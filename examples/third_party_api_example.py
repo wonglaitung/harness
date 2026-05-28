@@ -617,15 +617,16 @@ async def demo_skills_system():
 
     agent_with_skill = AgentHarness(config=config_with_skill)
 
+    # 7. 实际运行使用技能的 Agent
     print("\n--- 使用技能运行 Agent ---")
     print(f"用户输入: {user_input}")
-    print("(由于演示环境限制，这里只展示配置方式)")
 
-    # 在实际使用中，可以这样运行:
-    # result = await agent_with_skill.run(user_input)
-    # print(f"Agent 响应: {result.content}")
+    result = await agent_with_skill.run(user_input)
+    print("\nAgent 响应:")
+    print("-" * 40)
+    print(result.content[:800] if len(result.content) > 800 else result.content)
 
-    # 7. 预览注入效果
+    # 8. 预览注入效果
     preview = injector.get_injection_preview(base_prompt, user_input)
     print(f"\n注入预览:")
     print(f"  - 匹配的技能: {preview['matching_skills']}")
@@ -774,19 +775,18 @@ triggers:
 
 async def demo_mcp_integration():
     """
-    演示 9: MCP (Model Context Protocol) 服务器连接
+    演示 10: MCP (Model Context Protocol) 服务器连接
 
     功能:
     - 配置 MCP 服务器
     - Stdio 和 HTTP 传输方式
     - 自动发现和注册工具
+    - 实际连接并使用 MCP 工具
 
     学习要点:
     - MCP 让 Agent 可以使用外部工具服务器
     - 支持 Stdio (本地进程) 和 HTTP (网络) 两种传输
     - 工具自动注册到 Agent
-
-    注意: 此演示只展示配置方式，不实际连接服务器
     """
     print("\n" + "=" * 70)
     print("演示 10: MCP (Model Context Protocol) 服务器连接")
@@ -822,15 +822,17 @@ async def demo_mcp_integration():
     # 3. 创建 MCP 管理器
     manager = MCPManager()
 
-    # 4. 添加服务器配置（不实际启动）
+    # 4. 添加服务器配置
+    manager.add_server(stdio_config)
     print("\nMCP 管理器配置:")
     print(f"  - 默认配置路径: .mcp.json 或 ~/.harness/mcp.json")
+    print(f"  - 已添加服务器: {[c.name for c in manager.list_server_configs()]}")
 
     # 5. 配置文件格式示例
     config_example = """
 # .mcp.json 配置文件示例
 {
-    "servers": {
+    "mcpServers": {
         "filesystem": {
             "command": "mcp-filesystem",
             "args": ["/path/to/allowed/dir"]
@@ -846,6 +848,32 @@ async def demo_mcp_integration():
 """
     print("\n配置文件示例:")
     print(config_example)
+
+    # 6. 实际使用：连接 MCP 服务器
+    print("\n--- 实际使用示例 ---")
+    print("""
+    # 连接到 MCP 服务器
+    manager = MCPManager()
+    await manager.connect_server("filesystem")
+
+    # 获取服务器提供的工具
+    tools = manager.get_server_tools("filesystem")
+    print(f"可用工具: {[t.name for t in tools]}")
+
+    # 使用 Agent 调用 MCP 工具
+    agent = AgentHarness(
+        model="claude-sonnet-4-6",
+        tools=tools,  # 将 MCP 工具注册到 Agent
+    )
+
+    result = await agent.run("读取 /path/to/file.txt 的内容")
+
+    # 或者直接调用
+    result = await manager.call_tool("filesystem", "read_file", {"path": "/path/to/file.txt"})
+
+    # 断开连接
+    await manager.disconnect_all()
+    """)
 
     print("\n✅ MCP 配置演示完成")
     print("   注意: 实际连接需要运行 MCP 服务器")
@@ -1063,8 +1091,35 @@ async def demo_advanced_cost_control():
     print(f"  用户级: {cost_config.daily_token_limit} tokens/天")
     print(f"  全局级: ${cost_config.global_daily_budget_usd}/天")
 
-    # 3. 异步 SQLite 会话存储
-    print(f"\n异步 SQLite 存储:")
+    # 3. 实际使用：与 CostController 集成
+    from harness import CostController
+
+    controller = CostController(config=cost_config, storage=storage)
+
+    # 检查用户预算
+    print("\n--- 实际使用：预算检查 ---")
+    user_id = "user-001"
+
+    # 模拟 Token 使用
+    for i in range(3):
+        storage.record_user_usage(user_id, input_tokens=500, output_tokens=250)
+
+    current_usage = storage.get_user_usage(user_id)
+    print(f"\n用户 {user_id} 当前使用量:")
+    print(f"  - 今日 tokens: {current_usage.daily_tokens}")
+    print(f"  - 今日请求: {current_usage.hourly_requests}")
+
+    # 检查是否超限
+    remaining = cost_config.daily_token_limit - current_usage.daily_tokens
+    print(f"  - 剩余额度: {remaining} tokens")
+
+    if remaining < 0:
+        print("  ⚠️ 用户预算已超限！")
+    else:
+        print(f"  ✅ 用户预算充足")
+
+    # 4. 异步 SQLite 会话存储（代码示例）
+    print(f"\n--- 异步 SQLite 存储（生产环境推荐）---")
     print("""
     # 创建异步存储（WAL 模式 + 连接池）
     store = AsyncSQLiteSessionStore(
@@ -1073,10 +1128,10 @@ async def demo_advanced_cost_control():
         timeout=30.0,
     )
 
-    # 异步保存
+    # 异步保存会话
     await store.save(session)
 
-    # 异步加载
+    # 异步加载会话
     session = await store.load("session-id")
 
     # 关闭连接池
