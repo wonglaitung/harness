@@ -442,6 +442,9 @@ You are a code reviewer. Your task is to:
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 - [OpenHarness](https://github.com/HKUDS/OpenHarness)
 - [Anthropic Tool Use](https://docs.anthropic.com/en/docs/tool-use)
+
+---
+
 # 02 - Agent Loop 代理循环引擎
 
 ## 概述
@@ -1314,6 +1317,9 @@ async def test_agent_loop_with_real_llm():
     assert result.status == LoopState.COMPLETED
     assert len(result.final_response.content) > 0
 ```
+
+---
+
 # 03 - Tool System 工具系统
 
 ## 概述
@@ -2891,6 +2897,9 @@ async def test_permission_deny():
     assert not permissions.is_path_allowed("/etc/passwd", "read")
     assert not permissions.is_command_allowed("rm -rf /")
 ```
+
+---
+
 # 04 - Memory System 记忆系统
 
 ## 概述
@@ -4057,7 +4066,10 @@ async def test_memory_storage(memory_manager):
     results = await memory_manager.retrieve_memory("Python")
     assert len(results) > 0
     assert "Python" in results[0].content
-```# 05 - Skills System 技能系统
+```
+---
+
+# 05 - Skills System 技能系统
 
 ## 概述
 
@@ -5171,7 +5183,10 @@ def test_skill_injection(skill_registry):
 
     assert "code-review" in result
     assert len(result) > len(prompt)
-```# 06 - Trigger & Orchestration 触发与编排
+```
+---
+
+# 06 - Trigger & Orchestration 触发与编排
 
 ## 概述
 
@@ -6338,7 +6353,10 @@ async def test_trigger_manager():
 
     await manager.start()
     await manager.stop()
-```# 07 - SDK 与 API 设计
+```
+---
+
+# 07 - SDK 与 API 设计
 
 ## 概述
 
@@ -7220,6 +7238,9 @@ agent.expect("分析代码").respond("代码分析结果...")
 result = await agent.run("分析代码")
 assert result.content == "代码分析结果..."
 ```
+
+---
+
 # 08 - 安全设计
 
 ## 概述
@@ -8121,7 +8142,10 @@ suspicious = audit.query(
 for entry in suspicious:
     if entry.result == "denied":
         alert_security_team(entry)
-```# 09 - 实施路线图
+```
+---
+
+# 09 - 实施路线图
 
 ## 概述
 
@@ -8556,7 +8580,10 @@ jobs:
 - 云端部署方案
 - 更多预置技能
 - 自学习增强
-- 多模态支持# 10 - 与 Hermes/OpenClaw 对比
+- 多模态支持
+---
+
+# 10 - 与 Hermes/OpenClaw 对比
 
 ## 概述
 
@@ -8876,7 +8903,10 @@ agent.load_skill("downloaded_from_clawhub.md")
 三者互补而非替代，用户可以根据需求选择：
 - 需要独立服务 → Hermes/OpenClaw
 - 需要内嵌集成 → 本 Harness
-- 可以混合使用 → 共享技能/记忆格式# 11 - 测试策略
+- 可以混合使用 → 共享技能/记忆格式
+---
+
+# 11 - 测试策略
 
 ## 概述
 
@@ -9663,6 +9693,9 @@ class SessionFactory(Factory):
 3. **清晰命名**: 测试名称描述测试场景
 4. **单一职责**: 每个测试只验证一个行为
 5. **快速失败**: 使用明确的断言，避免复杂条件
+
+---
+
 # 12 - 技术决策与权衡
 
 ## 概述
@@ -10190,3 +10223,6 @@ class MemoryConfig:
 | 成本超支 | 中 | 高 | 多级预算控制 + 自动降级 |
 | Skill 冲突 | 中 | 中 | 优先级 + 互斥机制 |
 | 向量检索慢 | 低 | 低 | 默认关闭，按需启用 |
+
+---
+
