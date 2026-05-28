@@ -11,6 +11,7 @@ from typing import Any
 from harness.core.agent_loop import AgentLoop, LoopConfig
 from harness.llm.anthropic import AnthropicClient
 from harness.llm.base import LLMClient, ToolDefinition
+from harness.llm.openai import OpenAIClient
 from harness.memory.context_builder import ContextBuilder
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore
@@ -28,7 +29,7 @@ class AgentHarness:
     This class provides a simple interface to create and run AI agents
     that can use tools, maintain memory, and execute complex tasks.
 
-    Example:
+    Example with Anthropic:
         ```python
         from harness import AgentHarness, ReadTool
 
@@ -40,24 +41,47 @@ class AgentHarness:
         result = await agent.run("Read the main.py file")
         print(result.content)
         ```
+
+    Example with OpenAI:
+        ```python
+        agent = AgentHarness(
+            model="gpt-4o",
+            provider="openai",
+            tools=[ReadTool()],
+        )
+        ```
+
+    Example with custom LLM:
+        ```python
+        agent = AgentHarness(
+            llm_client=MyCustomLLMClient(),
+            tools=[ReadTool()],
+        )
+        ```
     """
 
     def __init__(
         self,
         model: str = "claude-sonnet-4-6",
         api_key: str | None = None,
+        provider: str = "anthropic",
+        base_url: str | None = None,
         tools: list[Tool] | None = None,
         config: HarnessConfig | None = None,
+        llm_client: LLMClient | None = None,
         **kwargs,
     ):
         """
         Initialize the Harness agent.
 
         Args:
-            model: LLM model to use
-            api_key: API key (or set ANTHROPIC_API_KEY env var)
+            model: LLM model to use (e.g., "claude-sonnet-4-6", "gpt-4o")
+            api_key: API key (or set environment variable)
+            provider: LLM provider - "anthropic", "openai", or "custom"
+            base_url: Custom API endpoint (for local LLMs, Azure, etc.)
             tools: List of tools to make available
             config: Full configuration object
+            llm_client: Custom LLM client instance (overrides provider detection)
             **kwargs: Additional config options
         """
         # Merge config
@@ -67,11 +91,16 @@ class AgentHarness:
             self.config = HarnessConfig(
                 model=model,
                 api_key=api_key,
+                provider=provider,
+                base_url=base_url,
                 **kwargs,
             )
 
         # Initialize LLM client
-        self._llm = self._create_llm_client()
+        if llm_client:
+            self._llm = llm_client
+        else:
+            self._llm = self._create_llm_client()
 
         # Initialize tool registry
         self._tool_registry = ToolRegistry()
@@ -108,13 +137,29 @@ class AgentHarness:
 
     def _create_llm_client(self) -> LLMClient:
         """Create the LLM client based on config."""
-        # Currently only support Anthropic
-        return AnthropicClient(
-            api_key=self.config.api_key,
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-        )
+        provider = self.config.provider.lower()
+
+        # Detect provider from model name if not explicitly set
+        if provider == "anthropic" or self.config.model.startswith("claude"):
+            return AnthropicClient(
+                api_key=self.config.api_key,
+                model=self.config.model,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+            )
+        elif provider == "openai" or self.config.model.startswith("gpt"):
+            return OpenAIClient(
+                api_key=self.config.api_key,
+                model=self.config.model,
+                base_url=self.config.base_url,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+            )
+        else:
+            raise ValueError(
+                f"Unknown provider: {provider}. "
+                "Use 'anthropic', 'openai', or provide a custom llm_client."
+            )
 
     async def run(
         self,

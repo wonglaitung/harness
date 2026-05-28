@@ -13,9 +13,12 @@ class HarnessConfig:
     Provides a simple way to configure the agent without
     building each component manually.
     """
+
     # LLM settings
     model: str = "claude-sonnet-4-6"
     api_key: str | None = None
+    provider: str = "anthropic"  # "anthropic", "openai", or "custom"
+    base_url: str | None = None  # For custom endpoints (e.g., local LLM, Azure)
     max_tokens: int = 4096
     temperature: float = 1.0
 
@@ -40,8 +43,6 @@ class HarnessConfig:
         """Load configuration from YAML or JSON file."""
         import json
 
-        import yaml
-
         file_path = Path(path)
         if not file_path.exists():
             raise FileNotFoundError(f"Config file not found: {path}")
@@ -49,7 +50,15 @@ class HarnessConfig:
         content = file_path.read_text()
 
         if file_path.suffix in (".yaml", ".yml"):
-            data = yaml.safe_load(content)
+            try:
+                import yaml
+
+                data = yaml.safe_load(content)
+            except ImportError as err:
+                raise ImportError(
+                    "PyYAML is required for YAML config files. "
+                    "Install with: pip install pyyaml"
+                ) from err
         else:
             data = json.loads(content)
 
@@ -60,6 +69,8 @@ class HarnessConfig:
         return {
             "model": self.model,
             "api_key": self.api_key,
+            "provider": self.provider,
+            "base_url": self.base_url,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "memory_dir": self.memory_dir,
