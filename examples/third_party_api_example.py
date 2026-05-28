@@ -78,6 +78,22 @@ from harness import (
 from harness.testing import MockHarness
 from harness.testing.mock_harness import MockResponse
 
+# Skills 技能系统 - 模块化能力单元
+from harness import (
+    Skill,          # 技能定义
+    SkillTrigger,   # 触发条件
+    SkillTools,     # 工具权限配置
+    SkillRegistry,  # 技能注册表
+)
+
+# MCP 支持 - 连接外部工具服务器
+from harness import (
+    MCPManager,       # MCP 管理器
+    MCPServerConfig,  # MCP 服务器配置
+    StdioTransport,   # 标准输入输出传输
+    HTTPTransport,    # HTTP 传输
+)
+
 
 # ============================================================================
 # 配置区 - 修改这里使用你的 API
@@ -467,12 +483,186 @@ async def demo_mock_testing():
 
 
 # ============================================================================
-# 演示 8: 中断与恢复
+# 演示 8: Skills 技能系统
+# ============================================================================
+
+async def demo_skills_system():
+    """
+    演示 8: Skills 技能系统
+
+    功能:
+    - 创建自定义技能
+    - 定义触发条件
+    - 配置工具权限
+    - 注册和激活技能
+
+    学习要点:
+    - Skill 是模块化的能力单元
+    - 包含触发条件、工具权限、执行内容
+    - 可以从文件加载或代码创建
+    """
+    print("\n" + "=" * 70)
+    print("演示 8: Skills 技能系统")
+    print("=" * 70)
+
+    # 1. 创建一个代码审查技能
+    code_review_skill = Skill(
+        name="code-review",
+        description="代码审查技能，帮助审查和改进代码质量",
+        content="""
+你是一个专业的代码审查专家。当审查代码时，请：
+
+1. **代码质量**: 检查代码是否清晰、可读、符合最佳实践
+2. **潜在问题**: 识别可能的 bug、安全漏洞、性能问题
+3. **改进建议**: 提供具体的改进建议
+
+请用结构化的方式输出审查结果。
+""",
+        triggers=SkillTrigger(
+            keywords=["review", "审查", "检查代码", "code check"],
+            patterns=[r"review\s+(this\s+)?code", r"审查.*代码"],
+        ),
+        tools=SkillTools(
+            allowed=["read", "glob", "grep"],  # 只允许读取类工具
+            restricted=["bash", "write", "edit"],  # 禁止修改类工具
+        ),
+        version="1.0.0",
+        author="Demo",
+    )
+
+    # 2. 创建技能注册表并注册技能
+    registry = SkillRegistry()
+    registry.register(code_review_skill)
+
+    print(f"\n已注册技能: {list(registry.list_skills())}")
+
+    # 3. 查找匹配的技能
+    test_input = "请 review 这段代码"
+    matches = registry.find_matching_skills(test_input)
+    print(f"\n输入: '{test_input}'")
+    print(f"匹配的技能: {[s.name for s in matches]}")
+
+    # 4. 创建一个翻译技能
+    translate_skill = Skill(
+        name="translator",
+        description="多语言翻译技能",
+        content="你是一个专业的翻译专家，可以准确地在中文和英文之间进行翻译。",
+        triggers=SkillTrigger(
+            keywords=["translate", "翻译", "translate to"],
+        ),
+        tools=SkillTools(default_permission="allow"),
+    )
+
+    registry.register(translate_skill)
+    print(f"\n注册翻译技能后，共有 {len(list(registry.list_skills()))} 个技能")
+
+    # 5. 技能可以保存到文件
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        skill_path = Path(tmpdir) / "code-review.md"
+        code_review_skill.to_file(skill_path)
+        print(f"\n技能已保存到: {skill_path}")
+
+        # 从文件加载
+        loaded_skill = Skill.from_file(skill_path)
+        print(f"从文件加载的技能: {loaded_skill.name}")
+        print(f"触发关键词: {loaded_skill.triggers.keywords}")
+
+    print("\n✅ Skills 技能系统演示完成")
+
+
+# ============================================================================
+# 演示 9: MCP 服务器连接
+# ============================================================================
+
+async def demo_mcp_integration():
+    """
+    演示 9: MCP (Model Context Protocol) 服务器连接
+
+    功能:
+    - 配置 MCP 服务器
+    - Stdio 和 HTTP 传输方式
+    - 自动发现和注册工具
+
+    学习要点:
+    - MCP 让 Agent 可以使用外部工具服务器
+    - 支持 Stdio (本地进程) 和 HTTP (网络) 两种传输
+    - 工具自动注册到 Agent
+
+    注意: 此演示只展示配置方式，不实际连接服务器
+    """
+    print("\n" + "=" * 70)
+    print("演示 9: MCP (Model Context Protocol) 服务器连接")
+    print("=" * 70)
+
+    # 1. 配置 Stdio MCP 服务器 (本地进程)
+    stdio_config = MCPServerConfig(
+        name="local-tools",
+        transport="stdio",
+        command="python",
+        args=["-m", "my_mcp_server"],  # 你的 MCP 服务器模块
+        env={"DEBUG": "1"},
+        enabled=True,
+    )
+
+    print("\nStdio MCP 配置:")
+    print(f"  - 名称: {stdio_config.name}")
+    print(f"  - 命令: {stdio_config.command} {' '.join(stdio_config.args)}")
+
+    # 2. 配置 HTTP MCP 服务器 (网络服务)
+    http_config = MCPServerConfig(
+        name="remote-tools",
+        transport="http",
+        url="http://localhost:8080/mcp",
+        headers={"Authorization": "Bearer your-token"},
+        timeout=60.0,
+    )
+
+    print("\nHTTP MCP 配置:")
+    print(f"  - 名称: {http_config.name}")
+    print(f"  - URL: {http_config.url}")
+
+    # 3. 创建 MCP 管理器
+    manager = MCPManager()
+
+    # 4. 添加服务器配置（不实际启动）
+    print("\nMCP 管理器配置:")
+    print(f"  - 默认配置路径: .mcp.json 或 ~/.harness/mcp.json")
+
+    # 5. 配置文件格式示例
+    config_example = """
+# .mcp.json 配置文件示例
+{
+    "servers": {
+        "filesystem": {
+            "command": "mcp-filesystem",
+            "args": ["/path/to/allowed/dir"]
+        },
+        "database": {
+            "url": "http://localhost:8080/mcp",
+            "headers": {
+                "Authorization": "Bearer token"
+            }
+        }
+    }
+}
+"""
+    print("\n配置文件示例:")
+    print(config_example)
+
+    print("\n✅ MCP 配置演示完成")
+    print("   注意: 实际连接需要运行 MCP 服务器")
+
+
+# ============================================================================
+# 演示 11: 中断与恢复
 # ============================================================================
 
 async def demo_interrupt_and_resume():
     """
-    演示 8: 中断与恢复
+    演示 11: 中断与恢复
 
     功能:
     - 中断长时间运行的任务
@@ -523,12 +713,12 @@ async def demo_interrupt_and_resume():
 
 
 # ============================================================================
-# 演示 9: 配置管理
+# 演示 11: 配置管理
 # ============================================================================
 
 async def demo_configuration():
     """
-    演示 9: 配置管理
+    演示 11: 配置管理
 
     功能:
     - 使用 HarnessConfig 配置所有参数
@@ -541,7 +731,7 @@ async def demo_configuration():
     - 可以保存为文件共享配置
     """
     print("\n" + "=" * 70)
-    print("演示 9: 配置管理")
+    print("演示 11: 配置管理")
     print("=" * 70)
 
     # 创建详细配置
@@ -583,12 +773,12 @@ async def demo_configuration():
 
 
 # ============================================================================
-# 演示 10: 完整工作流
+# 演示 12: 完整工作流
 # ============================================================================
 
 async def demo_complete_workflow():
     """
-    演示 10: 完整工作流
+    演示 12: 完整工作流
 
     功能:
     - 结合所有功能
@@ -601,7 +791,7 @@ async def demo_complete_workflow():
     - 最佳实践
     """
     print("\n" + "=" * 70)
-    print("演示 10: 完整工作流 - 代码分析助手")
+    print("演示 12: 完整工作流 - 代码分析助手")
     print("=" * 70)
 
     # 1. 配置 Agent
@@ -688,6 +878,12 @@ async def main():
 
         # Mock 测试
         await demo_mock_testing()
+
+        # Skills 技能系统
+        await demo_skills_system()
+
+        # MCP 服务器连接
+        await demo_mcp_integration()
 
         # 中断恢复
         await demo_interrupt_and_resume()
