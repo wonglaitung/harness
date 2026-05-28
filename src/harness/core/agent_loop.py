@@ -4,8 +4,10 @@ Agent Loop - The core execution engine.
 Implements the ReAct-style loop that drives agent behavior.
 """
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
@@ -179,19 +181,6 @@ class AgentLoop:
         session: Session,
     ) -> list:
         """Execute tool calls."""
-        context = ToolContext(
-            session_id=session.id,
-            working_directory=self.tools.registry.get("__working_directory__")
-            or self.tools.registry._tools.get("read", None)
-            and self.tools.registry.get("read")._working_directory
-            or None
-            or type('obj', (object,), {})(),  # Placeholder
-        )
-
-        # Get working directory from config or use cwd
-        import os
-        from pathlib import Path
-
         from harness.tools.permissions import PermissionSet
 
         context = ToolContext(
