@@ -1,6 +1,7 @@
 # Harness SDK 公共 API
 
 from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
+from harness.progress import ProgressFormatter, create_progress_handler
 from harness.sdk.config import HarnessConfig
 from harness.sdk.harness import AgentHarness
 from harness.tools.builtins import (
@@ -15,6 +16,9 @@ from harness.types import (
     LoopResult,
     LoopState,
     Message,
+    ProgressCallback,
+    ProgressEvent,
+    ProgressEventType,
     Session,
     ToolCall,
     ToolResult,
@@ -46,4 +50,10 @@ __all__ = [
     "ToolResult",
     "LoopResult",
     "LoopState",
+    # Progress types
+    "ProgressEvent",
+    "ProgressEventType",
+    "ProgressCallback",
+    "ProgressFormatter",
+    "create_progress_handler",
 ]

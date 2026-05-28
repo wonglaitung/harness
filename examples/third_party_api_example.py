@@ -38,25 +38,27 @@ async def main():
 
     # Example 1: Simple question
     print("--- Example 1: Simple Question ---")
-    result = await agent.run("你好，请简单介绍一下你自己。")
-    print(f"Response: {result.final_response}\n")
+    result = await agent.run("你好，请简单介绍一下你自己。", verbose=True)
+    print(f"\nResponse: {result.final_response}\n")
 
     # Example 2: File operations with tools
     print("--- Example 2: File Operations ---")
     result = await agent.run(
         "请用 glob 工具列出当前目录下所有的 Python 文件（*.py），"
-        "然后读取 README.md 文件的前 20 行内容。"
+        "然后读取 README.md 文件的前 20 行内容。",
+        verbose=True,
     )
-    print(f"Response: {result.final_response}\n")
+    print(f"\nResponse: {result.final_response}\n")
     print(f"Iterations: {result.iterations}")
 
     # Example 3: Code analysis
     print("--- Example 3: Code Analysis ---")
     result = await agent.run(
         "用 grep 工具在 src/harness 目录下搜索 'AgentHarness' 类的定义，"
-        "简要说明这个类的主要功能。"
+        "简要说明这个类的主要功能。",
+        verbose=True,
     )
-    print(f"Response: {result.final_response}\n")
+    print(f"\nResponse: {result.final_response}\n")
 
     print("=== Done ===")
 
