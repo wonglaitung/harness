@@ -25,6 +25,56 @@ Skill 是一个**结构化、模块化的能力单元**，包含：
 | 可组合性 | 低 | 高（可组合多个 Skill） |
 | 可学习性 | 无 | 支持自动生成 |
 
+### Skill vs MCP 的区别
+
+Skills 和 MCP (Model Context Protocol) 是完全不同的机制：
+
+| 特性 | Skills | MCP |
+|------|--------|-----|
+| 目的 | 注入 prompt 指令 | 连接外部工具服务器 |
+| 触发方式 | 关键词/正则匹配用户输入 | 不触发，工具始终可用 |
+| 工作层级 | System Prompt | Tool Registry |
+| 选择权 | 代码匹配决定 | LLM 自主决定 |
+
+**Skills 工作流程**：
+
+```
+用户输入 → 关键词匹配 → 注入技能到 prompt → LLM 看到指令
+"review code" → 匹配 "review" → 注入代码审查技能
+```
+
+**MCP 工作流程**：
+
+```
+配置服务器 → 工具注册到 Registry → LLM 自主选择使用
+无需匹配，工具始终在工具列表中，LLM 自己决定用不用
+```
+
+**示例对比**：
+
+```python
+# Skills: 需要匹配触发
+skill = Skill(
+    name="code-review",
+    triggers=SkillTrigger(keywords=["review"]),
+    content="你是代码审查专家...",
+)
+# 只有用户输入包含 "review" 时才会注入
+
+# MCP: 无需触发，工具始终可用
+manager = MCPManager()
+await manager.connect_server("filesystem")
+# 现在 read_file, write_file 等工具始终可用
+# LLM 根据用户请求自主决定调用哪个
+```
+
+**适用场景**：
+
+- **Skills**: 需要注入特定行为指令、改变 LLM 的工作方式
+- **MCP**: 扩展工具能力、连接外部服务
+
+MCP 的设计更简洁 - 工具注册后，完全由 LLM 根据上下文决定是否调用，不需要代码层面的触发判断。
+
 ## Skill 文件格式
 
 ### 标准 Skill 格式
