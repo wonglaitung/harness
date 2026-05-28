@@ -336,6 +336,8 @@ class AgentHarness:
         self,
         prompt: str,
         session_id: Optional[str] = None,
+        on_progress: Optional[Callable[[ProgressEvent], None]] = None,
+        verbose: bool = False,
         **kwargs
     ) -> "RunResult":
         """
@@ -344,6 +346,8 @@ class AgentHarness:
         Args:
             prompt: 用户输入
             session_id: 会话 ID，如果为 None 则创建新会话
+            on_progress: 进度事件回调函数
+            verbose: 是否打印进度日志（on_progress 优先）
             **kwargs: 额外参数
 
         Returns:

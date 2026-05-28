@@ -831,6 +831,46 @@ class LoopConfig:
 3. **日志记录**: 记录详细的执行过程用于调试
 4. **性能分析**: 统计各阶段耗时，优化性能瓶颈
 
+### 进度格式化器
+
+Harness 提供内置的进度格式化器，简化进度输出的配置：
+
+```python
+from harness import AgentHarness, create_progress_handler, ProgressFormatter
+
+# 方式 1: 使用 verbose=True（最简单）
+result = await agent.run("任务", verbose=True)
+
+# 方式 2: 使用 create_progress_handler 创建处理器
+handler = create_progress_handler(format_style="emoji")  # 可选: simple, detailed, colored, emoji
+result = await agent.run("任务", on_progress=handler)
+
+# 方式 3: 使用 ProgressFormatter 自定义输出
+def my_handler(event):
+    print(ProgressFormatter.colored(event))
+
+result = await agent.run("任务", on_progress=my_handler)
+```
+
+#### 格式化风格对比
+
+| 风格 | 输出示例 | 适用场景 |
+|-----|---------|---------|
+| `simple` | `[tool_call] Executing: read` | 日志文件 |
+| `detailed` | `[2026-05-28 14:32:01] tool_call: Executing: read (50ms) \| {"tool": "read"}` | 调试 |
+| `colored` | `[14:32:01] <span style="color:yellow">Executing: read</span> (50ms)` | 终端（ANSI 支持） |
+| `emoji` | `[14:32:01] 🔧 Executing: read (50ms)` | 用户界面 |
+
+#### create_progress_handler 参数
+
+```python
+def create_progress_handler(
+    format_style: str = "emoji",  # simple, detailed, colored, emoji
+    quiet: bool = False,          # True 则静默，不输出
+) -> Callable[[ProgressEvent], None]:
+    """创建进度处理器"""
+```
+
 ---
 
 ## 监控与可观测性
