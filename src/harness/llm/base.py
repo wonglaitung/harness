@@ -16,7 +16,7 @@ from harness.types import LLMResponse
 class LLMConfig:
     """Base configuration for LLM clients."""
     model: str
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Output tokens (reasonable for 64K context models)
     temperature: float = 1.0
     timeout: float = 120.0
     retry_count: int = 3

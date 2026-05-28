@@ -19,12 +19,12 @@ class HarnessConfig:
     api_key: str | None = None
     provider: str = "anthropic"  # "anthropic", "openai", or "custom"
     base_url: str | None = None  # For custom endpoints (e.g., local LLM, Azure)
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Output tokens (reasonable for 64K context models)
     temperature: float = 1.0
 
     # Memory settings
     memory_dir: str = ".harness/memory"
-    session_window: int = 50
+    session_window: int = 100  # Keep more messages for larger context
 
     # Tool settings
     sandbox_workspace: str | None = None
