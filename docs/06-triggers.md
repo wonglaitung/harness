@@ -1166,3 +1166,147 @@ async def test_trigger_manager():
     await manager.start()
     await manager.stop()
 ```
+
+---
+
+## 分布式环境下的 Trigger 管理
+
+内嵌 SDK 在多进程环境（Gunicorn 多 Worker、K8s 多副本）下，Trigger 会在每个进程独立启动，导致重复触发。需要引入分布式状态后端 + 分布式锁 + Leader 选举。
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+
+class DeploymentMode(Enum):
+    SINGLETON = "singleton"      # 单进程，使用 File/SQLite
+    DISTRIBUTED = "distributed"  # 多进程，必须使用 Redis/PostgreSQL
+
+@dataclass
+class DistributedConfig:
+    """分布式配置"""
+    mode: DeploymentMode = DeploymentMode.SINGLETON
+
+    # 分布式存储（当 mode=DISTRIBUTED 时必需）
+    storage_backend: str = "redis"
+    storage_url: str = ""
+
+    # 分布式锁
+    lock_backend: str = "redis"
+    lock_ttl_seconds: int = 30
+
+    # Trigger 配置
+    trigger_leader_election: bool = True
+
+
+class DistributedTriggerManager:
+    """分布式触发器管理器"""
+
+    def __init__(self, config: DistributedConfig):
+        self.config = config
+        self._lock = None
+        self._is_leader = False
+
+    async def acquire_leader_lock(self) -> bool:
+        """获取 Leader 锁（只有 Leader 执行 Trigger）"""
+        if self.config.mode == DeploymentMode.SINGLETON:
+            return True
+
+        # 使用 Redis Redlock
+        import redis.asyncio as redis
+        client = redis.from_url(self.config.storage_url)
+
+        self._lock = client.lock(
+            "harness:trigger:leader",
+            timeout=self.config.lock_ttl_seconds,
+            blocking=False
+        )
+
+        try:
+            self._is_leader = await self._lock.acquire()
+            return self._is_leader
+        except Exception:
+            return False
+
+    async def should_execute_trigger(self) -> bool:
+        """判断当前实例是否应该执行 Trigger"""
+        if self.config.mode == DeploymentMode.SINGLETON:
+            return True
+        return self._is_leader
+
+    async def renew_leader_lock(self) -> bool:
+        """续期 Leader 锁"""
+        if self._lock and self._is_leader:
+            try:
+                await self._lock.extend(self.config.lock_ttl_seconds)
+                return True
+            except Exception:
+                self._is_leader = False
+                return False
+        return False
+```
+
+**部署架构**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    K8s Cluster                       │
+│                                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ API Server  │  │ API Server  │  │ API Server  │ │
+│  │ (Worker)    │  │ (Worker)    │  │ (Worker)    │ │
+│  │ - 无 Trigger│  │ - 无 Trigger│  │ - 无 Trigger│ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │           Trigger Worker (单副本)            │   │
+│  │           - Leader Election                  │   │
+│  │           - 执行所有 Cron/Webhook            │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │                  Redis                        │   │
+│  │           - Session Store                     │   │
+│  │           - Distributed Lock                  │   │
+│  └─────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+**替代方案**:
+
+1. **Celery Beat 集成**:
+```python
+from celery import Celery
+from celery.schedules import crontab
+
+app = Celery()
+agent = AgentHarness(...)
+
+@app.task
+def run_agent_task(prompt):
+    asyncio.run(agent.run(prompt))
+
+app.conf.beat_schedule = {
+    'daily-report': {
+        'task': 'run_agent_task',
+        'schedule': crontab(hour=9, minute=0),
+        'args': ('生成每日报告',),
+    },
+}
+```
+
+2. **K8s CronJob**:
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: harness-trigger
+spec:
+  schedule: "0 9 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: agent
+            command: ["python", "-m", "harness", "run", "生成每日报告"]
+```

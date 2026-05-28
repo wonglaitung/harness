@@ -870,3 +870,379 @@ async def test_agent_loop_with_real_llm():
     assert result.status == LoopState.COMPLETED
     assert len(result.final_response.content) > 0
 ```
+
+---
+
+## 成本控制
+
+### 多层级成本控制体系
+
+需要全局成本控制，防止 Token 消耗失控。
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Cost Control                          │
+│                                                          │
+│  Level 1: 会话级限制                                    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ max_tokens_per_session: 1,000,000              │    │
+│  │ max_tool_calls_per_session: 500                │    │
+│  │ max_iterations_per_request: 20                 │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+│  Level 2: 用户级限制                                    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ daily_token_limit: 10,000,000                  │    │
+│  │ hourly_request_limit: 100                      │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+│  Level 3: 全局限制                                      │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ global_daily_budget: $100                       │    │
+│  │ auto_throttle: true                             │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+│  Level 4: 自适应降级                                    │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ 当预算不足时：                                   │    │
+│  │ - 切换到更便宜的模型                            │    │
+│  │ - 减少上下文长度                                │    │
+│  │ - 拒绝非关键请求                                │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**实现**:
+
+```python
+@dataclass
+class CostConfig:
+    """成本配置"""
+    # 会话级
+    max_tokens_per_session: int = 1_000_000
+    max_tool_calls_per_session: int = 500
+    max_iterations_per_request: int = 20
+
+    # 用户级
+    daily_token_limit: int = 10_000_000
+    hourly_request_limit: int = 100
+
+    # 全局
+    global_daily_budget_usd: float = 100.0
+    auto_throttle: bool = True
+
+    # 自适应降级
+    fallback_model: str = "claude-haiku-4-5"
+    context_reduction_ratio: float = 0.5
+
+
+class CostController:
+    """成本控制器"""
+
+    def __init__(self, config: CostConfig, storage: "CostStorage"):
+        self.config = config
+        self.storage = storage
+
+    async def check_session_budget(self, session_id: str) -> bool:
+        """检查会话预算"""
+        usage = await self.storage.get_session_usage(session_id)
+
+        if usage.total_tokens >= self.config.max_tokens_per_session:
+            raise BudgetExceededError(
+                f"Session token limit reached: {usage.total_tokens}/{self.config.max_tokens_per_session}"
+            )
+
+        if usage.tool_calls >= self.config.max_tool_calls_per_session:
+            raise BudgetExceededError("Session tool call limit reached")
+
+        return True
+
+    async def check_user_budget(self, user_id: str) -> bool:
+        """检查用户预算"""
+        daily_usage = await self.storage.get_daily_user_usage(user_id)
+
+        if daily_usage.tokens >= self.config.daily_token_limit:
+            raise BudgetExceededError("Daily token limit reached")
+
+        hourly_requests = await self.storage.get_hourly_request_count(user_id)
+        if hourly_requests >= self.config.hourly_request_limit:
+            raise RateLimitError("Hourly request limit reached")
+
+        return True
+
+    async def should_downgrade(self) -> tuple[bool, str]:
+        """判断是否应该降级"""
+        daily_cost = await self.storage.get_daily_cost()
+        budget = self.config.global_daily_budget_usd
+
+        if daily_cost >= budget * 0.8:  # 80% 预算
+            return True, self.config.fallback_model
+
+        return False, ""
+```
+
+---
+
+### 熔断机制
+
+LLM 可能陷入死循环，消耗完预算后才停止。需要熔断机制检测异常模式并强制中断。
+
+```python
+from dataclasses import dataclass, field
+from collections import deque
+from typing import Deque
+import time
+
+@dataclass
+class LoopPattern:
+    """循环模式记录"""
+    tool_name: str
+    arguments_hash: str
+    timestamp: float
+
+@dataclass
+class CircuitBreakerConfig:
+    """熔断器配置"""
+    same_tool_threshold: int = 5      # 相同工具调用次数阈值
+    time_window: float = 60.0         # 时间窗口（秒）
+    error_threshold: int = 3          # 错误重试阈值
+    cooldown_seconds: float = 300.0   # 冷却时间（秒）
+
+class CircuitBreaker:
+    """熔断器"""
+
+    def __init__(self, config: CircuitBreakerConfig = None):
+        self.config = config or CircuitBreakerConfig()
+        self._call_history: Deque[LoopPattern] = deque(maxlen=100)
+        self._error_count = 0
+        self._last_trip_time: float = 0
+        self._tripped = False
+
+    def record_call(self, tool_name: str, arguments: dict):
+        """记录工具调用"""
+        args_hash = self._hash_arguments(arguments)
+        self._call_history.append(LoopPattern(
+            tool_name=tool_name,
+            arguments_hash=args_hash,
+            timestamp=time.time()
+        ))
+
+        if self._should_trip():
+            self._trip()
+
+    def record_error(self):
+        """记录错误"""
+        self._error_count += 1
+        if self._error_count >= self.config.error_threshold:
+            self._trip()
+
+    def _should_trip(self) -> bool:
+        """判断是否应该熔断"""
+        if len(self._call_history) < self.config.same_tool_threshold:
+            return False
+
+        now = time.time()
+        recent = [
+            p for p in self._call_history
+            if now - p.timestamp < self.config.time_window
+        ]
+
+        if len(recent) < self.config.same_tool_threshold:
+            return False
+
+        # 检查相同工具的重复调用
+        tool_counts = {}
+        for pattern in recent:
+            key = f"{pattern.tool_name}:{pattern.arguments_hash}"
+            tool_counts[key] = tool_counts.get(key, 0) + 1
+
+            if tool_counts[key] >= self.config.same_tool_threshold:
+                return True
+
+        return False
+
+    def _trip(self):
+        """触发熔断"""
+        self._tripped = True
+        self._last_trip_time = time.time()
+
+    def is_open(self) -> bool:
+        """熔断器是否打开（阻止执行）"""
+        if not self._tripped:
+            return False
+
+        # 检查冷却时间
+        if time.time() - self._last_trip_time > self.config.cooldown_seconds:
+            self._reset()
+            return False
+
+        return True
+
+    def _reset(self):
+        """重置熔断器"""
+        self._tripped = False
+        self._error_count = 0
+        self._call_history.clear()
+
+    @staticmethod
+    def _hash_arguments(arguments: dict) -> str:
+        """计算参数哈希"""
+        import json
+        import hashlib
+        return hashlib.md5(
+            json.dumps(arguments, sort_keys=True).encode()
+        ).hexdigest()[:16]
+
+
+class CircuitBreakerError(Exception):
+    """熔断错误"""
+    def __init__(self, message: str, stats: dict):
+        super().__init__(message)
+        self.stats = stats
+```
+
+---
+
+## 流式中断与恢复
+
+`interrupt()` 无法中断正在进行的 LLM HTTP 请求或长耗时工具执行。需要实现网络级中断 + 状态快照恢复。
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any
+import asyncio
+
+@dataclass
+class LoopSnapshot:
+    """循环快照（用于恢复）"""
+    session_id: str
+    messages: List[Message]
+    current_iteration: int
+    pending_tool_calls: List[ToolCall] = field(default_factory=list)
+    last_llm_response: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+
+
+class InterruptibleAgentLoop:
+    """可中断的 Agent 循环"""
+
+    def __init__(self, agent: "AgentHarness"):
+        self.agent = agent
+        self._current_task: Optional[asyncio.Task] = None
+        self._snapshot: Optional[LoopSnapshot] = None
+
+    async def run(
+        self,
+        prompt: str,
+        session_id: str,
+        checkpoint_interval: int = 1
+    ) -> "LoopResult":
+        """可中断执行"""
+        self._current_task = asyncio.current_task()
+        iteration = 0
+
+        try:
+            while True:
+                # 保存快照
+                if iteration % checkpoint_interval == 0:
+                    self._save_snapshot(session_id, iteration)
+
+                result = await self._run_step(prompt, session_id, iteration)
+
+                if result.finished:
+                    return result
+
+                iteration += 1
+
+        except asyncio.CancelledError:
+            # 保存中断点快照
+            await self._save_interrupt_point(session_id, iteration)
+            raise
+
+    async def interrupt(self):
+        """中断当前执行"""
+        if self._current_task:
+            self._current_task.cancel()
+
+    async def resume(self, session_id: str) -> "LoopResult":
+        """从快照恢复执行"""
+        snapshot = await self.agent.memory.load_checkpoint(session_id)
+        if not snapshot:
+            raise ValueError(f"No checkpoint found for session {session_id}")
+
+        return await self.run(
+            prompt="",
+            session_id=session_id,
+            start_iteration=snapshot.current_iteration
+        )
+```
+
+---
+
+## OpenTelemetry 集成
+
+原生集成 OpenTelemetry，导出标准 Span，兼容 Langfuse、Datadog、Jaeger 等观测平台。
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+
+# 初始化 OTel
+resource = Resource.create({"service.name": "harness-agent"})
+provider = TracerProvider(resource=resource)
+processor = BatchSpanProcessor(OTLPSpanExporter())
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer("harness.agent")
+
+
+class ObservableAgentLoop:
+    """可观测的 Agent 循环"""
+
+    async def run(self, prompt: str, session_id: str) -> LoopResult:
+        """执行循环（带 OTel 埋点）"""
+        with tracer.start_as_current_span(
+            "agent_loop.run",
+            attributes={
+                "session.id": session_id,
+                "prompt.length": len(prompt)
+            }
+        ) as span:
+
+            # 1. 构建上下文
+            with tracer.start_as_current_span("context.build") as ctx_span:
+                context = await self._build_context(session_id)
+                ctx_span.set_attribute("context.token_count", context.token_count)
+                ctx_span.set_attribute("context.message_count", len(context.messages))
+
+            # 2. LLM 调用
+            with tracer.start_as_current_span("llm.call") as llm_span:
+                llm_span.set_attribute("llm.model", self.llm.model)
+                response = await self.llm.call(context)
+                llm_span.set_attribute("llm.input_tokens", response.usage.input_tokens)
+                llm_span.set_attribute("llm.output_tokens", response.usage.output_tokens)
+
+            # 3. 工具执行
+            if response.tool_calls:
+                with tracer.start_as_current_span("tools.execute") as tools_span:
+                    tools_span.set_attribute("tools.count", len(response.tool_calls))
+                    results = await self._execute_tools(response.tool_calls)
+
+            return result
+```
+
+**导出的 Span 结构**:
+```
+agent_loop.run (session_id=xxx, prompt.length=100)
+├── context.build (token_count=5000, message_count=10)
+├── llm.call (model=claude-sonnet-4-6, input_tokens=5000, output_tokens=500)
+├── tools.execute (count=2, names=["read", "grep"])
+│   ├── tools.read (success=true, duration=0.1s)
+│   └── tools.grep (success=true, duration=0.2s)
+└── memory.save (success=true)
+```

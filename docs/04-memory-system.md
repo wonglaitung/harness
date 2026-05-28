@@ -1165,3 +1165,254 @@ async def test_memory_storage(memory_manager):
     assert len(results) > 0
     assert "Python" in results[0].content
 ```
+
+---
+
+## 长会话扩展性设计
+
+会话消息可能持续增长，全量加载会导致内存爆炸。采用分片存储 + 滑动窗口 + 分层摘要策略。
+
+```
+会话存储结构：
+┌─────────────────────────────────────────────────────────┐
+│ Session                                                 │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Active Window (最近 50 条消息)                   │   │
+│  │ - 全量存储在内存                                 │   │
+│  │ - 快速访问                                       │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         ↓                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Recent Summaries (摘要层)                        │   │
+│  │ - 每 100 条消息生成一个摘要                       │   │
+│  │ - 存储在 SQLite，按需加载                        │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         ↓                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Archive (归档层)                                 │   │
+│  │ - 原始消息压缩存储                               │   │
+│  │ - 仅在需要时解压                                 │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**实现**:
+
+```python
+class ScalableSessionStore:
+    """可扩展的会话存储"""
+
+    def __init__(self, db_path: str):
+        self.db = sqlite3.connect(db_path)
+        self._init_tables()
+
+        # 配置
+        self.active_window_size = 50      # 内存中保留的消息数
+        self.summary_chunk_size = 100     # 每多少条生成摘要
+        self.archive_threshold = 500      # 超过此数量开始归档
+
+    async def get_session(self, session_id: str) -> Session:
+        """获取会话，只加载活跃窗口"""
+        session = Session(id=session_id)
+
+        # 1. 加载活跃窗口（最近 N 条）
+        cursor = self.db.execute("""
+            SELECT * FROM messages
+            WHERE session_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (session_id, self.active_window_size))
+
+        session.messages = [self._row_to_message(row) for row in cursor.fetchall()]
+        session.messages.reverse()
+
+        # 2. 加载摘要（如果有）
+        cursor = self.db.execute("""
+            SELECT summary FROM session_summaries
+            WHERE session_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (session_id,))
+
+        row = cursor.fetchone()
+        if row:
+            session.summary = row[0]
+
+        return session
+
+    async def add_message(self, session_id: str, message: Message):
+        """添加消息，自动触发压缩"""
+        self.db.execute("""
+            INSERT INTO messages (session_id, role, content, timestamp)
+            VALUES (?, ?, ?, ?)
+        """, (session_id, message.role, message.content, message.timestamp))
+
+        # 检查是否需要生成摘要
+        count = self._get_message_count(session_id)
+        if count % self.summary_chunk_size == 0:
+            await self._generate_summary(session_id)
+
+        # 检查是否需要归档
+        if count > self.archive_threshold:
+            await self._archive_old_messages(session_id)
+
+        self.db.commit()
+```
+
+---
+
+## SQLite 生产化配置
+
+默认 SQLite 配置在高并发下会遭遇 `database is locked` 错误。启用 WAL 模式 + 连接池 + 合理超时。
+
+```python
+import aiosqlite
+from contextlib import asynccontextmanager
+
+class ProductionSQLiteStore:
+    """生产级 SQLite 存储"""
+
+    def __init__(
+        self,
+        db_path: str,
+        pool_size: int = 5,
+        timeout: float = 30.0
+    ):
+        self.db_path = db_path
+        self.pool_size = pool_size
+        self.timeout = timeout
+        self._pool: list[aiosqlite.Connection] = []
+        self._lock = asyncio.Lock()
+
+    async def _init_connection(self, conn: aiosqlite.Connection):
+        """初始化连接配置"""
+        # 启用 WAL 模式（写并发关键）
+        await conn.execute("PRAGMA journal_mode=WAL")
+
+        # 同步模式设置
+        await conn.execute("PRAGMA synchronous=NORMAL")
+
+        # 增加 busy_timeout（毫秒）
+        await conn.execute(f"PRAGMA busy_timeout={int(self.timeout * 1000)}")
+
+        # 缓存大小（负数表示 KB）
+        await conn.execute("PRAGMA cache_size=-64000")  # 64MB
+
+        # 外键约束
+        await conn.execute("PRAGMA foreign_keys=ON")
+
+    @asynccontextmanager
+    async def get_connection(self):
+        """获取连接（连接池模式）"""
+        async with self._lock:
+            if self._pool:
+                conn = self._pool.pop()
+            else:
+                conn = await aiosqlite.connect(self.db_path)
+                await self._init_connection(conn)
+
+        try:
+            yield conn
+        finally:
+            async with self._lock:
+                if len(self._pool) < self.pool_size:
+                    self._pool.append(conn)
+                else:
+                    await conn.close()
+
+    async def save(self, session: Session):
+        """保存会话（带重试）"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                async with self.get_connection() as conn:
+                    # ... 保存逻辑
+                    await conn.commit()
+                return
+            except aiosqlite.OperationalError as e:
+                if "locked" in str(e) and attempt < max_retries - 1:
+                    await asyncio.sleep(0.1 * (2 ** attempt))
+                    continue
+                raise
+```
+
+**关键配置说明**:
+- `journal_mode=WAL`: 允许读写并发，解决 `database is locked`
+- `synchronous=NORMAL`: 平衡安全与性能
+- `busy_timeout`: 等待锁释放的时间
+- 连接池: 减少连接创建开销
+
+---
+
+## 增量 Token 计数
+
+每次循环都重新计算所有消息的 Token 会阻塞事件循环。使用增量计数 + 线程池 + 缓存。
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+
+class IncrementalTokenCounter:
+    """增量 Token 计数器"""
+
+    def __init__(
+        self,
+        model: str,
+        cache_size: int = 10000,
+        approximate_threshold: int = 50000
+    ):
+        self.model = model
+        self.approximate_threshold = approximate_threshold
+
+        # 缓存
+        self._cache: Dict[str, int] = {}
+        self._executor = ThreadPoolExecutor(max_workers=2)
+
+    @lru_cache(maxsize=1000)
+    def _get_encoder(self):
+        """获取编码器"""
+        import tiktoken
+        return tiktoken.encoding_for_model(self.model)
+
+    async def count_message(self, message: Message) -> int:
+        """计算单条消息的 Token 数"""
+        content_hash = self._hash_content(message.content)
+        cache_key = f"{message.role}:{content_hash}"
+
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        # 在线程池中计算
+        loop = asyncio.get_event_loop()
+        token_count = await loop.run_in_executor(
+            self._executor,
+            self._count_sync,
+            message.content
+        )
+
+        token_count += 4  # role + 格式开销
+        self._cache[cache_key] = token_count
+        return token_count
+
+    def _count_sync(self, content: str) -> int:
+        """同步计算（在线程池中执行）"""
+        if len(content) > self.approximate_threshold:
+            return len(content) // 4  # 近似估算
+
+        encoder = self._get_encoder()
+        return len(encoder.encode(content))
+
+    async def count_messages(self, messages: List[Message]) -> int:
+        """计算多条消息（并行）"""
+        tasks = [self.count_message(msg) for msg in messages]
+        counts = await asyncio.gather(*tasks)
+        return sum(counts)
+```
+
+**优化点**:
+- 线程池避免阻塞事件循环
+- LRU 缓存编码器
+- 大文本近似估算
+- 消息内容哈希缓存

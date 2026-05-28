@@ -968,3 +968,199 @@ def sync_wrapper(agent, prompt):
         raise exception
     return result
 ```
+
+---
+
+## Builder 模式 API
+
+`AgentHarness.__init__` 承担过多职责，配置项爆炸。采用 Builder 模式保持组件解耦。
+
+```python
+from typing import Optional, List, Union
+from dataclasses import dataclass
+
+@dataclass
+class HarnessComponents:
+    """Harness 组件容器"""
+    llm: Optional[LLMClient] = None
+    memory: Optional[SessionStore] = None
+    tools: Optional[ToolRegistry] = None
+    skills: Optional[SkillRegistry] = None
+    triggers: Optional[TriggerManager] = None
+    security: Optional[SecurityManager] = None
+    observability: Optional[ObservabilityManager] = None
+
+
+class HarnessBuilder:
+    """Harness 构建器"""
+
+    def __init__(self):
+        self._components = HarnessComponents()
+
+    def with_llm(
+        self,
+        model: str,
+        api_key: str = None,
+        provider: str = "anthropic",
+        **kwargs
+    ) -> "HarnessBuilder":
+        """配置 LLM"""
+        if provider == "anthropic":
+            self._components.llm = AnthropicClient(
+                api_key=api_key,
+                model=model,
+                **kwargs
+            )
+        elif provider == "openai":
+            self._components.llm = OpenAIClient(
+                api_key=api_key,
+                model=model,
+                **kwargs
+            )
+        return self
+
+    def with_memory(
+        self,
+        store: Union[str, SessionStore],
+        **kwargs
+    ) -> "HarnessBuilder":
+        """配置记忆存储"""
+        if isinstance(store, str):
+            if store == "file":
+                self._components.memory = FileSessionStore(**kwargs)
+            elif store == "sqlite":
+                self._components.memory = ProductionSQLiteStore(**kwargs)
+            elif store == "redis":
+                self._components.memory = RedisSessionStore(**kwargs)
+        else:
+            self._components.memory = store
+        return self
+
+    def with_tools(
+        self,
+        tools: List[Tool],
+        permissions: PermissionSet = None
+    ) -> "HarnessBuilder":
+        """配置工具集"""
+        registry = ToolRegistry()
+        for tool in tools:
+            registry.register(tool)
+        self._components.tools = registry
+        return self
+
+    def with_security(
+        self,
+        mode: str = "sandbox",
+        **kwargs
+    ) -> "HarnessBuilder":
+        """配置安全策略"""
+        if mode == "sandbox":
+            self._components.security = SecurityManager(
+                permissions=PermissionSet.sandbox(**kwargs)
+            )
+        elif mode == "readonly":
+            self._components.security = SecurityManager(
+                permissions=PermissionSet.read_only(**kwargs)
+            )
+        return self
+
+    def with_observability(
+        self,
+        backend: str = "opentelemetry",
+        **kwargs
+    ) -> "HarnessBuilder":
+        """配置可观测性"""
+        self._components.observability = ObservabilityManager(
+            backend=backend,
+            **kwargs
+        )
+        return self
+
+    def with_skills(self, skill_dirs: List[str]) -> "HarnessBuilder":
+        """配置技能目录"""
+        registry = SkillRegistry()
+        for dir_path in skill_dirs:
+            registry.add_skill_dir(Path(dir_path))
+        self._components.skills = registry
+        return self
+
+    def build(self) -> "AgentHarness":
+        """构建 Harness 实例"""
+        if not self._components.llm:
+            raise ValueError("LLM client is required")
+
+        # 使用默认值填充缺失组件
+        if not self._components.memory:
+            self._components.memory = FileSessionStore()
+
+        if not self._components.tools:
+            self._components.tools = ToolRegistry()
+            self._components.tools.register_defaults()
+
+        if not self._components.security:
+            self._components.security = SecurityManager(
+                permissions=PermissionSet.sandbox()
+            )
+
+        return AgentHarness(components=self._components)
+
+
+# 使用示例
+agent = (HarnessBuilder()
+    .with_llm("claude-sonnet-4-6", api_key=os.environ["ANTHROPIC_API_KEY"])
+    .with_memory("sqlite", db_path="~/.harness/harness.db")
+    .with_tools([ReadTool(), BashTool(), GrepTool()])
+    .with_security("sandbox", workspace="/workspace")
+    .with_observability("opentelemetry", service_name="my-agent")
+    .with_skills(["./skills", "~/.harness/skills"])
+    .build()
+)
+```
+
+---
+
+## API 稳定性分类
+
+### Public API (稳定，向后兼容)
+
+```python
+# 核心接口
+AgentHarness.run(prompt, session_id)
+AgentHarness.stream(prompt, session_id)
+AgentHarness.interrupt()
+
+# 工具注册
+AgentHarness.register_tool(tool)
+@agent.tool()
+
+# 技能管理
+AgentHarness.load_skill(path)
+AgentHarness.activate_skill(name)
+
+# 记忆
+AgentHarness.remember(content, type)
+AgentHarness.recall(query)
+```
+
+### Beta API (可能变更)
+
+```python
+# 触发器
+AgentHarness.on_schedule(cron, prompt)
+AgentHarness.on_webhook(endpoint, prompt)
+
+# 中断恢复
+AgentHarness.resume(session_id)
+
+# 可观测性
+AgentHarness.get_traces()
+```
+
+### Internal API (不保证兼容)
+
+```python
+# 内部组件
+AgentHarness._loop
+AgentHarness._components
+ContextBuilder._compress_context()
+```

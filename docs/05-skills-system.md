@@ -1113,3 +1113,183 @@ def test_skill_injection(skill_registry):
     assert "code-review" in result
     assert len(result) > len(prompt)
 ```
+
+---
+
+## Skill 冲突解决
+
+多个 Skill 同时激活可能导致指令冲突。实现优先级 + 互斥 + 融合策略。
+
+```python
+@dataclass
+class SkillPriority:
+    """技能优先级"""
+    skill_name: str
+    priority: int = 0           # 数值越高优先级越高
+    exclusive: bool = False     # 是否互斥（激活时禁用其他）
+    conflicts_with: List[str] = field(default_factory=list)
+
+
+class SkillConflictResolver:
+    """技能冲突解决器"""
+
+    def __init__(self, registry: SkillRegistry):
+        self.registry = registry
+        self.priorities: Dict[str, SkillPriority] = {}
+
+    def set_priority(self, priority: SkillPriority):
+        """设置技能优先级"""
+        self.priorities[priority.skill_name] = priority
+
+    def resolve(self, matched_skills: List[Skill], user_input: str) -> List[Skill]:
+        """解决冲突，返回最终激活的技能"""
+
+        if not matched_skills:
+            return []
+
+        # 1. 检查互斥技能
+        for skill in matched_skills:
+            priority = self.priorities.get(skill.name)
+            if priority and priority.exclusive:
+                return [skill]
+
+        # 2. 检查冲突对
+        result = []
+        for skill in matched_skills:
+            priority = self.priorities.get(skill.name)
+
+            if priority:
+                has_conflict = any(
+                    s.name in priority.conflicts_with
+                    for s in result
+                )
+                if has_conflict:
+                    continue
+
+            result.append(skill)
+
+        # 3. 按优先级排序，保留前 N 个
+        result.sort(
+            key=lambda s: self.priorities.get(s.name, SkillPriority(s.name)).priority,
+            reverse=True
+        )
+
+        return result[:2]  # 最多激活 2 个
+
+    def merge_prompts(self, system_prompt: str, skills: List[Skill]) -> str:
+        """融合多个技能的提示"""
+        if not skills:
+            return system_prompt
+
+        if len(skills) == 1:
+            return f"{system_prompt}\n\n# Active Skill: {skills[0].name}\n\n{skills[0].content}"
+
+        skill_sections = []
+        for i, skill in enumerate(skills, 1):
+            skill_sections.append(f"## Skill {i}: {skill.name}\n\n{skill.content}")
+
+        return f"{system_prompt}\n\n# Active Skills\n\n" + "\n\n".join(skill_sections)
+
+
+# 使用示例
+resolver = SkillConflictResolver(registry)
+
+resolver.set_priority(SkillPriority(
+    skill_name="code-review",
+    priority=10,
+    conflicts_with=["debug"]
+))
+
+resolver.set_priority(SkillPriority(
+    skill_name="think",
+    priority=100,
+    exclusive=True
+))
+
+matched = registry.find_matching_skills("review and debug this code")
+final_skills = resolver.resolve(matched, user_input)
+```
+
+---
+
+## Skill 自学习的人机协作机制
+
+自动生成的 Skill 质量不可控，可能污染 System Prompt 或引入安全漏洞。自学习 Skill 必须进入 Draft 状态，经过人工审核后才能激活。
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from datetime import datetime
+
+class SkillStatus(Enum):
+    DRAFT = "draft"        # 草稿，等待审核
+    PENDING = "pending"    # 待审核
+    APPROVED = "approved"  # 已批准，可激活
+    REJECTED = "rejected"  # 已拒绝
+
+
+class SkillReviewManager:
+    """技能审核管理器"""
+
+    def __init__(
+        self,
+        draft_dir: str = "~/.harness/skills/drafts",
+        approved_dir: str = "~/.harness/skills/approved"
+    ):
+        self.draft_dir = Path(draft_dir).expanduser()
+        self.approved_dir = Path(approved_dir).expanduser()
+        self.draft_dir.mkdir(parents=True, exist_ok=True)
+        self.approved_dir.mkdir(parents=True, exist_ok=True)
+
+    async def submit_for_review(self, skill: Skill) -> str:
+        """提交技能审核"""
+        draft_id = f"draft_{skill.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        draft_path = self.draft_dir / f"{draft_id}.md"
+        skill.to_file(draft_path)
+
+        return draft_id
+
+    def list_pending(self) -> List["DraftSkill"]:
+        """列出待审核的技能"""
+        pending = []
+        for draft_file in self.draft_dir.glob("*.md"):
+            meta = self._load_meta(draft_file)
+            if meta.get("status") == SkillStatus.PENDING.value:
+                skill = Skill.from_file(draft_file)
+                pending.append(DraftSkill(skill=skill, status=SkillStatus.PENDING))
+        return pending
+
+    async def approve(self, draft_id: str, reviewer: str = "user") -> bool:
+        """批准技能"""
+        draft_path = self.draft_dir / f"{draft_id}.md"
+        if not draft_path.exists():
+            return False
+
+        skill = Skill.from_file(draft_path)
+        approved_path = self.approved_dir / f"{skill.name}.md"
+        skill.to_file(approved_path)
+
+        draft_path.unlink()
+        return True
+
+    async def reject(self, draft_id: str, reason: str) -> bool:
+        """拒绝技能"""
+        draft_path = self.draft_dir / f"{draft_id}.md"
+        if not draft_path.exists():
+            return False
+
+        meta = self._load_meta(draft_path)
+        meta["status"] = SkillStatus.REJECTED.value
+        meta["rejection_reason"] = reason
+        self._save_meta(draft_path, meta)
+
+        return True
+
+
+# CLI 命令
+# harness skill review --list          # 列出待审核
+# harness skill approve <draft_id>      # 批准
+# harness skill reject <draft_id> -r "不安全"
+```

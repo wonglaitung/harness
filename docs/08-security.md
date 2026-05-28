@@ -900,3 +900,265 @@ for entry in suspicious:
     if entry.result == "denied":
         alert_security_team(entry)
 ```
+
+---
+
+## 轻量级沙箱方案
+
+Docker 沙箱每次执行延迟高达数秒，且需要 Docker 权限，不适合高频工具调用。MVP 采用轻量级隔离 + 严格白名单。
+
+```python
+from dataclasses import dataclass
+from typing import List, Set
+import subprocess
+import shutil
+
+@dataclass
+class LightweightSandboxConfig:
+    """轻量级沙箱配置"""
+    allowed_commands: Set[str] = None      # 白名单命令
+    blocked_patterns: List[str] = None     # 禁止的命令模式
+    max_execution_time: float = 30.0
+    max_output_size: int = 1_000_000       # 1MB
+    allowed_env_vars: Set[str] = None
+
+
+class LightweightSandbox:
+    """轻量级沙箱执行器"""
+
+    DEFAULT_BLOCKED_PATTERNS = [
+        "rm -rf",
+        "sudo",
+        "chmod",
+        "chown",
+        "mkfs",
+        "dd if=",
+        "> /dev/",
+        "curl | bash",
+        "wget | bash",
+        ":(){ :|:& };:",  # Fork bomb
+    ]
+
+    def __init__(self, config: LightweightSandboxConfig = None):
+        self.config = config or LightweightSandboxConfig()
+        self.config.blocked_patterns = (
+            self.config.blocked_patterns or self.DEFAULT_BLOCKED_PATTERNS
+        )
+
+    def validate_command(self, command: str) -> tuple[bool, str]:
+        """验证命令安全性"""
+        # 1. 检查黑名单
+        for pattern in self.config.blocked_patterns:
+            if pattern in command:
+                return False, f"Blocked pattern: {pattern}"
+
+        # 2. 白名单检查
+        if self.config.allowed_commands:
+            cmd_base = command.split()[0] if command.split() else ""
+            if shutil.which(cmd_base) not in self.config.allowed_commands:
+                return False, f"Command not in whitelist: {cmd_base}"
+
+        # 3. 危险路径检查
+        dangerous_paths = ["/etc", "/root", "/home", "~/.ssh", "~/.aws"]
+        for path in dangerous_paths:
+            if path in command:
+                return False, f"Dangerous path: {path}"
+
+        return True, ""
+
+    async def execute(
+        self,
+        command: str,
+        cwd: str = None,
+        env: dict = None,
+        timeout: float = None
+    ) -> "SandboxResult":
+        """在沙箱中执行命令"""
+
+        valid, reason = self.validate_command(command)
+        if not valid:
+            return SandboxResult(success=False, error=reason)
+
+        clean_env = self._build_clean_env(env)
+
+        try:
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=clean_env,
+                preexec_fn=self._set_resource_limits
+            )
+
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout or self.config.max_execution_time
+            )
+
+            return SandboxResult(
+                success=process.returncode == 0,
+                stdout=stdout[:self.config.max_output_size].decode("utf-8", errors="replace"),
+                stderr=stderr.decode("utf-8", errors="replace"),
+                exit_code=process.returncode
+            )
+
+        except asyncio.TimeoutError:
+            process.kill()
+            return SandboxResult(success=False, error="Timeout")
+
+    def _build_clean_env(self, extra_env: dict = None) -> dict:
+        """构建干净的环境变量"""
+        safe_vars = {"PATH", "HOME", "USER", "LANG", "LC_ALL"}
+        if self.config.allowed_env_vars:
+            safe_vars.update(self.config.allowed_env_vars)
+
+        env = {k: v for k, v in os.environ.items() if k in safe_vars}
+
+        # 移除敏感变量
+        sensitive = {
+            "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+            "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+            "GITHUB_TOKEN", "DATABASE_URL"
+        }
+        for var in sensitive:
+            env.pop(var, None)
+
+        if extra_env:
+            env.update(extra_env)
+
+        return env
+
+    @staticmethod
+    def _set_resource_limits():
+        """设置进程资源限制"""
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_NPROC, (10, 10))
+```
+
+**权衡**:
+- ✅ 毫秒级执行延迟
+- ✅ 无需 Docker 权限
+- ⚠️ 隔离强度低于容器
+- ⚠️ Windows 平台 `setrlimit` 不可用
+
+---
+
+## 输出过滤 (DLP)
+
+工具执行结果可能包含敏感信息（API Key、密码、PII），直接返回给 LLM 会导致泄露。在 `ToolExecutor` 返回前增加 `ResultSanitizer` 管道。
+
+```python
+import re
+from dataclasses import dataclass
+from typing import List, Pattern
+
+@dataclass
+class SanitizationRule:
+    """脱敏规则"""
+    name: str
+    pattern: Pattern
+    replacement: str
+    description: str = ""
+
+
+class ResultSanitizer:
+    """结果脱敏器"""
+
+    DEFAULT_RULES = [
+        SanitizationRule(
+            name="api_key",
+            pattern=re.compile(r'(api[_-]?key["\s:=]+)["\']?[\w-]{20,}["\']?', re.I),
+            replacement=r'\1[REDACTED]',
+            description="API Key"
+        ),
+        SanitizationRule(
+            name="password",
+            pattern=re.compile(r'(password["\s:=]+)["\']?[^\s"\']{8,}["\']?', re.I),
+            replacement=r'\1[REDACTED]',
+            description="密码"
+        ),
+        SanitizationRule(
+            name="aws_key",
+            pattern=re.compile(r'AKIA[0-9A-Z]{16}'),
+            replacement='AKIA[REDACTED]',
+            description="AWS Access Key"
+        ),
+        SanitizationRule(
+            name="email",
+            pattern=re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
+            replacement='[EMAIL REDACTED]',
+            description="邮箱地址"
+        ),
+        SanitizationRule(
+            name="private_key",
+            pattern=re.compile(r'-----BEGIN (?:RSA |EC )?PRIVATE KEY-----'),
+            replacement='-----BEGIN PRIVATE KEY [REDACTED]-----',
+            description="私钥"
+        ),
+    ]
+
+    def __init__(
+        self,
+        rules: List[SanitizationRule] = None,
+        max_length: int = 100_000
+    ):
+        self.rules = rules or self.DEFAULT_RULES
+        self.max_length = max_length
+
+    def sanitize(self, content: str) -> str:
+        """执行脱敏"""
+        result = content
+
+        for rule in self.rules:
+            result = rule.pattern.sub(rule.replacement, result)
+
+        # 长度限制
+        if len(result) > self.max_length:
+            head = result[:self.max_length // 2]
+            tail = result[-self.max_length // 4:]
+            result = f"{head}\n\n... [已截断] ...\n\n{tail}"
+
+        return result
+
+    def get_redaction_report(self, original: str) -> dict:
+        """获取脱敏报告"""
+        report = {"redactions": []}
+
+        for rule in self.rules:
+            matches = rule.pattern.findall(original)
+            if matches:
+                report["redactions"].append({
+                    "rule": rule.name,
+                    "description": rule.description,
+                    "count": len(matches) if isinstance(matches, list) else 1
+                })
+
+        return report
+
+
+class SanitizingToolExecutor(ToolExecutor):
+    """带脱敏的工具执行器"""
+
+    def __init__(self, registry: ToolRegistry, sanitizer: ResultSanitizer = None):
+        super().__init__(registry)
+        self.sanitizer = sanitizer or ResultSanitizer()
+
+    async def execute(self, call: ToolCall, context: ToolContext) -> ToolResult:
+        """执行工具并对结果脱敏"""
+        result = await super().execute(call, context)
+
+        if result.success and result.content:
+            result.content = self.sanitizer.sanitize(result.content)
+
+        return result
+```
+
+**关键点**:
+- 正则匹配常见敏感信息模式
+- 支持自定义规则
+- 输出长度限制防止信息泄露
+- 可审计的脱敏报告
