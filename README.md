@@ -8,6 +8,25 @@ An embeddable AI Agent SDK for Python.
 pip install harness-ai
 ```
 
+### 可选扩展
+
+```bash
+pip install "harness-ai[openai]"        # OpenAI 支持
+pip install "harness-ai[observability]" # OpenTelemetry 可观测性
+pip install "harness-ai[sqlite]"        # SQLite 会话存储
+pip install "harness-ai[web]"           # Web 抓取工具
+
+# 安装多个扩展
+pip install "harness-ai[openai,sqlite,web]"
+```
+
+### 开发模式
+
+```bash
+pip install -e ".[dev]"                    # 开发依赖
+pip install -e ".[dev,openai,observability]"  # 开发 + 所有扩展
+```
+
 ## Quick Start
 
 ```python
