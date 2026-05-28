@@ -143,3 +143,18 @@
 - Web 工具（搜索 + 抓取）
 
 总计: 244 个测试通过
+
+### Phase 14-15: JSON Schema 验证 + LLM Streaming 背压集成 ✅ 完成 (NEW)
+- Tool JSON Schema 完整验证 (tools/base.py) - 使用 jsonschema 库
+- LLMConfig.streaming_config - 流配置
+- AnthropicClient.stream() 背压集成
+- OpenAIClient.stream() 背压集成
+- 13 个验证测试 + 10 个流式测试
+
+测试状态: 267 个测试通过, 9 skipped
+
+### 文档同步 ✅ 完成
+- docs/02-agent-loop.md: 添加 CostStorage 文档, 更新 ObservabilityManager 章节
+- docs/04-memory-system.md: 更新 AsyncSQLiteSessionStore 文档
+- docs/07-sdk-api.md: 更新 Public API 列表
+- README.md: 更新 Features 列表

@@ -1238,7 +1238,60 @@ class CostController:
             return True, self.config.fallback_model
 
         return False, ""
+
+
+### CostStorage 存储接口
+
+CostController 依赖 CostStorage 接口来持久化用户级和全局级的使用数据。提供两种实现：
+
+```python
+from harness.core import CostStorage, InMemoryCostStorage, SQLiteCostStorage
+from harness.types import UserUsage
+
+# 抽象接口
+class CostStorage(ABC):
+    """成本存储抽象基类"""
+
+    @abstractmethod
+    def get_user_usage(self, user_id: str) -> UserUsage:
+        """获取用户使用量"""
+        pass
+
+    @abstractmethod
+    def record_user_usage(
+        self,
+        user_id: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        request: bool = False,
+    ) -> UserUsage:
+        """记录用户使用"""
+        pass
+
+    @abstractmethod
+    def get_global_usage(self) -> GlobalUsage:
+        """获取全局使用量"""
+        pass
+
+    @abstractmethod
+    def reset_daily(self) -> None:
+        """重置每日计数器"""
+        pass
+
+
+# 内存实现 - 适合单进程应用
+storage = InMemoryCostStorage()
+usage = storage.record_user_usage("user-123", input_tokens=1000, output_tokens=500)
+print(usage.daily_tokens)  # 1500
+
+# SQLite 实现 - 适合多进程/生产环境
+storage = SQLiteCostStorage("~/.harness/costs.db")
+usage = storage.get_user_usage("user-123")
 ```
+
+**选择建议**:
+- 开发/测试: `InMemoryCostStorage` (数据重启后丢失)
+- 生产环境: `SQLiteCostStorage` (持久化存储)
 
 ---
 
@@ -1549,56 +1602,77 @@ result = await agent._loop.resume_from_snapshot(snapshot)
 
 原生集成 OpenTelemetry，导出标准 Span，兼容 Langfuse、Datadog、Jaeger 等观测平台。
 
+### ObservabilityManager
+
+Harness 提供封装好的 ObservabilityManager，简化 OpenTelemetry 初始化：
+
 ```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
+from harness import ObservabilityManager, ObservabilityConfig, setup_observability
 
-# 初始化 OTel
-resource = Resource.create({"service.name": "harness-agent"})
-provider = TracerProvider(resource=resource)
-processor = BatchSpanProcessor(OTLPSpanExporter())
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+# 方式 1: 使用便捷函数
+setup_observability(ObservabilityConfig(
+    service_name="my-agent",
+    export_console=True,  # 调试时输出到控制台
+))
 
-tracer = trace.get_tracer("harness.agent")
+# 方式 2: 使用 Manager 类
+manager = ObservabilityManager(config=ObservabilityConfig(
+    service_name="my-agent",
+    export_otlp=True,
+    otlp_endpoint="http://jaeger:4317",  # OTLP gRPC 端点
+))
+manager.setup()
+```
 
+### 配置选项
 
-class ObservableAgentLoop:
-    """可观测的 Agent 循环"""
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| service_name | str | "harness-agent" | 服务名称 |
+| service_version | str | "0.1.0" | 服务版本 |
+| enabled | bool | True | 是否启用 |
+| export_console | bool | False | 输出到控制台（调试） |
+| export_otlp | bool | False | 导出到 OTLP 端点 |
+| otlp_endpoint | str | "http://localhost:4317" | OTLP gRPC 端点 |
+| sample_rate | float | 1.0 | 采样率 (1.0 = 全部) |
 
-    async def run(self, prompt: str, session_id: str) -> LoopResult:
-        """执行循环（带 OTel 埋点）"""
-        with tracer.start_as_current_span(
-            "agent_loop.run",
-            attributes={
-                "session.id": session_id,
-                "prompt.length": len(prompt)
-            }
-        ) as span:
+### SpanBuilder 使用
 
-            # 1. 构建上下文
-            with tracer.start_as_current_span("context.build") as ctx_span:
-                context = await self._build_context(session_id)
-                ctx_span.set_attribute("context.token_count", context.token_count)
-                ctx_span.set_attribute("context.message_count", len(context.messages))
+使用 SpanBuilder 进行链路追踪：
 
-            # 2. LLM 调用
-            with tracer.start_as_current_span("llm.call") as llm_span:
-                llm_span.set_attribute("llm.model", self.llm.model)
-                response = await self.llm.call(context)
-                llm_span.set_attribute("llm.input_tokens", response.usage.input_tokens)
-                llm_span.set_attribute("llm.output_tokens", response.usage.output_tokens)
+```python
+from harness import SpanBuilder, traced_operation
 
-            # 3. 工具执行
-            if response.tool_calls:
-                with tracer.start_as_current_span("tools.execute") as tools_span:
-                    tools_span.set_attribute("tools.count", len(response.tool_calls))
-                    results = await self._execute_tools(response.tool_calls)
+# 方式 1: 使用上下文管理器
+with traced_operation("llm.call", {"model": "claude-sonnet-4-6"}) as span:
+    response = await llm.call(messages)
+    span.set_attr("tokens.input", response.usage.input_tokens)
 
-            return result
+# 方式 2: 使用 SpanBuilder
+with SpanBuilder("agent_loop.run") as span:
+    span.set_attr("session.id", session_id)
+    span.set_attr("prompt.length", len(prompt))
+    # ... 执行任务 ...
+    span.add_event("tool.called", {"tool": "read_file"})
+```
+
+### 与 Agent 集成
+
+```python
+from harness import AgentHarness, ObservabilityConfig, setup_observability
+
+# 初始化可观测性
+setup_observability(ObservabilityConfig(
+    service_name="production-agent",
+    export_otlp=True,
+    otlp_endpoint="http://jaeger:4317",
+))
+
+# 创建 Agent
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 运行 - 自动生成 Span
+result = await agent.run("Analyze this code")
 ```
 
 **导出的 Span 结构**:
@@ -1610,4 +1684,15 @@ agent_loop.run (session_id=xxx, prompt.length=100)
 │   ├── tools.read (success=true, duration=0.1s)
 │   └── tools.grep (success=true, duration=0.2s)
 └── memory.save (success=true)
+```
+
+### 依赖安装
+
+```bash
+# 基础 OpenTelemetry
+pip install "harness-ai[observability]"
+
+# 或手动安装
+pip install opentelemetry-api opentelemetry-sdk
+pip install opentelemetry-exporter-otlp  # OTLP 导出
 ```

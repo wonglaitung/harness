@@ -339,8 +339,10 @@ assert result.content == "这是模拟响应"
 - **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
 - **Streaming**: 流式输出与背压控制
 - **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
-- **Tool System**: 内置工具 + 自定义工具
-- **Memory**: 会话管理与持久化存储
+- **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
+- **Memory**: 会话管理、SQLite 持久化存储、异步 WAL 模式
+- **Cost Control**: 多层级预算控制（会话级、用户级、全局级）
+- **Observability**: OpenTelemetry 集成，支持 Jaeger、Datadog、Langfuse
 - **Testing**: MockHarness + RecordingHarness 完整测试工具链
 - **SDK**: 简洁的 Python API
 - **Progress Events**: 执行过程可视化，支持 UI 展示和调试

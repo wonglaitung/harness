@@ -1267,82 +1267,78 @@ class ScalableSessionStore:
 
 默认 SQLite 配置在高并发下会遭遇 `database is locked` 错误。启用 WAL 模式 + 连接池 + 合理超时。
 
+### AsyncSQLiteSessionStore
+
+Harness 提供生产级的异步 SQLite 存储：
+
 ```python
-import aiosqlite
-from contextlib import asynccontextmanager
+from harness import AsyncSQLiteSessionStore
 
-class ProductionSQLiteStore:
-    """生产级 SQLite 存储"""
+# 创建生产级存储
+store = AsyncSQLiteSessionStore(
+    db_path="~/.harness/harness.db",
+    pool_size=5,      # 连接池大小
+    timeout=30.0,     # 超时时间（秒）
+)
 
-    def __init__(
-        self,
-        db_path: str,
-        pool_size: int = 5,
-        timeout: float = 30.0
-    ):
-        self.db_path = db_path
-        self.pool_size = pool_size
-        self.timeout = timeout
-        self._pool: list[aiosqlite.Connection] = []
-        self._lock = asyncio.Lock()
+# 异步保存
+await store.save(session)
 
-    async def _init_connection(self, conn: aiosqlite.Connection):
-        """初始化连接配置"""
+# 异步加载
+session = await store.load("session-123")
+
+# 关闭连接池
+await store.close()
+```
+
+**内置优化**:
+- `journal_mode=WAL`: 允许读写并发，解决 `database is locked`
+- `synchronous=NORMAL`: 平衡安全与性能
+- `busy_timeout`: 等待锁释放的时间
+- 连接池: 减少连接创建开销
+- 自动重试: 遇到锁冲突时自动重试
+
+### 实现细节
+
+```python
+class AsyncSQLiteSessionStore:
+    """异步 SQLite 存储，支持 WAL 模式和连接池"""
+
+    async def _init_connection(self, conn):
         # 启用 WAL 模式（写并发关键）
         await conn.execute("PRAGMA journal_mode=WAL")
-
         # 同步模式设置
         await conn.execute("PRAGMA synchronous=NORMAL")
-
         # 增加 busy_timeout（毫秒）
         await conn.execute(f"PRAGMA busy_timeout={int(self.timeout * 1000)}")
-
         # 缓存大小（负数表示 KB）
         await conn.execute("PRAGMA cache_size=-64000")  # 64MB
-
         # 外键约束
         await conn.execute("PRAGMA foreign_keys=ON")
-
-    @asynccontextmanager
-    async def get_connection(self):
-        """获取连接（连接池模式）"""
-        async with self._lock:
-            if self._pool:
-                conn = self._pool.pop()
-            else:
-                conn = await aiosqlite.connect(self.db_path)
-                await self._init_connection(conn)
-
-        try:
-            yield conn
-        finally:
-            async with self._lock:
-                if len(self._pool) < self.pool_size:
-                    self._pool.append(conn)
-                else:
-                    await conn.close()
 
     async def save(self, session: Session):
         """保存会话（带重试）"""
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                async with self.get_connection() as conn:
+                async with self._get_connection() as conn:
                     # ... 保存逻辑
                     await conn.commit()
                 return
-            except aiosqlite.OperationalError as e:
+            except Exception as e:
                 if "locked" in str(e) and attempt < max_retries - 1:
                     await asyncio.sleep(0.1 * (2 ** attempt))
                     continue
                 raise
 ```
 
-**关键配置说明**:
-- `journal_mode=WAL`: 允许读写并发，解决 `database is locked`
-- `synchronous=NORMAL`: 平衡安全与性能
-- `busy_timeout`: 等待锁释放的时间
-- 连接池: 减少连接创建开销
+### 存储选择指南
+
+| 存储类型 | 适用场景 | 特点 |
+|---------|---------|------|
+| `FileSessionStore` | 开发测试 | 简单，人类可读 |
+| `SQLiteSessionStore` | 单进程应用 | 同步 API，简单集成 |
+| `AsyncSQLiteSessionStore` | 生产环境 | 异步，高并发，WAL 模式 |
 
 ---
 

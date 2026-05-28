@@ -1397,6 +1397,15 @@ AgentHarness.activate_skill(name)
 # 记忆
 AgentHarness.remember(content, type)
 AgentHarness.recall(query)
+
+# 会话存储
+SessionStore, FileSessionStore, SQLiteSessionStore, AsyncSQLiteSessionStore
+
+# 成本控制
+CostController, CostStorage, InMemoryCostStorage, CostConfig
+
+# 可观测性
+ObservabilityManager, ObservabilityConfig, setup_observability
 ```
 
 ### Beta API (可能变更)
@@ -1411,6 +1420,9 @@ AgentHarness.resume(session_id)
 
 # 可观测性
 AgentHarness.get_traces()
+
+# SQLite 成本存储
+SQLiteCostStorage
 ```
 
 ### Internal API (不保证兼容)
