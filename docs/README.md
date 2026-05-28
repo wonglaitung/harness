@@ -15,7 +15,7 @@
 - [09-implementation.md](./09-implementation.md) - 实施路线图
 - [10-comparison.md](./10-comparison.md) - 与 Hermes/OpenClaw 对比
 - [11-testing.md](./11-testing.md) - 测试策略
-- [13-deployment.md](./13-deployment.md) - 内嵌部署指南
+- [12-deployment.md](./12-deployment.md) - 内嵌部署指南
 
 ## 项目定位
 
