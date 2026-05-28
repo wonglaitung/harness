@@ -7,10 +7,17 @@ from harness.core import (
     CircuitState,
     CostConfig,
     CostController,
+    CostStorage,
     ErrorAction,
     ErrorContext,
     ErrorDecision,
     ErrorHandler,
+    GlobalBudgetStatus,
+    InMemoryCostStorage,
+    ObservabilityConfig,
+    ObservabilityManager,
+    setup_observability,
+    UserBudgetStatus,
 )
 from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
 from harness.mcp import (
@@ -23,6 +30,13 @@ from harness.mcp import (
     MCPToolWrapper,
     MCPTransport,
     StdioTransport,
+)
+from harness.memory import (
+    AsyncSQLiteSessionStore,
+    ContextBuilder,
+    FileSessionStore,
+    SessionStore,
+    SQLiteSessionStore,
 )
 from harness.model_presets import (
     CONTEXT_LEVELS,
@@ -61,12 +75,16 @@ from harness.tools.builtins import (
     GlobTool,
     GrepTool,
     ReadTool,
+    WebFetchTool,
+    WebSearchTool,
     WriteTool,
 )
 from harness.types import (
     BudgetExceededError,
     CostConfig,
+    GlobalBudgetExceededError,
     LoopResult,
+    LoopSnapshot,
     LoopState,
     Message,
     ProgressCallback,
@@ -76,6 +94,8 @@ from harness.types import (
     ToolCall,
     TokenUsage,
     ToolResult,
+    UserBudgetExceededError,
+    UserUsage,
 )
 
 __version__ = "0.1.0"
@@ -105,6 +125,8 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "BashTool",
+    "WebSearchTool",
+    "WebFetchTool",
     # Core types
     "Message",
     "Session",
@@ -112,12 +134,20 @@ __all__ = [
     "ToolResult",
     "TokenUsage",
     "LoopResult",
+    "LoopSnapshot",
     "LoopState",
     # Cost control
     "CostConfig",
     "CostController",
+    "CostStorage",
+    "InMemoryCostStorage",
     "BudgetStatus",
+    "UserBudgetStatus",
+    "GlobalBudgetStatus",
+    "UserUsage",
     "BudgetExceededError",
+    "UserBudgetExceededError",
+    "GlobalBudgetExceededError",
     # Progress types
     "ProgressEvent",
     "ProgressEventType",
@@ -151,4 +181,13 @@ __all__ = [
     "MCPManager",
     "MCPServerConfig",
     "MCPToolWrapper",
+    # Session stores
+    "SessionStore",
+    "FileSessionStore",
+    "SQLiteSessionStore",
+    "AsyncSQLiteSessionStore",
+    # Observability
+    "ObservabilityManager",
+    "ObservabilityConfig",
+    "setup_observability",
 ]

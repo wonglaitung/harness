@@ -17,6 +17,12 @@ from pathlib import Path
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from harness.core.cost_controller import CostController
 from harness.core.error_handler import ErrorAction, ErrorContext, ErrorDecision, ErrorHandler
+from harness.core.observability import (
+    SpanBuilder,
+    is_tracing,
+    record_token_usage,
+    traced_operation,
+)
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 from harness.memory.session import SessionManager
@@ -138,6 +144,43 @@ class AgentLoop:
         Returns:
             LoopResult: Final result
         """
+        # Wrap with OpenTelemetry tracing if available
+        if is_tracing():
+            return await self._run_with_tracing(prompt, session, tools, on_chunk, on_progress)
+        return await self._run_impl(prompt, session, tools, on_chunk, on_progress)
+
+    async def _run_with_tracing(
+        self,
+        prompt: str,
+        session: Session,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> LoopResult:
+        """Run with OpenTelemetry tracing."""
+        with SpanBuilder("agent_loop.run") as span:
+            span.set_attr("session.id", session.id)
+            span.set_attr("prompt.length", len(prompt))
+            span.set_attr("model", self.llm.model_name)
+
+            result = await self._run_impl(prompt, session, tools, on_chunk, on_progress)
+
+            span.set_attr("result.status", result.status.value)
+            span.set_attr("result.iterations", result.iterations)
+            if result.token_usage:
+                record_token_usage(result.token_usage, span.span)
+
+            return result
+
+    async def _run_impl(
+        self,
+        prompt: str,
+        session: Session,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> LoopResult:
+        """Internal implementation of run."""
         self._on_progress = on_progress
         self._loop_start_time = time.time()
         self._interrupt_flag = False

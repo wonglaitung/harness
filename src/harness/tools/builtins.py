@@ -522,3 +522,253 @@ class BashTool(Tool):
                 content="",
                 error=f"Failed to execute command: {str(e)}",
             )
+
+
+class WebSearchTool(Tool):
+    """Search the web for information."""
+
+    @property
+    def name(self) -> str:
+        return "web_search"
+
+    @property
+    def description(self) -> str:
+        return "Search the web for information using a search query"
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query",
+                },
+                "num_results": {
+                    "type": "integer",
+                    "description": "Number of results to return (default 5)",
+                },
+            },
+            "required": ["query"],
+        }
+
+    async def execute(
+        self,
+        arguments: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        query = arguments["query"]
+        num_results = arguments.get("num_results", 5)
+
+        try:
+            import aiohttp
+        except ImportError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="aiohttp is required for web search. Install with: pip install aiohttp",
+            )
+
+        try:
+            # Use DuckDuckGo Instant Answer API (free, no API key needed)
+            async with aiohttp.ClientSession() as session:
+                url = "https://api.duckduckgo.com/"
+                params = {
+                    "q": query,
+                    "format": "json",
+                    "no_html": 1,
+                    "skip_disambig": 1,
+                }
+
+                async with session.get(url, params=params, timeout=30) as response:
+                    if response.status != 200:
+                        return ToolResult(
+                            tool_call_id="",
+                            success=False,
+                            content="",
+                            error=f"Search failed: HTTP {response.status}",
+                        )
+
+                    data = await response.json()
+
+            # Format results
+            results = []
+
+            # Abstract (instant answer)
+            if data.get("Abstract"):
+                results.append(f"**Answer**: {data['Abstract']}")
+                if data.get("AbstractURL"):
+                    results.append(f"Source: {data['AbstractURL']}")
+
+            # Related topics
+            for topic in data.get("RelatedTopics", [])[:num_results]:
+                if isinstance(topic, dict):
+                    if "Text" in topic:
+                        results.append(f"- {topic['Text']}")
+                        if "FirstURL" in topic:
+                            results.append(f"  URL: {topic['FirstURL']}")
+
+            if not results:
+                content = f"No results found for: {query}"
+            else:
+                content = "\n".join(results)
+
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=content,
+            )
+
+        except TimeoutError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="Search request timed out",
+            )
+
+        except Exception as e:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Search failed: {str(e)}",
+            )
+
+
+class WebFetchTool(Tool):
+    """Fetch and extract content from a URL."""
+
+    @property
+    def name(self) -> str:
+        return "web_fetch"
+
+    @property
+    def description(self) -> str:
+        return "Fetch and extract text content from a URL"
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL to fetch",
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector to extract specific content (optional)",
+                },
+                "max_length": {
+                    "type": "integer",
+                    "description": "Maximum content length in characters (default 10000)",
+                },
+            },
+            "required": ["url"],
+        }
+
+    async def execute(
+        self,
+        arguments: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        url = arguments["url"]
+        selector = arguments.get("selector")
+        max_length = arguments.get("max_length", 10000)
+
+        try:
+            import aiohttp
+        except ImportError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="aiohttp is required for web fetch. Install with: pip install aiohttp",
+            )
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (compatible; HarnessBot/1.0)",
+                }
+
+                async with session.get(
+                    url, headers=headers, timeout=30
+                ) as response:
+                    if response.status != 200:
+                        return ToolResult(
+                            tool_call_id="",
+                            success=False,
+                            content="",
+                            error=f"Fetch failed: HTTP {response.status}",
+                        )
+
+                    html = await response.text()
+
+            # Try to use BeautifulSoup for parsing
+            try:
+                from bs4 import BeautifulSoup
+
+                soup = BeautifulSoup(html, "html.parser")
+
+                # Remove script and style elements
+                for element in soup(["script", "style", "nav", "footer", "header"]):
+                    element.decompose()
+
+                # Extract text
+                if selector:
+                    elements = soup.select(selector)
+                    text = "\n\n".join(e.get_text(strip=True) for e in elements)
+                else:
+                    # Get main content
+                    main = soup.find("main") or soup.find("article") or soup.find("body")
+                    if main:
+                        text = main.get_text(separator="\n", strip=True)
+                    else:
+                        text = soup.get_text(separator="\n", strip=True)
+
+                # Clean up whitespace
+                lines = [line.strip() for line in text.split("\n") if line.strip()]
+                text = "\n".join(lines)
+
+            except ImportError:
+                # Fallback to simple regex extraction
+                import re
+
+                # Remove script and style blocks
+                html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+                html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL)
+
+                # Remove HTML tags
+                text = re.sub(r"<[^>]+>", " ", html)
+
+                # Clean up whitespace
+                text = re.sub(r"\s+", " ", text).strip()
+
+            # Truncate if needed
+            if len(text) > max_length:
+                text = text[:max_length] + "\n\n... (truncated)"
+
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=text,
+            )
+
+        except TimeoutError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="Fetch request timed out",
+            )
+
+        except Exception as e:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Fetch failed: {str(e)}",
+            )

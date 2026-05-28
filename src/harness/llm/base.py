@@ -12,9 +12,12 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from harness.types import LLMResponse
+
+if TYPE_CHECKING:
+    from harness.core import StreamingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,7 @@ class LLMConfig:
     timeout: float = 120.0
     retry_count: int = 3
     retry_delay: float = 1.0
+    streaming_config: "StreamingConfig | None" = None  # Streaming with backpressure
 
 
 @dataclass

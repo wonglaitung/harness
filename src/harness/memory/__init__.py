@@ -13,12 +13,20 @@ from harness.memory.context_builder import (
     ContextConfig,
 )
 from harness.memory.session import SessionManager
-from harness.memory.store import FileSessionStore
+from harness.memory.store import (
+    AsyncSQLiteSessionStore,
+    FileSessionStore,
+    SessionStore,
+    SQLiteSessionStore,
+)
 from harness.memory.token_counter import TokenCounter, count_tokens
 
 __all__ = [
     "SessionManager",
+    "SessionStore",
     "FileSessionStore",
+    "SQLiteSessionStore",
+    "AsyncSQLiteSessionStore",
     "ContextBuilder",
     "ContextConfig",
     "BuiltContext",

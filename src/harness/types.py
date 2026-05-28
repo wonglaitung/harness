@@ -175,6 +175,24 @@ class BudgetExceededError(Exception):
         self.limit = limit
 
 
+class UserBudgetExceededError(Exception):
+    """Raised when user-level budget is exceeded."""
+
+    def __init__(self, message: str, user_id: str = "", limit: int = 0):
+        super().__init__(message)
+        self.user_id = user_id
+        self.limit = limit
+
+
+class GlobalBudgetExceededError(Exception):
+    """Raised when global budget is exceeded."""
+
+    def __init__(self, message: str, current_cost: float = 0, budget: float = 0):
+        super().__init__(message)
+        self.current_cost = current_cost
+        self.budget = budget
+
+
 @dataclass
 class CostConfig:
     """
@@ -182,21 +200,42 @@ class CostConfig:
 
     Implements multi-level budget management to prevent runaway costs.
 
-    Attributes:
+    Session Level:
         max_tokens_per_session: Maximum tokens allowed per session
         max_tool_calls_per_session: Maximum tool calls per session
         max_iterations_per_request: Maximum iterations per request
-        warning_threshold: Ratio at which to emit warning (0.0-1.0)
-        action_on_exceed: Action when budget exceeded: "stop", "compress", "warn"
+
+    User Level:
+        daily_token_limit: Maximum tokens per user per day
+        hourly_request_limit: Maximum requests per user per hour
+
+    Global Level:
+        global_daily_budget_usd: Global daily budget in USD
+        auto_throttle: Enable automatic throttling when budget is low
+        fallback_model: Model to switch to when budget is tight
+        context_reduction_ratio: Ratio to reduce context when budget is tight
     """
+    # Session level
     max_tokens_per_session: int = 1_000_000
     max_tool_calls_per_session: int = 500
     max_iterations_per_request: int = 20
+
+    # User level
+    daily_token_limit: int = 10_000_000
+    hourly_request_limit: int = 100
+
+    # Global level
+    global_daily_budget_usd: float = 100.0
+    auto_throttle: bool = True
+    fallback_model: str = "claude-haiku-4-5"
+    context_reduction_ratio: float = 0.5
+
+    # Common settings
     warning_threshold: float = 0.8
-    action_on_exceed: str = "stop"  # stop | compress | warn
+    action_on_exceed: str = "stop"  # stop | compress | warn | downgrade
 
     def __post_init__(self):
-        if self.action_on_exceed not in ("stop", "compress", "warn"):
+        if self.action_on_exceed not in ("stop", "compress", "warn", "downgrade"):
             raise ValueError(f"Invalid action_on_exceed: {self.action_on_exceed}")
 
 
@@ -234,6 +273,39 @@ class TokenUsage:
         usage_ratio = self.total_tokens / config.max_tokens_per_session
         if usage_ratio >= config.warning_threshold:
             return True, f"Budget warning: {usage_ratio:.0%} of session budget used"
+
+        return True, None
+
+
+@dataclass
+class UserUsage:
+    """User-level usage statistics."""
+    user_id: str
+    daily_tokens: int = 0
+    hourly_requests: int = 0
+    date: str = ""  # YYYY-MM-DD format
+    hour: int = 0   # 0-23
+
+    def check_budget(self, config: CostConfig) -> tuple[bool, str | None]:
+        """
+        Check if user usage exceeds budget.
+
+        Args:
+            config: Cost configuration
+
+        Returns:
+            Tuple of (is_within_budget, warning_message)
+        """
+        if self.daily_tokens > config.daily_token_limit:
+            return False, f"Daily token limit exceeded: {self.daily_tokens}/{config.daily_token_limit}"
+
+        if self.hourly_requests > config.hourly_request_limit:
+            return False, f"Hourly request limit exceeded: {self.hourly_requests}/{config.hourly_request_limit}"
+
+        # Check warning threshold
+        usage_ratio = self.daily_tokens / config.daily_token_limit
+        if usage_ratio >= config.warning_threshold:
+            return True, f"User budget warning: {usage_ratio:.0%} of daily budget used"
 
         return True, None
 

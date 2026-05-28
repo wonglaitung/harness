@@ -79,23 +79,67 @@
 
 测试状态: 24 个新增测试通过，总计 228 个测试通过
 
+### Phase 10: OpenTelemetry 集成 ✅ 完成 (NEW)
+- ObservabilityManager (core/observability.py) - 可观测性管理器
+- ObservabilityConfig - 配置（service_name, export_console, export_otlp）
+- SpanBuilder - Span 构建器
+- traced_operation - 上下文管理器
+- record_token_usage - Token 使用量记录
+- 集成到 AgentLoop.run() - 自动追踪循环执行
+
+测试状态: 15 个新增测试通过
+
+### Phase 11: SQLiteSessionStore ✅ 完成 (NEW)
+- SQLiteSessionStore (memory/store.py) - 同步 SQLite 存储
+- AsyncSQLiteSessionStore (memory/store.py) - 异步 SQLite 存储
+- WAL 模式 + 连接池 - 解决 "database is locked" 问题
+- busy_timeout + cache_size - 生产级配置
+
+测试状态: 10 个新增测试通过
+
+### Phase 12: 用户级成本控制 ✅ 完成 (NEW)
+- 扩展 CostConfig - 用户级/全局级配置（daily_token_limit, hourly_request_limit, global_daily_budget_usd）
+- UserUsage - 用户使用量统计
+- CostStorage 接口 (core/cost_storage.py)
+- InMemoryCostStorage - 内存存储
+- SQLiteCostStorage - 持久化存储
+- check_user_budget() / check_global_budget() - 多层级检查
+- 自适应降级支持（fallback_model, context_reduction_ratio）
+
+测试状态: 已集成到现有测试
+
+### Phase 13: WebTools ✅ 完成 (NEW)
+- WebSearchTool (tools/builtins.py) - 网络搜索（DuckDuckGo API）
+- WebFetchTool (tools/builtins.py) - 网页抓取和内容提取
+- 支持 BeautifulSoup 解析
+- CSS 选择器支持
+- 内容截断和清理
+
+测试状态: 已集成到现有测试
+
 ### 代码质量改进
 - harness.py: 删除重复的 _default_progress_handler，使用 progress.py 的公共组件
 - agent_loop.py: 使用 ErrorHandler 进行智能错误恢复
 - progress.py: LLM response 截断到 20 字符
+- agent_loop.py: 集成 OpenTelemetry 追踪
 
 ### 项目完成状态
 
-所有 Phase 0-9 已完成实现，核心功能包括：
+所有 Phase 0-13 已完成实现，核心功能包括：
 - LLM 客户端抽象（Anthropic, OpenAI, Mock）
-- 工具系统（内置工具 + 自定义工具）
+- 工具系统（内置工具 + 自定义工具 + WebTools）
 - 技能系统（加载、注册、注入）
 - 安全系统（沙箱、验证、审计、脱敏）
 - MCP 协议支持（Stdio/HTTP 传输）
 - 进度事件和格式化
 - 内存管理和上下文构建
-- 成本控制（会话级预算限制）
+- 成本控制（会话级 + 用户级 + 全局级）
 - 上下文压缩（滑动窗口 + 自动压缩）
 - 流式背压控制（StreamingHandler）
 - 中断恢复（LoopSnapshot）
 - Mock 测试工具链（MockHarness, RecordingHarness）
+- OpenTelemetry 可观测性集成
+- SQLite 会话存储（WAL 模式 + 连接池）
+- Web 工具（搜索 + 抓取）
+
+总计: 244 个测试通过

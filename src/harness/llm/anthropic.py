@@ -2,12 +2,17 @@
 Anthropic Claude LLM client implementation.
 """
 
+import asyncio
 import os
 from collections.abc import AsyncIterator, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
-from harness.types import LLMResponse, StopReason, TokenUsage, ToolCall
+from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage, ToolCall
+
+if TYPE_CHECKING:
+    from harness.core import StreamingConfig
+    from harness.types import ProgressCallback
 
 
 class AnthropicClient(LLMClient):
@@ -92,10 +97,33 @@ class AnthropicClient(LLMClient):
         tools: list[ToolDefinition] | None = None,
         system: str | None = None,
         on_chunk: Callable[[str], None] | None = None,
+        on_progress: "ProgressCallback | None" = None,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """Stream response from Claude."""
+        """
+        Stream response from Claude with backpressure control.
+
+        Args:
+            messages: Conversation messages
+            tools: Available tools
+            system: System prompt
+            on_chunk: Callback for each text chunk
+            on_progress: Callback for progress events (including backpressure)
+            **kwargs: Additional parameters
+
+        Yields:
+            Text chunks from the response
+        """
+        from harness.core import StreamingConfig, StreamingHandler
+
         client = self._get_client()
+
+        # Initialize streaming handler with backpressure control
+        streaming_config = self.config.streaming_config or StreamingConfig()
+        handler = StreamingHandler(
+            config=streaming_config,
+            on_progress=on_progress,
+        )
 
         # Build request parameters
         params = {
@@ -110,11 +138,20 @@ class AnthropicClient(LLMClient):
         if tools:
             params["tools"] = [t.to_api_format() for t in tools]
 
-        # Stream the response
+        # Stream the response with backpressure handling
         async with client.messages.stream(**params) as stream:
             async for text in stream.text_stream:
+                # Create chunk and process through handler
+                chunk = Chunk(type=ChunkType.TEXT, content=text)
+                await handler.handle(chunk)
+
+                # Apply backpressure if needed
+                if handler.should_pause:
+                    await asyncio.sleep(0.01)
+
                 if on_chunk:
                     on_chunk(text)
+
                 yield text
 
     def _parse_response(self, response) -> LLMResponse:

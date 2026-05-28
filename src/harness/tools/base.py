@@ -98,9 +98,9 @@ class Tool(ABC):
         arguments: dict[str, Any],
     ) -> tuple[bool, str | None]:
         """
-        Validate tool arguments before execution.
+        Validate tool arguments using JSON Schema.
 
-        Override this for custom validation logic.
+        Falls back to basic validation if jsonschema is not installed.
 
         Args:
             arguments: Arguments to validate
@@ -108,7 +108,35 @@ class Tool(ABC):
         Returns:
             tuple: (is_valid, error_message)
         """
-        # Basic validation: check required fields
+        # Try to use jsonschema for full validation
+        try:
+            import jsonschema
+
+            jsonschema.validate(arguments, self.input_schema)
+            return True, None
+
+        except ImportError:
+            # Fall back to basic validation
+            return self._basic_validate(arguments)
+
+        except jsonschema.ValidationError as e:
+            return False, str(e.message)
+
+        except jsonschema.SchemaError as e:
+            return False, f"Invalid schema: {e.message}"
+
+    def _basic_validate(self, arguments: dict[str, Any]) -> tuple[bool, str | None]:
+        """
+        Basic validation when jsonschema is not available.
+
+        Only checks for required fields.
+
+        Args:
+            arguments: Arguments to validate
+
+        Returns:
+            tuple: (is_valid, error_message)
+        """
         required = self.input_schema.get("required", [])
         for field_name in required:
             if field_name not in arguments:

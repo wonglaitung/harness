@@ -2,12 +2,17 @@
 OpenAI LLM client implementation.
 """
 
+import asyncio
 import os
 from collections.abc import AsyncIterator, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
-from harness.types import LLMResponse, StopReason, TokenUsage, ToolCall
+from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage, ToolCall
+
+if TYPE_CHECKING:
+    from harness.core import StreamingConfig
+    from harness.types import ProgressCallback
 
 
 class OpenAIClient(LLMClient):
@@ -103,10 +108,33 @@ class OpenAIClient(LLMClient):
         tools: list[ToolDefinition] | None = None,
         system: str | None = None,
         on_chunk: Callable[[str], None] | None = None,
+        on_progress: "ProgressCallback | None" = None,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """Stream response from OpenAI."""
+        """
+        Stream response from OpenAI with backpressure control.
+
+        Args:
+            messages: Conversation messages
+            tools: Available tools
+            system: System prompt
+            on_chunk: Callback for each text chunk
+            on_progress: Callback for progress events (including backpressure)
+            **kwargs: Additional parameters
+
+        Yields:
+            Text chunks from the response
+        """
+        from harness.core import StreamingConfig, StreamingHandler
+
         client = self._get_client()
+
+        # Initialize streaming handler with backpressure control
+        streaming_config = self.config.streaming_config or StreamingConfig()
+        handler = StreamingHandler(
+            config=streaming_config,
+            on_progress=on_progress,
+        )
 
         # Build messages with system prompt
         formatted_messages = []
@@ -131,13 +159,23 @@ class OpenAIClient(LLMClient):
             params["tools"] = [self._format_tool(t) for t in tools]
             params["tool_choice"] = "auto"
 
-        # Stream the response
+        # Stream the response with backpressure handling
         stream = await client.chat.completions.create(**params)
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 text = chunk.choices[0].delta.content
+
+                # Create chunk and process through handler
+                stream_chunk = Chunk(type=ChunkType.TEXT, content=text)
+                await handler.handle(stream_chunk)
+
+                # Apply backpressure if needed
+                if handler.should_pause:
+                    await asyncio.sleep(0.01)
+
                 if on_chunk:
                     on_chunk(text)
+
                 yield text
 
     def _format_tool(self, tool: ToolDefinition) -> dict[str, Any]:
