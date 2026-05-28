@@ -1401,8 +1401,53 @@ class MCPManager:
 
 ### MCP 配置文件
 
+#### 配置文件存放位置
+
+```
+优先级（高→低）
+    │
+    ├── 1. ./.agent/mcp.json        # 项目级配置（最高优先级，随项目提交）
+    │
+    ├── 2. ./.mcp.json              # 项目级配置（备选位置，兼容 Claude Code）
+    │
+    ├── 3. ~/.harness/mcp.json      # 用户级配置
+    │
+    └── 4. ~/.claude/mcp.json       # 兼容 Claude Code 全局配置
+```
+
+#### 配置文件格式
+
+支持 YAML 和 JSON 两种格式，JSON 格式与 Claude Code 完全兼容：
+
+```json
+// .agent/mcp.json (JSON 格式，兼容 Claude Code)
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "mcp-server-filesystem",
+      "args": ["/workspace"],
+      "env": {}
+    },
+    "github": {
+      "command": "mcp-server-github",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "finance-proxy": {
+      "command": "python",
+      "args": ["/data/bank-services-plugins/prototype/local_proxy/main.py"],
+      "env": {
+        "REMOTE_MCP_URL": "http://localhost:8001",
+        "MCP_REFRESH_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
 ```yaml
-# mcp-config.yaml
+# .agent/mcp.yaml (YAML 格式)
 mcpServers:
   filesystem:
     transport: stdio
@@ -1417,17 +1462,30 @@ mcpServers:
       GITHUB_TOKEN: ${GITHUB_TOKEN}
     enabled: true
 
-  slack:
-    transport: stdio
-    command: mcp-server-slack
-    env:
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
-    enabled: false
-
   custom-api:
     transport: http
     url: https://api.example.com/mcp
     enabled: true
+```
+
+#### 项目目录结构示例
+
+```
+my-project/
+├── .agent/
+│   ├── mcp.json              # 项目 MCP 配置
+│   ├── skills/               # 项目技能
+│   ├── AGENTS.md             # 项目上下文
+│   └── config.yaml           # Harness 配置
+│
+├── .mcp.json                 # 备选 MCP 配置位置
+│
+└── ...
+
+~/.harness/
+├── mcp.json                  # 用户级 MCP 配置
+├── skills/                   # 用户技能库
+└── memory/                   # 记忆存储
 ```
 
 ### 使用示例
@@ -1435,23 +1493,51 @@ mcpServers:
 ```python
 from harness import AgentHarness
 
+# 方式1：自动加载（推荐）
+# 自动从 .agent/mcp.json, .mcp.json, ~/.harness/mcp.json 加载
 agent = AgentHarness()
 
-# 添加 MCP 服务器
+# 方式2：指定配置文件
+agent = AgentHarness(mcp_config_path="./.agent/mcp.json")
+
+# 方式3：手动添加 MCP 服务器
 agent.mcp.add_server(MCPServerConfig(
-    name="filesystem",
+    name="finance-proxy",
     transport="stdio",
-    command="mcp-server-filesystem",
-    args=["/workspace"]
+    command="python",
+    args=["/data/bank-services-plugins/prototype/local_proxy/main.py"],
+    env={
+        "REMOTE_MCP_URL": "http://localhost:8001",
+        "MCP_REFRESH_TOKEN": "your-token"
+    }
 ))
 
-# 连接
+# 连接所有 MCP 服务器
 await agent.mcp.connect_all()
 
 # MCP 工具已自动注册为 mcp_{server}_{tool} 格式
 # 例如: mcp_filesystem_read_file, mcp_github_create_issue
 
 result = await agent.run("使用 filesystem 工具读取 config.yaml")
+```
+
+### 与 Claude Code 配置兼容
+
+Harness 完全兼容 Claude Code 的 MCP 配置格式，可以直接使用 Claude Code 的配置文件：
+
+```json
+// Claude Code 配置格式（完全兼容）
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "command-to-run",
+      "args": ["arg1", "arg2"],
+      "env": {
+        "ENV_VAR": "value"
+      }
+    }
+  }
+}
 ```
 
 ## 测试

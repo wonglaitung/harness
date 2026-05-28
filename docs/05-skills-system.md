@@ -471,27 +471,103 @@ class SkillInjector:
 ### 5.4 Skill Loader
 
 ```python
-class SkillLoader:
-    """技能加载器"""
+## 技能文件存放位置
 
-    DEFAULT_SKILL_DIRS = [
-        Path("~/.harness/skills"),
-        Path("~/.harness/shared-skills"),
-        Path("./skills"),
-        Path("./.agent/skills")
-    ]
+### 默认搜索路径
 
-    def __init__(self, registry: SkillRegistry):
-        self.registry = registry
-        self.loaded_paths: List[Path] = []
+Harness 会自动从以下目录加载 Skill 文件（按优先级排序）：
 
-    def load_defaults(self):
-        """加载默认技能目录"""
-        for dir_path in self.DEFAULT_SKILL_DIRS:
-            expanded = dir_path.expanduser()
-            if expanded.exists():
-                self.registry.add_skill_dir(expanded)
-                self.loaded_paths.append(expanded)
+```
+优先级（高→低）
+    │
+    ├── 1. ./.agent/skills/          # 项目级技能（最高优先级，随项目提交）
+    │
+    ├── 2. ./skills/                 # 项目级技能（备选位置）
+    │
+    ├── 3. ~/.harness/skills/        # 用户级技能（个人技能库）
+    │
+    └── 4. ~/.harness/shared-skills/ # 共享技能（团队共享）
+```
+
+### 目录结构示例
+
+```
+my-project/
+├── .agent/
+│   ├── skills/
+│   │   ├── code-review.md        # 项目专用代码审查技能
+│   │   ├── deploy.md             # 项目部署技能
+│   │   └── api-test.md           # API 测试技能
+│   └── AGENTS.md                 # 项目上下文说明
+│
+├── skills/                       # 备选位置
+│   └── custom-workflow.md
+│
+└── ...
+
+~/.harness/
+├── skills/                       # 用户个人技能库
+│   ├── summarize.md
+│   ├── translate.md
+│   └── my-helpers/
+│       └── data-format.md
+│
+└── shared-skills/                # 团队共享技能
+    └── team-conventions.md
+```
+
+### 项目配置文件
+
+在项目根目录创建 `.agent/config.yaml` 进行项目级配置：
+
+```yaml
+# .agent/config.yaml
+skills:
+  directories:
+    - ./.agent/skills
+    - ./skills
+  auto_load: true
+
+mcp:
+  config: ./.agent/mcp.json        # MCP 配置文件路径
+
+memory:
+  type: file
+  path: ./.agent/memory
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+
+# 方式1：自动加载（推荐）
+# 自动加载 .agent/skills/, skills/, ~/.harness/skills/ 中的技能
+agent = AgentHarness()
+
+# 方式2：指定配置文件
+agent = AgentHarness.from_config("./.agent/config.yaml")
+
+# 方式3：手动加载特定技能
+agent = AgentHarness()
+agent.load_skill("./.agent/skills/code-review.md")
+
+# 方式4：添加额外技能目录
+agent.skills.add_skill_dir(Path("./custom-skills"))
+```
+
+### 与 Claude Code 兼容
+
+Harness 的 `.agent/` 目录设计兼容 Claude Code 的项目结构：
+
+```
+.agent/
+├── AGENTS.md       # Claude Code 项目上下文
+├── skills/         # Harness 技能文件
+├── mcp.json        # MCP 配置（兼容 Claude Code 格式）
+├── config.yaml     # Harness 配置
+└── memory/         # 记忆文件
+```
 
     def load_from_path(self, path: str):
         """从指定路径加载"""
