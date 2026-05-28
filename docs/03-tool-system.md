@@ -1527,6 +1527,194 @@ Harness 完全兼容 Claude Code 的 MCP 配置格式，可以直接使用 Claud
 
 ```json
 // Claude Code 配置格式（完全兼容）
+
+### MCP 子进程生命周期管理
+
+当宿主应用崩溃或被 `kill -9` 时，MCP 子进程可能变为孤儿/僵尸进程。需要使用进程组 + atexit 钩子 + 心跳探活机制来确保安全清理。
+
+```python
+import os
+import signal
+import atexit
+import asyncio
+from dataclasses import dataclass
+from typing import Dict, Optional
+from datetime import datetime
+
+@dataclass
+class MCPProcessInfo:
+    """MCP 进程信息"""
+    name: str
+    pid: int
+    pgid: int  # 进程组 ID
+    started_at: datetime
+    last_heartbeat: datetime
+    config_path: str
+
+
+class MCPProcessManager:
+    """MCP 子进程生命周期管理器"""
+
+    def __init__(
+        self,
+        heartbeat_interval: float = 30.0,
+        restart_on_failure: bool = True,
+        max_restart_attempts: int = 3
+    ):
+        self.heartbeat_interval = heartbeat_interval
+        self.restart_on_failure = restart_on_failure
+        self.max_restart_attempts = max_restart_attempts
+
+        self._processes: Dict[str, MCPProcessInfo] = {}
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._shutdown_registered = False
+
+    async def start(
+        self,
+        name: str,
+        command: str,
+        args: list[str],
+        env: dict = None
+    ) -> MCPProcessInfo:
+        """启动 MCP 进程（带进程组）"""
+
+        # 创建新进程组（关键：子进程不会收到父进程的信号）
+        def preexec_fn():
+            os.setsid()  # 创建新会话和进程组
+
+        process = await asyncio.create_subprocess_exec(
+            command,
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            preexec_fn=preexec_fn,
+            env={**os.environ, **(env or {})}
+        )
+
+        # 记录进程信息
+        info = MCPProcessInfo(
+            name=name,
+            pid=process.pid,
+            pgid=process.pid,
+            started_at=datetime.now(),
+            last_heartbeat=datetime.now(),
+            config_path=""
+        )
+        self._processes[name] = info
+
+        # 注册清理钩子（只注册一次）
+        if not self._shutdown_registered:
+            self._register_shutdown_hooks()
+            self._shutdown_registered = True
+
+        # 启动心跳检测
+        if self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+        return info
+
+    def _register_shutdown_hooks(self):
+        """注册退出清理钩子"""
+
+        def cleanup_handler():
+            """同步清理（atexit 调用）"""
+            for name, info in list(self._processes.items()):
+                try:
+                    # 发送 SIGTERM 到整个进程组
+                    os.killpg(info.pgid, signal.SIGTERM)
+
+                    # 等待进程结束（最多 5 秒）
+                    import time
+                    for _ in range(50):
+                        try:
+                            os.kill(info.pid, 0)
+                            time.sleep(0.1)
+                        except OSError:
+                            break
+                    else:
+                        os.killpg(info.pgid, signal.SIGKILL)
+
+                except ProcessLookupError:
+                    pass
+                except Exception as e:
+                    print(f"Warning: Failed to cleanup MCP process {name}: {e}")
+
+        atexit.register(cleanup_handler)
+
+        def signal_handler(signum, frame):
+            cleanup_handler()
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+    async def _heartbeat_loop(self):
+        """心跳检测循环"""
+        while True:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+
+                for name, info in list(self._processes.items()):
+                    try:
+                        os.kill(info.pid, 0)
+                        info.last_heartbeat = datetime.now()
+                    except ProcessLookupError:
+                        if self.restart_on_failure:
+                            await self._restart_process(name)
+                        else:
+                            del self._processes[name]
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Heartbeat error: {e}")
+
+    async def stop(self, name: str, timeout: float = 5.0):
+        """停止指定进程"""
+        if name not in self._processes:
+            return
+
+        info = self._processes[name]
+        try:
+            os.killpg(info.pgid, signal.SIGTERM)
+            await asyncio.wait_for(
+                self._wait_for_process(info.pid),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            os.killpg(info.pgid, signal.SIGKILL)
+        finally:
+            del self._processes[name]
+
+    async def stop_all(self):
+        """停止所有进程"""
+        for name in list(self._processes.keys()):
+            await self.stop(name)
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+
+
+# === 使用示例 ===
+async def main():
+    manager = MCPProcessManager(heartbeat_interval=30.0)
+    try:
+        await manager.start(
+            name="github",
+            command="mcp-server-github",
+            args=["--read-only"]
+        )
+        # ... 业务逻辑 ...
+    finally:
+        await manager.stop_all()
+```
+
+**关键点**：
+- 使用 `os.setsid()` 创建新进程组，确保子进程可以被统一清理
+- atexit 钩子 + SIGTERM/SIGINT 信号处理覆盖多种退出场景
+- 30s 心跳检测 + 自动重启失败进程
+- 注意：`preexec_fn` 在 Windows 上不可用
 {
   "mcpServers": {
     "server-name": {

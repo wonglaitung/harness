@@ -880,3 +880,91 @@ agent.expect("分析代码").respond("代码分析结果...")
 result = await agent.run("分析代码")
 assert result.content == "代码分析结果..."
 ```
+
+---
+
+## 异步 API 使用指南
+
+### run_sync() 的使用限制
+
+`run_sync()` 方法仅适用于以下场景：
+- CLI 脚本
+- 独立 Python 脚本（无事件循环）
+
+**不适用于**：
+- Jupyter Notebook（使用 `await agent.run()`）
+- FastAPI/Starlette（使用 `await agent.run()`）
+- 已有 asyncio 事件循环环境
+
+```python
+# ✅ 正确：CLI 脚本
+if __name__ == "__main__":
+    agent = AgentHarness(model="claude-sonnet-4-6")
+    result = agent.run_sync("分析代码")  # OK
+
+# ✅ 正确：Jupyter Notebook
+result = await agent.run("分析代码")
+
+# ✅ 正确：FastAPI
+@app.post("/chat")
+async def chat(message: str):
+    result = await agent.run(message)  # 使用 async API
+
+# ❌ 错误：在异步上下文中使用 run_sync
+async def wrong_usage():
+    result = agent.run_sync("hello")  # RuntimeError!
+```
+
+### 检测已有事件循环
+
+```python
+class AgentHarness:
+    def run_sync(self, prompt: str, **kwargs) -> "RunResult":
+        import asyncio
+
+        # 检测是否已有事件循环运行
+        try:
+            loop = asyncio.get_running_loop()
+            raise RuntimeError(
+                "run_sync() cannot be called from an async context. "
+                "Use 'await agent.run()' instead."
+            )
+        except RuntimeError as e:
+            if "no running event loop" in str(e):
+                pass  # 正常：没有事件循环
+            else:
+                raise
+
+        return asyncio.run(self.run(prompt, **kwargs))
+```
+
+### 同步包装器（遗留代码兼容）
+
+```python
+def sync_wrapper(agent, prompt):
+    """在独立线程中运行异步代码"""
+    import asyncio
+    import threading
+
+    result = None
+    exception = None
+
+    def run_in_thread():
+        nonlocal result, exception
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(agent.run(prompt))
+        except Exception as e:
+            exception = e
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=run_in_thread)
+    thread.start()
+    thread.join()
+
+    if exception:
+        raise exception
+    return result
+```

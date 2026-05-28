@@ -2753,6 +2753,194 @@ Harness 完全兼容 Claude Code 的 MCP 配置格式，可以直接使用 Claud
 
 ```json
 // Claude Code 配置格式（完全兼容）
+
+### MCP 子进程生命周期管理
+
+当宿主应用崩溃或被 `kill -9` 时，MCP 子进程可能变为孤儿/僵尸进程。需要使用进程组 + atexit 钩子 + 心跳探活机制来确保安全清理。
+
+```python
+import os
+import signal
+import atexit
+import asyncio
+from dataclasses import dataclass
+from typing import Dict, Optional
+from datetime import datetime
+
+@dataclass
+class MCPProcessInfo:
+    """MCP 进程信息"""
+    name: str
+    pid: int
+    pgid: int  # 进程组 ID
+    started_at: datetime
+    last_heartbeat: datetime
+    config_path: str
+
+
+class MCPProcessManager:
+    """MCP 子进程生命周期管理器"""
+
+    def __init__(
+        self,
+        heartbeat_interval: float = 30.0,
+        restart_on_failure: bool = True,
+        max_restart_attempts: int = 3
+    ):
+        self.heartbeat_interval = heartbeat_interval
+        self.restart_on_failure = restart_on_failure
+        self.max_restart_attempts = max_restart_attempts
+
+        self._processes: Dict[str, MCPProcessInfo] = {}
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._shutdown_registered = False
+
+    async def start(
+        self,
+        name: str,
+        command: str,
+        args: list[str],
+        env: dict = None
+    ) -> MCPProcessInfo:
+        """启动 MCP 进程（带进程组）"""
+
+        # 创建新进程组（关键：子进程不会收到父进程的信号）
+        def preexec_fn():
+            os.setsid()  # 创建新会话和进程组
+
+        process = await asyncio.create_subprocess_exec(
+            command,
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            preexec_fn=preexec_fn,
+            env={**os.environ, **(env or {})}
+        )
+
+        # 记录进程信息
+        info = MCPProcessInfo(
+            name=name,
+            pid=process.pid,
+            pgid=process.pid,
+            started_at=datetime.now(),
+            last_heartbeat=datetime.now(),
+            config_path=""
+        )
+        self._processes[name] = info
+
+        # 注册清理钩子（只注册一次）
+        if not self._shutdown_registered:
+            self._register_shutdown_hooks()
+            self._shutdown_registered = True
+
+        # 启动心跳检测
+        if self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+        return info
+
+    def _register_shutdown_hooks(self):
+        """注册退出清理钩子"""
+
+        def cleanup_handler():
+            """同步清理（atexit 调用）"""
+            for name, info in list(self._processes.items()):
+                try:
+                    # 发送 SIGTERM 到整个进程组
+                    os.killpg(info.pgid, signal.SIGTERM)
+
+                    # 等待进程结束（最多 5 秒）
+                    import time
+                    for _ in range(50):
+                        try:
+                            os.kill(info.pid, 0)
+                            time.sleep(0.1)
+                        except OSError:
+                            break
+                    else:
+                        os.killpg(info.pgid, signal.SIGKILL)
+
+                except ProcessLookupError:
+                    pass
+                except Exception as e:
+                    print(f"Warning: Failed to cleanup MCP process {name}: {e}")
+
+        atexit.register(cleanup_handler)
+
+        def signal_handler(signum, frame):
+            cleanup_handler()
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+    async def _heartbeat_loop(self):
+        """心跳检测循环"""
+        while True:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+
+                for name, info in list(self._processes.items()):
+                    try:
+                        os.kill(info.pid, 0)
+                        info.last_heartbeat = datetime.now()
+                    except ProcessLookupError:
+                        if self.restart_on_failure:
+                            await self._restart_process(name)
+                        else:
+                            del self._processes[name]
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Heartbeat error: {e}")
+
+    async def stop(self, name: str, timeout: float = 5.0):
+        """停止指定进程"""
+        if name not in self._processes:
+            return
+
+        info = self._processes[name]
+        try:
+            os.killpg(info.pgid, signal.SIGTERM)
+            await asyncio.wait_for(
+                self._wait_for_process(info.pid),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            os.killpg(info.pgid, signal.SIGKILL)
+        finally:
+            del self._processes[name]
+
+    async def stop_all(self):
+        """停止所有进程"""
+        for name in list(self._processes.keys()):
+            await self.stop(name)
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+
+
+# === 使用示例 ===
+async def main():
+    manager = MCPProcessManager(heartbeat_interval=30.0)
+    try:
+        await manager.start(
+            name="github",
+            command="mcp-server-github",
+            args=["--read-only"]
+        )
+        # ... 业务逻辑 ...
+    finally:
+        await manager.stop_all()
+```
+
+**关键点**：
+- 使用 `os.setsid()` 创建新进程组，确保子进程可以被统一清理
+- atexit 钩子 + SIGTERM/SIGINT 信号处理覆盖多种退出场景
+- 30s 心跳检测 + 自动重启失败进程
+- 注意：`preexec_fn` 在 Windows 上不可用
 {
   "mcpServers": {
     "server-name": {
@@ -7149,6 +7337,94 @@ agent.expect("分析代码").respond("代码分析结果...")
 # 运行测试
 result = await agent.run("分析代码")
 assert result.content == "代码分析结果..."
+```
+
+---
+
+## 异步 API 使用指南
+
+### run_sync() 的使用限制
+
+`run_sync()` 方法仅适用于以下场景：
+- CLI 脚本
+- 独立 Python 脚本（无事件循环）
+
+**不适用于**：
+- Jupyter Notebook（使用 `await agent.run()`）
+- FastAPI/Starlette（使用 `await agent.run()`）
+- 已有 asyncio 事件循环环境
+
+```python
+# ✅ 正确：CLI 脚本
+if __name__ == "__main__":
+    agent = AgentHarness(model="claude-sonnet-4-6")
+    result = agent.run_sync("分析代码")  # OK
+
+# ✅ 正确：Jupyter Notebook
+result = await agent.run("分析代码")
+
+# ✅ 正确：FastAPI
+@app.post("/chat")
+async def chat(message: str):
+    result = await agent.run(message)  # 使用 async API
+
+# ❌ 错误：在异步上下文中使用 run_sync
+async def wrong_usage():
+    result = agent.run_sync("hello")  # RuntimeError!
+```
+
+### 检测已有事件循环
+
+```python
+class AgentHarness:
+    def run_sync(self, prompt: str, **kwargs) -> "RunResult":
+        import asyncio
+
+        # 检测是否已有事件循环运行
+        try:
+            loop = asyncio.get_running_loop()
+            raise RuntimeError(
+                "run_sync() cannot be called from an async context. "
+                "Use 'await agent.run()' instead."
+            )
+        except RuntimeError as e:
+            if "no running event loop" in str(e):
+                pass  # 正常：没有事件循环
+            else:
+                raise
+
+        return asyncio.run(self.run(prompt, **kwargs))
+```
+
+### 同步包装器（遗留代码兼容）
+
+```python
+def sync_wrapper(agent, prompt):
+    """在独立线程中运行异步代码"""
+    import asyncio
+    import threading
+
+    result = None
+    exception = None
+
+    def run_in_thread():
+        nonlocal result, exception
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(agent.run(prompt))
+        except Exception as e:
+            exception = e
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=run_in_thread)
+    thread.start()
+    thread.join()
+
+    if exception:
+        raise exception
+    return result
 ```
 
 
@@ -11744,362 +12020,26 @@ AgentHarness._components
 ContextBuilder._compress_context()
 ```
 
----
+> **注意**: 第三轮架构评审的 ADR-019、ADR-020、ADR-021 已迁移到对应的主题文档中：
+> - ADR-019 (run_sync 使用限制) → [07-sdk-api.md](./07-sdk-api.md)
+> - ADR-020 (MCP 子进程生命周期) → [03-tool-system.md](./03-tool-system.md)
+> - ADR-021 (部署指南) → [13-deployment.md](./13-deployment.md)
 
-## 第三轮架构评审补充（异步安全与生产落地）
-
-### ADR-019: run_sync() 的使用限制
-
-**问题**: `run_sync()` 在 Jupyter Notebook、FastAPI 事件循环中会抛出 `RuntimeError: Event loop is already running`。
-
-**决策**: 明确标注 `run_sync()` 仅限 CLI/独立脚本使用，并提供替代方案。
-
-```python
-from harness import AgentHarness
-
-class AgentHarness:
-    def run_sync(
-        self,
-        prompt: str,
-        session_id: Optional[str] = None,
-        **kwargs
-    ) -> "RunResult":
-        """
-        运行 agent（同步）
-
-        ⚠️ **限制**: 此方法仅适用于：
-        - CLI 脚本
-        - 独立 Python 脚本（无事件循环）
-
-        ❌ **不适用于**：
-        - Jupyter Notebook（使用 `await agent.run()`）
-        - FastAPI/Starlette（使用 `await agent.run()`）
-        - 已有 asyncio 事件循环环境
-
-        如果在已有事件循环中调用，请使用 `await agent.run()`。
-        """
-        import asyncio
-
-        # 检测是否已有事件循环运行
-        try:
-            loop = asyncio.get_running_loop()
-            raise RuntimeError(
-                "run_sync() cannot be called from an async context. "
-                "Use 'await agent.run()' instead. "
-                "If you need sync API in async context, consider using "
-                "'asyncio.run(agent.run())' in a separate thread."
-            )
-        except RuntimeError as e:
-            if "no running event loop" in str(e):
-                # 正常情况：没有事件循环，可以创建
-                pass
-            else:
-                raise
-
-        return asyncio.run(self.run(prompt, session_id, **kwargs))
-
-
-# === 使用指南 ===
-
-# ✅ 正确：CLI 脚本
-if __name__ == "__main__":
-    agent = AgentHarness(model="claude-sonnet-4-6")
-    result = agent.run_sync("分析代码")  # OK
-
-# ✅ 正确：Jupyter Notebook
-# import nest_asyncio
-# nest_asyncio.apply()  # 可选：允许嵌套事件循环
-# result = await agent.run("分析代码")
-
-# ✅ 正确：FastAPI
-@app.post("/chat")
-async def chat(message: str):
-    result = await agent.run(message)  # 使用 async API
-
-# ✅ 正确：同步包装器（用于遗留代码）
-def sync_wrapper(agent, prompt):
-    """在独立线程中运行异步代码"""
-    import asyncio
-    import threading
-
-    result = None
-    exception = None
-
-    def run_in_thread():
-        nonlocal result, exception
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(agent.run(prompt))
-        except Exception as e:
-            exception = e
-        finally:
-            loop.close()
-
-    thread = threading.Thread(target=run_in_thread)
-    thread.start()
-    thread.join()
-
-    if exception:
-        raise exception
-    return result
-```
-
-**权衡**:
-- ✅ 明确 API 使用边界
-- ✅ 避免运行时错误
-- ⚠️ 可能影响习惯了同步 API 的用户
-- ⚠️ 需要在文档中强调
 
 ---
 
-### ADR-020: MCP 子进程生命周期管理
 
-**问题**: 宿主应用崩溃或被 `kill -9` 时，MCP 子进程变为孤儿/僵尸进程。
+# 13 - 内嵌部署指南
 
-**决策**: 使用进程组 + atexit 钩子 + 心跳探活机制。
+## 概述
 
-```python
-import os
-import signal
-import atexit
-import asyncio
-from dataclasses import dataclass
-from typing import Dict, Optional
-from pathlib import Path
-import json
-
-@dataclass
-class MCPProcessInfo:
-    """MCP 进程信息"""
-    name: str
-    pid: int
-    pgid: int  # 进程组 ID
-    started_at: datetime
-    last_heartbeat: datetime
-    config_path: str
-
-
-class MCPProcessManager:
-    """MCP 子进程生命周期管理器"""
-
-    def __init__(
-        self,
-        heartbeat_interval: float = 30.0,
-        restart_on_failure: bool = True,
-        max_restart_attempts: int = 3
-    ):
-        self.heartbeat_interval = heartbeat_interval
-        self.restart_on_failure = restart_on_failure
-        self.max_restart_attempts = max_restart_attempts
-
-        self._processes: Dict[str, MCPProcessInfo] = {}
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._shutdown_registered = False
-
-    async def start(
-        self,
-        name: str,
-        command: str,
-        args: list[str],
-        env: dict = None
-    ) -> MCPProcessInfo:
-        """启动 MCP 进程（带进程组）"""
-
-        # 创建新进程组（关键：子进程不会收到父进程的信号）
-        # 使用 os.setsid() 创建新会话
-        def preexec_fn():
-            os.setsid()  # 创建新会话和进程组
-
-        process = await asyncio.create_subprocess_exec(
-            command,
-            *args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            preexec_fn=preexec_fn,  # 创建新进程组
-            env={**os.environ, **(env or {})}
-        )
-
-        # 记录进程信息
-        info = MCPProcessInfo(
-            name=name,
-            pid=process.pid,
-            pgid=process.pid,  # 进程组 ID = 进程 ID（因为是组长）
-            started_at=datetime.now(),
-            last_heartbeat=datetime.now(),
-            config_path=""
-        )
-        self._processes[name] = info
-
-        # 注册清理钩子（只注册一次）
-        if not self._shutdown_registered:
-            self._register_shutdown_hooks()
-            self._shutdown_registered = True
-
-        # 启动心跳检测
-        if self._heartbeat_task is None:
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-
-        return info
-
-    def _register_shutdown_hooks(self):
-        """注册退出清理钩子"""
-
-        def cleanup_handler():
-            """同步清理（atexit 调用）"""
-            for name, info in list(self._processes.items()):
-                try:
-                    # 发送 SIGTERM 到整个进程组
-                    os.killpg(info.pgid, signal.SIGTERM)
-
-                    # 等待进程结束（最多 5 秒）
-                    import time
-                    for _ in range(50):
-                        try:
-                            os.kill(info.pid, 0)  # 检查进程是否存在
-                            time.sleep(0.1)
-                        except OSError:
-                            break
-                    else:
-                        # 强制杀死
-                        os.killpg(info.pgid, signal.SIGKILL)
-
-                except ProcessLookupError:
-                    pass  # 进程已结束
-                except Exception as e:
-                    print(f"Warning: Failed to cleanup MCP process {name}: {e}")
-
-        # atexit 钩子（正常退出时调用）
-        atexit.register(cleanup_handler)
-
-        # 信号处理（SIGTERM/SIGINT）
-        def signal_handler(signum, frame):
-            cleanup_handler()
-            # 重新抛出信号
-            signal.signal(signum, signal.SIG_DFL)
-            os.kill(os.getpid(), signum)
-
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
-
-    async def _heartbeat_loop(self):
-        """心跳检测循环"""
-        while True:
-            try:
-                await asyncio.sleep(self.heartbeat_interval)
-
-                for name, info in list(self._processes.items()):
-                    # 检查进程是否存活
-                    try:
-                        os.kill(info.pid, 0)
-                        info.last_heartbeat = datetime.now()
-                    except ProcessLookupError:
-                        # 进程已死亡
-                        if self.restart_on_failure:
-                            await self._restart_process(name)
-                        else:
-                            del self._processes[name]
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"Heartbeat error: {e}")
-
-    async def _restart_process(self, name: str):
-        """重启失败的进程"""
-        attempts = 0
-        while attempts < self.max_restart_attempts:
-            try:
-                # 重新加载配置并启动
-                # ... 启动逻辑
-                return
-            except Exception as e:
-                attempts += 1
-                await asyncio.sleep(2 ** attempts)  # 指数退避
-
-        print(f"Failed to restart MCP process {name} after {attempts} attempts")
-
-    async def stop(self, name: str, timeout: float = 5.0):
-        """停止指定进程"""
-        if name not in self._processes:
-            return
-
-        info = self._processes[name]
-
-        try:
-            # 发送 SIGTERM
-            os.killpg(info.pgid, signal.SIGTERM)
-
-            # 等待进程结束
-            await asyncio.wait_for(
-                self._wait_for_process(info.pid),
-                timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            # 超时后强制杀死
-            os.killpg(info.pgid, signal.SIGKILL)
-        finally:
-            del self._processes[name]
-
-    async def _wait_for_process(self, pid: int):
-        """等待进程结束"""
-        while True:
-            try:
-                os.kill(pid, 0)
-                await asyncio.sleep(0.1)
-            except OSError:
-                break
-
-    async def stop_all(self):
-        """停止所有进程"""
-        for name in list(self._processes.keys()):
-            await self.stop(name)
-
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
-            self._heartbeat_task = None
-
-
-# === 使用示例 ===
-
-async def main():
-    manager = MCPProcessManager(heartbeat_interval=30.0)
-
-    try:
-        # 启动 MCP 进程
-        await manager.start(
-            name="github",
-            command="mcp-server-github",
-            args=["--read-only"]
-        )
-
-        # ... 业务逻辑 ...
-
-    finally:
-        await manager.stop_all()
-```
-
-**权衡**:
-- ✅ 进程组确保子进程一起被清理
-- ✅ atexit + 信号处理覆盖多种退出场景
-- ✅ 心跳检测自动重启失败进程
-- ⚠️ `preexec_fn` 在 Windows 上不可用
-- ⚠️ 进程组杀死可能影响同组的其他进程
+本文档详细说明 Harness 在不同部署拓扑下的使用方式、限制和最佳实践。
 
 ---
 
-### ADR-021: 内嵌部署指南
+## 支持的部署拓扑
 
-**问题**: 文档缺少针对不同部署拓扑的详细指南。
-
-**决策**: 补充详细的部署拓扑说明、限制和最佳实践。
-
-## 内嵌部署指南（完整版）
-
-### 1. 支持的部署拓扑
-
-#### 拓扑 A：单进程脚本 ✅ MVP 支持
+### 拓扑 A：单进程脚本 ✅ MVP 支持
 
 ```python
 # script.py
@@ -12125,7 +12065,7 @@ agent = (HarnessBuilder()
 
 ---
 
-#### 拓扑 B：FastAPI + 单 Worker ✅ MVP 支持
+### 拓扑 B：FastAPI + 单 Worker ✅ MVP 支持
 
 ```python
 # app.py
@@ -12160,7 +12100,7 @@ agent = (HarnessBuilder()
 
 ---
 
-#### 拓扑 C：FastAPI + Gunicorn（多 Worker）⚠️ Phase 2
+### 拓扑 C：FastAPI + Gunicorn（多 Worker）⚠️ Phase 2
 
 ```python
 # 需要 Redis/PostgreSQL 后端
@@ -12173,14 +12113,15 @@ agent = (HarnessBuilder()
 ```
 
 **关键问题**：
-1. **Trigger 重复执行**：每个 Worker 都会启动 CronTrigger
-   - 解决：Leader 选举或独立 Trigger Worker
-2. **Session 缓存不一致**：Worker A 的内存缓存，Worker B 无法访问
-   - 解决：使用 Redis 共享存储
-3. **SQLite 锁竞争**：多进程写入冲突
-   - 解决：切换到 PostgreSQL 或 Redis
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| Trigger 重复执行 | 每个 Worker 都启动 CronTrigger | Leader 选举或独立 Trigger Worker |
+| Session 缓存不一致 | Worker A 的缓存，Worker B 无法访问 | Redis 共享存储 |
+| SQLite 锁竞争 | 多进程写入冲突 | PostgreSQL 或 Redis |
 
 **解决方案**：
+
 ```python
 # 方案 1：独立 Trigger Worker
 # trigger_worker.py
@@ -12209,7 +12150,7 @@ app.conf.beat_schedule = {
 
 ---
 
-#### 拓扑 D：Kubernetes 多副本 ⚠️ Phase 2
+### 拓扑 D：Kubernetes 多副本 ⚠️ Phase 2
 
 ```yaml
 # deployment.yaml
@@ -12250,7 +12191,7 @@ spec:
 
 ---
 
-### 2. 存储后端选型矩阵
+## 存储后端选型矩阵
 
 | 存储类型 | 单进程 | 多 Worker | K8s 多副本 | 延迟 | 持久化 | 成本 |
 |----------|--------|-----------|------------|------|--------|------|
@@ -12260,9 +12201,12 @@ spec:
 | Redis | ✅ | ✅ | ✅ | 中 | ⚠️ 需配置 | 中 |
 | PostgreSQL | ✅ | ✅ | ✅ | 中 | ✅ | 中-高 |
 
-### 3. 常见陷阱
+---
 
-#### 陷阱 1：在 Jupyter 中使用 run_sync()
+## 常见陷阱
+
+### 陷阱 1：在 Jupyter 中使用 run_sync()
+
 ```python
 # ❌ 错误
 result = agent.run_sync("hello")
@@ -12277,24 +12221,30 @@ nest_asyncio.apply()
 result = agent.run_sync("hello")  # 现在可以工作
 ```
 
-#### 陷阱 2：热重载丢失状态
+### 陷阱 2：热重载丢失状态
+
 ```python
 # 开发环境热重载会重置内存状态
 # 解决：使用持久化存储
 agent = AgentHarness(
-    memory_dir="./persistent_memory"  # 持久化到磁盘
+    memory_dir="./persistent_memory"  # 久化到磁盘
 )
 ```
 
-#### 陷阱 3：Gunicorn Worker 数量 > 1 导致 Trigger 重复
+### 陷阱 3：Gunicorn Worker 数量 > 1 导致 Trigger 重复
+
 ```python
 # ❌ 错误：每个 Worker 都会执行定时任务
 # 解决：使用独立 Trigger Worker 或 Celery Beat
 ```
 
+### 陷阱 4：MCP 子进程孤儿问题
+
+宿主应用崩溃时，MCP 子进程可能变为孤儿进程。解决方案见 [03-tool-system.md](./03-tool-system.md) 的 MCP 子进程生命周期管理章节。
+
 ---
 
-### 4. 安全配置清单
+## 安全配置清单
 
 | 配置项 | 开发环境 | 生产环境 |
 |--------|----------|----------|
@@ -12307,17 +12257,18 @@ agent = AgentHarness(
 
 ---
 
-### 5. 监控与告警
+## 监控与告警
 
-**推荐指标**：
+### 推荐指标
+
 - `harness_loop_iterations_total`：循环迭代次数
 - `harness_tool_calls_total{tool, success}`：工具调用计数
 - `harness_llm_tokens_total{type}`：Token 使用量
 - `harness_session_duration_seconds`：会话持续时间
 
-**告警规则**：
+### Prometheus 告警规则
+
 ```yaml
-# Prometheus 规则
 groups:
 - name: harness
   rules:
@@ -12338,12 +12289,15 @@ groups:
       summary: "工具调用失败率过高"
 ```
 
-**权衡**:
-- ✅ 覆盖所有主流部署场景
-- ✅ 明确限制和解决方案
-- ⚠️ 多进程/分布式场景需要额外依赖
-- ⚠️ K8s 部署需要额外运维知识
+---
 
+## 已知限制
+
+1. **单进程模式**: SQLite 适合低并发，高并发需切换 WAL 模式
+2. **多进程模式**: 必须使用 Redis/PostgreSQL，且 Trigger 需要 Leader 选举
+3. **热重载**: 开发环境热重载会丢失内存状态，需要持久化存储
+4. **Windows**: 部分信号处理和沙箱功能（如 `setrlimit`）受限
+5. **MCP 进程组**: `preexec_fn` 在 Windows 上不可用
 
 ---
 
