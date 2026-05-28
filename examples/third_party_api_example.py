@@ -542,6 +542,17 @@ async def demo_skills_system():
     print("=" * 70)
 
     # 1. 创建一个代码审查技能
+    #
+    # 匹配方式说明：
+    # - keywords: 子字符串匹配（大小写不敏感）
+    # - patterns: 正则表达式匹配
+    #
+    # 最佳实践：写更精确的 patterns 而非过于宽泛的 keywords
+    #
+    # 示例：
+    #   ❌ keywords=["review"]           # 太宽泛，"don't review" 也会匹配
+    #   ✅ patterns=[r"please\s+review", r"review\s+(this|my)\s+code"]  # 更精确
+    #
     code_review_skill = Skill(
         name="code-review",
         description="代码审查技能，帮助审查和改进代码质量",
@@ -555,8 +566,8 @@ async def demo_skills_system():
 请用结构化的方式输出审查结果。
 """,
         triggers=SkillTrigger(
-            keywords=["review", "审查", "检查代码", "code check"],
-            patterns=[r"review\s+(this\s+)?code", r"审查.*代码"],
+            keywords=["review", "审查", "检查代码"],
+            patterns=[r"review\s+(this|my|the)\s+code", r"审查.*代码", r"代码.*审查"],
         ),
         tools=SkillTools(
             allowed=["read", "glob", "grep"],  # 只允许读取类工具
