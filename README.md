@@ -216,13 +216,42 @@ def add(a: int, b: int) -> int:
 result = await agent.run("计算 5 + 3")
 ```
 
+## 测试
+
+使用 `MockLLMClient` 进行单元测试，无需真实 API 调用：
+
+```python
+from harness import AgentHarness, ReadTool
+from harness.llm import MockLLMClient, LLMConfig
+from harness.llm.mock import MockResponse, create_tool_use_mock
+
+# 创建模拟客户端
+mock_client = MockLLMClient(
+    model="mock-model",
+    responses=[
+        MockResponse(content="这是模拟响应"),
+    ]
+)
+
+# 使用模拟客户端创建 agent
+agent = AgentHarness(
+    llm_client=mock_client,
+    tools=[ReadTool()],
+)
+
+# 测试
+result = await agent.run("测试问题")
+assert result.content == "这是模拟响应"
+```
+
 ## Features
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
-- **Agent Loop**: ReAct 风格的执行循环
+- **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
 - **Tool System**: 内置工具 + 自定义工具
 - **Memory**: 会话管理与持久化存储
 - **SDK**: 简洁的 Python API
+- **Progress Events**: 执行过程可视化，支持 UI 展示和调试
 
 ## Documentation
 

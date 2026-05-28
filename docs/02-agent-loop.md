@@ -725,6 +725,114 @@ class ContextBudget:
         return allocated
 ```
 
+## 进度事件系统
+
+Agent Loop 内置进度事件追踪功能，用于监控执行过程，支持 UI 展示、日志记录、调试等场景。
+
+### 事件类型
+
+```python
+class ProgressEventType(Enum):
+    """进度事件类型"""
+    LOOP_START = "loop_start"            # Agent 循环开始
+    LOOP_END = "loop_end"                # Agent 循环结束
+    STATE_CHANGE = "state_change"        # 状态变化
+    TOOL_CALL = "tool_call"              # 工具调用开始
+    TOOL_RESULT = "tool_result"          # 工具调用结果
+    LLM_CALL = "llm_call"                # LLM 调用开始
+    LLM_RESPONSE = "llm_response"        # LLM 响应接收
+    ITERATION = "iteration"              # 迭代计数
+    ERROR = "error"                      # 错误发生
+```
+
+### 事件数据结构
+
+```python
+@dataclass
+class ProgressEvent:
+    """
+    进度事件
+    
+    Attributes:
+        type: 事件类型
+        message: 人类可读的消息
+        timestamp: 事件发生时间
+        data: 附加数据（工具名称、参数、计时等）
+        duration_ms: 持续时间（毫秒），用于计时事件
+    """
+    type: ProgressEventType
+    message: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    data: dict[str, Any] = field(default_factory=dict)
+    duration_ms: float | None = None
+
+    def __str__(self) -> str:
+        ts = self.timestamp.strftime("%H:%M:%S")
+        duration = f" ({self.duration_ms:.0f}ms)" if self.duration_ms else ""
+        return f"[{ts}] {self.type.value}: {self.message}{duration}"
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+from harness.types import ProgressEvent, ProgressEventType
+
+# 定义进度回调
+def on_progress(event: ProgressEvent):
+    if event.type == ProgressEventType.LOOP_START:
+        print(f"🚀 开始执行: {event.message}")
+    elif event.type == ProgressEventType.LLM_CALL:
+        print(f"🤖 调用 LLM...")
+    elif event.type == ProgressEventType.LLM_RESPONSE:
+        print(f"✅ LLM 响应 ({event.duration_ms:.0f}ms)")
+    elif event.type == ProgressEventType.TOOL_CALL:
+        print(f"🔧 工具调用: {event.data.get('tool_name')}")
+    elif event.type == ProgressEventType.TOOL_RESULT:
+        print(f"📋 工具结果: {event.message}")
+    elif event.type == ProgressEventType.LOOP_END:
+        print(f"🏁 执行完成: {event.message}")
+
+# 创建 agent 并设置进度回调
+agent = AgentHarness(model="claude-sonnet-4-6")
+agent.set_progress_callback(on_progress)
+
+# 运行
+result = await agent.run("分析当前目录的代码结构")
+```
+
+### 配置选项
+
+```python
+@dataclass
+class LoopConfig:
+    # ... 其他配置 ...
+    enable_progress: bool = True  # 启用进度事件（默认启用）
+```
+
+### 事件流示例
+
+```
+[14:30:01] loop_start: 开始处理用户请求
+[14:30:01] llm_call: 调用 claude-sonnet-4-6
+[14:30:03] llm_response: 收到响应 (2100ms)
+[14:30:03] tool_call: read_file
+[14:30:03] tool_result: 成功读取文件 (50ms)
+[14:30:03] iteration: 第 1 次迭代
+[14:30:03] llm_call: 调用 claude-sonnet-4-6
+[14:30:05] llm_response: 收到响应 (1800ms)
+[14:30:05] loop_end: 完成，共 2 次迭代
+```
+
+### 典型应用场景
+
+1. **CLI 进度条**: 在命令行界面显示执行进度
+2. **Web UI 更新**: 通过 WebSocket 推送进度到前端
+3. **日志记录**: 记录详细的执行过程用于调试
+4. **性能分析**: 统计各阶段耗时，优化性能瓶颈
+
+---
+
 ## 监控与可观测性
 
 ### 循环指标

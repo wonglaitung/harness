@@ -7,8 +7,57 @@ These types form the foundation of the agent loop, tool system, and memory manag
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
+
+# =============================================================================
+# Progress Events - 进度事件类型
+# =============================================================================
+
+class ProgressEventType(Enum):
+    """Progress event types for tracking agent execution."""
+    LOOP_START = "loop_start"            # Agent 循环开始
+    LOOP_END = "loop_end"                # Agent 循环结束
+    STATE_CHANGE = "state_change"        # 状态变化
+    TOOL_CALL = "tool_call"              # 工具调用开始
+    TOOL_RESULT = "tool_result"          # 工具调用结果
+    LLM_CALL = "llm_call"                # LLM 调用开始
+    LLM_RESPONSE = "llm_response"        # LLM 响应接收
+    ITERATION = "iteration"              # 迭代计数
+    ERROR = "error"                      # 错误发生
+
+
+@dataclass
+class ProgressEvent:
+    """
+    Progress event for tracking agent execution.
+
+    Attributes:
+        type: Event type
+        message: Human-readable message
+        timestamp: When the event occurred
+        data: Additional event data (tool name, arguments, timing, etc.)
+        duration_ms: Duration in milliseconds (for timed events)
+    """
+    type: ProgressEventType
+    message: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    data: dict[str, Any] = field(default_factory=dict)
+    duration_ms: float | None = None
+
+    def __str__(self) -> str:
+        ts = self.timestamp.strftime("%H:%M:%S")
+        duration = f" ({self.duration_ms:.0f}ms)" if self.duration_ms else ""
+        return f"[{ts}] {self.type.value}: {self.message}{duration}"
+
+
+# Progress callback type
+ProgressCallback = Callable[[ProgressEvent], None]
+
+
+# =============================================================================
+# Loop State - 循环状态
+# =============================================================================
 
 class LoopState(Enum):
     """Agent loop state machine states."""

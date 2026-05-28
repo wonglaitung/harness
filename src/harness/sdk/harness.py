@@ -19,7 +19,13 @@ from harness.sdk.config import HarnessConfig
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
-from harness.types import LoopResult, Session
+from harness.types import (
+    LoopResult,
+    ProgressCallback,
+    ProgressEvent,
+    ProgressEventType,
+    Session,
+)
 
 
 class AgentHarness:
@@ -165,6 +171,8 @@ class AgentHarness:
         self,
         prompt: str,
         session_id: str | None = None,
+        on_progress: ProgressCallback | None = None,
+        verbose: bool = False,
         **kwargs,
     ) -> LoopResult:
         """
@@ -173,11 +181,18 @@ class AgentHarness:
         Args:
             prompt: User input
             session_id: Optional session ID for conversation continuity
+            on_progress: Optional callback for progress events
+            verbose: If True, print progress to console (ignored if on_progress is set)
             **kwargs: Additional options
 
         Returns:
             LoopResult: Result of the agent execution
         """
+        # Set up progress callback
+        progress_callback = on_progress
+        if progress_callback is None and verbose:
+            progress_callback = self._default_progress_handler
+
         # Get or create session
         session = self._session_manager.get_or_create(session_id)
 
@@ -196,12 +211,32 @@ class AgentHarness:
             prompt=prompt,
             session=session,
             tools=tool_defs if tool_defs else None,
+            on_progress=progress_callback,
         )
 
         # Save session
         self._session_manager.update_session(result.session)
 
         return result
+
+    def _default_progress_handler(self, event: ProgressEvent) -> None:
+        """Default progress handler that prints to console."""
+        # Use different icons for different event types
+        icons = {
+            ProgressEventType.LOOP_START: "🚀",
+            ProgressEventType.LOOP_END: "✅",
+            ProgressEventType.STATE_CHANGE: "📍",
+            ProgressEventType.TOOL_CALL: "🔧",
+            ProgressEventType.TOOL_RESULT: "⚙️",
+            ProgressEventType.LLM_CALL: "🤖",
+            ProgressEventType.LLM_RESPONSE: "💬",
+            ProgressEventType.ITERATION: "🔄",
+            ProgressEventType.ERROR: "❌",
+        }
+        icon = icons.get(event.type, "•")
+        timestamp = event.timestamp.strftime("%H:%M:%S")
+        duration = f" ({event.duration_ms:.0f}ms)" if event.duration_ms else ""
+        print(f"[{timestamp}] {icon} {event.message}{duration}")
 
     def run_sync(
         self,

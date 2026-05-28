@@ -53,6 +53,195 @@ agent = AgentHarness(config)
 
 ## 核心 API
 
+### LLM 客户端
+
+Harness 支持三种 LLM 客户端实现，提供统一的接口抽象：
+
+| 客户端 | 用途 | 支持模型 |
+|-------|------|---------|
+| `AnthropicClient` | Anthropic Claude API | claude-sonnet-4-6, claude-opus-4-6 等 |
+| `OpenAIClient` | OpenAI / 第三方 OpenAI 兼容 API | gpt-4o, gpt-4-turbo, 第三方模型 |
+| `MockLLMClient` | 测试用模拟客户端 | - |
+
+#### 基类定义
+
+```python
+from harness.llm import LLMClient, LLMConfig, ToolDefinition
+from harness.types import LLMResponse, StopReason, TokenUsage
+
+class LLMClient(ABC):
+    """LLM 客户端抽象基类"""
+
+    def __init__(self, config: LLMConfig):
+        self.config = config
+
+    @abstractmethod
+    async def call(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> LLMResponse:
+        """同步调用 LLM"""
+        pass
+
+    @abstractmethod
+    async def stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        """流式调用 LLM"""
+        pass
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        """返回模型名称"""
+        pass
+```
+
+#### AnthropicClient
+
+用于 Anthropic Claude 模型：
+
+```python
+from harness.llm import AnthropicClient, LLMConfig
+
+# 方式1：直接创建
+client = AnthropicClient(
+    api_key="your-anthropic-api-key",  # 或设置 ANTHROPIC_API_KEY 环境变量
+    model="claude-sonnet-4-6",
+)
+
+# 方式2：使用配置
+client = AnthropicClient(
+    config=LLMConfig(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        temperature=0.7,
+    )
+)
+
+# 调用
+response = await client.call(
+    messages=[{"role": "user", "content": "Hello"}],
+    system="You are a helpful assistant.",
+)
+```
+
+#### OpenAIClient
+
+用于 OpenAI 模型或任何兼容 OpenAI API 格式的第三方服务：
+
+```python
+from harness.llm import OpenAIClient, LLMConfig
+
+# OpenAI 官方
+client = OpenAIClient(
+    api_key="your-openai-api-key",  # 或设置 OPENAI_API_KEY 环境变量
+    model="gpt-4o",
+)
+
+# 第三方 OpenAI 兼容 API（如 DeepSeek、Moonshot、Ollama 等）
+client = OpenAIClient(
+    api_key="your-api-key",
+    model="deepseek-chat",
+    base_url="https://api.deepseek.com/v1",  # 自定义 API 地址
+)
+
+# Ollama 本地模型
+client = OpenAIClient(
+    api_key="ollama",  # Ollama 不需要真实 key
+    model="llama3",
+    base_url="http://localhost:11434/v1",
+)
+
+# 环境变量配置
+# export OPENAI_API_KEY=your-api-key
+# export OPENAI_BASE_URL=https://api.your-provider.com/v1
+client = OpenAIClient(model="your-model")
+```
+
+#### MockLLMClient
+
+用于单元测试和开发，无需真实 API 调用：
+
+```python
+from harness.llm import MockLLMClient, LLMConfig
+from harness.llm.mock import MockResponse, create_tool_use_mock
+
+# 创建模拟客户端
+client = MockLLMClient(
+    model="mock-model",
+    responses=[
+        MockResponse(content="Hello! How can I help?", stop_reason=StopReason.END_TURN),
+    ]
+)
+
+# 模拟工具调用场景
+client.set_responses(create_tool_use_mock(
+    tool_name="read",
+    tool_args={"path": "/tmp/test.txt"},
+    final_response="File content: ...",
+))
+
+# 测试
+response = await client.call([{"role": "user", "content": "Read the file"}])
+assert response.content == "File content: ..."
+
+# 检查调用次数
+assert client.call_count == 2  # 工具调用 + 最终响应
+```
+
+#### 自定义客户端
+
+实现自己的 LLM 客户端：
+
+```python
+from harness.llm import LLMClient, LLMConfig, ToolDefinition
+from harness.types import LLMResponse, StopReason, TokenUsage
+
+class MyCustomLLM(LLMClient):
+    def __init__(self, config: LLMConfig):
+        super().__init__(config)
+        # 初始化你的客户端
+
+    @property
+    def model_name(self) -> str:
+        return self.config.model
+
+    async def call(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> LLMResponse:
+        # 实现你的 LLM 调用逻辑
+        return LLMResponse(
+            content="Response from custom LLM",
+            tool_calls=[],
+            stop_reason=StopReason.END_TURN,
+            usage=TokenUsage(input_tokens=10, output_tokens=20),
+        )
+
+    async def stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        # 实现流式响应
+        yield "Response"
+```
+
 ### AgentHarness 类
 
 ```python
