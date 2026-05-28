@@ -529,10 +529,12 @@ async def demo_skills_system():
     - 定义触发条件
     - 配置工具权限
     - 注册和激活技能
+    - 在 Agent 运行时使用技能
 
     学习要点:
     - Skill 是模块化的能力单元
     - 包含触发条件、工具权限、执行内容
+    - 通过 SkillInjector 注入到 system prompt
     - 可以从文件加载或代码创建
     """
     print("\n" + "=" * 70)
@@ -576,7 +578,51 @@ async def demo_skills_system():
     print(f"\n输入: '{test_input}'")
     print(f"匹配的技能: {[s.name for s in matches]}")
 
-    # 4. 创建一个翻译技能
+    # 4. 创建技能注入器
+    injector = SkillInjector(registry)
+
+    # 5. 演示如何将技能注入到 system prompt
+    base_prompt = "你是一个有帮助的 AI 助手。"
+    user_input = "请 review 这段代码"
+
+    # 注入技能
+    enhanced_prompt = injector.inject_skills(base_prompt, user_input)
+
+    print("\n--- 原始 system prompt ---")
+    print(base_prompt)
+    print("\n--- 注入技能后的 system prompt ---")
+    print(enhanced_prompt[:500] + "..." if len(enhanced_prompt) > 500 else enhanced_prompt)
+
+    # 6. 实际使用技能与 Agent
+    # 创建配置时使用增强后的 system prompt
+    config_with_skill = HarnessConfig(
+        model=MODEL,
+        api_key=API_KEY,
+        provider=PROVIDER,
+        base_url=BASE_URL,
+        system_prompt=enhanced_prompt,  # 使用注入了技能的 prompt
+        max_iterations=3,
+    )
+
+    agent_with_skill = AgentHarness(config=config_with_skill)
+
+    print("\n--- 使用技能运行 Agent ---")
+    print(f"用户输入: {user_input}")
+    print("(由于演示环境限制，这里只展示配置方式)")
+
+    # 在实际使用中，可以这样运行:
+    # result = await agent_with_skill.run(user_input)
+    # print(f"Agent 响应: {result.content}")
+
+    # 7. 预览注入效果
+    preview = injector.get_injection_preview(base_prompt, user_input)
+    print(f"\n注入预览:")
+    print(f"  - 匹配的技能: {preview['matching_skills']}")
+    print(f"  - 将注入的技能数: {preview['total_to_inject']}")
+    print(f"  - 原始 prompt 长度: {preview['original_prompt_length']}")
+    print(f"  - 注入后长度: {preview['estimated_injected_length']}")
+
+    # 8. 创建一个翻译技能
     translate_skill = Skill(
         name="translator",
         description="多语言翻译技能",
@@ -590,7 +636,7 @@ async def demo_skills_system():
     registry.register(translate_skill)
     print(f"\n注册翻译技能后，共有 {len(list(registry.list_skills()))} 个技能")
 
-    # 5. 技能可以保存到文件
+    # 9. 技能可以保存到文件
     import tempfile
     from pathlib import Path
 
