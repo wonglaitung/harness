@@ -1,0 +1,101 @@
+# Harness 项目进度
+
+## 2026-05-29
+
+### Phase 0: 基础功能 ✅ 完成
+- Token Counter (token_counter.py) - 精确 token 计数
+- Context Budget (context_builder.py) - 上下文预算管理
+- Circuit Breaker (circuit_breaker.py) - 熔断机制
+- Error Handler (error_handler.py) - 智能错误恢复
+
+测试状态: 21 个测试通过
+
+### Phase 1: Skills System ✅ 完成
+- Skill 基类 (skills/base.py) - Skill, SkillTrigger, SkillTools, SkillParameter
+- Skill Registry (skills/registry.py) - 注册、查找、激活/停用
+- Skill Injector (skills/injector.py) - 注入到 system prompt
+- Skill Loader (skills/loader.py) - 从文件/目录加载
+
+测试状态: 20 个新增测试通过
+
+### Phase 2: Security System ✅ 完成
+- Sandbox Executor (security/sandbox.py) - 沙箱执行，命令验证
+- Input Validator (security/validation.py) - 输入验证，注入检测
+- Audit Logger (security/audit.py) - 审计日志，操作记录
+- Result Sanitizer (security/sanitizer.py) - 输出脱敏，敏感信息过滤
+
+测试状态: 26 个新增测试通过
+
+### Phase 3: MCP Support ✅ 完成
+- Transport (mcp/transport.py) - StdioTransport, HTTPTransport
+- MCPClient (mcp/client.py) - JSON-RPC 2.0 协议实现
+- MCPManager (mcp/manager.py) - 管理 MCP 服务器连接
+- MCPToolWrapper (mcp/tool_wrapper.py) - 将 MCP 工具包装为 Harness Tool
+
+测试状态: 27 个新增测试通过，总计 124 个测试通过
+
+### Phase 4: Cost Control ✅ 完成 (NEW)
+- CostConfig (types.py) - 成本配置
+- CostController (core/cost_controller.py) - 会话级预算控制
+- BudgetExceededError - 预算超限异常
+- 集成到 AgentLoop - 每次迭代检查预算
+
+测试状态: 29 个新增测试通过
+
+### Phase 5: Sliding Window Enhancement ✅ 完成 (NEW)
+- ContextCompressor (memory/compressor.py) - 上下文压缩器
+- CompressionConfig - 压缩配置
+- IncrementalTokenCounter - 增量 Token 计数（带缓存）
+- 自动压缩触发 - 集成到 ContextBuilder
+
+测试状态: 21 个新增测试通过
+
+### Phase 6: Streaming Backpressure ✅ 完成 (NEW)
+- ChunkType enum - 流式块类型（TEXT, TOOL_CALL_*, THINKING, ERROR, DONE）
+- Chunk dataclass - 流式块数据结构
+- StreamingHandler (core/streaming.py) - 流处理器，背压控制
+- StreamingConfig - 流配置（buffer_size, backpressure_threshold）
+- StreamingStats - 统计信息（chunks_received, backpressure_events）
+- 集成 ProgressEventType.STREAM_BACKPRESSURE 事件
+
+测试状态: 20 个新增测试通过
+
+### Phase 7: Interrupt/Recovery ✅ 完成 (NEW)
+- LoopSnapshot (types.py) - 循环快照数据结构
+- create_snapshot() - 捕获当前执行状态
+- resume_from_snapshot() - 从快照恢复执行
+- 支持序列化/反序列化（to_dict/from_dict）
+- ToolCall 序列化支持
+
+测试状态: 10 个新增测试通过
+
+### Phase 9: Mock Testing Toolchain ✅ 完成 (NEW)
+- MockResponse (testing/mock_harness.py) - 模拟 LLM 响应
+- MockHarness (testing/mock_harness.py) - 完整模拟的 Agent Harness
+- MockHarnessConfig - Mock 配置（responses, auto_tool_results, record_mode）
+- RecordingHarness (testing/recording.py) - 记录真实交互
+- RecordingConfig - 记录配置
+- pytest plugin (testing/pytest_plugin.py) - fixtures 和 helpers
+
+测试状态: 24 个新增测试通过，总计 228 个测试通过
+
+### 代码质量改进
+- harness.py: 删除重复的 _default_progress_handler，使用 progress.py 的公共组件
+- agent_loop.py: 使用 ErrorHandler 进行智能错误恢复
+- progress.py: LLM response 截断到 20 字符
+
+### 项目完成状态
+
+所有 Phase 0-9 已完成实现，核心功能包括：
+- LLM 客户端抽象（Anthropic, OpenAI, Mock）
+- 工具系统（内置工具 + 自定义工具）
+- 技能系统（加载、注册、注入）
+- 安全系统（沙箱、验证、审计、脱敏）
+- MCP 协议支持（Stdio/HTTP 传输）
+- 进度事件和格式化
+- 内存管理和上下文构建
+- 成本控制（会话级预算限制）
+- 上下文压缩（滑动窗口 + 自动压缩）
+- 流式背压控制（StreamingHandler）
+- 中断恢复（LoopSnapshot）
+- Mock 测试工具链（MockHarness, RecordingHarness）
