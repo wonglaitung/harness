@@ -84,13 +84,13 @@ class ProgressFormatter:
 
             base = f"[{ts}] {color}{event.message}{reset}{duration}"
 
-            # Show content if present (truncated to 20 chars)
+            # Show content if present (truncated to 20 chars, single line)
             if content and content.strip():
                 content_preview = content[:20] + "..." if len(content) > 20 else content
-                return f"{base}\n    {content_preview}"
+                return f"{base} {content_preview}"
             # Or show tool calls if any
             elif has_tool_calls and tool_names:
-                return f"{base}\n    📎 Calling tools: {', '.join(tool_names)}"
+                return f"{base} 📎 {', '.join(tool_names)}"
             return base
 
         return f"[{ts}] {color}{event.message}{reset}{duration}"
@@ -125,13 +125,13 @@ class ProgressFormatter:
 
             base = f"[{ts}] {icon} {event.message}{duration}"
 
-            # Show content if present (truncated to 20 chars)
+            # Show content if present (truncated to 20 chars, single line)
             if content and content.strip():
                 content_preview = content[:20] + "..." if len(content) > 20 else content
-                return f"{base}\n    {content_preview}"
+                return f"{base} {content_preview}"
             # Or show tool calls if any
             elif has_tool_calls and tool_names:
-                return f"{base}\n    📎 Calling tools: {', '.join(tool_names)}"
+                return f"{base} 📎 {', '.join(tool_names)}"
             return base
 
         return f"[{ts}] {icon} {event.message}{duration}"
