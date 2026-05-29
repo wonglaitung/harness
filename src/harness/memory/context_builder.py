@@ -1,0 +1,299 @@
+"""
+Context builder for assembling messages for LLM calls.
+
+Handles system prompt injection, message windowing, and token budget management.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+from harness.memory.token_counter import TokenCounter
+from harness.types import Message, Session
+
+if TYPE_CHECKING:
+    from harness.llm.base import ToolDefinition
+
+
+@dataclass
+class ContextBudget:
+    """
+    Token budget allocation for context components.
+
+    Priority order: system_prompt > recent_messages > skills > memory
+
+    Attributes:
+        max_tokens: Maximum context window size
+        response_reserve: Tokens reserved for LLM response
+        system_prompt: Tokens allocated for system prompt
+        tools: Tokens allocated for tool definitions
+        recent_messages: Tokens allocated for recent messages
+        skills: Tokens allocated for skill prompts
+        memory: Tokens allocated for memory/context
+    """
+    max_tokens: int = 200000
+    response_reserve: int = 4096
+    system_prompt: int = 0
+    tools: int = 0
+    recent_messages: int = 0
+    skills: int = 0
+    memory: int = 0
+
+    @property
+    def available_for_input(self) -> int:
+        """Tokens available for all input components."""
+        return self.max_tokens - self.response_reserve
+
+    @property
+    def used(self) -> int:
+        """Total tokens allocated."""
+        return (
+            self.system_prompt +
+            self.tools +
+            self.recent_messages +
+            self.skills +
+            self.memory
+        )
+
+    @property
+    def remaining(self) -> int:
+        """Tokens remaining unallocated."""
+        return self.available_for_input - self.used
+
+    @property
+    def needs_compression(self) -> bool:
+        """Check if context exceeds budget and needs compression."""
+        return self.used > self.available_for_input
+
+    @classmethod
+    def allocate(
+        cls,
+        max_tokens: int,
+        system_prompt_tokens: int = 0,
+        tool_tokens: int = 0,
+        message_ratio: float = 0.7,
+        skills_ratio: float = 0.2,
+        memory_ratio: float = 0.1,
+    ) -> "ContextBudget":
+        """
+        Create a budget with automatic allocation.
+
+        Args:
+            max_tokens: Maximum context window
+            system_prompt_tokens: Actual system prompt tokens
+            tool_tokens: Actual tool definition tokens
+            message_ratio: Ratio for messages (default 70%)
+            skills_ratio: Ratio for skills (default 20%)
+            memory_ratio: Ratio for memory (default 10%)
+
+        Returns:
+            Allocated ContextBudget
+        """
+        response_reserve = 4096
+        available = max_tokens - response_reserve
+
+        # Fixed allocations first (high priority)
+        actual_system = min(system_prompt_tokens, available)
+        remaining_after_system = available - actual_system
+
+        actual_tools = min(tool_tokens, remaining_after_system)
+        remaining = remaining_after_system - actual_tools
+
+        # Proportional allocation for remaining
+        total_ratio = message_ratio + skills_ratio + memory_ratio
+        if total_ratio > 0:
+            messages_alloc = int(remaining * message_ratio / total_ratio)
+            skills_alloc = int(remaining * skills_ratio / total_ratio)
+            memory_alloc = remaining - messages_alloc - skills_alloc
+        else:
+            messages_alloc = remaining
+            skills_alloc = 0
+            memory_alloc = 0
+
+        return cls(
+            max_tokens=max_tokens,
+            response_reserve=response_reserve,
+            system_prompt=actual_system,
+            tools=actual_tools,
+            recent_messages=messages_alloc,
+            skills=skills_alloc,
+            memory=memory_alloc,
+        )
+
+
+@dataclass
+class ContextConfig:
+    """Configuration for context building."""
+    max_tokens: int = 200000
+    system_prompt: str = ""
+    window_size: int = 100  # Max number of recent messages
+    compression_threshold: float = 0.9  # Compress when usage > 90%
+
+
+@dataclass
+class BuiltContext:
+    """Result of context building."""
+    messages: list[dict[str, Any]]
+    system_prompt: str
+    estimated_tokens: int
+    budget: ContextBudget | None = None
+    compression_needed: bool = False
+
+
+class ContextBuilder:
+    """
+    Builds context for LLM calls.
+
+    Handles:
+    - System prompt injection
+    - Message windowing with token budget
+    - Automatic compression detection
+    - Integration with TokenCounter for accurate counting
+    """
+
+    def __init__(
+        self,
+        config: ContextConfig | None = None,
+        token_counter: TokenCounter | None = None,
+    ):
+        self.config = config or ContextConfig()
+        self._token_counter = token_counter or TokenCounter()
+
+    def build(
+        self,
+        session: Session,
+        new_prompt: str | None = None,
+        tools: list[ToolDefinition] | None = None,
+    ) -> BuiltContext:
+        """
+        Build context for LLM call with budget management.
+
+        Args:
+            session: Current session
+            new_prompt: Optional new user prompt
+            tools: Available tools for budget estimation
+
+        Returns:
+            BuiltContext: Prepared messages for LLM
+        """
+        # Calculate budget
+        budget = self._calculate_budget(tools)
+
+        # Build messages within budget
+        messages = self._build_messages(
+            session=session,
+            new_prompt=new_prompt,
+            token_budget=budget.recent_messages,
+        )
+
+        # Check if compression is needed
+        estimated = self._token_counter.count_messages(
+            [self._dict_to_message(m) for m in messages]
+        )
+
+        compression_needed = estimated > budget.recent_messages
+
+        return BuiltContext(
+            messages=messages,
+            system_prompt=self.config.system_prompt,
+            estimated_tokens=estimated,
+            budget=budget,
+            compression_needed=compression_needed,
+        )
+
+    def _calculate_budget(self, tools: list[ToolDefinition] | None = None) -> ContextBudget:
+        """Calculate token budget allocation."""
+        system_tokens = self._token_counter.count(self.config.system_prompt)
+        tool_tokens = self._token_counter.estimate_tool_overhead(tools or [])
+
+        return ContextBudget.allocate(
+            max_tokens=self.config.max_tokens,
+            system_prompt_tokens=system_tokens,
+            tool_tokens=tool_tokens,
+        )
+
+    def _build_messages(
+        self,
+        session: Session,
+        new_prompt: str | None,
+        token_budget: int,
+    ) -> list[dict[str, Any]]:
+        """
+        Build message list within token budget.
+
+        Uses sliding window to fit messages within budget.
+        """
+        messages = []
+
+        # Start with window size limit
+        recent = session.messages[-self.config.window_size:]
+
+        # Add messages from newest to oldest until budget exhausted
+        current_tokens = 0
+        included_messages = []
+
+        for msg in reversed(recent):
+            msg_tokens = self._token_counter.count(msg.content if isinstance(msg.content, str) else "")
+
+            if current_tokens + msg_tokens <= token_budget:
+                included_messages.insert(0, msg)
+                current_tokens += msg_tokens
+            else:
+                # Budget exhausted, stop adding older messages
+                break
+
+        # Convert to API format
+        for msg in included_messages:
+            messages.append(msg.to_api_format())
+
+        # Add new prompt if provided
+        if new_prompt:
+            messages.append({
+                "role": "user",
+                "content": new_prompt,
+            })
+
+        return messages
+
+    def _dict_to_message(self, msg_dict: dict[str, Any]) -> Message:
+        """Convert dict to Message for token counting."""
+        return Message(
+            role=msg_dict.get("role", "user"),
+            content=msg_dict.get("content", ""),
+        )
+
+    def set_system_prompt(self, prompt: str) -> None:
+        """Set the system prompt."""
+        self.config.system_prompt = prompt
+
+    def estimate_tokens(self, content: str) -> int:
+        """Estimate token count for content using tiktoken."""
+        return self._token_counter.count(content)
+
+    def get_message_window(self, session: Session, max_tokens: int) -> list[Message]:
+        """
+        Get messages that fit within token budget.
+
+        Args:
+            session: Current session
+            max_tokens: Maximum tokens for messages
+
+        Returns:
+            List of messages fitting within budget
+        """
+        messages = []
+        current_tokens = 0
+
+        for msg in reversed(session.messages):
+            msg_tokens = self._token_counter.count(
+                msg.content if isinstance(msg.content, str) else ""
+            )
+
+            if current_tokens + msg_tokens <= max_tokens:
+                messages.insert(0, msg)
+                current_tokens += msg_tokens
+            else:
+                break
+
+        return messages

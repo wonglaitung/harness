@@ -15,6 +15,7 @@ from harness.llm.openai import OpenAIClient
 from harness.memory.context_builder import ContextBuilder
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore
+from harness.progress import create_progress_handler
 from harness.sdk.config import HarnessConfig
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
@@ -22,8 +23,6 @@ from harness.tools.registry import ToolRegistry
 from harness.types import (
     LoopResult,
     ProgressCallback,
-    ProgressEvent,
-    ProgressEventType,
     Session,
 )
 
@@ -191,7 +190,7 @@ class AgentHarness:
         # Set up progress callback
         progress_callback = on_progress
         if progress_callback is None and verbose:
-            progress_callback = self._default_progress_handler
+            progress_callback = create_progress_handler("emoji")
 
         # Get or create session
         session = self._session_manager.get_or_create(session_id)
@@ -218,25 +217,6 @@ class AgentHarness:
         self._session_manager.update_session(result.session)
 
         return result
-
-    def _default_progress_handler(self, event: ProgressEvent) -> None:
-        """Default progress handler that prints to console."""
-        # Use different icons for different event types
-        icons = {
-            ProgressEventType.LOOP_START: "🚀",
-            ProgressEventType.LOOP_END: "✅",
-            ProgressEventType.STATE_CHANGE: "📍",
-            ProgressEventType.TOOL_CALL: "🔧",
-            ProgressEventType.TOOL_RESULT: "⚙️",
-            ProgressEventType.LLM_CALL: "🤖",
-            ProgressEventType.LLM_RESPONSE: "💬",
-            ProgressEventType.ITERATION: "🔄",
-            ProgressEventType.ERROR: "❌",
-        }
-        icon = icons.get(event.type, "•")
-        timestamp = event.timestamp.strftime("%H:%M:%S")
-        duration = f" ({event.duration_ms:.0f}ms)" if event.duration_ms else ""
-        print(f"[{timestamp}] {icon} {event.message}{duration}")
 
     def run_sync(
         self,

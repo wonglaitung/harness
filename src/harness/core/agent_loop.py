@@ -2,14 +2,20 @@
 Agent Loop - The core execution engine.
 
 Implements the ReAct-style loop that drives agent behavior.
+Includes circuit breaker and error handling for production resilience.
 """
 
+from __future__ import annotations
+
+import asyncio
 import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from harness.core.error_handler import ErrorAction, ErrorContext, ErrorDecision, ErrorHandler
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 from harness.memory.session import SessionManager
@@ -34,6 +40,8 @@ class LoopConfig:
     enable_parallel_tools: bool = True
     retry_on_error: int = 3
     enable_progress: bool = True  # Enable progress events
+    enable_circuit_breaker: bool = True  # Enable circuit breaker
+    same_tool_threshold: int = 5  # Circuit breaker threshold
 
 
 class AgentLoop:
@@ -66,6 +74,17 @@ class AgentLoop:
         self._on_progress: ProgressCallback | None = None
         self._loop_start_time: float | None = None
         self._last_event_time: float | None = None
+        self._iteration = 0  # Track current iteration for error context
+
+        # Initialize circuit breaker
+        self._circuit_breaker = CircuitBreaker(
+            CircuitBreakerConfig(
+                same_tool_threshold=self.config.same_tool_threshold,
+            )
+        ) if self.config.enable_circuit_breaker else None
+
+        # Initialize error handler
+        self._error_handler = ErrorHandler(max_retries=self.config.retry_on_error)
 
     def _emit_progress(
         self,
@@ -121,6 +140,7 @@ class AgentLoop:
         self.state = LoopState.BUILDING_CONTEXT
         iteration = 0
         total_usage = session.token_usage
+        self._iteration = 0  # Reset for error handler context
 
         try:
             while iteration < self.config.max_iterations:
@@ -165,13 +185,59 @@ class AgentLoop:
                     {"model": self.llm.model_name, "message_count": len(context.messages)},
                 )
 
-                response = await self.llm.call(
-                    messages=context.messages,
-                    tools=tools,
-                    system=context.system_prompt,
-                )
+                # LLM call with error handling
+                response = None
+                llm_error = None
+                max_llm_retries = 3
+                for llm_attempt in range(max_llm_retries):
+                    try:
+                        response = await self.llm.call(
+                            messages=context.messages,
+                            tools=tools,
+                            system=context.system_prompt,
+                        )
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        llm_error = e
+                        error_ctx = ErrorContext(
+                            error=e,
+                            iteration=self._iteration,
+                            context_tokens=getattr(context, 'token_count', 0),
+                        )
+                        decision = self._error_handler.handle(e, error_ctx)
+
+                        if decision.action == ErrorAction.RETRY and llm_attempt < max_llm_retries - 1:
+                            self._emit_progress(
+                                ProgressEventType.ERROR,
+                                f"LLM call failed, retrying: {decision.message}",
+                                {"error": str(e), "attempt": llm_attempt + 1, "delay": decision.delay_seconds},
+                            )
+                            if decision.delay_seconds > 0:
+                                await asyncio.sleep(decision.delay_seconds)
+                            continue
+                        elif decision.action == ErrorAction.COMPRESS_CONTEXT:
+                            self._emit_progress(
+                                ProgressEventType.STATE_CHANGE,
+                                "Compressing context due to error",
+                                {"action": "compress_context"},
+                            )
+                            # Context compression would be implemented here
+                            # For now, just retry with reduced context
+                            continue
+                        else:
+                            # Abort or escalate
+                            raise
+
+                if response is None and llm_error:
+                    raise llm_error
 
                 llm_duration = (time.time() - llm_call_start) * 1000
+
+                # Prepare response content for progress event
+                response_content = response.content if response.content else ""
+                # Truncate long responses for display (keep first 500 chars)
+                content_preview = response_content[:500] + "..." if len(response_content) > 500 else response_content
+
                 self._emit_progress(
                     ProgressEventType.LLM_RESPONSE,
                     f"LLM responded",
@@ -179,6 +245,9 @@ class AgentLoop:
                         "stop_reason": response.stop_reason.value,
                         "input_tokens": response.usage.input_tokens,
                         "output_tokens": response.usage.output_tokens,
+                        "content": content_preview,
+                        "has_tool_calls": response.is_tool_use,
+                        "tool_names": [tc.name for tc in response.tool_calls] if response.is_tool_use else [],
                     },
                     duration_ms=llm_duration,
                 )
@@ -223,6 +292,7 @@ class AgentLoop:
                         session.add_message(tool_msg)
 
                     iteration += 1
+                    self._iteration = iteration
                     continue
 
                 # Done!
@@ -241,6 +311,9 @@ class AgentLoop:
                     },
                     duration_ms=total_duration,
                 )
+
+                # Reset error handler state
+                self._error_handler.reset()
 
                 return LoopResult(
                     status=LoopState.COMPLETED,
@@ -268,17 +341,34 @@ class AgentLoop:
             )
 
         except Exception as e:
+            # Use ErrorHandler to determine action
+            error_ctx = ErrorContext(
+                error=e,
+                iteration=self._iteration,
+                context_tokens=total_usage.total_tokens,
+            )
+            decision = self._error_handler.handle(e, error_ctx)
+
             self.state = LoopState.ERROR
             self._emit_progress(
                 ProgressEventType.ERROR,
                 f"Error: {str(e)}",
-                {"error": str(e), "type": type(e).__name__},
+                {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                    "action": decision.action.value,
+                    "message": decision.message,
+                },
             )
+
+            # Reset error handler state
+            self._error_handler.reset()
+
             return LoopResult(
                 status=LoopState.ERROR,
                 session=session,
                 messages=session.messages,
-                iterations=iteration,
+                iterations=self._iteration,
                 error=str(e),
                 token_usage=total_usage,
             )
@@ -288,7 +378,7 @@ class AgentLoop:
         tool_calls: list[ToolCall],
         session: Session,
     ) -> list:
-        """Execute tool calls with progress tracking."""
+        """Execute tool calls with progress tracking and circuit breaker."""
         from harness.tools.permissions import PermissionSet
 
         context = ToolContext(
@@ -299,6 +389,28 @@ class AgentLoop:
 
         results = []
         for tool_call in tool_calls:
+            # Check circuit breaker
+            if self._circuit_breaker and self._circuit_breaker.is_open():
+                reason = self._circuit_breaker.get_reason()
+                self._emit_progress(
+                    ProgressEventType.ERROR,
+                    f"Circuit breaker open: {reason}",
+                    {"circuit_breaker": self._circuit_breaker.stats},
+                )
+                # Return error for all remaining tools
+                from harness.types import ToolResult
+                results.append(ToolResult(
+                    tool_call_id=tool_call.id,
+                    success=False,
+                    content="",
+                    error=f"Circuit breaker open: {reason}",
+                ))
+                continue
+
+            # Record call for circuit breaker
+            if self._circuit_breaker:
+                self._circuit_breaker.record_call(tool_call.name, tool_call.arguments)
+
             # Emit tool call start
             self._emit_progress(
                 ProgressEventType.TOOL_CALL,
@@ -313,6 +425,13 @@ class AgentLoop:
             tool_start = time.time()
             result = await self.tools.execute(tool_call, context)
             tool_duration = (time.time() - tool_start) * 1000
+
+            # Record result for circuit breaker
+            if self._circuit_breaker:
+                if result.success:
+                    self._circuit_breaker.record_success()
+                else:
+                    self._circuit_breaker.record_error()
 
             # Emit tool result
             status = "success" if result.success else "failed"

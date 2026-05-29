@@ -28,6 +28,28 @@ class ProgressFormatter:
         """
         ts = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         duration = f" ({event.duration_ms:.0f}ms)" if event.duration_ms else ""
+
+        # For LLM response, include content preview or tool calls
+        if event.type == ProgressEventType.LLM_RESPONSE:
+            content = event.data.get("content", "")
+            has_tool_calls = event.data.get("has_tool_calls", False)
+            tool_names = event.data.get("tool_names", [])
+
+            # Remove content from data dict for display
+            display_data = {k: v for k, v in event.data.items() if k not in ("content", "has_tool_calls", "tool_names")}
+            data_str = f" | {display_data}" if display_data else ""
+
+            base = f"[{ts}] {event.type.value}: {event.message}{duration}{data_str}"
+
+            # Show content if present (truncated to 20 chars)
+            if content and content.strip():
+                content_preview = content[:20] + "..." if len(content) > 20 else content
+                return f"{base}\n    Content: {content_preview}"
+            # Or show tool calls if any
+            elif has_tool_calls and tool_names:
+                return f"{base}\n    Tools: {', '.join(tool_names)}"
+            return base
+
         data_str = f" | {event.data}" if event.data else ""
         return f"[{ts}] {event.type.value}: {event.message}{duration}{data_str}"
 
@@ -53,6 +75,24 @@ class ProgressFormatter:
         color = colors.get(event.type, "")
         ts = event.timestamp.strftime("%H:%M:%S")
         duration = f" ({event.duration_ms:.0f}ms)" if event.duration_ms else ""
+
+        # For LLM response, include content preview or tool calls
+        if event.type == ProgressEventType.LLM_RESPONSE:
+            content = event.data.get("content", "")
+            has_tool_calls = event.data.get("has_tool_calls", False)
+            tool_names = event.data.get("tool_names", [])
+
+            base = f"[{ts}] {color}{event.message}{reset}{duration}"
+
+            # Show content if present (truncated to 20 chars)
+            if content and content.strip():
+                content_preview = content[:20] + "..." if len(content) > 20 else content
+                return f"{base}\n    {content_preview}"
+            # Or show tool calls if any
+            elif has_tool_calls and tool_names:
+                return f"{base}\n    📎 Calling tools: {', '.join(tool_names)}"
+            return base
+
         return f"[{ts}] {color}{event.message}{reset}{duration}"
 
     @staticmethod
@@ -76,6 +116,24 @@ class ProgressFormatter:
         icon = icons.get(event.type, "•")
         ts = event.timestamp.strftime("%H:%M:%S")
         duration = f" ({event.duration_ms:.0f}ms)" if event.duration_ms else ""
+
+        # For LLM response, include content preview or tool calls
+        if event.type == ProgressEventType.LLM_RESPONSE:
+            content = event.data.get("content", "")
+            has_tool_calls = event.data.get("has_tool_calls", False)
+            tool_names = event.data.get("tool_names", [])
+
+            base = f"[{ts}] {icon} {event.message}{duration}"
+
+            # Show content if present (truncated to 20 chars)
+            if content and content.strip():
+                content_preview = content[:20] + "..." if len(content) > 20 else content
+                return f"{base}\n    {content_preview}"
+            # Or show tool calls if any
+            elif has_tool_calls and tool_names:
+                return f"{base}\n    📎 Calling tools: {', '.join(tool_names)}"
+            return base
+
         return f"[{ts}] {icon} {event.message}{duration}"
 
 
