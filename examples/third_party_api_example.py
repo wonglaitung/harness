@@ -20,9 +20,9 @@ async def main():
     print("=== Third-Party OpenAI-Compatible API Example ===\n")
 
     # Configuration
-    base_url = "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-    api_key = "16a9dd623e0d9970b082f7d5ba01475d:YmM2NzI5M2VjOGJjNzNmYjc1N2QzNTA1"
-    model = "astron-code-latest"
+    base_url = "http://47.115.141.152:8080/v2/coding"
+    api_key = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
+    model = "glm-5"
 
     # Create agent with third-party API
     agent = AgentHarness(
