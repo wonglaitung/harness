@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-05-29: ToolResult 类型定义不一致
+
+### 问题
+
+文档 `docs/03-tool-system.md` 中定义的 `ToolResult` 有 `ok()` 和 `error()` 工厂方法：
+
+```python
+@classmethod
+def ok(cls, content: str, **metadata) -> "ToolResult":
+    return cls(success=True, content=content, metadata=metadata)
+
+@classmethod
+def error(cls, message: str) -> "ToolResult":
+    return cls(success=False, content="", error=message)
+```
+
+但实际 `src/harness/types.py` 中的 `ToolResult` 是一个简单的 dataclass，没有这些方法。导致 MCPToolWrapper 使用时报错。
+
+### 原因
+
+1. 设计文档和实现不同步
+2. 新增代码参考了文档中的"理想"接口，而非实际实现
+
+### 解决
+
+修改 `MCPToolWrapper` 直接构造 `ToolResult` 对象：
+
+```python
+# ❌ 按文档写（会报错）
+return ToolResult.ok(content)
+
+# ✅ 按实际实现写
+return ToolResult(
+    tool_call_id="",
+    success=True,
+    content=content,
+    metadata={...}
+)
+```
+
+### 教训
+
+1. **先读实现再写代码**：不要只看设计文档，要检查实际代码
+2. **类型检查很重要**：mypy 可以在编译期发现这类问题
+3. **文档要和实现同步**：如果文档是设计目标，要显式标记"待实现"
+
+### 检查方法
+
+```bash
+# 检查类是否有某个方法
+python -c "from harness.types import ToolResult; print(hasattr(ToolResult, 'ok'))"
+```
+
+---
+
 ## 2026-05-29: 公共组件未被复用
 
 ### 问题

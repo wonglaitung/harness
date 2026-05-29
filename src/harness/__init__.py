@@ -1,9 +1,39 @@
 # Harness SDK 公共 API
 
 from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
+from harness.mcp import (
+    HTTPTransport,
+    MCPClient,
+    MCPManager,
+    MCPServerConfig,
+    MCPServerInfo,
+    MCPTool,
+    MCPToolWrapper,
+    MCPTransport,
+    StdioTransport,
+)
 from harness.progress import ProgressFormatter, create_progress_handler
 from harness.sdk.config import HarnessConfig
 from harness.sdk.harness import AgentHarness
+from harness.security import (
+    AuditLogEntry,
+    AuditLogger,
+    InputValidator,
+    LightweightSandbox,
+    PromptInjectionDetector,
+    ResultSanitizer,
+    SandboxExecutor,
+    SanitizationRule,
+)
+from harness.skills import (
+    InjectionConfig,
+    Skill,
+    SkillInjector,
+    SkillLoader,
+    SkillRegistry,
+    SkillTools,
+    SkillTrigger,
+)
 from harness.tools.builtins import (
     BashTool,
     EditTool,
@@ -56,4 +86,31 @@ __all__ = [
     "ProgressCallback",
     "ProgressFormatter",
     "create_progress_handler",
+    # Skills
+    "Skill",
+    "SkillTrigger",
+    "SkillTools",
+    "SkillRegistry",
+    "SkillInjector",
+    "SkillLoader",
+    "InjectionConfig",
+    # Security
+    "SandboxExecutor",
+    "LightweightSandbox",
+    "InputValidator",
+    "PromptInjectionDetector",
+    "AuditLogger",
+    "AuditLogEntry",
+    "ResultSanitizer",
+    "SanitizationRule",
+    # MCP
+    "MCPTransport",
+    "StdioTransport",
+    "HTTPTransport",
+    "MCPClient",
+    "MCPTool",
+    "MCPServerInfo",
+    "MCPManager",
+    "MCPServerConfig",
+    "MCPToolWrapper",
 ]
