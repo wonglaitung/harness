@@ -2,8 +2,9 @@
 
 from harness.core.agent_loop import AgentLoop, LoopConfig
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+from harness.core.cost_controller import BudgetStatus, CostController
 from harness.core.error_handler import ErrorHandler, ErrorAction, ErrorContext, ErrorDecision
-from harness.types import LoopResult
+from harness.types import CostConfig, LoopResult
 
 __all__ = [
     "AgentLoop",
@@ -16,4 +17,7 @@ __all__ = [
     "ErrorAction",
     "ErrorContext",
     "ErrorDecision",
+    "CostController",
+    "CostConfig",
+    "BudgetStatus",
 ]

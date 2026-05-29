@@ -15,12 +15,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from harness.core.cost_controller import CostController
 from harness.core.error_handler import ErrorAction, ErrorContext, ErrorDecision, ErrorHandler
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 from harness.memory.session import SessionManager
 from harness.tools.executor import ToolContext, ToolExecutor
 from harness.types import (
+    BudgetExceededError,
+    CostConfig,
     LoopResult,
     LoopState,
     Message,
@@ -42,6 +45,8 @@ class LoopConfig:
     enable_progress: bool = True  # Enable progress events
     enable_circuit_breaker: bool = True  # Enable circuit breaker
     same_tool_threshold: int = 5  # Circuit breaker threshold
+    enable_cost_control: bool = True  # Enable cost control
+    cost_config: CostConfig | None = None  # Cost control configuration
 
 
 class AgentLoop:
@@ -86,6 +91,13 @@ class AgentLoop:
         # Initialize error handler
         self._error_handler = ErrorHandler(max_retries=self.config.retry_on_error)
 
+        # Initialize cost controller
+        cost_config = self.config.cost_config or CostConfig()
+        self._cost_controller = CostController(
+            config=cost_config,
+            on_progress=None,  # Will be set in run()
+        ) if self.config.enable_cost_control else None
+
     def _emit_progress(
         self,
         event_type: ProgressEventType,
@@ -129,6 +141,10 @@ class AgentLoop:
         self._loop_start_time = time.time()
         self._interrupt_flag = False
 
+        # Update cost controller progress callback
+        if self._cost_controller:
+            self._cost_controller._on_progress = on_progress
+
         # Emit loop start
         prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
         self._emit_progress(
@@ -144,6 +160,25 @@ class AgentLoop:
 
         try:
             while iteration < self.config.max_iterations:
+                # Check cost budget
+                if self._cost_controller:
+                    budget_status = self._cost_controller.check(total_usage, session.id)
+                    if not budget_status.is_within_budget:
+                        self.state = LoopState.ERROR
+                        self._emit_progress(
+                            ProgressEventType.ERROR,
+                            budget_status.warning_message or "Budget exceeded",
+                            {
+                                "total_tokens": total_usage.total_tokens,
+                                "limit": self._cost_controller.config.max_tokens_per_session,
+                            },
+                        )
+                        raise BudgetExceededError(
+                            budget_status.warning_message or "Budget exceeded",
+                            usage=total_usage,
+                            limit=self._cost_controller.config.max_tokens_per_session,
+                        )
+
                 # Emit iteration event
                 self._emit_progress(
                     ProgressEventType.ITERATION,

@@ -144,6 +144,44 @@ class ToolResult:
         }
 
 
+# =============================================================================
+# Cost Control - 成本控制
+# =============================================================================
+
+class BudgetExceededError(Exception):
+    """Raised when session budget is exceeded."""
+
+    def __init__(self, message: str, usage: "TokenUsage | None" = None, limit: int = 0):
+        super().__init__(message)
+        self.usage = usage
+        self.limit = limit
+
+
+@dataclass
+class CostConfig:
+    """
+    Cost control configuration.
+
+    Implements multi-level budget management to prevent runaway costs.
+
+    Attributes:
+        max_tokens_per_session: Maximum tokens allowed per session
+        max_tool_calls_per_session: Maximum tool calls per session
+        max_iterations_per_request: Maximum iterations per request
+        warning_threshold: Ratio at which to emit warning (0.0-1.0)
+        action_on_exceed: Action when budget exceeded: "stop", "compress", "warn"
+    """
+    max_tokens_per_session: int = 1_000_000
+    max_tool_calls_per_session: int = 500
+    max_iterations_per_request: int = 20
+    warning_threshold: float = 0.8
+    action_on_exceed: str = "stop"  # stop | compress | warn
+
+    def __post_init__(self):
+        if self.action_on_exceed not in ("stop", "compress", "warn"):
+            raise ValueError(f"Invalid action_on_exceed: {self.action_on_exceed}")
+
+
 @dataclass
 class TokenUsage:
     """Token usage statistics."""
@@ -151,11 +189,35 @@ class TokenUsage:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    tool_calls: int = 0
 
     @property
     def total_tokens(self) -> int:
         """Total tokens used."""
         return self.input_tokens + self.output_tokens
+
+    def check_budget(self, config: CostConfig) -> tuple[bool, str | None]:
+        """
+        Check if usage exceeds budget.
+
+        Args:
+            config: Cost configuration
+
+        Returns:
+            Tuple of (is_within_budget, warning_message)
+        """
+        if self.total_tokens > config.max_tokens_per_session:
+            return False, f"Token limit exceeded: {self.total_tokens}/{config.max_tokens_per_session}"
+
+        if self.tool_calls > config.max_tool_calls_per_session:
+            return False, f"Tool call limit exceeded: {self.tool_calls}/{config.max_tool_calls_per_session}"
+
+        # Check warning threshold
+        usage_ratio = self.total_tokens / config.max_tokens_per_session
+        if usage_ratio >= config.warning_threshold:
+            return True, f"Budget warning: {usage_ratio:.0%} of session budget used"
+
+        return True, None
 
 
 @dataclass
