@@ -536,6 +536,7 @@ class ChunkType(Enum):
     TOOL_CALL_END = "tool_end"       # 工具调用结束
     THINKING = "thinking"            # 思考过程（Claude）
     ERROR = "error"                  # 错误
+    DONE = "done"                    # 流结束
 
 @dataclass
 class Chunk:
@@ -543,32 +544,141 @@ class Chunk:
     content: str = ""
     tool_call_id: Optional[str] = None
     tool_name: Optional[str] = None
+    tool_arguments: dict = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
+
+    def is_text(self) -> bool:
+        return self.type == ChunkType.TEXT
+
+    def is_tool_call(self) -> bool:
+        return self.type in (ChunkType.TOOL_CALL_START, ChunkType.TOOL_CALL_DELTA, ChunkType.TOOL_CALL_END)
+
+    def is_done(self) -> bool:
+        return self.type == ChunkType.DONE
 ```
 
-### 流式输出处理
+### 流式输出处理与背压控制
 
 ```python
+@dataclass
+class StreamingConfig:
+    """流式处理配置"""
+    buffer_size: int = 8192                # 缓冲区大小（chunk 数量）
+    backpressure_threshold: float = 0.9    # 背压触发阈值
+    pause_on_backpressure: bool = True     # 是否在背压时暂停
+    max_pause_duration: float = 5.0        # 最大暂停时间（秒）
+
+@dataclass
+class StreamingStats:
+    """流式统计信息"""
+    chunks_received: int = 0
+    chunks_processed: int = 0
+    backpressure_events: int = 0
+    total_pause_time: float = 0.0
+    buffer_high_watermark: int = 0
+
+    @property
+    def is_healthy(self) -> bool:
+        """检查流式处理是否健康（无过度背压）"""
+        return self.backpressure_events < 10
+
+
 class StreamingHandler:
-    """流式输出处理器"""
+    """
+    流式输出处理器，支持背压控制。
 
-    def __init__(self, callbacks: Dict[ChunkType, Callable]):
-        self.callbacks = callbacks
-        self.buffer = []
+    功能：
+    - 缓冲区管理
+    - 背压检测与处理
+    - 进度事件发射
+    - 支持不同 chunk 类型
 
-    async def handle(self, chunk: Chunk):
-        """处理流式 chunk"""
-        self.buffer.append(chunk)
+    Example:
+        >>> handler = StreamingHandler(on_progress=my_callback)
+        >>> async for chunk in llm.stream(messages):
+        ...     await handler.handle(chunk)
+        ...     if handler.should_pause:
+        ...         await asyncio.sleep(0.1)
+        >>> content = handler.get_full_content()
+    """
 
-        if chunk.type in self.callbacks:
-            await self.callbacks[chunk.type](chunk)
+    def __init__(
+        self,
+        config: StreamingConfig | None = None,
+        on_progress: ProgressCallback | None = None,
+        on_chunk: Callable[[Chunk], None] | None = None,
+    ):
+        self.config = config or StreamingConfig()
+        self._on_progress = on_progress
+        self._on_chunk = on_chunk
+        self._buffer: deque[Chunk] = deque(maxlen=self.config.buffer_size)
+        self._is_paused = False
+        self._stats = StreamingStats()
+        self._text_content: list[str] = []
+        self._tool_calls: dict[str, dict] = {}
+
+    @property
+    def buffer_usage(self) -> float:
+        """缓冲区使用率 (0.0-1.0)"""
+        return len(self._buffer) / self.config.buffer_size
+
+    @property
+    def should_pause(self) -> bool:
+        """检查是否应暂停上游（背压检测）"""
+        return self._is_paused or self.buffer_usage >= self.config.backpressure_threshold
+
+    async def handle(self, chunk: Chunk) -> None:
+        """处理 incoming chunk"""
+        self._stats.chunks_received += 1
+        self._buffer.append(chunk)
+
+        # 更新高水位
+        if len(self._buffer) > self._stats.buffer_high_watermark:
+            self._stats.buffer_high_watermark = len(self._buffer)
+
+        # 检测背压
+        if self.config.pause_on_backpressure and self.should_pause:
+            await self._apply_backpressure()
+
+        # 处理 chunk
+        self._process_chunk(chunk)
+        if self._on_chunk:
+            self._on_chunk(chunk)
+        self._stats.chunks_processed += 1
+
+    async def _apply_backpressure(self) -> None:
+        """应用背压（暂停并等待缓冲区释放）"""
+        self._is_paused = True
+        self._stats.backpressure_events += 1
+
+        # 发射进度事件
+        if self._on_progress:
+            self._on_progress(ProgressEvent(
+                type=ProgressEventType.STREAM_BACKPRESSURE,
+                message=f"Backpressure applied: buffer at {self.buffer_usage:.0%}",
+                data={"buffer_size": len(self._buffer), "usage": self.buffer_usage},
+            ))
+
+        # 等待缓冲区释放
+        while self.buffer_usage > self.config.backpressure_threshold * 0.5:
+            await asyncio.sleep(0.01)
+
+        self._is_paused = False
 
     def get_full_content(self) -> str:
-        """获取完整内容"""
-        return "".join(
-            c.content for c in self.buffer
-            if c.type == ChunkType.TEXT
-        )
+        """获取完整文本内容"""
+        return "".join(self._text_content)
+
+    def get_tool_calls(self) -> list[dict]:
+        """获取累积的工具调用"""
+        return [{"id": id_, **data} for id_, data in self._tool_calls.items()]
+
+    def clear(self) -> None:
+        """清空缓冲区和累积内容"""
+        self._buffer.clear()
+        self._text_content.clear()
+        self._tool_calls.clear()
+        self._is_paused = False
 ```
 
 ## 错误处理
@@ -1256,74 +1366,181 @@ class CircuitBreakerError(Exception):
 
 `interrupt()` 无法中断正在进行的 LLM HTTP 请求或长耗时工具执行。需要实现网络级中断 + 状态快照恢复。
 
+### LoopSnapshot 快照结构
+
 ```python
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
-import asyncio
+from datetime import datetime
+from typing import Any
 
 @dataclass
 class LoopSnapshot:
-    """循环快照（用于恢复）"""
+    """
+    循环快照，用于中断恢复。
+
+    捕获执行状态，支持从中断点恢复执行。
+
+    Attributes:
+        session_id: 会话标识符
+        messages: 对话中的所有消息
+        current_iteration: 当前迭代次数
+        pending_tool_calls: 待执行的工具调用
+        last_llm_response: 最后的 LLM 响应
+        created_at: 快照创建时间
+    """
     session_id: str
-    messages: List[Message]
-    current_iteration: int
-    pending_tool_calls: List[ToolCall] = field(default_factory=list)
-    last_llm_response: Optional[str] = None
+    messages: list[Message] = field(default_factory=list)
+    current_iteration: int = 0
+    pending_tool_calls: list[ToolCall] = field(default_factory=list)
+    last_llm_response: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
 
+    def to_dict(self) -> dict[str, Any]:
+        """序列化快照为字典"""
+        return {
+            "session_id": self.session_id,
+            "messages": [{"role": m.role, "content": m.content} for m in self.messages],
+            "current_iteration": self.current_iteration,
+            "pending_tool_calls": [tc.to_dict() for tc in self.pending_tool_calls],
+            "last_llm_response": self.last_llm_response,
+            "created_at": self.created_at.isoformat(),
+        }
 
-class InterruptibleAgentLoop:
-    """可中断的 Agent 循环"""
-
-    def __init__(self, agent: "AgentHarness"):
-        self.agent = agent
-        self._current_task: Optional[asyncio.Task] = None
-        self._snapshot: Optional[LoopSnapshot] = None
-
-    async def run(
-        self,
-        prompt: str,
-        session_id: str,
-        checkpoint_interval: int = 1
-    ) -> "LoopResult":
-        """可中断执行"""
-        self._current_task = asyncio.current_task()
-        iteration = 0
-
-        try:
-            while True:
-                # 保存快照
-                if iteration % checkpoint_interval == 0:
-                    self._save_snapshot(session_id, iteration)
-
-                result = await self._run_step(prompt, session_id, iteration)
-
-                if result.finished:
-                    return result
-
-                iteration += 1
-
-        except asyncio.CancelledError:
-            # 保存中断点快照
-            await self._save_interrupt_point(session_id, iteration)
-            raise
-
-    async def interrupt(self):
-        """中断当前执行"""
-        if self._current_task:
-            self._current_task.cancel()
-
-    async def resume(self, session_id: str) -> "LoopResult":
-        """从快照恢复执行"""
-        snapshot = await self.agent.memory.load_checkpoint(session_id)
-        if not snapshot:
-            raise ValueError(f"No checkpoint found for session {session_id}")
-
-        return await self.run(
-            prompt="",
-            session_id=session_id,
-            start_iteration=snapshot.current_iteration
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LoopSnapshot":
+        """从字典反序列化快照"""
+        return cls(
+            session_id=data["session_id"],
+            messages=[Message(**m) for m in data.get("messages", [])],
+            current_iteration=data.get("current_iteration", 0),
+            pending_tool_calls=[ToolCall.from_dict(tc) for tc in data.get("pending_tool_calls", [])],
+            last_llm_response=data.get("last_llm_response"),
+            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
         )
+```
+
+### AgentLoop 中断恢复方法
+
+```python
+class AgentLoop:
+    """Agent 循环引擎"""
+
+    def interrupt(self) -> None:
+        """中断当前循环"""
+        self._interrupt_flag = True
+
+    def create_snapshot(
+        self,
+        session: Session,
+        iteration: int = 0,
+        pending_tool_calls: list[ToolCall] | None = None,
+        last_llm_response: str | None = None,
+    ) -> LoopSnapshot:
+        """
+        创建当前循环状态的快照。
+
+        Args:
+            session: 当前会话
+            iteration: 当前迭代次数
+            pending_tool_calls: 待执行的工具调用
+            last_llm_response: 最后的 LLM 响应
+
+        Returns:
+            LoopSnapshot 捕获当前状态
+        """
+        return LoopSnapshot(
+            session_id=session.id,
+            messages=session.messages.copy(),
+            current_iteration=iteration,
+            pending_tool_calls=pending_tool_calls or [],
+            last_llm_response=last_llm_response,
+        )
+
+    async def resume_from_snapshot(
+        self,
+        snapshot: LoopSnapshot,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> LoopResult:
+        """
+        从快照恢复执行。
+
+        Args:
+            snapshot: 要恢复的快照
+            tools: 可用的工具定义
+            on_chunk: 流式回调
+            on_progress: 进度回调
+
+        Returns:
+            LoopResult 恢复后的执行结果
+        """
+        # 从快照恢复会话
+        session = Session(
+            id=snapshot.session_id,
+            messages=snapshot.messages.copy(),
+        )
+
+        self._on_progress = on_progress
+        self._loop_start_time = time.time()
+        self._interrupt_flag = False
+
+        # 发射恢复事件
+        self._emit_progress(
+            ProgressEventType.STATE_CHANGE,
+            f"Resuming from snapshot at iteration {snapshot.current_iteration}",
+            {"snapshot_created_at": snapshot.created_at.isoformat()},
+        )
+
+        # 执行待处理的工具调用
+        if snapshot.pending_tool_calls:
+            tool_results = await self._execute_tools(
+                snapshot.pending_tool_calls,
+                session,
+            )
+            for result in tool_results:
+                session.add_message(Message(
+                    role="tool",
+                    content=result.content,
+                    metadata={"tool_call_id": result.tool_call_id},
+                ))
+
+        # 继续循环
+        iteration = snapshot.current_iteration + 1
+        # ... 继续正常循环逻辑
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+from harness.types import LoopSnapshot
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 执行任务
+result = await agent.run("Complex task")
+
+# 如果需要中断
+agent._loop.interrupt()
+
+# 创建快照保存状态
+snapshot = agent._loop.create_snapshot(
+    session=result.session,
+    iteration=result.iterations,
+)
+
+# 保存快照到文件
+import json
+with open("checkpoint.json", "w") as f:
+    json.dump(snapshot.to_dict(), f)
+
+# 后续从快照恢复
+with open("checkpoint.json") as f:
+    data = json.load(f)
+    snapshot = LoopSnapshot.from_dict(data)
+
+result = await agent._loop.resume_from_snapshot(snapshot)
 ```
 
 ---

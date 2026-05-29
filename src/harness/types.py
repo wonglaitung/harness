@@ -25,6 +25,7 @@ class ProgressEventType(Enum):
     LLM_RESPONSE = "llm_response"        # LLM 响应接收
     ITERATION = "iteration"              # 迭代计数
     ERROR = "error"                      # 错误发生
+    STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压
 
 
 @dataclass
@@ -123,6 +124,23 @@ class ToolCall:
             "name": self.name,
             "input": self.arguments,
         }
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dictionary (for snapshot)."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "arguments": self.arguments,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ToolCall":
+        """Deserialize from dictionary."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            arguments=data.get("arguments", {}),
+        )
 
 
 @dataclass
@@ -289,3 +307,105 @@ class LoopResult:
     def content(self) -> str:
         """Get the final response content."""
         return self.final_response or ""
+
+
+# =============================================================================
+# Streaming Types - 流式输出类型
+# =============================================================================
+
+class ChunkType(Enum):
+    """Types of chunks in streaming output."""
+    TEXT = "text"                    # 文本内容
+    TOOL_CALL_START = "tool_start"   # 工具调用开始
+    TOOL_CALL_DELTA = "tool_delta"   # 工具调用增量
+    TOOL_CALL_END = "tool_end"       # 工具调用结束
+    THINKING = "thinking"            # 思考过程（Claude）
+    ERROR = "error"                  # 错误
+    DONE = "done"                    # 流结束
+
+
+@dataclass
+class Chunk:
+    """
+    A chunk of streaming output.
+
+    Attributes:
+        type: Chunk type
+        content: Text content (for TEXT/THINKING/ERROR)
+        tool_call_id: Tool call ID (for TOOL_CALL_* types)
+        tool_name: Tool name (for TOOL_CALL_START)
+        tool_arguments: Partial arguments (for TOOL_CALL_DELTA)
+        metadata: Additional metadata
+    """
+    type: ChunkType
+    content: str = ""
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+    tool_arguments: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def is_text(self) -> bool:
+        """Check if this is a text chunk."""
+        return self.type == ChunkType.TEXT
+
+    def is_tool_call(self) -> bool:
+        """Check if this is a tool call chunk."""
+        return self.type in (
+            ChunkType.TOOL_CALL_START,
+            ChunkType.TOOL_CALL_DELTA,
+            ChunkType.TOOL_CALL_END,
+        )
+
+    def is_done(self) -> bool:
+        """Check if this is the final chunk."""
+        return self.type == ChunkType.DONE
+
+
+# =============================================================================
+# Loop Snapshot - 循环快照（用于中断恢复）
+# =============================================================================
+
+@dataclass
+class LoopSnapshot:
+    """
+    Snapshot of agent loop state for interruption and recovery.
+
+    Captures all state needed to resume execution after interruption.
+
+    Attributes:
+        session_id: Session identifier
+        messages: All messages in conversation
+        current_iteration: Current iteration number
+        pending_tool_calls: Tool calls waiting to be executed
+        last_llm_response: Last response from LLM
+        created_at: When snapshot was created
+    """
+    session_id: str
+    messages: list[Message] = field(default_factory=list)
+    current_iteration: int = 0
+    pending_tool_calls: list[ToolCall] = field(default_factory=list)
+    last_llm_response: str | None = None
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize snapshot to dictionary."""
+        return {
+            "session_id": self.session_id,
+            "messages": [{"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)} for m in self.messages],
+            "current_iteration": self.current_iteration,
+            "pending_tool_calls": [tc.to_dict() for tc in self.pending_tool_calls],
+            "last_llm_response": self.last_llm_response,
+            "created_at": self.created_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LoopSnapshot":
+        """Deserialize snapshot from dictionary."""
+        return cls(
+            session_id=data["session_id"],
+            messages=[Message(**m) for m in data.get("messages", [])],
+            current_iteration=data.get("current_iteration", 0),
+            pending_tool_calls=[ToolCall.from_dict(tc) for tc in data.get("pending_tool_calls", [])],
+            last_llm_response=data.get("last_llm_response"),
+            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
+        )

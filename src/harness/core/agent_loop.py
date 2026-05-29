@@ -25,6 +25,7 @@ from harness.types import (
     BudgetExceededError,
     CostConfig,
     LoopResult,
+    LoopSnapshot,
     LoopState,
     Message,
     ProgressCallback,
@@ -489,3 +490,261 @@ class AgentLoop:
     def interrupt(self) -> None:
         """Interrupt the current loop."""
         self._interrupt_flag = True
+
+    def create_snapshot(
+        self,
+        session: Session,
+        iteration: int = 0,
+        pending_tool_calls: list[ToolCall] | None = None,
+        last_llm_response: str | None = None,
+    ) -> LoopSnapshot:
+        """
+        Create a snapshot of the current loop state.
+
+        Args:
+            session: Current session
+            iteration: Current iteration number
+            pending_tool_calls: Tool calls waiting to be executed
+            last_llm_response: Last response from LLM
+
+        Returns:
+            LoopSnapshot capturing current state
+        """
+        return LoopSnapshot(
+            session_id=session.id,
+            messages=session.messages.copy(),
+            current_iteration=iteration,
+            pending_tool_calls=pending_tool_calls or [],
+            last_llm_response=last_llm_response,
+        )
+
+    async def resume_from_snapshot(
+        self,
+        snapshot: LoopSnapshot,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> LoopResult:
+        """
+        Resume execution from a snapshot.
+
+        Args:
+            snapshot: Snapshot to resume from
+            tools: Available tools
+            on_chunk: Streaming callback
+            on_progress: Progress callback
+
+        Returns:
+            LoopResult from resumed execution
+        """
+        # Restore session from snapshot
+        session = Session(
+            id=snapshot.session_id,
+            messages=snapshot.messages.copy(),
+        )
+
+        self._on_progress = on_progress
+        self._loop_start_time = time.time()
+        self._interrupt_flag = False
+
+        # Update cost controller progress callback
+        if self._cost_controller:
+            self._cost_controller._on_progress = on_progress
+
+        # Emit resume event
+        self._emit_progress(
+            ProgressEventType.STATE_CHANGE,
+            f"Resuming from snapshot at iteration {snapshot.current_iteration}",
+            {
+                "state": LoopState.BUILDING_CONTEXT.value,
+                "snapshot_created_at": snapshot.created_at.isoformat(),
+            },
+        )
+
+        # Continue from snapshot iteration
+        self.state = LoopState.BUILDING_CONTEXT
+        iteration = snapshot.current_iteration
+        total_usage = session.token_usage
+        self._iteration = iteration
+
+        try:
+            # Execute pending tool calls if any
+            if snapshot.pending_tool_calls:
+                self.state = LoopState.EXECUTING_TOOLS
+                tool_results = await self._execute_tools(
+                    snapshot.pending_tool_calls,
+                    session,
+                )
+                for result in tool_results:
+                    tool_msg = Message(
+                        role="tool",
+                        content=result.content,
+                        metadata={"tool_call_id": result.tool_call_id},
+                    )
+                    session.add_message(tool_msg)
+                iteration += 1
+                self._iteration = iteration
+
+            # Continue the loop
+            while iteration < self.config.max_iterations:
+                # Check cost budget
+                if self._cost_controller:
+                    budget_status = self._cost_controller.check(total_usage, session.id)
+                    if not budget_status.is_within_budget:
+                        self.state = LoopState.ERROR
+                        self._emit_progress(
+                            ProgressEventType.ERROR,
+                            budget_status.warning_message or "Budget exceeded",
+                            {
+                                "total_tokens": total_usage.total_tokens,
+                                "limit": self._cost_controller.config.max_tokens_per_session,
+                            },
+                        )
+                        raise BudgetExceededError(
+                            budget_status.warning_message or "Budget exceeded",
+                            usage=total_usage,
+                            limit=self._cost_controller.config.max_tokens_per_session,
+                        )
+
+                # Check for interruption
+                if self._interrupt_flag:
+                    self.state = LoopState.INTERRUPTED
+                    self._emit_progress(
+                        ProgressEventType.LOOP_END,
+                        "Loop interrupted",
+                        {"status": "interrupted", "iterations": iteration},
+                    )
+                    return LoopResult(
+                        status=LoopState.INTERRUPTED,
+                        session=session,
+                        iterations=iteration,
+                    )
+
+                # Build context
+                self.state = LoopState.BUILDING_CONTEXT
+                context = self.context.build(session)
+
+                # Call LLM
+                self.state = LoopState.CALLING_LLM
+                llm_call_start = time.time()
+                self._emit_progress(
+                    ProgressEventType.LLM_CALL,
+                    f"Calling LLM: {self.llm.model_name}",
+                    {"model": self.llm.model_name, "message_count": len(context.messages)},
+                )
+
+                response = await self.llm.call(
+                    messages=context.messages,
+                    tools=tools,
+                    system=context.system_prompt,
+                )
+
+                llm_duration = (time.time() - llm_call_start) * 1000
+                self._emit_progress(
+                    ProgressEventType.LLM_RESPONSE,
+                    f"LLM responded",
+                    {
+                        "stop_reason": response.stop_reason.value,
+                        "input_tokens": response.usage.input_tokens,
+                        "output_tokens": response.usage.output_tokens,
+                    },
+                    duration_ms=llm_duration,
+                )
+
+                # Update usage
+                total_usage.input_tokens += response.usage.input_tokens
+                total_usage.output_tokens += response.usage.output_tokens
+
+                # Add assistant message
+                assistant_msg = Message(role="assistant", content=response.content)
+                session.add_message(assistant_msg)
+
+                # Check if we need tools
+                if response.is_tool_use:
+                    self.state = LoopState.EXECUTING_TOOLS
+                    tool_results = await self._execute_tools(response.tool_calls, session)
+
+                    for result in tool_results:
+                        tool_msg = Message(
+                            role="tool",
+                            content=result.content,
+                            metadata={"tool_call_id": result.tool_call_id},
+                        )
+                        session.add_message(tool_msg)
+
+                    iteration += 1
+                    self._iteration = iteration
+                    continue
+
+                # Done!
+                self.state = LoopState.COMPLETED
+                session.token_usage = total_usage
+
+                total_duration = (time.time() - self._loop_start_time) * 1000
+                self._emit_progress(
+                    ProgressEventType.LOOP_END,
+                    "Loop completed successfully",
+                    {
+                        "status": "completed",
+                        "iterations": iteration + 1,
+                        "total_tokens": total_usage.total_tokens,
+                    },
+                    duration_ms=total_duration,
+                )
+
+                self._error_handler.reset()
+
+                return LoopResult(
+                    status=LoopState.COMPLETED,
+                    session=session,
+                    messages=session.messages,
+                    final_response=response.content,
+                    iterations=iteration,
+                    token_usage=total_usage,
+                )
+
+            # Max iterations reached
+            self.state = LoopState.ERROR
+            self._emit_progress(
+                ProgressEventType.ERROR,
+                "Max iterations reached",
+                {"iterations": iteration},
+            )
+            return LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                messages=session.messages,
+                iterations=iteration,
+                error="Max iterations reached",
+                token_usage=total_usage,
+            )
+
+        except Exception as e:
+            error_ctx = ErrorContext(
+                error=e,
+                iteration=self._iteration,
+                context_tokens=total_usage.total_tokens,
+            )
+            decision = self._error_handler.handle(e, error_ctx)
+
+            self.state = LoopState.ERROR
+            self._emit_progress(
+                ProgressEventType.ERROR,
+                f"Error: {str(e)}",
+                {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                    "action": decision.action.value,
+                },
+            )
+
+            self._error_handler.reset()
+
+            return LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                messages=session.messages,
+                iterations=self._iteration,
+                error=str(e),
+                token_usage=total_usage,
+            )

@@ -454,7 +454,199 @@ def apply_discount(total, discount_percent):
 
 ## Mock 策略
 
-### Mock LLM
+### Mock Harness（推荐）
+
+Harness 提供了完整的 `MockHarness` 用于测试，无需真实 LLM API 调用。
+
+```python
+from harness.testing import MockHarness, MockHarnessConfig, MockResponse
+from harness.types import StopReason, ToolCall
+
+# 简单用法：预设响应
+mock = MockHarness(responses=[
+    MockResponse(content="Hello! I'm a test agent."),
+])
+
+result = await mock.run("Say hello")
+assert result.content == "Hello! I'm a test agent."
+
+# 复杂用法：模拟工具调用
+mock = MockHarness(responses=[
+    MockResponse(
+        tool_calls=[ToolCall(id="call_1", name="read", arguments={"path": "/test.txt"})],
+        stop_reason=StopReason.TOOL_USE,
+    ),
+    MockResponse(content="The file contains: test data"),
+])
+mock.add_tool_result("read", "test data")
+
+result = await mock.run("Read the test.txt file")
+assert "test data" in result.content
+
+# 录制模式
+mock = MockHarness(config=MockHarnessConfig(record_mode=True))
+mock.add_response(MockResponse(content="Test response"))
+
+await mock.run("Test prompt")
+
+# 获取录制
+recordings = mock.get_recordings()
+
+# 保存录制
+mock.save_recording(Path("test_recording.json"))
+
+# 加载录制回放
+new_mock = MockHarness()
+new_mock.load_recording(Path("test_recording.json"))
+```
+
+### MockResponse 配置
+
+```python
+@dataclass
+class MockResponse:
+    """模拟 LLM 响应"""
+    content: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    stop_reason: StopReason = StopReason.END_TURN
+    input_tokens: int = 100
+    output_tokens: int = 50
+
+    def to_llm_response(self) -> LLMResponse:
+        """转换为 LLMResponse"""
+        return LLMResponse(
+            content=self.content,
+            tool_calls=self.tool_calls,
+            stop_reason=self.stop_reason,
+            usage=TokenUsage(
+                input_tokens=self.input_tokens,
+                output_tokens=self.output_tokens,
+            ),
+        )
+```
+
+### MockHarnessConfig
+
+```python
+@dataclass
+class MockHarnessConfig:
+    """Mock Harness 配置"""
+    responses: list[MockResponse] = field(default_factory=list)
+    auto_tool_results: dict[str, str] = field(default_factory=dict)  # 自动工具结果
+    record_mode: bool = False            # 录制模式
+    recording_path: Path | None = None   # 录制路径
+    default_input_tokens: int = 100
+    default_output_tokens: int = 50
+```
+
+### pytest fixtures
+
+Harness 提供了 pytest 插件和内置 fixtures：
+
+```python
+# tests/conftest.py 或使用内置插件
+
+@pytest.fixture
+def mock_harness():
+    """创建基础 Mock Harness"""
+    return MockHarness()
+
+@pytest.fixture
+def mock_harness_with_responses():
+    """创建带响应的 Mock Harness"""
+    responses = [
+        MockResponse(content="Hello! I'm a test agent."),
+    ]
+    return MockHarness(responses=responses)
+
+# 使用
+def test_with_mock(mock_harness_with_responses):
+    mock_harness_with_responses.add_response(MockResponse(content="Done"))
+    result = asyncio.run(mock_harness_with_responses.run("Test"))
+    assert result.content == "Done"
+```
+
+### 辅助函数
+
+```python
+from harness.testing.pytest_plugin import create_mock_sequence, create_mock_with_tools
+
+# 创建文本响应序列
+mock = create_mock_sequence(["First", "Second", "Third"])
+
+# 创建带工具调用的 Mock
+mock = create_mock_with_tools(
+    tool_sequence=[
+        ("read", {"path": "/test.txt"}, "file content"),
+        ("write", {"path": "/output.txt"}, "written successfully"),
+    ],
+    final_response="Task completed",
+)
+```
+
+---
+
+### RecordingHarness（录制真实交互）
+
+`RecordingHarness` 包装真实 `AgentHarness`，录制所有交互用于后续回放测试。
+
+```python
+from harness.testing import RecordingHarness, RecordingConfig
+from harness import AgentHarness, HarnessConfig
+
+# 创建真实 Agent
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 创建录制器
+recorder = RecordingHarness(
+    agent,
+    config=RecordingConfig(
+        recording_dir=Path(".harness_recordings"),
+        auto_save=True,
+        include_metadata=True,
+        max_recording_size=100,
+    )
+)
+
+# 执行并录制
+result = await recorder.run("Read the main.py file")
+
+# 保存录制
+recorder.save_recording("test_fixture")
+
+# 获取录制摘要
+summary = recorder.get_recording_summary()
+# {
+#     "total_interactions": 5,
+#     "llm_requests": 2,
+#     "tool_calls": 3,
+#     "total_input_tokens": 500,
+#     "total_output_tokens": 200,
+# }
+```
+
+### 录制回放
+
+```python
+# 录制 → MockHarness 回放
+
+# 1. 录制真实交互
+recorder = RecordingHarness(real_agent)
+await recorder.run("Complex task")
+recorder.save_recording("complex_task_recording")
+
+# 2. 在测试中回放
+mock = MockHarness()
+mock.load_recording(Path(".harness_recordings/complex_task_recording.json"))
+
+# 3. 测试使用回放
+result = await mock.run("Complex task")  # 无需真实 API
+assert result.status == LoopState.COMPLETED
+```
+
+---
+
+### Mock LLM（传统方式）
 
 用于不消耗 API 调用的测试：
 

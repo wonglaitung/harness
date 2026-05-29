@@ -236,7 +236,59 @@ result = await agent.run("计算 5 + 3")
 
 ## 测试
 
-使用 `MockLLMClient` 进行单元测试，无需真实 API 调用：
+### MockHarness（推荐）
+
+使用 `MockHarness` 进行单元测试，无需真实 API 调用：
+
+```python
+from harness.testing import MockHarness, MockResponse
+from harness.types import StopReason, ToolCall
+
+# 简单测试
+mock = MockHarness(responses=[
+    MockResponse(content="这是模拟响应"),
+])
+
+result = await mock.run("测试问题")
+assert result.content == "这是模拟响应"
+
+# 模拟工具调用
+mock = MockHarness(responses=[
+    MockResponse(
+        tool_calls=[ToolCall(id="1", name="read", arguments={"path": "/test.txt"})],
+        stop_reason=StopReason.TOOL_USE,
+    ),
+    MockResponse(content="文件内容: test data"),
+])
+mock.add_tool_result("read", "test data")
+
+result = await mock.run("读取文件")
+assert "test data" in result.content
+```
+
+### RecordingHarness（录制真实交互）
+
+录制真实交互用于回放测试：
+
+```python
+from harness.testing import RecordingHarness, RecordingConfig
+from harness import AgentHarness
+
+# 录制
+agent = AgentHarness(model="claude-sonnet-4-6")
+recorder = RecordingHarness(agent)
+
+result = await recorder.run("复杂任务")
+recorder.save_recording("test_fixture")
+
+# 回放
+mock = MockHarness()
+mock.load_recording("test_fixture.json")
+
+result = await mock.run("复杂任务")  # 无需真实 API
+```
+
+### MockLLMClient（传统方式）
 
 ```python
 from harness import AgentHarness, ReadTool
@@ -266,8 +318,11 @@ assert result.content == "这是模拟响应"
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
 - **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
+- **Streaming**: 流式输出与背压控制
+- **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
 - **Tool System**: 内置工具 + 自定义工具
 - **Memory**: 会话管理与持久化存储
+- **Testing**: MockHarness + RecordingHarness 完整测试工具链
 - **SDK**: 简洁的 Python API
 - **Progress Events**: 执行过程可视化，支持 UI 展示和调试
 
