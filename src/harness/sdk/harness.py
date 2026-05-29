@@ -12,7 +12,7 @@ from harness.core.agent_loop import AgentLoop, LoopConfig
 from harness.llm.anthropic import AnthropicClient
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.llm.openai import OpenAIClient
-from harness.memory.context_builder import ContextBuilder
+from harness.memory.context_builder import ContextBuilder, ContextConfig
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore
 from harness.progress import create_progress_handler
@@ -123,10 +123,17 @@ class AgentHarness:
         self._session_store = FileSessionStore(str(memory_dir / "sessions"))
         self._session_manager = SessionManager(self._session_store)
 
-        # Initialize context builder
-        self._context_builder = ContextBuilder()
-        if self.config.system_prompt:
-            self._context_builder.set_system_prompt(self.config.system_prompt)
+        # Get resolved context window
+        context_window = self.config.get_context_window()
+
+        # Initialize context builder with context window
+        self._context_builder = ContextBuilder(
+            config=ContextConfig(
+                max_tokens=context_window,
+                system_prompt=self.config.system_prompt,
+                window_size=self.config.session_window,
+            )
+        )
 
         # Initialize agent loop
         self._loop = AgentLoop(
@@ -143,13 +150,14 @@ class AgentHarness:
     def _create_llm_client(self) -> LLMClient:
         """Create the LLM client based on config."""
         provider = self.config.provider.lower()
+        max_tokens = self.config.get_max_tokens()
 
         # Detect provider from model name if not explicitly set
         if provider == "anthropic" or self.config.model.startswith("claude"):
             return AnthropicClient(
                 api_key=self.config.api_key,
                 model=self.config.model,
-                max_tokens=self.config.max_tokens,
+                max_tokens=max_tokens,
                 temperature=self.config.temperature,
             )
         elif provider == "openai" or self.config.model.startswith("gpt"):
@@ -157,7 +165,7 @@ class AgentHarness:
                 api_key=self.config.api_key,
                 model=self.config.model,
                 base_url=self.config.base_url,
-                max_tokens=self.config.max_tokens,
+                max_tokens=max_tokens,
                 temperature=self.config.temperature,
             )
         else:

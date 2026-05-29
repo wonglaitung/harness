@@ -1,5 +1,17 @@
 # Harness SDK 公共 API
 
+from harness.core import (
+    BudgetStatus,
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    CostConfig,
+    CostController,
+    ErrorAction,
+    ErrorContext,
+    ErrorDecision,
+    ErrorHandler,
+)
 from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
 from harness.mcp import (
     HTTPTransport,
@@ -11,6 +23,15 @@ from harness.mcp import (
     MCPToolWrapper,
     MCPTransport,
     StdioTransport,
+)
+from harness.model_presets import (
+    CONTEXT_LEVELS,
+    DEFAULT_PRESET,
+    MODEL_PRESETS,
+    ModelPreset,
+    get_default_output_tokens,
+    get_model_preset,
+    parse_context_window,
 )
 from harness.progress import ProgressFormatter, create_progress_handler
 from harness.sdk.config import HarnessConfig
@@ -43,6 +64,8 @@ from harness.tools.builtins import (
     WriteTool,
 )
 from harness.types import (
+    BudgetExceededError,
+    CostConfig,
     LoopResult,
     LoopState,
     Message,
@@ -51,6 +74,7 @@ from harness.types import (
     ProgressEventType,
     Session,
     ToolCall,
+    TokenUsage,
     ToolResult,
 )
 
@@ -60,6 +84,14 @@ __all__ = [
     # Main SDK class
     "AgentHarness",
     "HarnessConfig",
+    # Model presets
+    "ModelPreset",
+    "MODEL_PRESETS",
+    "CONTEXT_LEVELS",
+    "DEFAULT_PRESET",
+    "get_model_preset",
+    "parse_context_window",
+    "get_default_output_tokens",
     # LLM clients
     "LLMClient",
     "LLMConfig",
@@ -78,8 +110,14 @@ __all__ = [
     "Session",
     "ToolCall",
     "ToolResult",
+    "TokenUsage",
     "LoopResult",
     "LoopState",
+    # Cost control
+    "CostConfig",
+    "CostController",
+    "BudgetStatus",
+    "BudgetExceededError",
     # Progress types
     "ProgressEvent",
     "ProgressEventType",

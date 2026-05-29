@@ -2,18 +2,23 @@
 Context builder for assembling messages for LLM calls.
 
 Handles system prompt injection, message windowing, and token budget management.
+Includes automatic compression when context exceeds budget.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from harness.memory.compressor import CompressionConfig, CompressionResult, ContextCompressor
 from harness.memory.token_counter import TokenCounter
 from harness.types import Message, Session
 
 if TYPE_CHECKING:
     from harness.llm.base import ToolDefinition
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -129,6 +134,8 @@ class ContextConfig:
     system_prompt: str = ""
     window_size: int = 100  # Max number of recent messages
     compression_threshold: float = 0.9  # Compress when usage > 90%
+    enable_compression: bool = True  # Enable automatic compression
+    compression_config: CompressionConfig | None = None  # Compression settings
 
 
 @dataclass
@@ -139,6 +146,7 @@ class BuiltContext:
     estimated_tokens: int
     budget: ContextBudget | None = None
     compression_needed: bool = False
+    compression_result: CompressionResult | None = None
 
 
 class ContextBuilder:
@@ -148,7 +156,7 @@ class ContextBuilder:
     Handles:
     - System prompt injection
     - Message windowing with token budget
-    - Automatic compression detection
+    - Automatic compression detection and execution
     - Integration with TokenCounter for accurate counting
     """
 
@@ -156,9 +164,22 @@ class ContextBuilder:
         self,
         config: ContextConfig | None = None,
         token_counter: TokenCounter | None = None,
+        compressor: ContextCompressor | None = None,
     ):
         self.config = config or ContextConfig()
         self._token_counter = token_counter or TokenCounter()
+
+        # Initialize compressor
+        if compressor:
+            self._compressor = compressor
+        elif self.config.enable_compression:
+            compression_config = self.config.compression_config or CompressionConfig()
+            self._compressor = ContextCompressor(
+                token_counter=self._token_counter,
+                config=compression_config,
+            )
+        else:
+            self._compressor = None
 
     def build(
         self,
@@ -168,6 +189,8 @@ class ContextBuilder:
     ) -> BuiltContext:
         """
         Build context for LLM call with budget management.
+
+        Automatically compresses context if it exceeds budget.
 
         Args:
             session: Current session
@@ -180,19 +203,48 @@ class ContextBuilder:
         # Calculate budget
         budget = self._calculate_budget(tools)
 
-        # Build messages within budget
-        messages = self._build_messages(
-            session=session,
-            new_prompt=new_prompt,
-            token_budget=budget.recent_messages,
-        )
+        # Get messages from session
+        session_messages = session.messages.copy()
+
+        # Apply sliding window
+        windowed_messages = self._apply_window(session_messages)
+
+        # Add new prompt if provided
+        if new_prompt:
+            windowed_messages.append(Message(role="user", content=new_prompt))
+
+        # Estimate current tokens
+        estimated = self._estimate_tokens(windowed_messages)
 
         # Check if compression is needed
-        estimated = self._token_counter.count_messages(
-            [self._dict_to_message(m) for m in messages]
-        )
+        compression_needed = estimated > budget.available_for_input * self.config.compression_threshold
+        compression_result = None
 
-        compression_needed = estimated > budget.recent_messages
+        if compression_needed and self._compressor:
+            logger.info(
+                f"Context compression needed: {estimated} tokens > "
+                f"{int(budget.available_for_input * self.config.compression_threshold)} threshold"
+            )
+
+            # Perform compression
+            target_tokens = int(budget.available_for_input * 0.7)  # Aim for 70% utilization
+            compression_result = self._compressor.compress(
+                messages=windowed_messages,
+                target_tokens=target_tokens,
+            )
+
+            # Use compressed messages
+            windowed_messages = compression_result.compressed_messages
+            estimated = compression_result.tokens_after
+
+            logger.info(
+                f"Compression complete: {compression_result.tokens_before} -> "
+                f"{compression_result.tokens_after} tokens "
+                f"(saved {compression_result.compression_saved})"
+            )
+
+        # Convert to API format
+        messages = [msg.to_api_format() for msg in windowed_messages]
 
         return BuiltContext(
             messages=messages,
@@ -200,6 +252,7 @@ class ContextBuilder:
             estimated_tokens=estimated,
             budget=budget,
             compression_needed=compression_needed,
+            compression_result=compression_result,
         )
 
     def _calculate_budget(self, tools: list[ToolDefinition] | None = None) -> ContextBudget:
@@ -212,6 +265,38 @@ class ContextBuilder:
             system_prompt_tokens=system_tokens,
             tool_tokens=tool_tokens,
         )
+
+    def _apply_window(self, messages: list[Message]) -> list[Message]:
+        """
+        Apply sliding window to messages.
+
+        Args:
+            messages: All messages
+
+        Returns:
+            Messages within window size
+        """
+        if len(messages) <= self.config.window_size:
+            return messages
+
+        return messages[-self.config.window_size:]
+
+    def _estimate_tokens(self, messages: list[Message]) -> int:
+        """
+        Estimate total tokens in messages.
+
+        Args:
+            messages: Messages to estimate
+
+        Returns:
+            Estimated token count
+        """
+        total = 0
+        for msg in messages:
+            content = msg.content if isinstance(msg.content, str) else ""
+            total += self._token_counter.count(content)
+            total += 4  # Message format overhead
+        return total
 
     def _build_messages(
         self,
