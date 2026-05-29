@@ -33,6 +33,70 @@ response = await agent.run("分析当前目录的代码结构")
 print(response.content)
 ```
 
+### 模型预设配置
+
+Harness 内置主流 LLM 的预设配置，自动适配上下文窗口和输出 token 上限。
+
+#### 支持的模型预设
+
+| 模型 | 上下文窗口 | 默认输出 | 提供商 |
+|-----|----------|---------|-------|
+| claude-opus-4-6 | 200K | 16K | anthropic |
+| claude-sonnet-4-6 | 200K | 16K | anthropic |
+| claude-haiku-4-5 | 200K | 8K | anthropic |
+| gpt-4o | 128K | 16K | openai |
+| gpt-4-turbo | 128K | 4K | openai |
+| glm-4 | 128K | 4K | openai |
+| glm-5 | 64K | 4K | openai |
+| qwen-max | 32K | 6K | openai |
+| deepseek-chat | 64K | 4K | openai |
+
+#### 使用示例
+
+```python
+from harness import AgentHarness
+
+# 方式1：自动检测（推荐）
+agent = AgentHarness(model="glm-5")  # 自动使用 64K 上下文
+
+# 方式2：指定上下文级别
+agent = AgentHarness(
+    model="unknown-model",
+    context_window="64k",  # 可选: "32k", "64k", "128k", "200k"
+)
+
+# 方式3：指定具体数值
+agent = AgentHarness(
+    model="custom-model",
+    context_window=65536,  # 64K
+)
+
+# 方式4：完整配置
+agent = AgentHarness(
+    model="glm-5",
+    context_window="64k",
+    max_tokens=4096,  # 输出上限
+)
+```
+
+#### 查询模型预设
+
+```python
+from harness import get_model_preset, parse_context_window, CONTEXT_LEVELS
+
+# 获取模型预设
+preset = get_model_preset("glm-5")
+print(f"上下文窗口: {preset.context_window}")  # 65536
+print(f"默认输出: {preset.default_output_tokens}")  # 4096
+
+# 解析上下文配置
+tokens = parse_context_window("64k")  # 65536
+tokens = parse_context_window("auto", "glm-5")  # 65536
+
+# 上下文级别映射
+print(CONTEXT_LEVELS)  # {"32k": 32768, "64k": 65536, ...}
+```
+
 ### 完整配置
 
 ```python

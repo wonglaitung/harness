@@ -176,7 +176,8 @@ config = HarnessConfig(
     provider="openai",                 # 提供商: "anthropic" 或 "openai"
     base_url="https://api.xxx.com/v1", # 自定义 API 地址
     api_key="your-api-key",            # API Key
-    max_tokens=4096,                   # 最大输出 token
+    context_window="auto",             # 上下文窗口: "auto", "32k", "64k", "128k", "200k" 或具体数值
+    max_tokens="auto",                 # 输出 token: "auto" 或具体数值
     temperature=0.7,                   # 温度参数
 
     # Agent 配置
@@ -189,6 +190,23 @@ config = HarnessConfig(
 )
 
 agent = AgentHarness(config=config, tools=[ReadTool()])
+```
+
+### 模型上下文窗口自动适配
+
+Harness 内置主流模型预设，自动配置上下文窗口：
+
+```python
+from harness import AgentHarness
+
+# 自动检测（推荐）
+agent = AgentHarness(model="glm-5")  # 自动使用 64K 上下文
+
+# 手动指定
+agent = AgentHarness(
+    model="unknown-model",
+    context_window="64k",  # 可选: "32k", "64k", "128k", "200k"
+)
 ```
 
 ## Built-in Tools
