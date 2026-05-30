@@ -15,6 +15,7 @@ from harness_client.ui.sidebar import SidebarPanel
 from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.skill_controller import SkillController
+from harness_client.utils.settings import SettingsManager
 
 
 class AsyncWorker(QThread):
@@ -62,9 +63,13 @@ class MainWindow(QMainWindow):
         # State
         self.work_dir = Path.cwd()
         self._current_worker = None
+        self.settings_manager = SettingsManager()
 
         # Connect chat panel signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
+
+        # Load saved settings
+        self._load_saved_settings()
 
     def _setup_menubar(self):
         """Setup menu bar."""
@@ -160,15 +165,45 @@ class MainWindow(QMainWindow):
         """Open preferences dialog."""
         from harness_client.ui.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
+
+        # Populate with current settings
+        current = self.settings_manager.get()
+        dialog.provider_combo.setCurrentText(current.provider)
+        dialog.api_key_edit.setText(current.api_key)
+        dialog.base_url_edit.setText(current.base_url)
+        dialog.model_combo.setCurrentText(current.model)
+        dialog.auto_save_check.setChecked(current.auto_save)
+        dialog.stream_check.setChecked(current.stream)
+        dialog.max_iterations_spin.setValue(current.max_iterations)
+        if current.work_dir:
+            dialog.work_dir_edit.setText(current.work_dir)
+        dialog.remember_dir_check.setChecked(current.remember_dir)
+
         if dialog.exec():
             settings = dialog.get_settings()
             self._apply_settings(settings)
             self.statusbar.showMessage("设置已保存", 3000)
 
     def _apply_settings(self, settings: dict):
-        """Apply settings to controllers."""
+        """Apply settings to controllers and save to disk."""
         from harness_client.controllers.chat_controller import ChatConfig
+        from harness_client.utils.settings import AppSettings
 
+        # Create and save settings
+        app_settings = AppSettings(
+            provider=settings.get("provider", "anthropic"),
+            api_key=settings.get("api_key", ""),
+            base_url=settings.get("base_url", ""),
+            model=settings.get("model", "claude-sonnet-4-6"),
+            auto_save=settings.get("auto_save", True),
+            stream=settings.get("stream", True),
+            max_iterations=settings.get("max_iterations", 20),
+            work_dir=settings.get("work_dir", ""),
+            remember_dir=settings.get("remember_dir", True),
+        )
+        self.settings_manager.save(app_settings)
+
+        # Apply to chat controller
         chat_config = ChatConfig(
             provider=settings.get("provider", "anthropic"),
             api_key=settings.get("api_key", ""),
@@ -180,6 +215,26 @@ class MainWindow(QMainWindow):
 
         if settings.get("work_dir"):
             self.work_dir = Path(settings["work_dir"])
+
+    def _load_saved_settings(self):
+        """Load and apply saved settings on startup."""
+        from harness_client.controllers.chat_controller import ChatConfig
+
+        settings = self.settings_manager.get()
+
+        # Apply to chat controller
+        chat_config = ChatConfig(
+            provider=settings.provider,
+            api_key=settings.api_key,
+            base_url=settings.base_url,
+            model=settings.model,
+            max_iterations=settings.max_iterations,
+        )
+        self.chat_controller.configure(chat_config)
+
+        # Apply work directory
+        if settings.work_dir:
+            self.work_dir = Path(settings.work_dir)
 
     def _on_about(self):
         """Show about dialog."""

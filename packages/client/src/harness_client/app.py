@@ -8,9 +8,33 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QFontDatabase
 import qasync
 
 from harness_client.ui.main_window import MainWindow
+
+
+def get_system_font() -> QFont:
+    """Get a suitable system font."""
+    font = QFont()
+    font.setPointSize(10)
+
+    # Try fonts in order of preference for Windows
+    preferred_fonts = [
+        "Microsoft YaHei",
+        "Segoe UI",
+        "SimHei",
+        "Microsoft JhengHei",
+        "Arial",
+    ]
+
+    available_families = QFontDatabase.families()
+    for family in preferred_fonts:
+        if family in available_families:
+            font.setFamily(family)
+            break
+
+    return font
 
 
 def run():
@@ -24,6 +48,9 @@ def run():
     app.setApplicationName("Harness Client")
     app.setApplicationVersion("0.1.0")
     app.setOrganizationName("Harness")
+
+    # Set default application font (fixes QFont warnings)
+    app.setFont(get_system_font())
 
     # Load stylesheet
     style_path = Path(__file__).parent.parent.parent / "resources" / "styles" / "main.qss"

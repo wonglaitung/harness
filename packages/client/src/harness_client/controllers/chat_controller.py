@@ -67,8 +67,10 @@ class ChatController:
         self._on_stream = callback
 
     def configure(self, config: ChatConfig):
-        """Update chat configuration."""
+        """Update chat configuration and reset agent."""
         self.config = config
+        # Reset agent so it will be re-initialized with new config
+        self.agent = None
 
     async def initialize(self, mcp_tools: list = None):
         """Initialize the AgentHarness with current configuration."""
