@@ -63,6 +63,7 @@ class ChatController:
         self._on_tool_call: Callable | None = None
         self._on_tool_result: Callable | None = None
         self._on_thinking: Callable | None = None
+        self._on_text_chunk: Callable | None = None  # For streaming text
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -83,6 +84,10 @@ class ChatController:
     def set_thinking_callback(self, callback: Callable[[str], None]):
         """Set callback for thinking/progress messages."""
         self._on_thinking = callback
+
+    def set_text_chunk_callback(self, callback: Callable[[str], None]):
+        """Set callback for streaming text chunks."""
+        self._on_text_chunk = callback
 
     def configure(self, config: ChatConfig):
         """Update chat configuration and reset agent."""
@@ -186,6 +191,13 @@ class ChatController:
                     # LLM call started
                     if self._on_thinking:
                         self._on_thinking("正在生成回复...")
+
+                elif event.type == ProgressEventType.TEXT_CHUNK:
+                    # Streaming text chunk
+                    if self._on_text_chunk and event.data:
+                        chunk = event.data.get("text", "")
+                        if chunk:
+                            self._on_text_chunk(chunk)
 
             # Execute
             logger.info("Calling agent.run()...")

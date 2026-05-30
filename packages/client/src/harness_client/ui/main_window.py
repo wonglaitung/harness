@@ -73,6 +73,9 @@ class MainWindow(QMainWindow):
         self.chat_controller.set_tool_result_callback(self._on_tool_result)
         self.chat_controller.set_thinking_callback(self._on_thinking)
 
+        # Settings
+        self._stream_enabled = True  # Will be loaded from settings
+
         # Initialize UI
         self._setup_menubar()
         self._setup_toolbar()
@@ -222,6 +225,9 @@ class MainWindow(QMainWindow):
         )
         self.settings_manager.save(app_settings)
 
+        # Update stream setting
+        self._stream_enabled = settings.get("stream", True)
+
         # Apply to chat controller
         chat_config = ChatConfig(
             provider=settings.get("provider", "anthropic"),
@@ -240,6 +246,9 @@ class MainWindow(QMainWindow):
         from harness_client.controllers.chat_controller import ChatConfig
 
         settings = self.settings_manager.get()
+
+        # Store stream setting
+        self._stream_enabled = settings.stream
 
         # Apply to chat controller
         chat_config = ChatConfig(
@@ -298,13 +307,51 @@ class MainWindow(QMainWindow):
         """Handle response from agent."""
         logger.info(f"Response received: {response[:50] if response else 'EMPTY'}...")
         if response:
-            self.chat_panel.append_assistant_message(response)
+            # Check if streaming is enabled
+            settings = self.settings_manager.get()
+            if settings.stream and len(response) > 50:
+                # Simulate streaming for better UX
+                self._simulate_streaming(response)
+            else:
+                self.chat_panel.append_assistant_message(response)
         else:
             self.chat_panel.append_assistant_message("(无响应)")
         self.statusbar.showMessage(
             f"完成 | Token: {self.chat_controller.get_token_usage()}"
         )
         self._current_worker = None
+
+    def _simulate_streaming(self, text: str):
+        """Simulate streaming output for better UX."""
+        from PyQt6.QtCore import QTimer
+
+        self.chat_panel.start_streaming()
+        self._stream_buffer = text
+        self._stream_pos = 0
+        self._stream_timer = QTimer()
+        self._stream_timer.timeout.connect(self._stream_next_chunk)
+
+        # Calculate chunk size and interval based on text length
+        chunk_size = max(1, len(text) // 100)  # ~100 chunks
+        interval = max(10, 1500 // 100)  # ~1.5 seconds total
+
+        self._stream_chunk_size = chunk_size
+        self._stream_timer.start(interval)
+
+    def _stream_next_chunk(self):
+        """Stream the next chunk of text."""
+        if self._stream_pos >= len(self._stream_buffer):
+            self._stream_timer.stop()
+            self.chat_panel.finish_streaming()
+            return
+
+        # Get next chunk
+        end = min(self._stream_pos + self._stream_chunk_size, len(self._stream_buffer))
+        chunk = self._stream_buffer[self._stream_pos:end]
+        self._stream_pos = end
+
+        # Append chunk
+        self.chat_panel.append_streaming_chunk(chunk)
 
     def _on_error(self, error: str):
         """Handle error from async operation."""

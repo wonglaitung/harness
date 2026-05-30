@@ -23,6 +23,7 @@ class ProgressEventType(Enum):
     TOOL_RESULT = "tool_result"          # 工具调用结果
     LLM_CALL = "llm_call"                # LLM 调用开始
     LLM_RESPONSE = "llm_response"        # LLM 响应接收
+    TEXT_CHUNK = "text_chunk"            # 流式文本块
     ITERATION = "iteration"              # 迭代计数
     ERROR = "error"                      # 错误发生
     STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压

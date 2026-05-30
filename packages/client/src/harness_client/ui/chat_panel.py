@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QTextBrowser, QLineEdit, QPushButton, QScrollArea
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QFontDatabase
 
 
@@ -19,6 +19,8 @@ class ChatPanel(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._streaming_text = ""  # Buffer for streaming text
+        self._is_streaming = False
         self._setup_ui()
 
     def _get_font(self) -> QFont:
@@ -235,3 +237,82 @@ class ChatPanel(QWidget):
     def clear_chat(self):
         """Clear the chat display."""
         self.chat_display.clear()
+
+    def start_streaming(self):
+        """Start streaming mode for assistant response."""
+        self._streaming_text = ""
+        self._is_streaming = True
+        # Add an empty assistant message that will be updated
+        html = f'''
+        <div style="margin: 8px 0;">
+            <div id="streaming" style="display: inline-block; background-color: #f5f5f5; color: #333;
+                        padding: 8px 12px; border-radius: 12px; max-width: 90%;">
+                <b style="color: #333;">🤖 助手:</b><br>
+                <div id="streaming-content" style="margin-top: 4px; color: #333;">▌</div>
+            </div>
+        </div>
+        '''
+        self.chat_display.append(html)
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def append_streaming_chunk(self, chunk: str):
+        """Append a text chunk during streaming."""
+        if not self._is_streaming:
+            return
+
+        self._streaming_text += chunk
+        # Update the streaming content
+        rendered = self._render_markdown(self._streaming_text + "▌")
+        # Use JavaScript-like approach: find and replace the streaming content
+        # For QTextBrowser, we need to regenerate the HTML
+        html = f'''
+        <div style="margin: 8px 0;">
+            <div style="display: inline-block; background-color: #f5f5f5; color: #333;
+                        padding: 8px 12px; border-radius: 12px; max-width: 90%;">
+                <b style="color: #333;">🤖 助手:</b><br>
+                <div style="margin-top: 4px; color: #333;">{rendered}</div>
+            </div>
+        </div>
+        '''
+        # Remove last message and add updated one
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+        cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        self.chat_display.append(html)
+
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def finish_streaming(self):
+        """Finish streaming and finalize the message."""
+        if not self._is_streaming:
+            return
+
+        self._is_streaming = False
+        # Render final text without cursor
+        rendered = self._render_markdown(self._streaming_text)
+        html = f'''
+        <div style="margin: 8px 0;">
+            <table style="display: inline-table; background-color: #f5f5f5;
+                          border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
+                <tr><td style="color: #333;">
+                    <b style="color: #333;">🤖 助手:</b><br>
+                    <div style="margin-top: 4px; color: #333;">{rendered}</div>
+                </td></tr>
+            </table>
+        </div>
+        '''
+        # Remove last message and add final one
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+        cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        self.chat_display.append(html)
+
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        self._streaming_text = ""
