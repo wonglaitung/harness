@@ -231,6 +231,22 @@ client = OpenAIClient(
 client = OpenAIClient(model="your-model")
 ```
 
+##### Windows/qasync 兼容性
+
+OpenAIClient 在 Windows 平台上使用同步客户端 + 线程池模式，以解决 qasync 与 asyncio 的兼容性问题：
+
+```python
+# 内部实现（无需用户配置）
+# - 使用 openai.OpenAI (同步客户端) 而非 AsyncOpenAI
+# - 通过 ThreadPoolExecutor 在后台线程执行 API 调用
+# - 使用 async polling 检查 Future 完成状态，保持 UI 响应
+```
+
+**注意事项**：
+- 在 Windows + PyQt6/qasync 环境中，OpenAIClient 自动使用兼容模式
+- 无需用户额外配置，客户端会自动处理
+- 流式响应使用 sync queue 桥接线程和协程
+
 #### MockLLMClient
 
 用于单元测试和开发，无需真实 API 调用：
@@ -485,6 +501,9 @@ class AgentHarness:
         """
         流式运行 agent
 
+        注意：当前实现为模拟流式输出。内部先完成完整响应，
+        然后分块 yield，以解决 Windows/qasync 兼容性问题。
+
         Args:
             prompt: 用户输入
             session_id: 会话 ID
@@ -497,7 +516,10 @@ class AgentHarness:
             async for chunk in agent.stream("分析代码"):
                 print(chunk.content, end="")
         """
-        async for chunk in self._loop.stream(prompt, session_id):
+        # 当前实现：先运行完成，再分块输出
+        result = await self.run(prompt, session_id)
+        # 将结果分块 yield
+        for chunk in split_into_chunks(result.content):
             if on_chunk:
                 on_chunk(chunk)
             yield chunk

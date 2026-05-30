@@ -139,6 +139,30 @@ uv run python -m harness_client
 
 3. 确认 API 配置正确（Provider、API Key、Base URL）
 
+### 问题 8: Windows 上程序崩溃或事件循环错误
+
+**症状**：程序启动或运行时崩溃，出现 `ProactorEventLoop` 相关错误。
+
+**原因**：Windows 默认使用 `ProactorEventLoop`，但 qasync 需要 `SelectorEventLoop`。
+
+**解决方案**：已通过独立模块 `_win_event_loop.py` 自动处理：
+
+```python
+# _win_event_loop.py（入口点最先导入此模块）
+import sys
+
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+```
+
+该模块在 `main.py` 和 `__main__.py` 中作为第一个导入，确保在任何 asyncio/qasync 导入前设置策略。
+
+如果仍有问题，请确保：
+1. 使用最新代码：`git pull && uv sync --all-packages`
+2. 不要在其他地方手动设置事件循环策略
+3. 检查是否有其他库冲突
+
 ---
 
 ## 一键启动脚本
