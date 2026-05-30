@@ -158,6 +158,8 @@ class MainWindow(QMainWindow):
         self.sidebar = SidebarPanel()
         self.sidebar.setMaximumWidth(280)
         self.sidebar.work_dir_changed.connect(self._on_work_dir_changed)
+        self.sidebar.session_delete_requested.connect(self._on_session_delete)
+        self.sidebar.session_new_requested.connect(self._on_new_session)
 
         # Right chat panel
         self.chat_panel = ChatPanel()
@@ -182,6 +184,13 @@ class MainWindow(QMainWindow):
         self.chat_controller.new_session()
         self.chat_panel.clear_chat()
         self.statusbar.showMessage("新会话已创建", 3000)
+
+    def _on_session_delete(self, session_id: str):
+        """Handle session delete request."""
+        # For now, just show a message since we don't have persistent sessions
+        # In the future, this would delete the session from storage
+        self.sidebar.remove_session(session_id)
+        self.statusbar.showMessage(f"会话已删除", 3000)
 
     def _on_preferences(self):
         """Open preferences dialog."""

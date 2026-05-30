@@ -5,9 +5,10 @@ Sidebar panel with sessions, MCP servers, and skills.
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QHBoxLayout, QGroupBox, QFileDialog
+    QPushButton, QHBoxLayout, QGroupBox, QFileDialog, QMessageBox, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction
 
 
 class SidebarPanel(QWidget):
@@ -17,6 +18,8 @@ class SidebarPanel(QWidget):
     work_dir_changed = pyqtSignal(Path)
     mcp_connect_requested = pyqtSignal(str)
     skill_load_requested = pyqtSignal(Path)
+    session_delete_requested = pyqtSignal(str)  # session_id
+    session_new_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -35,9 +38,12 @@ class SidebarPanel(QWidget):
 
         self.session_list = QListWidget()
         self.session_list.addItem("🔵 当前会话")
+        self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         sessions_layout.addWidget(self.session_list)
 
         new_session_btn = QPushButton("➕ 新建会话")
+        new_session_btn.clicked.connect(self._on_new_session)
         sessions_layout.addWidget(new_session_btn)
 
         layout.addWidget(sessions_group)
@@ -166,3 +172,77 @@ class SidebarPanel(QWidget):
         """Update work directory display."""
         self.work_dir = path
         self.work_dir_label.setText(str(path))
+
+    def _on_new_session(self):
+        """Handle new session button click."""
+        self.session_new_requested.emit()
+
+    def _on_session_context_menu(self, position):
+        """Show context menu for session list."""
+        item = self.session_list.itemAt(position)
+        if not item:
+            return
+
+        # Get session info
+        row = self.session_list.row(item)
+        text = item.text()
+
+        # Don't show menu for current session (first item)
+        if row == 0:
+            return
+
+        # Extract session ID from item data or text
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+        if not session_id:
+            # Fallback: use row as ID
+            session_id = f"session_{row}"
+
+        menu = QMenu(self)
+
+        # Delete action
+        delete_action = QAction("🗑️ 删除会话", self)
+        delete_action.triggered.connect(lambda: self._on_delete_session(session_id, text))
+        menu.addAction(delete_action)
+
+        menu.exec(self.session_list.mapToGlobal(position))
+
+    def _on_delete_session(self, session_id: str, session_name: str):
+        """Handle delete session request with confirmation."""
+        # Extract session display name
+        display_name = session_name.replace("🔵 ", "").replace("📄 ", "")
+        if "(" in display_name:
+            display_name = display_name.split("(")[0].strip()
+
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self,
+            "确认删除",
+            f"确定要删除会话「{display_name}」吗？\n\n此操作无法撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.session_delete_requested.emit(session_id)
+
+    def add_session(self, session_id: str, name: str = None):
+        """Add a session to the list."""
+        if name is None:
+            name = session_id[:8]
+        item = QListWidgetItem(f"📄 {name}")
+        item.setData(Qt.ItemDataRole.UserRole, session_id)
+        self.session_list.addItem(item)
+
+    def remove_session(self, session_id: str):
+        """Remove a session from the list."""
+        for i in range(self.session_list.count()):
+            item = self.session_list.item(i)
+            if item and item.data(Qt.ItemDataRole.UserRole) == session_id:
+                self.session_list.takeItem(i)
+                break
+
+    def update_current_session(self, name: str):
+        """Update the current session display name."""
+        if self.session_list.count() > 0:
+            item = self.session_list.item(0)
+            item.setText(f"🔵 {name}")
