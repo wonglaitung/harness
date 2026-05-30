@@ -2,17 +2,38 @@
 Main window for Harness Client.
 """
 
+import asyncio
 from pathlib import Path
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QSplitter, QStatusBar, QMenuBar, QMenu, QToolBar,
-    QMessageBox
+    QMainWindow, QWidget, QHBoxLayout,
+    QSplitter, QStatusBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.sidebar import SidebarPanel
+from harness_client.controllers.chat_controller import ChatController
+from harness_client.controllers.mcp_controller import MCPController
+from harness_client.controllers.skill_controller import SkillController
+
+
+class AsyncWorker(QThread):
+    """Worker thread for async operations."""
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, coro, parent=None):
+        super().__init__(parent)
+        self.coro = coro
+
+    def run(self):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self.coro)
+            self.finished.emit(result or "")
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +44,15 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Harness Client")
         self.setMinimumSize(1200, 800)
 
+        # Initialize controllers
+        self.chat_controller = ChatController()
+        self.mcp_controller = MCPController()
+        self.skill_controller = SkillController()
+
+        # Connect controller callbacks
+        self.mcp_controller.set_change_callback(self._on_mcp_changed)
+        self.skill_controller.set_change_callback(self._on_skills_changed)
+
         # Initialize UI
         self._setup_menubar()
         self._setup_toolbar()
@@ -31,6 +61,10 @@ class MainWindow(QMainWindow):
 
         # State
         self.work_dir = Path.cwd()
+        self._current_worker = None
+
+        # Connect chat panel signals
+        self.chat_panel.message_sent.connect(self._on_message_sent)
 
     def _setup_menubar(self):
         """Setup menu bar."""
@@ -38,6 +72,8 @@ class MainWindow(QMainWindow):
 
         # File menu
         file_menu = menubar.addMenu("文件(&F)")
+
+        from PyQt6.QtGui import QAction
 
         new_session_action = QAction("新建会话(&N)", self)
         new_session_action.setShortcut("Ctrl+N")
@@ -68,6 +104,9 @@ class MainWindow(QMainWindow):
 
     def _setup_toolbar(self):
         """Setup toolbar."""
+        from PyQt6.QtGui import QAction
+        from PyQt6.QtCore import QSize
+
         toolbar = self.addToolBar("Main")
         toolbar.setIconSize(QSize(24, 24))
         toolbar.setMovable(False)
@@ -91,6 +130,7 @@ class MainWindow(QMainWindow):
         # Left sidebar
         self.sidebar = SidebarPanel()
         self.sidebar.setMaximumWidth(280)
+        self.sidebar.work_dir_changed.connect(self._on_work_dir_changed)
 
         # Right chat panel
         self.chat_panel = ChatPanel()
@@ -112,6 +152,7 @@ class MainWindow(QMainWindow):
 
     def _on_new_session(self):
         """Create new session."""
+        self.chat_controller.new_session()
         self.chat_panel.clear_chat()
         self.statusbar.showMessage("新会话已创建", 3000)
 
@@ -120,7 +161,25 @@ class MainWindow(QMainWindow):
         from harness_client.ui.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
         if dialog.exec():
+            settings = dialog.get_settings()
+            self._apply_settings(settings)
             self.statusbar.showMessage("设置已保存", 3000)
+
+    def _apply_settings(self, settings: dict):
+        """Apply settings to controllers."""
+        from harness_client.controllers.chat_controller import ChatConfig
+
+        chat_config = ChatConfig(
+            provider=settings.get("provider", "anthropic"),
+            api_key=settings.get("api_key", ""),
+            base_url=settings.get("base_url", ""),
+            model=settings.get("model", "claude-sonnet-4-6"),
+            max_iterations=settings.get("max_iterations", 20),
+        )
+        self.chat_controller.configure(chat_config)
+
+        if settings.get("work_dir"):
+            self.work_dir = Path(settings["work_dir"])
 
     def _on_about(self):
         """Show about dialog."""
@@ -132,3 +191,67 @@ class MainWindow(QMainWindow):
             "基于 Harness AI Agent SDK\n\n"
             "© 2024 Harness Team"
         )
+
+    def _on_message_sent(self, message: str):
+        """Handle message sent from chat panel."""
+        if self.chat_controller.is_busy():
+            self.statusbar.showMessage("正在处理中，请稍候...", 2000)
+            return
+
+        # Show user message
+        self.chat_panel.append_user_message(message)
+        self.statusbar.showMessage("正在思考...")
+
+        # Start async worker
+        async def send_and_receive():
+            response = ""
+            async for chunk in self.chat_controller.send_message(message):
+                response = chunk
+            return response
+
+        self._current_worker = AsyncWorker(send_and_receive())
+        self._current_worker.finished.connect(self._on_response_received)
+        self._current_worker.error.connect(self._on_error)
+        self._current_worker.start()
+
+    def _on_response_received(self, response: str):
+        """Handle response from agent."""
+        self.chat_panel.append_assistant_message(response)
+        self.statusbar.showMessage(
+            f"完成 | Token: {self.chat_controller.get_token_usage()}"
+        )
+        self._current_worker = None
+
+    def _on_error(self, error: str):
+        """Handle error from async operation."""
+        self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
+        self.statusbar.showMessage(f"错误: {error}")
+        self._current_worker = None
+
+    def _on_work_dir_changed(self, path: Path):
+        """Handle work directory change."""
+        self.work_dir = path
+        self.chat_controller.work_dir = path
+        self.statusbar.showMessage(f"工作目录已更改: {path}", 3000)
+
+    def _on_mcp_changed(self):
+        """Handle MCP server list change."""
+        # Update sidebar
+        self.sidebar.mcp_list.clear()
+        for server in self.mcp_controller.get_server_list():
+            status_icon = "✓" if server.status == "已连接" else "○"
+            self.sidebar.mcp_list.addItem(f"{status_icon} {server.name} ({server.status})")
+
+    def _on_skills_changed(self):
+        """Handle skill list change."""
+        # Update sidebar
+        self.sidebar.skill_list.clear()
+        for skill in self.skill_controller.get_skill_list():
+            status = "已启用" if skill.enabled else "已禁用"
+            self.sidebar.skill_list.addItem(f"{skill.name} ({status})")
+
+    def closeEvent(self, event):
+        """Handle window close."""
+        if self._current_worker and self._current_worker.isRunning():
+            self._current_worker.wait()
+        event.accept()

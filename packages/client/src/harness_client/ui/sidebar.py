@@ -15,6 +15,8 @@ class SidebarPanel(QWidget):
 
     # Signals
     work_dir_changed = pyqtSignal(Path)
+    mcp_connect_requested = pyqtSignal(str)
+    skill_load_requested = pyqtSignal(Path)
 
     def __init__(self):
         super().__init__()
@@ -28,64 +30,65 @@ class SidebarPanel(QWidget):
         layout.setSpacing(8)
 
         # Sessions group
-        sessions_group = QGroupBox("会话列表")
+        sessions_group = QGroupBox("📁 会话列表")
         sessions_layout = QVBoxLayout(sessions_group)
 
         self.session_list = QListWidget()
-        self.session_list.addItem("当前会话")
+        self.session_list.addItem("🔵 当前会话")
         sessions_layout.addWidget(self.session_list)
 
-        new_session_btn = QPushButton("新建会话")
+        new_session_btn = QPushButton("➕ 新建会话")
         sessions_layout.addWidget(new_session_btn)
 
         layout.addWidget(sessions_group)
 
         # MCP Servers group
-        mcp_group = QGroupBox("MCP 服务器")
+        mcp_group = QGroupBox("🔌 MCP 服务器")
         mcp_layout = QVBoxLayout(mcp_group)
 
         self.mcp_list = QListWidget()
-        self.mcp_list.addItem("filesystem (已连接)")
-        self.mcp_list.addItem("github (已连接)")
+        self.mcp_list.itemDoubleClicked.connect(self._on_mcp_double_click)
         mcp_layout.addWidget(self.mcp_list)
 
         mcp_btn_layout = QHBoxLayout()
-        add_mcp_btn = QPushButton("添加")
+        add_mcp_btn = QPushButton("➕ 添加")
         add_mcp_btn.clicked.connect(self._on_add_mcp)
         mcp_btn_layout.addWidget(add_mcp_btn)
 
-        refresh_mcp_btn = QPushButton("刷新")
+        refresh_mcp_btn = QPushButton("🔄 刷新")
+        refresh_mcp_btn.clicked.connect(self._on_refresh_mcp)
         mcp_btn_layout.addWidget(refresh_mcp_btn)
 
         mcp_layout.addLayout(mcp_btn_layout)
         layout.addWidget(mcp_group)
 
         # Skills group
-        skills_group = QGroupBox("技能列表")
+        skills_group = QGroupBox("⚡ 技能列表")
         skills_layout = QVBoxLayout(skills_group)
 
         self.skill_list = QListWidget()
-        self.skill_list.addItem("code-review (已启用)")
-        self.skill_list.addItem("translator (已启用)")
+        self.skill_list.itemDoubleClicked.connect(self._on_skill_double_click)
         skills_layout.addWidget(self.skill_list)
 
         skill_btn_layout = QHBoxLayout()
-        load_skill_btn = QPushButton("加载")
+        load_skill_btn = QPushButton("📂 加载")
         load_skill_btn.clicked.connect(self._on_load_skill)
         skill_btn_layout.addWidget(load_skill_btn)
 
-        new_skill_btn = QPushButton("新建")
+        new_skill_btn = QPushButton("➕ 新建")
+        new_skill_btn.clicked.connect(self._on_new_skill)
         skill_btn_layout.addWidget(new_skill_btn)
 
         skills_layout.addLayout(skill_btn_layout)
         layout.addWidget(skills_group)
 
         # Work directory group
-        work_group = QGroupBox("工作目录")
+        work_group = QGroupBox("📂 工作目录")
         work_layout = QVBoxLayout(work_group)
 
         self.work_dir_label = QLabel(str(self.work_dir))
         self.work_dir_label.setWordWrap(True)
+        self.work_dir_label.setStyleSheet("color: #666; font-size: 11px;")
         work_layout.addWidget(self.work_dir_label)
 
         change_dir_btn = QPushButton("更改...")
@@ -101,14 +104,44 @@ class SidebarPanel(QWidget):
         """Add MCP server dialog."""
         from harness_client.ui.mcp_panel import MCPServerDialog
         dialog = MCPServerDialog(self)
-        dialog.exec()
+        if dialog.exec():
+            config = dialog.get_config()
+            # Emit signal for controller to handle
+            self.mcp_config = config
+
+    def _on_refresh_mcp(self):
+        """Refresh MCP server list."""
+        # Will be connected to controller
+        pass
+
+    def _on_mcp_double_click(self, item: QListWidgetItem):
+        """Handle MCP server double click."""
+        # Extract server name from item text
+        text = item.text()
+        # Format: "✓ server-name (status)" or "○ server-name (status)"
+        parts = text.split()
+        if len(parts) >= 2:
+            server_name = parts[1]
+            self.mcp_connect_requested.emit(server_name)
 
     def _on_load_skill(self):
         """Load skills from directory."""
         dir_path = QFileDialog.getExistingDirectory(self, "选择技能目录")
         if dir_path:
-            # TODO: Load skills using SDK
-            self.skill_list.addItem(f"从 {Path(dir_path).name} 加载")
+            self.skill_load_requested.emit(Path(dir_path))
+
+    def _on_new_skill(self):
+        """Create new skill."""
+        from harness_client.ui.skill_dialog import SkillEditDialog
+        dialog = SkillEditDialog(self)
+        if dialog.exec():
+            # Will be handled by main window
+            pass
+
+    def _on_skill_double_click(self, item: QListWidgetItem):
+        """Handle skill double click."""
+        # Show skill details
+        pass
 
     def _on_change_work_dir(self):
         """Change work directory."""
@@ -122,8 +155,14 @@ class SidebarPanel(QWidget):
 
     def add_mcp_server(self, name: str, status: str = "未连接"):
         """Add MCP server to list."""
-        self.mcp_list.addItem(f"{name} ({status})")
+        icon = "✓" if status == "已连接" else "○"
+        self.mcp_list.addItem(f"{icon} {name} ({status})")
 
     def add_skill(self, name: str, status: str = "已启用"):
         """Add skill to list."""
         self.skill_list.addItem(f"{name} ({status})")
+
+    def update_work_dir(self, path: Path):
+        """Update work directory display."""
+        self.work_dir = path
+        self.work_dir_label.setText(str(path))

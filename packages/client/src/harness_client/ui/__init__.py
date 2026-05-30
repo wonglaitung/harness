@@ -7,6 +7,7 @@ from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.sidebar import SidebarPanel
 from harness_client.ui.settings_dialog import SettingsDialog
 from harness_client.ui.mcp_panel import MCPServerDialog
+from harness_client.ui.skill_dialog import SkillEditDialog
 
 __all__ = [
     "MainWindow",
@@ -14,4 +15,5 @@ __all__ = [
     "SidebarPanel",
     "SettingsDialog",
     "MCPServerDialog",
+    "SkillEditDialog",
 ]

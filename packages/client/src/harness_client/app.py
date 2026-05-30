@@ -25,6 +25,11 @@ def run():
     app.setApplicationVersion("0.1.0")
     app.setOrganizationName("Harness")
 
+    # Load stylesheet
+    style_path = Path(__file__).parent.parent.parent / "resources" / "styles" / "main.qss"
+    if style_path.exists():
+        app.setStyleSheet(style_path.read_text(encoding="utf-8"))
+
     # Setup async event loop
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)

@@ -27,6 +27,7 @@ wheels/
 # PyInstaller
 *.manifest
 *.spec
+!packages/client/*.spec
 
 # Installer logs
 pip-log.txt
