@@ -3,6 +3,7 @@ Chat controller - manages conversation with AgentHarness.
 """
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from harness import (
     ProgressEventType,
 )
 from harness.tools.builtins import ReadTool, WriteTool, GlobTool, GrepTool, BashTool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,6 +77,17 @@ class ChatController:
 
     async def initialize(self, mcp_tools: list = None):
         """Initialize the AgentHarness with current configuration."""
+        logger.info(f"Initializing agent with provider={self.config.provider}, model={self.config.model}")
+
+        # Check if API key is configured
+        if not self.config.api_key:
+            raise ValueError(
+                "未配置 API Key。请在设置中配置 API Key。\n\n"
+                "或设置环境变量：\n"
+                "- Anthropic: ANTHROPIC_API_KEY\n"
+                "- OpenAI: OPENAI_API_KEY"
+            )
+
         # Build SDK config
         sdk_config = HarnessConfig(
             model=self.config.model,
@@ -83,6 +97,8 @@ class ChatController:
             max_iterations=self.config.max_iterations,
             system_prompt=self.config.system_prompt,
         )
+
+        logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}")
 
         # Default tools
         tools = [
@@ -97,10 +113,12 @@ class ChatController:
             tools.extend(mcp_tools)
 
         # Create agent
+        logger.info("Creating AgentHarness...")
         self.agent = AgentHarness(
             config=sdk_config,
             tools=tools,
         )
+        logger.info("AgentHarness created successfully")
 
     async def send_message(self, message: str) -> AsyncIterator[str]:
         """
@@ -112,7 +130,10 @@ class ChatController:
         Yields:
             Response text chunks
         """
+        logger.info(f"send_message called with: {message[:50]}...")
+
         if not self.agent:
+            logger.info("Agent not initialized, initializing now...")
             await self.initialize()
 
         self.state.is_running = True
@@ -125,11 +146,13 @@ class ChatController:
                     self._on_progress(event)
 
             # Execute
+            logger.info("Calling agent.run()...")
             result = await self.agent.run(
                 message,
                 session_id=self.state.session_id,
                 on_progress=on_progress,
             )
+            logger.info(f"agent.run() returned, iterations={result.iterations}")
 
             # Update state
             self.state.iterations = result.iterations
@@ -139,10 +162,15 @@ class ChatController:
 
             # Yield response
             full_response = result.content
+            logger.info(f"Response length: {len(full_response)} chars")
             yield full_response
 
+        except ValueError as e:
+            logger.error(f"ValueError: {e}")
+            yield f"⚠️ 配置错误: {str(e)}"
         except Exception as e:
-            yield f"❌ 错误: {str(e)}"
+            logger.exception(f"Unexpected error: {e}")
+            yield f"❌ 错误: {type(e).__name__}: {str(e)}"
         finally:
             self.state.is_running = False
 

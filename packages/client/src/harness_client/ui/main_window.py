@@ -3,6 +3,8 @@ Main window for Harness Client.
 """
 
 import asyncio
+import logging
+import sys
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout,
@@ -16,6 +18,16 @@ from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.skill_controller import SkillController
 from harness_client.utils.settings import SettingsManager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stderr),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class AsyncWorker(QThread):
@@ -32,9 +44,11 @@ class AsyncWorker(QThread):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.coro)
+            logger.info(f"AsyncWorker finished with result: {result[:50] if result else 'None'}...")
             self.finished.emit(result or "")
         except Exception as e:
-            self.error.emit(str(e))
+            logger.exception(f"AsyncWorker error: {e}")
+            self.error.emit(f"{type(e).__name__}: {str(e)}")
 
 
 class MainWindow(QMainWindow):
@@ -249,6 +263,8 @@ class MainWindow(QMainWindow):
 
     def _on_message_sent(self, message: str):
         """Handle message sent from chat panel."""
+        logger.info(f"Message sent: {message[:50]}...")
+
         if self.chat_controller.is_busy():
             self.statusbar.showMessage("正在处理中，请稍候...", 2000)
             return
@@ -256,6 +272,10 @@ class MainWindow(QMainWindow):
         # Show user message
         self.chat_panel.append_user_message(message)
         self.statusbar.showMessage("正在思考...")
+
+        # Log current config
+        config = self.chat_controller.config
+        logger.info(f"Current config: provider={config.provider}, model={config.model}, api_key={'*' * 8 if config.api_key else 'NOT SET'}")
 
         # Start async worker
         async def send_and_receive():
@@ -267,11 +287,16 @@ class MainWindow(QMainWindow):
         self._current_worker = AsyncWorker(send_and_receive())
         self._current_worker.finished.connect(self._on_response_received)
         self._current_worker.error.connect(self._on_error)
+        logger.info("Starting AsyncWorker...")
         self._current_worker.start()
 
     def _on_response_received(self, response: str):
         """Handle response from agent."""
-        self.chat_panel.append_assistant_message(response)
+        logger.info(f"Response received: {response[:50] if response else 'EMPTY'}...")
+        if response:
+            self.chat_panel.append_assistant_message(response)
+        else:
+            self.chat_panel.append_assistant_message("(无响应)")
         self.statusbar.showMessage(
             f"完成 | Token: {self.chat_controller.get_token_usage()}"
         )
@@ -279,6 +304,7 @@ class MainWindow(QMainWindow):
 
     def _on_error(self, error: str):
         """Handle error from async operation."""
+        logger.error(f"Error received: {error}")
         self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
         self.statusbar.showMessage(f"错误: {error}")
         self._current_worker = None
