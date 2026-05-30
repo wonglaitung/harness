@@ -1140,6 +1140,183 @@ assert result.content == "代码分析结果..."
 
 ---
 
+## 可观测性 API
+
+Harness 内置 OpenTelemetry 集成，支持 Jaeger、Datadog、Langfuse 等 OTel 兼容后端。
+
+### 快速开始
+
+```python
+from harness import AgentHarness, setup_observability, ObservabilityConfig
+
+# 方式1：全局设置
+setup_observability(ObservabilityConfig(
+    service_name="my-agent",
+    export_console=True,  # 调试时输出到控制台
+))
+
+# 方式2：OTLP 导出（生产环境）
+setup_observability(ObservabilityConfig(
+    service_name="my-agent",
+    export_otlp=True,
+    otlp_endpoint="http://jaeger:4317",  # OTLP gRPC 端点
+))
+
+# 创建 Agent，追踪自动启用
+agent = AgentHarness(model="claude-sonnet-4-6")
+result = await agent.run("分析代码")  # 自动追踪
+```
+
+### ObservabilityManager
+
+```python
+from harness import ObservabilityManager, ObservabilityConfig
+
+# 创建管理器
+manager = ObservabilityManager(config=ObservabilityConfig(
+    service_name="harness-agent",
+    service_version="1.0.0",
+    enabled=True,
+    export_console=False,
+    export_otlp=True,
+    otlp_endpoint="http://localhost:4317",
+    sample_rate=1.0,  # 采样率 1.0 = 100%
+))
+
+# 初始化
+manager.setup()
+
+# 检查是否启用
+if manager.is_enabled:
+    print("OpenTelemetry 追踪已启用")
+
+# 关闭
+manager.shutdown()
+```
+
+### 手动追踪
+
+```python
+from harness import get_tracer, traced_operation
+
+# 使用上下文管理器追踪操作
+async with traced_operation("custom_operation", {"key": "value"}):
+    # 业务逻辑
+    pass
+
+# 获取 tracer 自定义追踪
+tracer = get_tracer()
+if tracer:
+    with tracer.start_as_current_span("my_span") as span:
+        span.set_attribute("user.id", "user-123")
+        # 业务逻辑
+```
+
+### 配置选项
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `service_name` | str | "harness-agent" | 服务名称 |
+| `service_version` | str | "0.1.0" | 服务版本 |
+| `enabled` | bool | True | 是否启用 |
+| `export_console` | bool | False | 输出到控制台 |
+| `export_otlp` | bool | False | 导出到 OTLP 端点 |
+| `otlp_endpoint` | str | "http://localhost:4317" | OTLP gRPC 端点 |
+| `sample_rate` | float | 1.0 | 采样率 (0.0-1.0) |
+
+### 依赖安装
+
+```bash
+# 基础 OpenTelemetry
+pip install harness-ai[observability]
+
+# OTLP 导出（生产环境）
+pip install opentelemetry-exporter-otlp
+```
+
+---
+
+## 成本控制 API
+
+Harness 支持多层级成本控制：会话级、用户级、全局级。
+
+### CostStorage
+
+```python
+from harness import CostStorage, InMemoryCostStorage
+
+# 内存存储（单进程应用）
+storage = InMemoryCostStorage()
+
+# 记录用户使用量
+usage = storage.record_user_usage(
+    user_id="user-123",
+    input_tokens=1000,
+    output_tokens=500,
+    request=True,  # 计入请求次数
+)
+print(f"每日 Token: {usage.daily_tokens}")
+print(f"每小时请求: {usage.hourly_requests}")
+
+# 获取用户使用量
+usage = storage.get_user_usage("user-123")
+
+# 获取全局使用量
+global_usage = storage.get_global_usage()
+print(f"全局每日成本: ${global_usage.daily_cost_usd:.4f}")
+
+# 重置每日计数（通常由定时任务调用）
+storage.reset_daily()
+```
+
+### SQLite 持久化存储
+
+```python
+from harness.core.cost_storage import SQLiteCostStorage
+
+# SQLite 持久化存储（生产环境）
+storage = SQLiteCostStorage(db_path="~/.harness/costs.db")
+
+# API 与 InMemoryCostStorage 相同
+usage = storage.record_user_usage("user-123", input_tokens=1000)
+```
+
+### 与 CostController 集成
+
+```python
+from harness import AgentHarness, CostController, CostConfig, InMemoryCostStorage
+
+# 创建成本控制器
+storage = InMemoryCostStorage()
+cost_controller = CostController(
+    config=CostConfig(
+        session_budget=10.0,      # 会话预算 $10
+        user_daily_budget=50.0,   # 用户每日预算 $50
+        global_daily_budget=500.0, # 全局每日预算 $500
+    ),
+    storage=storage,
+)
+
+# 创建 Agent
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    cost_controller=cost_controller,
+)
+
+# 运行时自动检查预算
+result = await agent.run("分析代码")
+```
+
+### 使用量类型
+
+| 类型 | 字段 | 说明 |
+|-----|------|------|
+| `UserUsage` | `user_id`, `daily_tokens`, `hourly_requests` | 用户级使用量 |
+| `GlobalUsage` | `daily_cost_usd`, `daily_tokens` | 全局使用量 |
+| `BudgetStatus` | `spent`, `remaining`, `percentage` | 预算状态 |
+
+---
+
 ## 异步 API 使用指南
 
 ### run_sync() 的使用限制

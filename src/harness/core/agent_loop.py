@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from harness.core.cost_controller import CostController
@@ -25,6 +26,9 @@ from harness.core.observability import (
 )
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
+
+if TYPE_CHECKING:
+    from harness.sdk.config import SecurityConfig
 from harness.memory.session import SessionManager
 from harness.tools.executor import ToolContext, ToolExecutor
 from harness.types import (
@@ -54,6 +58,7 @@ class LoopConfig:
     same_tool_threshold: int = 5  # Circuit breaker threshold
     enable_cost_control: bool = True  # Enable cost control
     cost_config: CostConfig | None = None  # Cost control configuration
+    security_config: SecurityConfig | None = None  # Security configuration
 
 
 class AgentLoop:
@@ -104,6 +109,31 @@ class AgentLoop:
             config=cost_config,
             on_progress=None,  # Will be set in run()
         ) if self.config.enable_cost_control else None
+
+        # Initialize security components (lazy import to avoid circular dependency)
+        from harness.security import AuditLogger, InputValidator, ResultSanitizer
+
+        if self.config.security_config:
+            sec = self.config.security_config
+
+            self._input_validator = InputValidator(
+                max_length=sec.max_input_length,
+                check_injection=sec.check_prompt_injection,
+            ) if sec.enable_input_validation else None
+
+            self._sanitizer = ResultSanitizer(
+                max_length=sec.max_output_length,
+            ) if sec.enable_output_sanitization else None
+
+            self._audit_logger = AuditLogger(
+                log_dir=sec.audit_log_dir,
+                retention_days=sec.audit_retention_days,
+            ) if sec.enable_audit_log else None
+        else:
+            # Default: enable all security features
+            self._input_validator = InputValidator()
+            self._sanitizer = ResultSanitizer()
+            self._audit_logger = AuditLogger()
 
     def _emit_progress(
         self,
@@ -181,6 +211,18 @@ class AgentLoop:
         on_progress: ProgressCallback | None = None,
     ) -> LoopResult:
         """Internal implementation of run."""
+        # Input validation
+        if self._input_validator:
+            validation_result = self._input_validator.validate(prompt)
+            if not validation_result.valid:
+                raise ValueError(f"Invalid input: {validation_result.errors}")
+            if validation_result.warnings:
+                self._emit_progress(
+                    ProgressEventType.WARNING,
+                    f"Input validation warnings: {validation_result.warnings}",
+                    {"warnings": validation_result.warnings},
+                )
+
         self._on_progress = on_progress
         self._loop_start_time = time.time()
         self._interrupt_flag = False
@@ -504,6 +546,20 @@ class AgentLoop:
             tool_start = time.time()
             result = await self.tools.execute(tool_call, context)
             tool_duration = (time.time() - tool_start) * 1000
+
+            # Sanitize output
+            if self._sanitizer and result.success and result.content:
+                result.content = self._sanitizer.sanitize(result.content)
+
+            # Audit log
+            if self._audit_logger:
+                self._audit_logger.log_tool_call(
+                    session_id=session.id,
+                    tool_name=tool_call.name,
+                    arguments=tool_call.arguments,
+                    result="success" if result.success else "error",
+                    details={"error": result.error} if result.error else None,
+                )
 
             # Record result for circuit breaker
             if self._circuit_breaker:

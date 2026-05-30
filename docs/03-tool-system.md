@@ -672,6 +672,41 @@ class WebFetchTool(Tool):
             return ToolResult.error(f"Error fetching URL: {e}")
 ```
 
+#### Web Tools 实现（DuckDuckGo 免费搜索）
+
+Harness 内置的 `WebSearchTool` 使用 DuckDuckGo Instant Answer API，无需 API Key：
+
+```python
+from harness import AgentHarness, WebSearchTool, WebFetchTool
+
+# 创建 Agent 并启用 Web 工具
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[WebSearchTool(), WebFetchTool()],
+)
+
+# Web 搜索
+result = await agent.run("搜索 Python asyncio 最佳实践")
+
+# 获取网页内容
+result = await agent.run("获取 https://docs.python.org/3/library/asyncio.html 的内容")
+```
+
+**注意**：WebSearchTool 需要安装 `aiohttp`：
+```bash
+pip install aiohttp
+```
+
+**WebFetchTool 参数**：
+- `url`: 要抓取的 URL
+- `selector`: CSS 选择器，提取特定内容（可选）
+- `max_length`: 最大内容长度，默认 10000 字符
+
+如果安装了 `beautifulsoup4`，会自动解析 HTML 并提取正文：
+```bash
+pip install beautifulsoup4
+```
+
 ## Tool Registry
 
 ```python

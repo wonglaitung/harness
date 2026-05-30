@@ -48,7 +48,13 @@ from harness.model_presets import (
     parse_context_window,
 )
 from harness.progress import ProgressFormatter, create_progress_handler
-from harness.sdk.config import HarnessConfig
+from harness.sdk.config import (
+    CostControlConfig,
+    HarnessConfig,
+    ObservabilityConfig,
+    SecurityConfig,
+    StorageConfig,
+)
 from harness.sdk.harness import AgentHarness
 from harness.security import (
     AuditLogEntry,
@@ -104,6 +110,10 @@ __all__ = [
     # Main SDK class
     "AgentHarness",
     "HarnessConfig",
+    "SecurityConfig",
+    "CostControlConfig",
+    "ObservabilityConfig",
+    "StorageConfig",
     # Model presets
     "ModelPreset",
     "MODEL_PRESETS",

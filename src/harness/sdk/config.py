@@ -10,6 +10,105 @@ from harness.model_presets import get_default_output_tokens, get_model_preset, p
 
 
 @dataclass
+class SecurityConfig:
+    """
+    Security configuration for the agent.
+
+    Controls input validation, output sanitization, and audit logging.
+    """
+
+    # Input validation
+    enable_input_validation: bool = True
+    max_input_length: int = 100000
+    check_prompt_injection: bool = True
+
+    # Output sanitization
+    enable_output_sanitization: bool = True
+    max_output_length: int = 100000
+
+    # Audit logging
+    enable_audit_log: bool = True
+    audit_log_dir: str = "~/.harness/audit"
+    audit_retention_days: int = 30
+
+    # Sandbox settings
+    enable_sandbox: bool = True
+    sandbox_max_execution_time: float = 30.0
+
+
+@dataclass
+class CostControlConfig:
+    """
+    Cost control configuration for budget management.
+
+    Supports multi-level budget control:
+    - Session level: tokens, tool calls, iterations
+    - User level: daily tokens, hourly requests
+    - Global level: daily budget in USD
+    """
+
+    # Session level
+    max_tokens_per_session: int = 1_000_000
+    max_tool_calls_per_session: int = 500
+    max_iterations_per_request: int = 20
+
+    # User level
+    daily_token_limit: int = 10_000_000
+    hourly_request_limit: int = 100
+
+    # Global level
+    global_daily_budget_usd: float = 100.0
+    auto_throttle: bool = True
+    fallback_model: str | None = None
+    context_reduction_ratio: float = 0.5
+
+    # Warning threshold (0.0 - 1.0)
+    warning_threshold: float = 0.8
+
+
+@dataclass
+class ObservabilityConfig:
+    """
+    Observability configuration for OpenTelemetry integration.
+
+    Supports tracing to Jaeger, Datadog, Langfuse, and other
+    OTel-compatible backends.
+    """
+
+    enabled: bool = False
+    service_name: str = "harness-agent"
+    service_version: str = "0.1.0"
+    export_console: bool = False
+    export_otlp: bool = False
+    otlp_endpoint: str = "http://localhost:4317"
+    sample_rate: float = 1.0
+
+
+@dataclass
+class StorageConfig:
+    """
+    Session storage configuration.
+
+    Supports file-based or SQLite storage.
+    """
+
+    # Storage type: "file" or "sqlite"
+    type: Literal["file", "sqlite"] = "file"
+
+    # For file storage
+    storage_dir: str = ".harness/sessions"
+
+    # For SQLite storage
+    sqlite_path: str = ".harness/harness.db"
+
+    # Async mode (only for SQLite)
+    async_mode: bool = True
+
+    # Connection pool size (only for async SQLite)
+    pool_size: int = 5
+
+
+@dataclass
 class HarnessConfig:
     """
     Main configuration for AgentHarness.
@@ -44,6 +143,18 @@ class HarnessConfig:
     # Optional settings
     system_prompt: str = ""
     extra_config: dict[str, Any] = field(default_factory=dict)
+
+    # Security settings
+    security: SecurityConfig | None = None
+
+    # Cost control settings
+    cost_control: CostControlConfig | None = None
+
+    # Observability settings
+    observability: ObservabilityConfig | None = None
+
+    # Storage settings
+    storage: StorageConfig | None = None
 
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)
@@ -118,4 +229,8 @@ class HarnessConfig:
             "tool_timeout": self.tool_timeout,
             "system_prompt": self.system_prompt,
             "extra_config": self.extra_config,
+            "security": self.security.__dict__ if self.security else None,
+            "cost_control": self.cost_control.__dict__ if self.cost_control else None,
+            "observability": self.observability.__dict__ if self.observability else None,
+            "storage": self.storage.__dict__ if self.storage else None,
         }

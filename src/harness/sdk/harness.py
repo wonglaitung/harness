@@ -9,18 +9,25 @@ from pathlib import Path
 from typing import Any
 
 from harness.core.agent_loop import AgentLoop, LoopConfig
+from harness.core.observability import ObservabilityManager
 from harness.llm.anthropic import AnthropicClient
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.llm.openai import OpenAIClient
 from harness.memory.context_builder import ContextBuilder, ContextConfig
 from harness.memory.session import SessionManager
-from harness.memory.store import FileSessionStore
+from harness.memory.store import FileSessionStore, SQLiteSessionStore
 from harness.progress import create_progress_handler
-from harness.sdk.config import HarnessConfig
+from harness.sdk.config import (
+    CostControlConfig,
+    HarnessConfig,
+    ObservabilityConfig,
+    StorageConfig,
+)
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
 from harness.types import (
+    CostConfig,
     LoopResult,
     ProgressCallback,
     Session,
@@ -116,12 +123,14 @@ class AgentHarness:
         # Initialize tool executor
         self._tool_executor = ToolExecutor(self._tool_registry)
 
-        # Initialize memory
-        memory_dir = Path(self.config.memory_dir)
-        memory_dir.mkdir(parents=True, exist_ok=True)
+        # Initialize session storage
+        self._session_store = self._create_session_store()
 
-        self._session_store = FileSessionStore(str(memory_dir / "sessions"))
+        # Initialize session manager
         self._session_manager = SessionManager(self._session_store)
+
+        # Initialize observability
+        self._observability = self._setup_observability()
 
         # Get resolved context window
         context_window = self.config.get_context_window()
@@ -144,7 +153,75 @@ class AgentHarness:
             config=LoopConfig(
                 max_iterations=self.config.max_iterations,
                 timeout_per_tool=self.config.tool_timeout,
+                security_config=self.config.security,
+                cost_config=self._create_cost_config(),
             ),
+        )
+
+    def _create_session_store(self):
+        """Create session store based on storage config."""
+        storage_config = self.config.storage
+
+        if storage_config is None:
+            # Default: file-based storage
+            memory_dir = Path(self.config.memory_dir)
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            return FileSessionStore(str(memory_dir / "sessions"))
+
+        if storage_config.type == "sqlite":
+            # Ensure directory exists
+            sqlite_path = Path(storage_config.sqlite_path)
+            sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if storage_config.async_mode:
+                try:
+                    from harness.memory.store import AsyncSQLiteSessionStore
+                    return AsyncSQLiteSessionStore(
+                        str(sqlite_path),
+                        pool_size=storage_config.pool_size,
+                    )
+                except ImportError:
+                    # Fall back to sync SQLite
+                    return SQLiteSessionStore(str(sqlite_path))
+            else:
+                return SQLiteSessionStore(str(sqlite_path))
+        else:
+            # File-based storage
+            storage_dir = Path(storage_config.storage_dir)
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            return FileSessionStore(str(storage_dir))
+
+    def _setup_observability(self) -> ObservabilityManager | None:
+        """Set up observability based on config."""
+        obs_config = self.config.observability
+
+        if obs_config is None:
+            # Default: disabled
+            return None
+
+        manager = ObservabilityManager(config=obs_config)
+        if obs_config.enabled:
+            manager.setup()
+        return manager
+
+    def _create_cost_config(self) -> CostConfig | None:
+        """Create cost config from HarnessConfig."""
+        cost_control = self.config.cost_control
+
+        if cost_control is None:
+            return None
+
+        return CostConfig(
+            max_tokens_per_session=cost_control.max_tokens_per_session,
+            max_tool_calls_per_session=cost_control.max_tool_calls_per_session,
+            max_iterations_per_request=cost_control.max_iterations_per_request,
+            daily_token_limit=cost_control.daily_token_limit,
+            hourly_request_limit=cost_control.hourly_request_limit,
+            global_daily_budget_usd=cost_control.global_daily_budget_usd,
+            auto_throttle=cost_control.auto_throttle,
+            fallback_model=cost_control.fallback_model or "claude-haiku-4-5",
+            context_reduction_ratio=cost_control.context_reduction_ratio,
+            warning_threshold=cost_control.warning_threshold,
         )
 
     def _create_llm_client(self) -> LLMClient:

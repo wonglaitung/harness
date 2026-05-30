@@ -238,6 +238,31 @@ agent = AgentHarness(
 | `GlobTool` | 按模式查找文件 |
 | `GrepTool` | 搜索文件内容 |
 | `BashTool` | 执行 shell 命令 |
+| `WebSearchTool` | Web 搜索（DuckDuckGo 免费API） |
+| `WebFetchTool` | 获取网页内容 |
+
+### Web Tools 示例
+
+```python
+from harness import AgentHarness, WebSearchTool, WebFetchTool
+
+agent = AgentHarness(
+    model="your-model",
+    provider="openai",
+    tools=[WebSearchTool(), WebFetchTool()],
+)
+
+# Web 搜索
+result = await agent.run("搜索 Python asyncio 最佳实践")
+
+# 获取网页内容
+result = await agent.run("获取 https://docs.python.org/3/library/asyncio.html 的内容")
+```
+
+**依赖**：
+```bash
+pip install aiohttp beautifulsoup4
+```
 
 ## 自定义工具
 
