@@ -58,6 +58,21 @@ class OpenAIClient(LLMClient):
     def _get_client(self):
         """Get or create the OpenAI client."""
         if self._client is None:
+            logger.info("Creating OpenAI client instance...")
+            import openai
+
+            client_kwargs = {"api_key": self._api_key}
+            if self._base_url:
+                client_kwargs["base_url"] = self._base_url
+
+            # Use synchronous client to avoid issues with qasync on Windows
+            self._client = openai.OpenAI(**client_kwargs)
+            logger.info("OpenAI client created (sync mode for compatibility)")
+        return self._client
+
+    def _get_async_client(self):
+        """Get or create the async OpenAI client."""
+        if not hasattr(self, '_async_client') or self._async_client is None:
             logger.info("Creating AsyncOpenAI client instance...")
             import openai
 
@@ -65,9 +80,9 @@ class OpenAIClient(LLMClient):
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
 
-            self._client = openai.AsyncOpenAI(**client_kwargs)
+            self._async_client = openai.AsyncOpenAI(**client_kwargs)
             logger.info("AsyncOpenAI client created")
-        return self._client
+        return self._async_client
 
     @property
     def model_name(self) -> str:
@@ -83,13 +98,6 @@ class OpenAIClient(LLMClient):
     ) -> LLMResponse:
         """Make a call to OpenAI."""
         logger.info(f"OpenAI call starting: model={self.config.model}, base_url={self._base_url}")
-
-        try:
-            client = self._get_client()
-            logger.info(f"OpenAI client obtained")
-        except Exception as e:
-            logger.exception(f"Failed to get OpenAI client: {e}")
-            raise
 
         # Build messages with system prompt
         formatted_messages = []
@@ -117,9 +125,15 @@ class OpenAIClient(LLMClient):
 
         logger.info(f"OpenAI API request: messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
 
-        # Make the API call
+        # Use synchronous client in a thread to avoid qasync compatibility issues
+        def sync_call():
+            client = self._get_client()  # Returns sync client
+            return client.chat.completions.create(**params)
+
         try:
-            response = await client.chat.completions.create(**params)
+            # Run sync call in thread pool
+            import asyncio
+            response = await asyncio.to_thread(sync_call)
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
         except Exception as e:
             logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
