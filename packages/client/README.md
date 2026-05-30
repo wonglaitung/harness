@@ -9,6 +9,7 @@ Windows 桌面客户端，基于 Harness AI Agent SDK。
 - **技能系统** - 加载、创建、管理技能文件
 - **工作目录** - 选择和切换工作目录
 - **多模型支持** - 支持 Claude、OpenAI 及兼容 API
+- **设置持久化** - 配置自动保存，重启后自动加载
 
 ---
 
@@ -117,6 +118,27 @@ uv sync
 $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
 ```
 
+### 问题 6: No module named 'openai'
+
+确保运行过完整的同步命令：
+```powershell
+uv sync --all-packages
+```
+
+客户端需要 `openai` 和 `anthropic` 包来调用各种 LLM API。
+
+### 问题 7: 发送消息后无响应
+
+1. 从命令行启动客户端查看日志：
+```powershell
+cd packages\client
+uv run python -m harness_client
+```
+
+2. 检查日志输出中的错误信息
+
+3. 确认 API 配置正确（Provider、API Key、Base URL）
+
 ---
 
 ## 一键启动脚本
@@ -154,6 +176,15 @@ uv run harness-client
 3. 输入 API Key
 4. 如使用第三方 API，填写 Base URL
 5. 选择模型
+6. 点击确定保存（设置会自动持久化）
+
+**设置存储位置：**
+
+| 平台 | 路径 |
+|------|------|
+| Windows | `%LOCALAPPDATA%\HarnessClient\settings.json` |
+| macOS | `~/Library/Application Support/HarnessClient/settings.json` |
+| Linux | `~/.config/HarnessClient/settings.json` |
 
 **方式二：环境变量**
 
@@ -221,6 +252,20 @@ triggers:
 2. 按 Enter 或点击 "发送"
 3. Agent 会自动调用工具完成任务
 
+### 调试模式
+
+从命令行启动客户端可以看到详细日志：
+
+```powershell
+cd packages\client
+uv run python -m harness_client
+```
+
+日志会显示：
+- 配置信息（provider、model、API key 是否已设置）
+- LLM 调用详情
+- 错误信息和堆栈跟踪
+
 ---
 
 ## 打包为 EXE
@@ -287,10 +332,13 @@ packages/client/
 │   │   ├── settings_dialog.py
 │   │   ├── mcp_panel.py
 │   │   └── skill_dialog.py
-│   └── controllers/         # 控制器
-│       ├── chat_controller.py
-│       ├── mcp_controller.py
-│       └── skill_controller.py
+│   ├── controllers/         # 控制器
+│   │   ├── chat_controller.py
+│   │   ├── mcp_controller.py
+│   │   └── skill_controller.py
+│   └── utils/               # 工具模块
+│       ├── __init__.py
+│       └── settings.py      # 设置持久化
 ├── resources/
 │   ├── icons/
 │   ├── styles/main.qss
