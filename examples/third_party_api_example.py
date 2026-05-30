@@ -1042,12 +1042,11 @@ async def demo_security_system():
 
     # 创建带安全配置的 Agent
     secure_agent = AgentHarness(
-        base_url=BASE_URL,
-        api_key=API_KEY,
-        model=MODEL,
-        provider=PROVIDER,
         config=HarnessConfig(
             model=MODEL,
+            api_key=API_KEY,
+            provider=PROVIDER,
+            base_url=BASE_URL,
             security=security_config,  # 传入安全配置
         ),
         tools=[ReadTool(), GlobTool()],
@@ -1176,12 +1175,11 @@ async def demo_observability():
     if OTEL_AVAILABLE:
         print("\n创建带可观测性的 Agent:")
         traced_agent = AgentHarness(
-            base_url=BASE_URL,
-            api_key=API_KEY,
-            model=MODEL,
-            provider=PROVIDER,
             config=HarnessConfig(
                 model=MODEL,
+                api_key=API_KEY,
+                provider=PROVIDER,
+                base_url=BASE_URL,
                 observability=obs_config,  # 传入可观测性配置
             ),
             tools=[ReadTool()],
