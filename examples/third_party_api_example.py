@@ -114,6 +114,7 @@ from harness import (
     InputValidator,        # 输入验证器
     PromptInjectionDetector,  # 提示注入检测
     AuditLogger,           # 审计日志
+    SecurityConfig,        # 安全配置（新增）
 )
 
 # Observability 可观测性 - OpenTelemetry 集成
@@ -127,6 +128,8 @@ from harness import (
 from harness import (
     InMemoryCostStorage,   # 内存存储
     AsyncSQLiteSessionStore,  # 异步 SQLite 存储
+    CostControlConfig,     # 成本控制配置（新增）
+    StorageConfig,         # 存储配置（新增）
 )
 
 
@@ -1067,77 +1070,88 @@ async def demo_security_system():
             print(f"  [{entry.timestamp.strftime('%H:%M:%S')}] {entry.action}: {entry.result}")
 
     # -------------------------------------------------------------------------
-    # 5. 与 AgentHarness 集成（重要！）
+    # 5. 开箱即用：与 AgentHarness 自动集成
     # -------------------------------------------------------------------------
-    print("\n--- 5. 与 AgentHarness 集成 ---")
+    print("\n--- 5. 开箱即用：与 AgentHarness 自动集成 ---")
     print("""
-    安全组件需要在应用层集成到 Agent 的使用流程中：
+    ✅ 安全组件现已自动整合到 AgentHarness 中！
 
     ┌─────────────────────────────────────────────────────────────┐
-    │  用户输入                                                    │
+    │  用户输入 → AgentHarness.run()                              │
     │    ↓                                                        │
-    │  InputValidator.validate()  ← 验证输入，过滤注入            │
+    │  自动: InputValidator.validate()  ← 验证输入，过滤注入      │
     │    ↓                                                        │
-    │  agent.run(sanitized_input)  ← 使用清理后的输入             │
+    │  自动: BashTool + LightweightSandbox  ← 沙箱执行命令        │
     │    ↓                                                        │
-    │  BashTool + LightweightSandbox  ← 沙箱执行命令              │
+    │  自动: ResultSanitizer.sanitize()  ← 输出脱敏               │
     │    ↓                                                        │
-    │  AuditLogger.log()  ← 记录操作审计                          │
+    │  自动: AuditLogger.log()  ← 记录操作审计                    │
     └─────────────────────────────────────────────────────────────┘
     """)
 
-    # 实际集成示例
-    print("\n--- 实际集成代码示例 ---")
+    # 使用 SecurityConfig 配置安全选项
+    from harness import SecurityConfig, HarnessConfig
 
-    # 创建安全组件
-    input_validator = InputValidator(check_injection=True)
-    audit = AuditLogger(log_dir=".harness/audit")
+    security_config = SecurityConfig(
+        # 输入验证
+        enable_input_validation=True,      # 输入验证（默认启用）
+        check_prompt_injection=True,       # Prompt 注入检测（默认启用）
+        max_input_length=100000,           # 最大输入长度
 
-    # 创建 Agent
+        # 输出脱敏
+        enable_output_sanitization=True,   # 输出脱敏（默认启用）
+        max_output_length=100000,          # 最大输出长度
+
+        # 审计日志
+        enable_audit_log=True,             # 审计日志（默认启用）
+        audit_log_dir="~/.harness/audit",  # 审计日志目录
+
+        # 沙箱配置
+        enable_sandbox=True,               # 沙箱执行（默认启用）
+        sandbox_max_execution_time=30.0,   # 最大执行时间（秒）
+        sandbox_max_output_size=1_000_000, # 最大输出大小（字节）
+        sandbox_blocked_commands=[         # 阻止的命令
+            "rm -rf /",
+            "sudo",
+            "chmod -R 777",
+            "mkfs",
+        ],
+        sandbox_allowed_commands=None,     # None = 允许所有非阻止命令
+    )
+
+    print("\n安全配置:")
+    print(f"  - 输入验证: {security_config.enable_input_validation}")
+    print(f"  - Prompt 注入检测: {security_config.check_prompt_injection}")
+    print(f"  - 输出脱敏: {security_config.enable_output_sanitization}")
+    print(f"  - 审计日志: {security_config.enable_audit_log}")
+    print(f"  - 沙箱: {security_config.enable_sandbox}")
+    print(f"  - 沙箱最大执行时间: {security_config.sandbox_max_execution_time}s")
+
+    # 创建带安全配置的 Agent
     secure_agent = AgentHarness(
         base_url=BASE_URL,
         api_key=API_KEY,
         model=MODEL,
         provider=PROVIDER,
+        config=HarnessConfig(
+            model=MODEL,
+            security=security_config,  # 传入安全配置
+        ),
         tools=[ReadTool(), GlobTool()],
     )
 
-    # 定义安全运行函数
-    async def secure_run(user_input: str, session_id: str = None) -> str:
-        """安全地运行 Agent，包含输入验证和审计日志"""
+    print("\n✅ Agent 已自动启用所有安全功能！")
 
-        # Step 1: 验证输入
-        validation = input_validator.validate(user_input)
-        if not validation.valid:
-            return f"输入无效: {validation.errors}"
-
-        if validation.warnings:
-            print(f"⚠️ 警告: {validation.warnings}")
-            # 可以选择拒绝或继续
-
-        # Step 2: 使用清理后的输入
-        safe_input = validation.sanitized_text
-
-        # Step 3: 运行 Agent
-        result = await secure_agent.run(safe_input, session_id=session_id)
-
-        # Step 4: 记录审计日志
-        audit.log_tool_call(
-            session_id=session_id or "default",
-            tool_name="agent.run",
-            arguments={"input_length": len(user_input)},
-            result="success" if result.status.value == "completed" else "failed",
-        )
-
-        return result.content
-
-    # 测试安全运行
-    print("\n测试安全运行:")
+    # 测试自动安全功能
+    print("\n测试自动安全运行:")
     test_input = "读取 pyproject.toml 文件的前 10 行"
     print(f"  用户输入: {test_input}")
 
-    response = await secure_run(test_input, session_id="security-demo")
-    print(f"\n  Agent 响应:\n  {response[:200]}...")
+    result = await secure_agent.run(test_input, session_id="security-demo")
+    print(f"\n  Agent 响应:\n  {result.content[:200]}...")
+
+    # 查看审计日志
+    print("\n审计日志已自动记录到 ~/.harness/audit/")
 
     # -------------------------------------------------------------------------
     # 6. 高级集成：自定义 BashTool 使用沙箱
@@ -1252,88 +1266,83 @@ async def demo_observability():
     print(f"  - 已启用: {manager.is_enabled}")
 
     # -------------------------------------------------------------------------
-    # 4. 与 AgentHarness 集成
+    # 4. 开箱即用：与 AgentHarness 自动集成
     # -------------------------------------------------------------------------
-    print("\n--- 与 AgentHarness 集成 ---")
+    print("\n--- 4. 开箱即用：与 AgentHarness 自动集成 ---")
     print("""
-    可观测性与 AgentHarness 的集成方式：
+    ✅ 可观测性现已可通过配置自动启用！
 
     ┌─────────────────────────────────────────────────────────────┐
-    │  1. setup_observability()  → 全局初始化追踪                │
+    │  AgentHarness(config=HarnessConfig(                        │
+    │      observability=ObservabilityConfig(                    │
+    │          enabled=True,                                      │
+    │          export_otlp=True,                                  │
+    │          otlp_endpoint="http://jaeger:4317",              │
+    │      )                                                     │
+    │  ))                                                         │
     │    ↓                                                        │
-    │  2. traced_operation("agent.run")  → 创建 Span             │
+    │  自动启用 OpenTelemetry 追踪                               │
     │    ↓                                                        │
-    │  3. agent.run("任务")  → 执行被追踪                         │
-    │    ↓                                                        │
-    │  4. 自动记录: LLM 调用、工具执行、Token 使用               │
+    │  agent.run() → 自动记录 LLM 调用、工具执行、Token 使用     │
     └─────────────────────────────────────────────────────────────┘
     """)
 
-    # 5. 实际集成代码
-    print("\n--- 完整集成代码 ---")
+    # 使用 HarnessConfig + ObservabilityConfig
+    from harness import HarnessConfig, ObservabilityConfig
 
+    obs_config = ObservabilityConfig(
+        enabled=True,
+        service_name="harness-demo",
+        export_console=True,
+        export_otlp=False,  # 设置为 True 并配置 otlp_endpoint 连接 Jaeger
+    )
+
+    # 创建带可观测性的 Agent
     if OTEL_AVAILABLE:
-        # 初始化可观测性
-        setup_observability(config)
-
-        # 使用追踪装饰器
-        from harness.core.observability import traced_operation
-
-        # 创建 Agent
+        print("\n创建带可观测性的 Agent:")
         traced_agent = AgentHarness(
             base_url=BASE_URL,
             api_key=API_KEY,
             model=MODEL,
             provider=PROVIDER,
+            config=HarnessConfig(
+                model=MODEL,
+                observability=obs_config,  # 传入可观测性配置
+            ),
             tools=[ReadTool()],
         )
 
-        # 使用追踪运行 Agent
-        print("\n使用追踪运行 Agent:")
-        with traced_operation("demo.agent.run", {"model": MODEL}) as span:
-            if span:
-                span.set_attribute("demo.name", "observability-demo")
+        print("  ✅ Agent 已自动启用 OpenTelemetry 追踪！")
 
-            result = await traced_agent.run("你好，请简单介绍你自己。")
-            print(f"  响应: {result.content[:100]}...")
-
-            if span:
-                span.set_attribute("result.tokens", result.token_usage.total_tokens)
-
-        print("  ✅ 追踪完成，数据已导出")
+        # 运行 Agent（自动追踪）
+        result = await traced_agent.run("你好，请简单介绍你自己。")
+        print(f"\n  响应: {result.content[:100]}...")
+        print("  ✅ 追踪数据已自动记录")
     else:
-        print("\nOpenTelemetry 未安装，显示集成代码示例:")
-        print(f"""
+        print("\nOpenTelemetry 未安装，显示配置示例:")
+        print("""
     # 安装: pip install opentelemetry-api opentelemetry-sdk
 
-    from harness import setup_observability, ObservabilityConfig
-    from harness.core.observability import traced_operation
+    from harness import AgentHarness, HarnessConfig, ObservabilityConfig
 
-    # Step 1: 初始化可观测性
-    setup_observability(ObservabilityConfig(
-        service_name="my-agent-service",
-        service_version="1.0.0",
-        export_console=True,      # 控制台输出
-        export_otlp=True,         # 导出到 Jaeger/Datadog
-        otlp_endpoint="http://jaeger:4317",
-    ))
-
-    # Step 2: 创建 Agent
+    # 创建带可观测性的 Agent
     agent = AgentHarness(
-        model=MODEL,
-        tools=[ReadTool(), GlobTool()],
+        config=HarnessConfig(
+            model="claude-sonnet-4-6",
+            observability=ObservabilityConfig(
+                enabled=True,               # 启用追踪
+                service_name="my-agent",    # 服务名称
+                export_console=True,        # 控制台输出（调试）
+                export_otlp=True,           # 导出到 OTLP
+                otlp_endpoint="http://jaeger:4317",  # Jaeger 端点
+            ),
+        ),
+        tools=[ReadTool()],
     )
 
-    # Step 3: 使用追踪上下文运行 Agent
-    with traced_operation("agent.run", {{"model": MODEL}}) as span:
-        result = await agent.run("分析项目结构")
-
-        # 添加自定义属性
-        if span:
-            span.set_attribute("tokens.used", result.token_usage.total_tokens)
-            span.set_attribute("iterations", result.iterations)
-
-    # 追踪数据会自动导出到配置的后端（Jaeger/Datadog）
+    # 运行 Agent，追踪自动生效
+    result = await agent.run("分析项目结构")
+    # 追踪数据会自动导出到 Jaeger/Datadog
     """)
 
     # -------------------------------------------------------------------------
