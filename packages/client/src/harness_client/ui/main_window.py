@@ -175,6 +175,7 @@ class MainWindow(QMainWindow):
         self.sidebar.setMaximumWidth(280)
         self.sidebar.work_dir_changed.connect(self._on_work_dir_changed)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
+        self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_new_requested.connect(self._on_new_session)
 
         # Right chat panel
@@ -212,9 +213,30 @@ class MainWindow(QMainWindow):
         self.chat_panel.clear_chat()
 
         # Update sidebar to show new session as current
-        self.sidebar.update_current_session(f"会话 {new_session_id[:8]}")
+        self.sidebar.update_current_session(f"会话 {new_session_id[:8]}", new_session_id)
 
         self.statusbar.showMessage("新会话已创建", 3000)
+
+    def _on_session_switch(self, session_id: str):
+        """Handle session switch request."""
+        # Get current session ID
+        current_session_id = self.chat_controller.state.session_id
+
+        # Save current session to sidebar
+        if current_session_id and current_session_id != "default":
+            self.sidebar.add_session(current_session_id, f"会话 {current_session_id[:8]}")
+
+        # Switch to the new session
+        self.chat_controller.state.session_id = session_id
+        self.chat_controller.agent = None  # Force re-initialization
+
+        # Update sidebar
+        self.sidebar.switch_to_session(session_id, f"会话 {session_id[:8]}")
+
+        # Clear chat panel (in real implementation, would load session history)
+        self.chat_panel.clear_chat()
+
+        self.statusbar.showMessage(f"已切换到会话 {session_id[:8]}", 3000)
 
     def _on_session_delete(self, session_id: str):
         """Handle session delete request."""

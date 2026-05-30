@@ -19,11 +19,13 @@ class SidebarPanel(QWidget):
     mcp_connect_requested = pyqtSignal(str)
     skill_load_requested = pyqtSignal(Path)
     session_delete_requested = pyqtSignal(str)  # session_id
+    session_switch_requested = pyqtSignal(str)  # session_id
     session_new_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.work_dir = Path.cwd()
+        self._current_session_id = "default"
         self._setup_ui()
 
     def _setup_ui(self):
@@ -40,6 +42,7 @@ class SidebarPanel(QWidget):
         self.session_list.addItem("🔵 当前会话")
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
+        self.session_list.itemClicked.connect(self._on_session_clicked)
         sessions_layout.addWidget(self.session_list)
 
         new_session_btn = QPushButton("➕ 新建会话")
@@ -177,6 +180,19 @@ class SidebarPanel(QWidget):
         """Handle new session button click."""
         self.session_new_requested.emit()
 
+    def _on_session_clicked(self, item: QListWidgetItem):
+        """Handle session list item click."""
+        row = self.session_list.row(item)
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+
+        # First item is current session - no action needed
+        if row == 0:
+            return
+
+        # Switch to this session
+        if session_id:
+            self.session_switch_requested.emit(session_id)
+
     def _on_session_context_menu(self, position):
         """Show context menu for session list."""
         item = self.session_list.itemAt(position)
@@ -241,8 +257,46 @@ class SidebarPanel(QWidget):
                 self.session_list.takeItem(i)
                 break
 
-    def update_current_session(self, name: str):
+    def update_current_session(self, name: str, session_id: str = None):
         """Update the current session display name."""
+        if session_id:
+            self._current_session_id = session_id
         if self.session_list.count() > 0:
             item = self.session_list.item(0)
             item.setText(f"🔵 {name}")
+            if session_id:
+                item.setData(Qt.ItemDataRole.UserRole, session_id)
+
+    def switch_to_session(self, session_id: str, name: str = None):
+        """Switch to a different session - move it to current position."""
+        # Find the session item
+        target_item = None
+        target_row = -1
+        for i in range(self.session_list.count()):
+            item = self.session_list.item(i)
+            if item and item.data(Qt.ItemDataRole.UserRole) == session_id:
+                target_item = item
+                target_row = i
+                break
+
+        if target_item is None or target_row == 0:
+            return  # Not found or already current
+
+        # Get current session info
+        current_item = self.session_list.item(0)
+        current_session_id = current_item.data(Qt.ItemDataRole.UserRole)
+        current_text = current_item.text()
+
+        # Swap: move target to current, move current to history
+        if name is None:
+            name = target_item.text().replace("📄 ", "").replace("🔵 ", "")
+
+        # Update current item (row 0)
+        current_item.setText(f"🔵 {name}")
+        current_item.setData(Qt.ItemDataRole.UserRole, session_id)
+
+        # Update target item (in history)
+        target_item.setText(current_text.replace("🔵 ", "📄 "))
+        target_item.setData(Qt.ItemDataRole.UserRole, current_session_id)
+
+        self._current_session_id = session_id
