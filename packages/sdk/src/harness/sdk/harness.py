@@ -4,7 +4,7 @@ Main AgentHarness class - The primary SDK entry point.
 This is the main interface users interact with to create and run agents.
 """
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
