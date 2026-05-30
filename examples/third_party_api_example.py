@@ -82,6 +82,7 @@ from harness import (
     LoopResult,  # 执行结果
     LoopState,   # 执行状态
     Message,     # 消息
+    ToolResult,  # 工具执行结果
 )
 
 # Mock 测试 - 不需要真实 API 的测试
@@ -781,7 +782,7 @@ async def demo_mcp_integration():
     - 配置 MCP 服务器
     - Stdio 和 HTTP 传输方式
     - 自动发现和注册工具
-    - 实际连接并使用 MCP 工具
+    - 与 AgentHarness 集成使用
 
     学习要点:
     - MCP 让 Agent 可以使用外部工具服务器
@@ -849,33 +850,105 @@ async def demo_mcp_integration():
     print("\n配置文件示例:")
     print(config_example)
 
-    # 6. 实际使用：连接 MCP 服务器
-    print("\n--- 实际使用示例 ---")
+    # -------------------------------------------------------------------------
+    # 6. 与 AgentHarness 集成的完整示例
+    # -------------------------------------------------------------------------
+    print("\n--- 与 AgentHarness 集成 ---")
     print("""
-    # 连接到 MCP 服务器
-    manager = MCPManager()
-    await manager.connect_server("filesystem")
+    MCP 工具需要先连接服务器获取，然后注册到 AgentHarness：
 
-    # 获取服务器提供的工具
-    tools = manager.get_server_tools("filesystem")
-    print(f"可用工具: {[t.name for t in tools]}")
-
-    # 使用 Agent 调用 MCP 工具
-    agent = AgentHarness(
-        model="claude-sonnet-4-6",
-        tools=tools,  # 将 MCP 工具注册到 Agent
-    )
-
-    result = await agent.run("读取 /path/to/file.txt 的内容")
-
-    # 或者直接调用
-    result = await manager.call_tool("filesystem", "read_file", {"path": "/path/to/file.txt"})
-
-    # 断开连接
-    await manager.disconnect_all()
+    ┌─────────────────────────────────────────────────────────────┐
+    │  1. MCPManager.connect_server()  → 获取 MCP 工具           │
+    │    ↓                                                        │
+    │  2. AgentHarness(tools=mcp_tools)  → 注册到 Agent          │
+    │    ↓                                                        │
+    │  3. agent.run("使用工具完成任务")  → Agent 自动调用 MCP 工具│
+    └─────────────────────────────────────────────────────────────┘
     """)
 
-    print("\n✅ MCP 配置演示完成")
+    # 完整的集成代码示例
+    print("\n--- 完整集成代码 ---")
+    print("""
+    import asyncio
+    from harness import AgentHarness, MCPManager, MCPServerConfig
+
+    async def run_with_mcp():
+        # Step 1: 创建 MCP 管理器并连接服务器
+        manager = MCPManager()
+
+        # 方式 A: 从配置文件加载
+        manager.load_from_file(".mcp.json")
+
+        # 方式 B: 手动添加配置
+        manager.add_server(MCPServerConfig(
+            name="filesystem",
+            transport="stdio",
+            command="mcp-filesystem",
+            args=["/allowed/path"],
+        ))
+
+        # Step 2: 连接到 MCP 服务器
+        try:
+            await manager.connect_server("filesystem")
+            print("✅ 已连接到 MCP 服务器")
+        except Exception as e:
+            print(f"❌ 连接失败: {e}")
+            return
+
+        # Step 3: 获取 MCP 服务器提供的工具
+        mcp_tools = manager.get_server_tools("filesystem")
+        print(f"可用工具: {[t.name for t in mcp_tools]}")
+
+        # Step 4: 创建 Agent 并注册 MCP 工具
+        agent = AgentHarness(
+            model=MODEL,
+            tools=mcp_tools,  # 将 MCP 工具注册到 Agent
+        )
+
+        # Step 5: Agent 自动使用 MCP 工具
+        result = await agent.run("读取 /allowed/path/config.json 的内容")
+        print(f"结果: {result.content}")
+
+        # Step 6: 清理 - 断开所有连接
+        await manager.disconnect_all()
+
+    asyncio.run(run_with_mcp())
+    """)
+
+    # -------------------------------------------------------------------------
+    # 7. 高级集成：混合使用内置工具和 MCP 工具
+    # -------------------------------------------------------------------------
+    print("\n--- 高级集成：混合使用内置工具和 MCP 工具 ---")
+    print("""
+    from harness import AgentHarness, ReadTool, GlobTool, MCPManager
+
+    async def run_with_mixed_tools():
+        manager = MCPManager()
+        await manager.connect_server("database")  # 假设有数据库 MCP
+
+        # 内置工具 + MCP 工具
+        all_tools = [
+            ReadTool(),      # 内置：文件读取
+            GlobTool(),      # 内置：文件搜索
+        ] + manager.get_server_tools("database")  # MCP：数据库操作
+
+        agent = AgentHarness(
+            model=MODEL,
+            tools=all_tools,
+        )
+
+        # Agent 可以同时使用内置工具和 MCP 工具
+        result = await agent.run('''
+            1. 读取 config.json 获取数据库配置
+            2. 连接数据库查询用户表
+            3. 输出结果
+        ''')
+
+        await manager.disconnect_all()
+        return result
+    """)
+
+    print("\n✅ MCP 与 AgentHarness 集成演示完成")
     print("   注意: 实际连接需要运行 MCP 服务器")
 
 
@@ -889,19 +962,25 @@ async def demo_security_system():
 
     功能:
     - 提示注入检测
-    - 轻量沙箱执行
+    - 输入验证与过滤
+    - 沙箱命令执行
     - 审计日志记录
+    - 与 AgentHarness 集成
 
     学习要点:
     - 保护 Agent 免受恶意输入攻击
     - 安全地执行外部命令
     - 记录所有操作用于审计
+    - 安全组件需要在应用层集成
     """
     print("\n" + "=" * 70)
     print("演示 11: Security 安全系统")
     print("=" * 70)
 
-    # 1. 提示注入检测
+    # -------------------------------------------------------------------------
+    # 1. 提示注入检测（独立使用）
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 提示注入检测 ---")
     detector = PromptInjectionDetector()
 
     test_inputs = [
@@ -919,7 +998,28 @@ async def demo_security_system():
         if detected:
             print(f"       检测到模式: {detected[0][:50]}...")
 
-    # 2. 轻量沙箱
+    # -------------------------------------------------------------------------
+    # 2. 输入验证器（应用层集成）
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 输入验证器 ---")
+    validator = InputValidator(
+        max_length=10000,
+        check_injection=True,
+    )
+
+    # 验证用户输入
+    user_input = "请帮我读取 config.json 文件"
+    result = validator.validate(user_input)
+
+    print(f"\n验证输入: '{user_input}'")
+    print(f"  - 有效: {result.valid}")
+    print(f"  - 错误: {result.errors}")
+    print(f"  - 警告: {result.warnings}")
+
+    # -------------------------------------------------------------------------
+    # 3. 沙箱命令执行（独立使用）
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 沙箱命令执行 ---")
     sandbox = LightweightSandbox()
 
     test_commands = [
@@ -937,7 +1037,10 @@ async def demo_security_system():
         if not is_valid:
             print(f"       原因: {reason}")
 
-    # 3. 审计日志
+    # -------------------------------------------------------------------------
+    # 4. 审计日志（独立使用）
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 审计日志 ---")
     import tempfile
     from pathlib import Path
 
@@ -963,6 +1066,135 @@ async def demo_security_system():
         for entry in entries[:3]:
             print(f"  [{entry.timestamp.strftime('%H:%M:%S')}] {entry.action}: {entry.result}")
 
+    # -------------------------------------------------------------------------
+    # 5. 与 AgentHarness 集成（重要！）
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 与 AgentHarness 集成 ---")
+    print("""
+    安全组件需要在应用层集成到 Agent 的使用流程中：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  用户输入                                                    │
+    │    ↓                                                        │
+    │  InputValidator.validate()  ← 验证输入，过滤注入            │
+    │    ↓                                                        │
+    │  agent.run(sanitized_input)  ← 使用清理后的输入             │
+    │    ↓                                                        │
+    │  BashTool + LightweightSandbox  ← 沙箱执行命令              │
+    │    ↓                                                        │
+    │  AuditLogger.log()  ← 记录操作审计                          │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 实际集成示例
+    print("\n--- 实际集成代码示例 ---")
+
+    # 创建安全组件
+    input_validator = InputValidator(check_injection=True)
+    audit = AuditLogger(log_dir=".harness/audit")
+
+    # 创建 Agent
+    secure_agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    # 定义安全运行函数
+    async def secure_run(user_input: str, session_id: str = None) -> str:
+        """安全地运行 Agent，包含输入验证和审计日志"""
+
+        # Step 1: 验证输入
+        validation = input_validator.validate(user_input)
+        if not validation.valid:
+            return f"输入无效: {validation.errors}"
+
+        if validation.warnings:
+            print(f"⚠️ 警告: {validation.warnings}")
+            # 可以选择拒绝或继续
+
+        # Step 2: 使用清理后的输入
+        safe_input = validation.sanitized_text
+
+        # Step 3: 运行 Agent
+        result = await secure_agent.run(safe_input, session_id=session_id)
+
+        # Step 4: 记录审计日志
+        audit.log_tool_call(
+            session_id=session_id or "default",
+            tool_name="agent.run",
+            arguments={"input_length": len(user_input)},
+            result="success" if result.status.value == "completed" else "failed",
+        )
+
+        return result.content
+
+    # 测试安全运行
+    print("\n测试安全运行:")
+    test_input = "读取 pyproject.toml 文件的前 10 行"
+    print(f"  用户输入: {test_input}")
+
+    response = await secure_run(test_input, session_id="security-demo")
+    print(f"\n  Agent 响应:\n  {response[:200]}...")
+
+    # -------------------------------------------------------------------------
+    # 6. 高级集成：自定义 BashTool 使用沙箱
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 高级集成：沙箱化的 BashTool ---")
+
+    # 导入沙箱执行器
+    from harness.security import SandboxExecutor
+
+    # 创建沙箱执行器
+    sandbox_executor = SandboxExecutor(
+        blocked_commands=["rm -rf", "sudo", "chmod 777"],
+        max_execution_time=10.0,
+    )
+
+    # 创建沙箱化的 BashTool（通过继承）
+    class SecureBashTool(BashTool):
+        """使用沙箱的 BashTool"""
+
+        def __init__(self, executor: SandboxExecutor):
+            super().__init__()
+            self.executor = executor
+
+        async def execute(self, arguments, context):
+            command = arguments["command"]
+
+            # 使用沙箱执行器验证
+            if not self.executor.is_command_allowed(command):
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    content="",
+                    error=f"Command blocked by sandbox: {command}",
+                )
+
+            # 使用父类执行（或直接使用 sandbox_executor.execute）
+            return await super().execute(arguments, context)
+
+    print("\n自定义 SecureBashTool 示例:")
+    print("""
+    class SecureBashTool(BashTool):
+        def __init__(self, executor: SandboxExecutor):
+            super().__init__()
+            self.executor = executor
+
+        async def execute(self, arguments, context):
+            # 沙箱验证 + 执行
+            if not self.executor.is_command_allowed(arguments["command"]):
+                return ToolResult(success=False, error="Blocked")
+            return await super().execute(arguments, context)
+
+    # 使用
+    agent = AgentHarness(
+        tools=[ReadTool(), SecureBashTool(sandbox_executor)],
+    )
+    """)
+
     print("\n✅ Security 安全系统演示完成")
 
 
@@ -978,11 +1210,13 @@ async def demo_observability():
     - OpenTelemetry 集成
     - 配置追踪导出
     - Span 构建和使用
+    - 与 AgentHarness 集成追踪
 
     学习要点:
     - 集成 Jaeger、Datadog 等观测平台
     - 追踪 Agent 执行过程
     - 调试和性能分析
+    - 在 Agent 运行时收集追踪数据
     """
     print("\n" + "=" * 70)
     print("演示 12: Observability 可观测性")
@@ -1017,24 +1251,112 @@ async def demo_observability():
     print(f"\n可观测性管理器已创建")
     print(f"  - 已启用: {manager.is_enabled}")
 
-    # 4. 使用便捷函数
-    # setup_observability()  # 会全局初始化
-
-    print("\n使用示例:")
+    # -------------------------------------------------------------------------
+    # 4. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 与 AgentHarness 集成 ---")
     print("""
-    # 初始化
+    可观测性与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  1. setup_observability()  → 全局初始化追踪                │
+    │    ↓                                                        │
+    │  2. traced_operation("agent.run")  → 创建 Span             │
+    │    ↓                                                        │
+    │  3. agent.run("任务")  → 执行被追踪                         │
+    │    ↓                                                        │
+    │  4. 自动记录: LLM 调用、工具执行、Token 使用               │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 5. 实际集成代码
+    print("\n--- 完整集成代码 ---")
+
+    if OTEL_AVAILABLE:
+        # 初始化可观测性
+        setup_observability(config)
+
+        # 使用追踪装饰器
+        from harness.core.observability import traced_operation
+
+        # 创建 Agent
+        traced_agent = AgentHarness(
+            base_url=BASE_URL,
+            api_key=API_KEY,
+            model=MODEL,
+            provider=PROVIDER,
+            tools=[ReadTool()],
+        )
+
+        # 使用追踪运行 Agent
+        print("\n使用追踪运行 Agent:")
+        with traced_operation("demo.agent.run", {"model": MODEL}) as span:
+            if span:
+                span.set_attribute("demo.name", "observability-demo")
+
+            result = await traced_agent.run("你好，请简单介绍你自己。")
+            print(f"  响应: {result.content[:100]}...")
+
+            if span:
+                span.set_attribute("result.tokens", result.token_usage.total_tokens)
+
+        print("  ✅ 追踪完成，数据已导出")
+    else:
+        print("\nOpenTelemetry 未安装，显示集成代码示例:")
+        print(f"""
+    # 安装: pip install opentelemetry-api opentelemetry-sdk
+
+    from harness import setup_observability, ObservabilityConfig
+    from harness.core.observability import traced_operation
+
+    # Step 1: 初始化可观测性
     setup_observability(ObservabilityConfig(
-        service_name="my-agent",
-        export_otlp=True,
+        service_name="my-agent-service",
+        service_version="1.0.0",
+        export_console=True,      # 控制台输出
+        export_otlp=True,         # 导出到 Jaeger/Datadog
         otlp_endpoint="http://jaeger:4317",
     ))
 
-    # 追踪操作
-    with traced_operation("agent.run", {"model": "claude-sonnet-4-6"}):
-        result = await agent.run("任务")
+    # Step 2: 创建 Agent
+    agent = AgentHarness(
+        model=MODEL,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    # Step 3: 使用追踪上下文运行 Agent
+    with traced_operation("agent.run", {{"model": MODEL}}) as span:
+        result = await agent.run("分析项目结构")
+
+        # 添加自定义属性
+        if span:
+            span.set_attribute("tokens.used", result.token_usage.total_tokens)
+            span.set_attribute("iterations", result.iterations)
+
+    # 追踪数据会自动导出到配置的后端（Jaeger/Datadog）
     """)
 
-    print("\n✅ Observability 可观测性演示完成")
+    # -------------------------------------------------------------------------
+    # 6. 高级集成：自定义追踪
+    # -------------------------------------------------------------------------
+    print("\n--- 高级集成：自定义追踪 ---")
+    print("""
+    from harness.core.observability import get_tracer
+
+    tracer = get_tracer("my-app")
+
+    # 自定义追踪逻辑
+    with tracer.start_as_current_span("custom.operation") as span:
+        span.set_attribute("user.id", "user-001")
+        span.add_event("开始处理")
+
+        result = await agent.run("任务")
+
+        span.add_event("处理完成")
+        span.set_attribute("result.length", len(result.content))
+    """)
+
+    print("\n✅ Observability 与 AgentHarness 集成演示完成")
 
 
 # ============================================================================
@@ -1049,12 +1371,13 @@ async def demo_advanced_cost_control():
     - InMemoryCostStorage 内存存储
     - 用户级预算追踪
     - 全局预算追踪
-    - AsyncSQLiteSessionStore 异步存储
+    - 与 AgentHarness 集成控制成本
 
     学习要点:
     - 多进程场景使用 SQLite 存储
     - 追踪每个用户的使用量
     - 设置全局预算限制
+    - 在 Agent 运行前后检查和控制预算
     """
     print("\n" + "=" * 70)
     print("演示 13: 多级成本控制与异步存储")
@@ -1091,34 +1414,99 @@ async def demo_advanced_cost_control():
     print(f"  用户级: {cost_config.daily_token_limit} tokens/天")
     print(f"  全局级: ${cost_config.global_daily_budget_usd}/天")
 
-    # 3. 实际使用：与 CostController 集成
+    # -------------------------------------------------------------------------
+    # 3. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 与 AgentHarness 集成 ---")
+    print("""
+    多级成本控制与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  用户请求                                                    │
+    │    ↓                                                        │
+    │  检查用户预算 (daily_token_limit)                           │
+    │    ↓ 通过                                                   │
+    │  检查全局预算 (global_daily_budget_usd)                     │
+    │    ↓ 通过                                                   │
+    │  agent.run() 执行                                           │
+    │    ↓                                                        │
+    │  记录 Token 使用到 storage                                  │
+    │    ↓                                                        │
+    │  检查是否超限，超限则阻止后续请求                           │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 4. 实际集成代码
+    print("\n--- 实际集成代码 ---")
+
+    # 创建成本控制器
     from harness import CostController
 
     controller = CostController(config=cost_config, storage=storage)
 
-    # 检查用户预算
-    print("\n--- 实际使用：预算检查 ---")
+    # 创建 Agent
+    cost_controlled_agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+    )
+
+    # 定义带预算控制的运行函数
     user_id = "user-001"
 
-    # 模拟 Token 使用
-    for i in range(3):
-        storage.record_user_usage(user_id, input_tokens=500, output_tokens=250)
+    async def run_with_budget_control(user_input: str, user_id: str) -> str:
+        """带预算控制的 Agent 运行"""
 
-    current_usage = storage.get_user_usage(user_id)
-    print(f"\n用户 {user_id} 当前使用量:")
-    print(f"  - 今日 tokens: {current_usage.daily_tokens}")
-    print(f"  - 今日请求: {current_usage.hourly_requests}")
+        # Step 1: 检查用户预算
+        user_usage = storage.get_user_usage(user_id)
+        if user_usage.daily_tokens >= cost_config.daily_token_limit:
+            return f"❌ 用户 {user_id} 今日预算已用尽"
 
-    # 检查是否超限
-    remaining = cost_config.daily_token_limit - current_usage.daily_tokens
-    print(f"  - 剩余额度: {remaining} tokens")
+        # Step 2: 检查全局预算
+        global_usage = storage.get_global_usage()
+        if global_usage.daily_cost_usd >= cost_config.global_daily_budget_usd:
+            return "❌ 系统全局预算已用尽，请明天再试"
 
-    if remaining < 0:
-        print("  ⚠️ 用户预算已超限！")
-    else:
-        print(f"  ✅ 用户预算充足")
+        # Step 3: 运行 Agent
+        result = await cost_controlled_agent.run(user_input, session_id=f"session-{user_id}")
 
-    # 4. 异步 SQLite 会话存储（代码示例）
+        # Step 4: 记录使用量
+        storage.record_user_usage(
+            user_id,
+            input_tokens=result.token_usage.input_tokens,
+            output_tokens=result.token_usage.output_tokens,
+        )
+        storage.record_global_usage(
+            cost_usd=result.token_usage.total_tokens * 0.00001,  # 假设价格
+            tokens=result.token_usage.total_tokens,
+        )
+
+        # Step 5: 检查是否需要警告
+        new_usage = storage.get_user_usage(user_id)
+        remaining = cost_config.daily_token_limit - new_usage.daily_tokens
+        if remaining < cost_config.daily_token_limit * 0.1:
+            print(f"  ⚠️ 警告: 用户 {user_id} 剩余预算不足 10%")
+
+        return result.content
+
+    # 测试预算控制运行
+    print(f"\n测试预算控制运行 (用户: {user_id}):")
+    test_input = "你好，请用 50 字介绍一下 Python"
+    print(f"  输入: {test_input}")
+
+    response = await run_with_budget_control(test_input, user_id)
+    print(f"  响应: {response[:100]}...")
+
+    # 显示当前使用量
+    final_usage = storage.get_user_usage(user_id)
+    print(f"\n用户 {user_id} 今日累计使用:")
+    print(f"  - Tokens: {final_usage.daily_tokens}")
+    print(f"  - 剩余: {cost_config.daily_token_limit - final_usage.daily_tokens}")
+
+    # -------------------------------------------------------------------------
+    # 5. 异步 SQLite 存储（生产环境推荐）
+    # -------------------------------------------------------------------------
     print(f"\n--- 异步 SQLite 存储（生产环境推荐）---")
     print("""
     # 创建异步存储（WAL 模式 + 连接池）
@@ -1138,7 +1526,47 @@ async def demo_advanced_cost_control():
     await store.close()
     """)
 
-    print("\n✅ 多级成本控制与异步存储演示完成")
+    # -------------------------------------------------------------------------
+    # 6. 完整集成示例
+    # -------------------------------------------------------------------------
+    print("\n--- 完整集成示例：多租户成本控制 ---")
+    print("""
+    class TenantAwareAgent:
+        def __init__(self, storage: InMemoryCostStorage, config: CostConfig):
+            self.storage = storage
+            self.config = config
+            self.agent = AgentHarness(model=MODEL)
+
+        async def run(self, user_id: str, prompt: str) -> str:
+            # 预检查
+            if not self._check_budget(user_id):
+                raise BudgetExceededError(f"用户 {user_id} 预算已用尽")
+
+            # 执行
+            result = await self.agent.run(prompt, session_id=user_id)
+
+            # 后记录
+            self._record_usage(user_id, result.token_usage)
+
+            return result.content
+
+        def _check_budget(self, user_id: str) -> bool:
+            usage = self.storage.get_user_usage(user_id)
+            return usage.daily_tokens < self.config.daily_token_limit
+
+        def _record_usage(self, user_id: str, usage: TokenUsage):
+            self.storage.record_user_usage(
+                user_id,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+            )
+
+    # 使用
+    tenant_agent = TenantAwareAgent(storage, cost_config)
+    result = await tenant_agent.run("user-001", "你好")
+    """)
+
+    print("\n✅ 多级成本控制与 AgentHarness 集成演示完成")
 
 
 # ============================================================================
@@ -1153,15 +1581,44 @@ async def demo_interrupt_and_resume():
     - 中断长时间运行的任务
     - 保存执行状态
     - 从中断点恢复执行
+    - 与 AgentHarness 集成
 
     学习要点:
     - agent.interrupt() 中断执行
     - LoopSnapshot 保存状态
     - resume_from_snapshot() 恢复
+    - 快照持久化用于断点续传
     """
     print("\n" + "=" * 70)
     print("演示 14: 中断与恢复")
     print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 与 AgentHarness 集成概述
+    # -------------------------------------------------------------------------
+    print("\n--- 与 AgentHarness 集成 ---")
+    print("""
+    中断与恢复功能与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  场景 1: 超时中断                                           │
+    │  ───────────────────                                        │
+    │  agent.run() → 超时 → agent.interrupt() → 保存快照         │
+    │                                                              │
+    │  场景 2: 用户取消                                           │
+    │  ───────────────────                                        │
+    │  用户点击取消 → agent.interrupt() → 返回部分结果            │
+    │                                                              │
+    │  场景 3: 断点续传                                           │
+    │  ───────────────────                                        │
+    │  保存快照 → 存储到文件 → 下次加载 → 恢复执行                │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. 基本使用
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 基本使用 ---")
 
     agent = AgentHarness(
         base_url=BASE_URL,
@@ -1171,15 +1628,17 @@ async def demo_interrupt_and_resume():
         tools=[ReadTool()],
     )
 
-    # 演示中断功能
-    print("\n开始执行一个复杂任务...")
-    print("(在实际场景中，可以通过 agent.interrupt() 中断)")
-
+    # 正常执行任务
+    print("\n执行任务...")
     result = await agent.run("读取 pyproject.toml 文件，告诉我项目名称是什么。")
 
     print(f"\n响应: {result.content[:200]}...")
 
-    # 创建快照（用于恢复）
+    # -------------------------------------------------------------------------
+    # 3. 创建快照（用于恢复）
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 创建快照 ---")
+
     from harness import LoopSnapshot
 
     snapshot = agent._loop.create_snapshot(
@@ -1195,6 +1654,77 @@ async def demo_interrupt_and_resume():
     # 快照可以序列化保存
     snapshot_dict = snapshot.to_dict()
     print(f"\n快照可以序列化为 JSON，大小: {len(str(snapshot_dict))} 字节")
+
+    # -------------------------------------------------------------------------
+    # 4. 中断执行的集成代码
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 中断执行集成代码 ---")
+    print("""
+    import asyncio
+    from harness import AgentHarness, LoopSnapshot
+
+    async def run_with_timeout(agent: AgentHarness, prompt: str, timeout: float):
+        '''带超时中断的运行'''
+
+        async def run_task():
+            return await agent.run(prompt)
+
+        async def interrupt_after():
+            await asyncio.sleep(timeout)
+            agent.interrupt()
+            print("⏰ 任务超时，已中断")
+
+        # 并行运行任务和超时检查
+        task = asyncio.create_task(run_task())
+        timeout_task = asyncio.create_task(interrupt_after())
+
+        try:
+            result = await task
+            timeout_task.cancel()
+            return result
+        except asyncio.CancelledError:
+            # 创建快照用于恢复
+            snapshot = agent._loop.create_snapshot(
+                session=agent._loop.session,
+                iteration=agent._loop.current_iteration,
+            )
+            print(f"已保存快照: {snapshot.session_id}")
+            return None
+
+    # 使用
+    agent = AgentHarness(model=MODEL, tools=[ReadTool()])
+    result = await run_with_timeout(agent, "复杂任务...", timeout=30.0)
+    """)
+
+    # -------------------------------------------------------------------------
+    # 5. 快照持久化
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 快照持久化 ---")
+    print("""
+    import json
+    from pathlib import Path
+
+    # 保存快照到文件
+    def save_snapshot(snapshot: LoopSnapshot, path: str):
+        data = snapshot.to_dict()
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        print(f"快照已保存到: {path}")
+
+    # 从文件加载快照
+    def load_snapshot(path: str) -> LoopSnapshot:
+        data = json.loads(Path(path).read_text())
+        return LoopSnapshot.from_dict(data)
+
+    # 使用场景：断点续传
+    async def resume_from_file(agent: AgentHarness, snapshot_path: str):
+        snapshot = load_snapshot(snapshot_path)
+        # 恢复 session 状态
+        agent._loop.restore_from_snapshot(snapshot)
+        # 继续执行
+        return await agent.run("请继续...")
+    """)
+
+    print("\n✅ 中断与恢复与 AgentHarness 集成演示完成")
 
 
 # ============================================================================
