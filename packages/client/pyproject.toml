@@ -1,0 +1,36 @@
+[project]
+name = "harness-client"
+version = "0.1.0"
+description = "Windows Desktop Client for Harness AI Agent SDK"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "harness-sdk",
+    "PyQt6>=6.6.0",
+    "qasync>=0.27.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-qt>=4.2.0",
+    "pyinstaller>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+harness-client = "harness_client.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness_client"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
