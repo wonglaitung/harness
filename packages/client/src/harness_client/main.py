@@ -2,13 +2,8 @@
 Main entry point for Harness Client.
 """
 
-import sys
-
-# CRITICAL: Must be set BEFORE importing asyncio/qasync on Windows
-# This fixes qasync crashes caused by ProactorEventLoop incompatibility
-if sys.platform == "win32":
-    import asyncio
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# CRITICAL: This MUST be the first import to set Windows event loop policy
+import harness_client._win_event_loop
 
 from harness_client.app import run
 
