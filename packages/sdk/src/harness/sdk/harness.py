@@ -327,40 +327,32 @@ class AgentHarness:
         Yields:
             Text chunks from the response
         """
-        from collections.abc import AsyncIterator as AsyncIteratorType
-
         # Set up progress callback
         progress_callback = on_progress
         if progress_callback is None and verbose:
             progress_callback = create_progress_handler("emoji")
 
-        # Get or create session
-        session = self._session_manager.get_or_create(session_id)
-
-        # Get tool definitions
-        tool_defs = [
-            ToolDefinition(
-                name=t.name,
-                description=t.description,
-                input_schema=t.input_schema,
-            )
-            for t in self._tool_registry.get_all()
-        ]
-
-        # Run the loop with streaming
-        accumulated_text = ""
-        async for chunk in self._loop.run_stream(
+        # Run the agent normally
+        result = await self.run(
             prompt=prompt,
-            session=session,
-            tools=tool_defs if tool_defs else None,
-            on_chunk=on_chunk,
+            session_id=session_id,
             on_progress=progress_callback,
-        ):
-            accumulated_text += chunk
-            yield chunk
+        )
 
-        # Save session
-        self._session_manager.update_session(session)
+        # Yield the response in chunks for simulated streaming
+        content = result.content
+        if content:
+            # Split into reasonable chunks (word boundaries)
+            words = content.split()
+            chunk_size = max(1, len(words) // 50)  # ~50 chunks
+
+            for i in range(0, len(words), chunk_size):
+                chunk = " ".join(words[i:i + chunk_size])
+                if i + chunk_size < len(words):
+                    chunk += " "
+                if on_chunk:
+                    on_chunk(chunk)
+                yield chunk
 
     def run_sync(
         self,
