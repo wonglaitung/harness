@@ -45,13 +45,22 @@ class SettingsDialog(QDialog):
         api_layout.addRow("Base URL:", self.base_url_edit)
 
         self.model_combo = QComboBox()
+        self.model_combo.setEditable(True)  # 允许自定义输入
         self.model_combo.addItems([
             "claude-sonnet-4-6",
             "claude-opus-4-6",
             "claude-haiku-4-5",
             "gpt-4o",
             "gpt-4-turbo",
+            "glm-4",
+            "glm-5",
+            "deepseek-chat",
+            "deepseek-coder",
+            "qwen-max",
+            "qwen-plus",
         ])
+        self.model_combo.setCurrentText("claude-sonnet-4-6")
+        self.model_combo.lineEdit().setPlaceholderText("选择或输入模型名称")
         api_layout.addRow("Model:", self.model_combo)
 
         tabs.addTab(api_tab, "API")
