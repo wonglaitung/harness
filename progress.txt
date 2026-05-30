@@ -158,3 +158,21 @@
 - docs/04-memory-system.md: 更新 AsyncSQLiteSessionStore 文档
 - docs/07-sdk-api.md: 更新 Public API 列表
 - README.md: 更新 Features 列表
+
+## 2026-05-31
+
+### Harness Client 会话管理功能 ✅ 完成
+
+#### 会话切换修复
+- sidebar.py: 为初始会话列表项设置 UserRole 数据，确保所有项有有效 session_id
+- main_window.py: 移除 _on_session_switch 中多余的 add_session 调用
+- switch_to_session 正确处理列表项交换
+
+#### 会话历史加载
+- ChatController._session_cache: 添加会话消息缓存
+- send_message 完成后自动缓存 session.messages
+- 切换会话时从缓存加载历史消息到聊天面板
+
+提交记录:
+- fix(client): Fix session switching not updating current session display (14be5e4)
+- feat(client): Load session history when switching sessions (bb9d57f)

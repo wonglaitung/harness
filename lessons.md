@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-05-31: QListWidget 初始项未设置数据
+
+### 问题
+
+PyQt6 的 `QListWidget.addItem(str)` 只添加文本，不会设置 `UserRole` 数据。点击历史会话时：
+- `item.data(Qt.ItemDataRole.UserRole)` 返回 `None`
+- 导致会话切换信号不触发
+
+### 原因
+
+初始化时使用了简化的 `addItem("文本")` 而非创建 `QListWidgetItem` 并设置数据。
+
+### 解决
+
+```python
+# ❌ 错误：只添加文本，没有数据
+self.session_list.addItem("🔵 当前会话")
+
+# ✅ 正确：创建项并设置数据
+current_item = QListWidgetItem("🔵 当前会话")
+current_item.setData(Qt.ItemDataRole.UserRole, "default")
+self.session_list.addItem(current_item)
+```
+
+### 教训
+
+1. **列表项数据很重要**：如果后续需要获取项的关联数据，初始化时就要设置
+2. **信号处理要检查数据**：`item.data()` 可能返回 `None`，要防御性处理
+
+---
+
+## 2026-05-31: 会话切换时的重复添加问题
+
+### 问题
+
+`_on_session_switch` 中先调用 `add_session` 添加当前会话到历史列表，再调用 `switch_to_session`。但 `switch_to_session` 本身就处理了列表项交换，导致重复添加。
+
+### 原因
+
+两个方法的职责重叠：
+- `add_session`: 创建新的列表项
+- `switch_to_session`: 交换两个已存在的列表项
+
+调用者误以为需要先添加再切换。
+
+### 解决
+
+只调用 `switch_to_session`，它已经处理了完整的交换逻辑。
+
+### 教训
+
+1. **理解方法职责**：调用前要明确方法做了什么，避免重复操作
+2. **方法命名要清晰**：`switch_to_session` 应暗示它处理完整切换，不需要额外准备
+
+---
+
 ## 2026-05-29: ToolResult 类型定义不一致
 
 ### 问题
