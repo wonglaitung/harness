@@ -319,6 +319,10 @@ class AgentLoop:
                 for llm_attempt in range(max_llm_retries):
                     try:
                         logger.info(f"Calling LLM, attempt={llm_attempt + 1}, messages={len(context.messages)}")
+                        logger.debug(f"Context messages: {[m.get('role', 'unknown') for m in context.messages]}")
+                        if tools:
+                            logger.debug(f"Tools available: {[t.name for t in tools]}")
+
                         response = await self.llm.call(
                             messages=context.messages,
                             tools=tools,
@@ -326,6 +330,9 @@ class AgentLoop:
                         )
                         logger.info(f"LLM response: content_len={len(response.content) if response.content else 0}, stop_reason={response.stop_reason}, tool_calls={len(response.tool_calls) if response.tool_calls else 0}")
                         break  # Success, exit retry loop
+                    except Exception as e:
+                        logger.exception(f"LLM call failed: {type(e).__name__}: {e}")
+                        llm_error = e
                     except Exception as e:
                         llm_error = e
                         error_ctx = ErrorContext(
