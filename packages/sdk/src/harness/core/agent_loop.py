@@ -583,8 +583,8 @@ class AgentLoop:
             status = "success" if result.success else "failed"
             # Create result preview (first 200 chars)
             result_preview = ""
-            if result.output:
-                result_preview = str(result.output)[:200]
+            if result.content:
+                result_preview = str(result.content)[:200]
             elif result.error:
                 result_preview = str(result.error)[:200]
 
