@@ -222,15 +222,11 @@ class MainWindow(QMainWindow):
         # Get current session ID
         current_session_id = self.chat_controller.state.session_id
 
-        # Save current session to sidebar
-        if current_session_id and current_session_id != "default":
-            self.sidebar.add_session(current_session_id, f"会话 {current_session_id[:8]}")
-
         # Switch to the new session
         self.chat_controller.state.session_id = session_id
         self.chat_controller.agent = None  # Force re-initialization
 
-        # Update sidebar
+        # Update sidebar (switch_to_session handles the swap)
         self.sidebar.switch_to_session(session_id, f"会话 {session_id[:8]}")
 
         # Clear chat panel (in real implementation, would load session history)

@@ -39,7 +39,9 @@ class SidebarPanel(QWidget):
         sessions_layout = QVBoxLayout(sessions_group)
 
         self.session_list = QListWidget()
-        self.session_list.addItem("🔵 当前会话")
+        current_item = QListWidgetItem("🔵 当前会话")
+        current_item.setData(Qt.ItemDataRole.UserRole, "default")
+        self.session_list.addItem(current_item)
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.session_list.itemClicked.connect(self._on_session_clicked)
