@@ -125,15 +125,11 @@ class OpenAIClient(LLMClient):
 
         logger.info(f"OpenAI API request: messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
 
-        # Use synchronous client in a thread to avoid qasync compatibility issues
-        def sync_call():
-            client = self._get_client()  # Returns sync client
-            return client.chat.completions.create(**params)
-
+        # Use synchronous client directly (blocking but works with qasync)
         try:
-            # Run sync call in thread pool
-            import asyncio
-            response = await asyncio.to_thread(sync_call)
+            client = self._get_client()  # Returns sync client
+            logger.info("Making sync API call...")
+            response = client.chat.completions.create(**params)
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
         except Exception as e:
             logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
