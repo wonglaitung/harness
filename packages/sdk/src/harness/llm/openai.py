@@ -53,15 +53,10 @@ class OpenAIClient(LLMClient):
         if self._client is None:
             import openai
 
-            client_kwargs = {
-                "api_key": self._api_key,
-                "timeout": 120.0,  # 2 minute timeout
-                "max_retries": 2,
-            }
+            client_kwargs = {"api_key": self._api_key}
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
 
-            logger.info(f"Creating OpenAI client with base_url={self._base_url}")
             self._client = openai.AsyncOpenAI(**client_kwargs)
         return self._client
 
@@ -78,48 +73,51 @@ class OpenAIClient(LLMClient):
         **kwargs,
     ) -> LLMResponse:
         """Make a call to OpenAI."""
+        logger.info(f"OpenAI call starting: model={self.config.model}, base_url={self._base_url}")
+
         try:
             client = self._get_client()
-            logger.info(f"Got OpenAI client, base_url={self._base_url}")
+            logger.info(f"OpenAI client obtained")
+        except Exception as e:
+            logger.exception(f"Failed to get OpenAI client: {e}")
+            raise
 
-            # Build messages with system prompt
-            formatted_messages = []
-            if system:
-                formatted_messages.append({"role": "system", "content": system})
-            formatted_messages.extend(messages)
+        # Build messages with system prompt
+        formatted_messages = []
+        if system:
+            formatted_messages.append({"role": "system", "content": system})
+        formatted_messages.extend(messages)
 
-            # Build request parameters
-            params: dict[str, Any] = {
-                "model": self.config.model,
-                "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
-                "messages": formatted_messages,
-            }
+        # Build request parameters
+        params: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "messages": formatted_messages,
+        }
 
-            # Add temperature if specified
-            if "temperature" in kwargs:
-                params["temperature"] = kwargs["temperature"]
-            elif self.config.temperature != 1.0:
-                params["temperature"] = self.config.temperature
+        # Add temperature if specified
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif self.config.temperature != 1.0:
+            params["temperature"] = self.config.temperature
 
-            # Add tools if provided
-            if tools:
-                params["tools"] = [self._format_tool(t) for t in tools]
-                params["tool_choice"] = "auto"
+        # Add tools if provided
+        if tools:
+            params["tools"] = [self._format_tool(t) for t in tools]
+            params["tool_choice"] = "auto"
 
-            logger.info(f"OpenAI call params: model={self.config.model}, base_url={self._base_url}, messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
-            logger.debug(f"Request params keys: {list(params.keys())}")
+        logger.info(f"OpenAI API request: messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
 
-            # Make the API call
-            logger.info("Calling OpenAI API...")
+        # Make the API call
+        try:
             response = await client.chat.completions.create(**params)
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
-
-            # Parse response
-            return self._parse_response(response)
-
         except Exception as e:
             logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
             raise
+
+        # Parse response
+        return self._parse_response(response)
 
     async def stream(
         self,

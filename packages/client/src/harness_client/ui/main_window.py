@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout,
     QSplitter, QStatusBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMetaObject, Q_ARG
 
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.sidebar import SidebarPanel
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AsyncWorker(QThread):
-    """Worker thread for async operations."""
+    """Worker thread for async operations with proper event loop handling."""
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
@@ -41,9 +41,25 @@ class AsyncWorker(QThread):
 
     def run(self):
         try:
+            # Create a new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+            # Run the coroutine
             result = loop.run_until_complete(self.coro)
+
+            # Clean up
+            try:
+                # Cancel all running tasks
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                # Wait for all tasks to be cancelled
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            finally:
+                loop.close()
+
             logger.info(f"AsyncWorker finished with result: {result[:50] if result else 'None'}...")
             self.finished.emit(result or "")
         except Exception as e:
