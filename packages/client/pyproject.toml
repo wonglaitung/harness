@@ -9,6 +9,8 @@ dependencies = [
     "harness-sdk",
     "PyQt6>=6.6.0",
     "qasync>=0.27.1",
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
 ]
 
 [project.optional-dependencies]
