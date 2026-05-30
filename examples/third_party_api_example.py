@@ -1162,7 +1162,7 @@ async def demo_observability():
     """)
 
     # 使用 HarnessConfig + ObservabilityConfig
-    from harness import HarnessConfig, ObservabilityConfig
+    from harness import HarnessConfig
 
     obs_config = ObservabilityConfig(
         enabled=True,

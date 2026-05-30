@@ -1610,3 +1610,263 @@ AgentHarness._loop
 AgentHarness._components
 ContextBuilder._compress_context()
 ```
+
+---
+
+## 配置类 API
+
+Harness 提供四个配置类，用于精细控制 Agent 行为。这些配置可直接传入 `HarnessConfig`。
+
+### SecurityConfig - 安全配置
+
+控制输入验证、输出脱敏、审计日志、沙箱执行。
+
+```python
+from harness import AgentHarness, HarnessConfig, SecurityConfig
+
+# 完整配置
+security_config = SecurityConfig(
+    # 输入验证
+    enable_input_validation=True,
+    max_input_length=100000,
+    check_prompt_injection=True,
+
+    # 输出脱敏
+    enable_output_sanitization=True,
+    max_output_length=100000,
+
+    # 审计日志
+    enable_audit_log=True,
+    audit_log_dir="~/.harness/audit",
+    audit_retention_days=30,
+
+    # 沙箱设置
+    enable_sandbox=True,
+    sandbox_max_execution_time=30.0,
+    sandbox_max_output_size=1_000_000,  # 1MB
+    sandbox_blocked_commands=[
+        "rm -rf /",
+        "sudo",
+        "chmod -R 777",
+    ],
+    sandbox_allowed_commands=None,  # None = 允许所有非禁止命令
+)
+
+# 与 AgentHarness 集成
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        security=security_config,
+    ),
+)
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `enable_input_validation` | bool | True | 启用输入验证 |
+| `max_input_length` | int | 100000 | 最大输入长度 |
+| `check_prompt_injection` | bool | True | 检测提示注入攻击 |
+| `enable_output_sanitization` | bool | True | 启用输出脱敏 |
+| `max_output_length` | int | 100000 | 最大输出长度 |
+| `enable_audit_log` | bool | True | 启用审计日志 |
+| `audit_log_dir` | str | "~/.harness/audit" | 审计日志目录 |
+| `audit_retention_days` | int | 30 | 日志保留天数 |
+| `enable_sandbox` | bool | True | 启用沙箱执行 |
+| `sandbox_max_execution_time` | float | 30.0 | 最大执行时间（秒） |
+| `sandbox_max_output_size` | int | 1000000 | 最大输出大小（字节） |
+| `sandbox_blocked_commands` | list[str] | [...] | 禁止的命令列表 |
+| `sandbox_allowed_commands` | list[str] \| None | None | 允许的命令白名单 |
+
+---
+
+### CostControlConfig - 成本控制配置
+
+多层级成本控制：会话级、用户级、全局级。
+
+```python
+from harness import AgentHarness, HarnessConfig, CostControlConfig
+
+cost_config = CostControlConfig(
+    # 会话级限制
+    max_tokens_per_session=1_000_000,
+    max_tool_calls_per_session=500,
+    max_iterations_per_request=20,
+
+    # 用户级限制
+    daily_token_limit=10_000_000,
+    hourly_request_limit=100,
+
+    # 全局限制
+    global_daily_budget_usd=100.0,
+    auto_throttle=True,  # 自动节流
+
+    # 自适应降级
+    fallback_model="claude-haiku-4-5",
+    context_reduction_ratio=0.5,
+
+    # 警告阈值
+    warning_threshold=0.8,  # 使用 80% 时警告
+)
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        cost_control=cost_config,
+    ),
+)
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `max_tokens_per_session` | int | 1000000 | 每会话最大 Token |
+| `max_tool_calls_per_session` | int | 500 | 每会话最大工具调用 |
+| `max_iterations_per_request` | int | 20 | 每请求最大迭代 |
+| `daily_token_limit` | int | 10000000 | 每日 Token 限制（用户级） |
+| `hourly_request_limit` | int | 100 | 每小时请求限制 |
+| `global_daily_budget_usd` | float | 100.0 | 全局每日预算（美元） |
+| `auto_throttle` | bool | True | 自动节流 |
+| `fallback_model` | str \| None | None | 预算不足时的降级模型 |
+| `context_reduction_ratio` | float | 0.5 | 上下文压缩比例 |
+| `warning_threshold` | float | 0.8 | 警告阈值 (0.0-1.0) |
+
+---
+
+### ObservabilityConfig - 可观测性配置
+
+OpenTelemetry 集成，支持 Jaeger、Datadog 等。
+
+```python
+from harness import AgentHarness, HarnessConfig, ObservabilityConfig
+
+# 控制台输出（调试）
+obs_config = ObservabilityConfig(
+    enabled=True,
+    service_name="my-agent",
+    export_console=True,
+)
+
+# OTLP 导出（生产）
+obs_config = ObservabilityConfig(
+    enabled=True,
+    service_name="production-agent",
+    export_otlp=True,
+    otlp_endpoint="http://jaeger:4317",
+    sample_rate=1.0,
+)
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        observability=obs_config,
+    ),
+)
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `enabled` | bool | False | 是否启用 |
+| `service_name` | str | "harness-agent" | 服务名称 |
+| `service_version` | str | "0.1.0" | 服务版本 |
+| `export_console` | bool | False | 输出到控制台 |
+| `export_otlp` | bool | False | 导出到 OTLP |
+| `otlp_endpoint` | str | "http://localhost:4317" | OTLP gRPC 端点 |
+| `sample_rate` | float | 1.0 | 采样率 (0.0-1.0) |
+
+---
+
+### StorageConfig - 存储配置
+
+会话存储配置，支持文件或 SQLite。
+
+```python
+from harness import AgentHarness, HarnessConfig, StorageConfig
+
+# 文件存储（默认）
+storage_config = StorageConfig(
+    type="file",
+    storage_dir=".harness/sessions",
+)
+
+# SQLite 存储（生产）
+storage_config = StorageConfig(
+    type="sqlite",
+    sqlite_path=".harness/harness.db",
+    async_mode=True,
+    pool_size=5,
+)
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        storage=storage_config,
+    ),
+)
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `type` | "file" \| "sqlite" | "file" | 存储类型 |
+| `storage_dir` | str | ".harness/sessions" | 文件存储目录 |
+| `sqlite_path` | str | ".harness/harness.db" | SQLite 数据库路径 |
+| `async_mode` | bool | True | 异步模式（仅 SQLite） |
+| `pool_size` | int | 5 | 连接池大小（仅异步 SQLite） |
+
+---
+
+### 完整配置示例
+
+```python
+from harness import (
+    AgentHarness,
+    HarnessConfig,
+    SecurityConfig,
+    CostControlConfig,
+    ObservabilityConfig,
+    StorageConfig,
+)
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        # LLM 配置
+        api_key="your-api-key",
+        base_url="https://api.example.com/v1",  # 第三方 API
+
+        # 安全配置
+        security=SecurityConfig(
+            enable_input_validation=True,
+            check_prompt_injection=True,
+            enable_audit_log=True,
+        ),
+
+        # 成本控制
+        cost_control=CostControlConfig(
+            max_tokens_per_session=500000,
+            global_daily_budget_usd=50.0,
+            fallback_model="claude-haiku-4-5",
+        ),
+
+        # 可观测性
+        observability=ObservabilityConfig(
+            enabled=True,
+            export_console=True,
+        ),
+
+        # 存储
+        storage=StorageConfig(
+            type="sqlite",
+            sqlite_path=".harness/production.db",
+        ),
+    ),
+)
+
+result = await agent.run("分析代码")
+```

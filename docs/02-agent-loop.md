@@ -87,6 +87,9 @@ class LoopConfig:
     enable_parallel_tools: bool = True  # 并行执行工具
     retry_on_error: int = 3             # 错误重试次数
     retry_delay: float = 1.0            # 重试延迟
+    enable_cost_control: bool = True    # 启用成本控制
+    cost_config: CostConfig | None = None  # 成本控制配置
+    security_config: SecurityConfig | None = None  # 安全配置
 
 class AgentLoop:
     """Agent 循环引擎"""
@@ -104,6 +107,26 @@ class AgentLoop:
         self.config = config or LoopConfig()
         self.state = LoopState.IDLE
         self._interrupt_flag = False
+
+        # 初始化安全组件
+        if self.config.security_config:
+            sec = self.config.security_config
+            self._input_validator = InputValidator(
+                max_length=sec.max_input_length,
+                check_injection=sec.check_prompt_injection,
+            ) if sec.enable_input_validation else None
+            self._sanitizer = ResultSanitizer(
+                max_length=sec.max_output_length,
+            ) if sec.enable_output_sanitization else None
+            self._audit_logger = AuditLogger(
+                log_dir=sec.audit_log_dir,
+                retention_days=sec.audit_retention_days,
+            ) if sec.enable_audit_log else None
+        else:
+            # 默认启用所有安全功能
+            self._input_validator = InputValidator()
+            self._sanitizer = ResultSanitizer()
+            self._audit_logger = AuditLogger()
 
     async def run(
         self,

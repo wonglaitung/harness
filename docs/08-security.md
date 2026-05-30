@@ -903,6 +903,143 @@ for entry in suspicious:
 
 ---
 
+## 与 AgentHarness 集成
+
+### 使用 SecurityConfig 配置
+
+Harness 提供 `SecurityConfig` 类，支持通过 `HarnessConfig` 统一配置安全策略。
+
+```python
+from harness import AgentHarness, HarnessConfig, SecurityConfig
+
+# 创建安全配置
+security_config = SecurityConfig(
+    # 输入验证
+    enable_input_validation=True,
+    max_input_length=100000,
+    check_prompt_injection=True,
+
+    # 输出脱敏
+    enable_output_sanitization=True,
+    max_output_length=100000,
+
+    # 审计日志
+    enable_audit_log=True,
+    audit_log_dir="~/.harness/audit",
+    audit_retention_days=30,
+
+    # 沙箱设置
+    enable_sandbox=True,
+    sandbox_max_execution_time=30.0,
+    sandbox_max_output_size=1_000_000,
+    sandbox_blocked_commands=[
+        "rm -rf /",
+        "rm -rf ~",
+        "sudo",
+        "chmod -R 777",
+        "mkfs",
+        "dd if=",
+        "> /dev/",
+        ":(){ :|:& };:",  # Fork bomb
+    ],
+)
+
+# 创建 Agent
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    config=HarnessConfig(
+        security=security_config,
+    ),
+)
+
+# 运行 - 安全检查自动生效
+result = await agent.run("分析代码")
+```
+
+### 自动安全检查流程
+
+当启用 `SecurityConfig` 后，AgentLoop 会在以下时机自动执行安全检查：
+
+```
+用户输入 → AgentHarness.run()
+    │
+    ├─→ [1] InputValidator.validate()
+    │       └─→ 检查输入长度
+    │       └─→ 检测提示注入
+    │
+    ├─→ [2] AgentLoop 执行
+    │       └─→ LLM 调用
+    │       └─→ 工具执行
+    │
+    ├─→ [3] ResultSanitizer.sanitize()
+    │       └─→ 脱敏 API Key
+    │       └─→ 脱敏密码
+    │       └─→ 脱敏邮箱
+    │       └─→ 脱敏私钥
+    │
+    └─→ [4] AuditLogger.log_tool_call()
+            └─→ 记录工具调用
+            └─→ 记录执行结果
+```
+
+### 配置选项详解
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| **输入验证** |
+| `enable_input_validation` | bool | True | 启用输入验证 |
+| `max_input_length` | int | 100000 | 最大输入长度（字符） |
+| `check_prompt_injection` | bool | True | 检测提示注入攻击 |
+| **输出脱敏** |
+| `enable_output_sanitization` | bool | True | 启用输出脱敏 |
+| `max_output_length` | int | 100000 | 最大输出长度（字符） |
+| **审计日志** |
+| `enable_audit_log` | bool | True | 启用审计日志 |
+| `audit_log_dir` | str | "~/.harness/audit" | 日志存储目录 |
+| `audit_retention_days` | int | 30 | 日志保留天数 |
+| **沙箱执行** |
+| `enable_sandbox` | bool | True | 启用沙箱执行 |
+| `sandbox_max_execution_time` | float | 30.0 | 最大执行时间（秒） |
+| `sandbox_max_output_size` | int | 1000000 | 最大输出大小（字节） |
+| `sandbox_blocked_commands` | list[str] | [...] | 禁止的命令列表 |
+| `sandbox_allowed_commands` | list[str] \| None | None | 允许的命令白名单 |
+| `sandbox_allowed_env_vars` | list[str] | [...] | 允许的环境变量 |
+
+### 预设配置示例
+
+```python
+from harness import SecurityConfig
+
+# 开发环境：宽松配置
+dev_security = SecurityConfig(
+    enable_input_validation=True,
+    check_prompt_injection=False,  # 开发时可关闭
+    enable_audit_log=False,
+    enable_sandbox=False,
+)
+
+# 生产环境：严格配置
+prod_security = SecurityConfig(
+    enable_input_validation=True,
+    check_prompt_injection=True,
+    enable_audit_log=True,
+    audit_log_dir="/var/log/harness/audit",
+    enable_sandbox=True,
+    sandbox_max_execution_time=10.0,
+    sandbox_blocked_commands=[
+        "rm", "sudo", "chmod", "chown", "mkfs", "dd",
+    ],
+)
+
+# 只读模式
+readonly_security = SecurityConfig(
+    enable_sandbox=True,
+    sandbox_blocked_commands=["rm", "write", "edit"],
+)
+```
+
+---
+
 ## 轻量级沙箱方案
 
 Docker 沙箱每次执行延迟高达数秒，且需要 Docker 权限，不适合高频工具调用。MVP 采用轻量级隔离 + 严格白名单。
