@@ -3,6 +3,7 @@ OpenAI LLM client implementation.
 """
 
 import asyncio
+import logging
 import os
 from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any
@@ -13,6 +14,8 @@ from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage,
 if TYPE_CHECKING:
     from harness.core import StreamingConfig
     from harness.types import ProgressCallback
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(LLMClient):
@@ -96,8 +99,15 @@ class OpenAIClient(LLMClient):
             params["tools"] = [self._format_tool(t) for t in tools]
             params["tool_choice"] = "auto"
 
+        logger.info(f"OpenAI call: model={self.config.model}, base_url={self._base_url}, messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
+
         # Make the API call
-        response = await client.chat.completions.create(**params)
+        try:
+            response = await client.chat.completions.create(**params)
+            logger.info(f"OpenAI response: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+        except Exception as e:
+            logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
+            raise
 
         # Parse response
         return self._parse_response(response)

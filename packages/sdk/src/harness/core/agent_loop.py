@@ -8,6 +8,7 @@ Includes circuit breaker and error handling for production resilience.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -44,6 +45,8 @@ from harness.types import (
     Session,
     ToolCall,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -211,6 +214,8 @@ class AgentLoop:
         on_progress: ProgressCallback | None = None,
     ) -> LoopResult:
         """Internal implementation of run."""
+        logger.info(f"_run_impl called, prompt length={len(prompt)}, tools={len(tools) if tools else 0}")
+
         # Input validation
         if self._input_validator:
             validation_result = self._input_validator.validate(prompt)
@@ -245,6 +250,7 @@ class AgentLoop:
         self._iteration = 0  # Reset for error handler context
 
         try:
+            logger.info(f"Starting loop, max_iterations={self.config.max_iterations}")
             while iteration < self.config.max_iterations:
                 # Check cost budget
                 if self._cost_controller:
@@ -312,11 +318,13 @@ class AgentLoop:
                 max_llm_retries = 3
                 for llm_attempt in range(max_llm_retries):
                     try:
+                        logger.info(f"Calling LLM, attempt={llm_attempt + 1}, messages={len(context.messages)}")
                         response = await self.llm.call(
                             messages=context.messages,
                             tools=tools,
                             system=context.system_prompt,
                         )
+                        logger.info(f"LLM response: content_len={len(response.content) if response.content else 0}, stop_reason={response.stop_reason}, tool_calls={len(response.tool_calls) if response.tool_calls else 0}")
                         break  # Success, exit retry loop
                     except Exception as e:
                         llm_error = e
@@ -436,6 +444,7 @@ class AgentLoop:
                 # Reset error handler state
                 self._error_handler.reset()
 
+                logger.info(f"Loop completed, iterations={iteration}, content_len={len(response.content) if response.content else 0}")
                 return LoopResult(
                     status=LoopState.COMPLETED,
                     session=session,
@@ -462,6 +471,7 @@ class AgentLoop:
             )
 
         except Exception as e:
+            logger.exception(f"Loop exception: {type(e).__name__}: {e}")
             # Use ErrorHandler to determine action
             error_ctx = ErrorContext(
                 error=e,
