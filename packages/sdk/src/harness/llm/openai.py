@@ -51,13 +51,28 @@ class OpenAIClient(LLMClient):
     def _get_client(self):
         """Get or create the OpenAI client."""
         if self._client is None:
-            import openai
+            logger.info("Creating new OpenAI client...")
+            try:
+                import openai
+                logger.info(f"OpenAI module imported, version: {openai.__version__}")
+            except ImportError as e:
+                logger.error(f"Failed to import openai: {e}")
+                raise ImportError(
+                    "openai package is required. Install with: pip install openai"
+                ) from e
 
             client_kwargs = {"api_key": self._api_key}
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
+                logger.info(f"Using custom base_url: {self._base_url}")
 
-            self._client = openai.AsyncOpenAI(**client_kwargs)
+            logger.info(f"Creating AsyncOpenAI client with kwargs keys: {list(client_kwargs.keys())}")
+            try:
+                self._client = openai.AsyncOpenAI(**client_kwargs)
+                logger.info("AsyncOpenAI client created successfully")
+            except Exception as e:
+                logger.exception(f"Failed to create AsyncOpenAI client: {e}")
+                raise
         return self._client
 
     @property
