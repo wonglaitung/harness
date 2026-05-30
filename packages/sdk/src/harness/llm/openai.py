@@ -70,20 +70,6 @@ class OpenAIClient(LLMClient):
             logger.info("OpenAI client created (sync mode for compatibility)")
         return self._client
 
-    def _get_async_client(self):
-        """Get or create the async OpenAI client."""
-        if not hasattr(self, '_async_client') or self._async_client is None:
-            logger.info("Creating AsyncOpenAI client instance...")
-            import openai
-
-            client_kwargs = {"api_key": self._api_key}
-            if self._base_url:
-                client_kwargs["base_url"] = self._base_url
-
-            self._async_client = openai.AsyncOpenAI(**client_kwargs)
-            logger.info("AsyncOpenAI client created")
-        return self._async_client
-
     @property
     def model_name(self) -> str:
         """Return the model name."""
@@ -167,35 +153,26 @@ class OpenAIClient(LLMClient):
         """
         Stream response from OpenAI with backpressure control.
 
-        Args:
-            messages: Conversation messages
-            tools: Available tools
-            system: System prompt
-            on_chunk: Callback for each text chunk
-            on_progress: Callback for progress events (including backpressure)
-            **kwargs: Additional parameters
-
-        Yields:
-            Text chunks from the response
+        Uses a sync client in a separate thread with a queue to avoid
+        qasync/Windows compatibility issues.
         """
         from harness.core import StreamingConfig, StreamingHandler
+        import queue
+        import threading
 
         client = self._get_client()
 
-        # Initialize streaming handler with backpressure control
         streaming_config = self.config.streaming_config or StreamingConfig()
         handler = StreamingHandler(
             config=streaming_config,
             on_progress=on_progress,
         )
 
-        # Build messages with system prompt
         formatted_messages = []
         if system:
             formatted_messages.append({"role": "system", "content": system})
         formatted_messages.extend(messages)
 
-        # Build request parameters
         params: dict[str, Any] = {
             "model": self.config.model,
             "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
@@ -212,17 +189,42 @@ class OpenAIClient(LLMClient):
             params["tools"] = [self._format_tool(t) for t in tools]
             params["tool_choice"] = "auto"
 
-        # Stream the response with backpressure handling
-        stream = await client.chat.completions.create(**params)
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                text = chunk.choices[0].delta.content
+        # Use sync queue to bridge thread (producer) -> coroutine (consumer)
+        chunk_queue = queue.Queue()
+        exception_holder = {}
 
-                # Create chunk and process through handler
+        def sync_stream_worker():
+            try:
+                logger.info("sync_stream_worker: Starting stream request")
+                response_stream = client.chat.completions.create(**params)
+                for chunk in response_stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        text = chunk.choices[0].delta.content
+                        chunk_queue.put(text)
+            except Exception as e:
+                logger.exception("Error in sync_stream_worker")
+                exception_holder["exception"] = e
+            finally:
+                # Sentinel to signal end of stream
+                chunk_queue.put(None)
+
+        # Start pure native thread for streaming request
+        worker_thread = threading.Thread(target=sync_stream_worker, daemon=True)
+        worker_thread.start()
+
+        # Consume queue in async coroutine
+        while True:
+            if "exception" in exception_holder:
+                raise exception_holder["exception"]
+
+            if not chunk_queue.empty():
+                text = chunk_queue.get_nowait()
+                if text is None:  # Sentinel received, stream ended
+                    break
+
                 stream_chunk = Chunk(type=ChunkType.TEXT, content=text)
                 await handler.handle(stream_chunk)
 
-                # Apply backpressure if needed
                 if handler.should_pause:
                     await asyncio.sleep(0.01)
 
@@ -230,6 +232,9 @@ class OpenAIClient(LLMClient):
                     on_chunk(text)
 
                 yield text
+            else:
+                # Queue empty, release control to prevent CPU spin
+                await asyncio.sleep(0.01)
 
     def _format_tool(self, tool: ToolDefinition) -> dict[str, Any]:
         """Format tool for OpenAI API."""
