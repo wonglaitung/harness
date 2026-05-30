@@ -6,6 +6,11 @@ import asyncio
 import sys
 from pathlib import Path
 
+# CRITICAL: Must be set BEFORE importing qasync on Windows
+# This fixes qasync crashes caused by ProactorEventLoop incompatibility
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontDatabase
