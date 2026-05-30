@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
     QTextEdit, QPushButton, QDialogButtonBox, QGroupBox,
-    QCheckBox
+    QCheckBox, QLabel
 )
 from PyQt6.QtCore import Qt
 

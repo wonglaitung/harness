@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QTextBrowser, QLineEdit, QPushButton, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QFontDatabase
 
 
 class ChatPanel(QWidget):
@@ -20,6 +20,17 @@ class ChatPanel(QWidget):
         super().__init__()
         self._setup_ui()
 
+    def _get_font(self) -> QFont:
+        """Get a suitable font for the system."""
+        font = QFont()
+        font.setPointSize(10)
+        # Try common fonts in order
+        for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
+            font.setFamily(family)
+            if QFontDatabase.families().count(family) > 0 or family in QFontDatabase.families():
+                break
+        return font
+
     def _setup_ui(self):
         """Setup UI components."""
         layout = QVBoxLayout(self)
@@ -28,7 +39,7 @@ class ChatPanel(QWidget):
         # Chat display area
         self.chat_display = QTextBrowser()
         self.chat_display.setOpenExternalLinks(True)
-        self.chat_display.setFont(QFont("Microsoft YaHei", 10))
+        self.chat_display.setFont(self._get_font())
         self.chat_display.setStyleSheet("""
             QTextBrowser {
                 background-color: #ffffff;
@@ -45,7 +56,7 @@ class ChatPanel(QWidget):
 
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("输入消息... (Enter 发送)")
-        self.input_field.setFont(QFont("Microsoft YaHei", 10))
+        self.input_field.setFont(self._get_font())
         self.input_field.setMinimumHeight(40)
         self.input_field.returnPressed.connect(self._on_send)
 
