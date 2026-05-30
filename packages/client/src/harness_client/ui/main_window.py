@@ -229,8 +229,14 @@ class MainWindow(QMainWindow):
         # Update sidebar (switch_to_session handles the swap)
         self.sidebar.switch_to_session(session_id, f"会话 {session_id[:8]}")
 
-        # Clear chat panel (in real implementation, would load session history)
+        # Clear chat panel and load session history
         self.chat_panel.clear_chat()
+        messages = self.chat_controller.get_session_messages(session_id)
+        for msg in messages:
+            if msg.role == "user":
+                self.chat_panel.append_user_message(msg.content)
+            elif msg.role == "assistant":
+                self.chat_panel.append_assistant_message(msg.content)
 
         self.statusbar.showMessage(f"已切换到会话 {session_id[:8]}", 3000)
 

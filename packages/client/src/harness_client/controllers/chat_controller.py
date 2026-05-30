@@ -58,6 +58,7 @@ class ChatController:
         self.agent: AgentHarness | None = None
         self.config = ChatConfig()
         self.state = ChatState()
+        self._session_cache: dict[str, list] = {}  # session_id -> messages
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
         self._on_tool_call: Callable | None = None
@@ -214,6 +215,10 @@ class ChatController:
                 self.state.token_usage["input"] += result.token_usage.input_tokens
                 self.state.token_usage["output"] += result.token_usage.output_tokens
 
+            # Cache session messages for later retrieval
+            if result.session:
+                self._session_cache[self.state.session_id] = result.session.messages
+
             # Yield response
             full_response = result.content
             logger.info(f"Response length: {len(full_response)} chars")
@@ -264,10 +269,11 @@ class ChatController:
 
     def get_session_history(self) -> list:
         """Get current session message history."""
-        if not self.agent:
-            return []
-        # TODO: Implement session history retrieval
-        return []
+        return self._session_cache.get(self.state.session_id, [])
+
+    def get_session_messages(self, session_id: str) -> list:
+        """Get messages for a specific session."""
+        return self._session_cache.get(session_id, [])
 
     def is_busy(self) -> bool:
         """Check if agent is processing."""
