@@ -197,8 +197,23 @@ class MainWindow(QMainWindow):
 
     def _on_new_session(self):
         """Create new session."""
+        # Get current session ID before creating new one
+        old_session_id = self.chat_controller.state.session_id
+
+        # Create new session
         self.chat_controller.new_session()
+        new_session_id = self.chat_controller.state.session_id
+
+        # Add old session to sidebar history (if not the default empty session)
+        if old_session_id and old_session_id != "default":
+            self.sidebar.add_session(old_session_id, f"会话 {old_session_id[:8]}")
+
+        # Clear chat panel
         self.chat_panel.clear_chat()
+
+        # Update sidebar to show new session as current
+        self.sidebar.update_current_session(f"会话 {new_session_id[:8]}")
+
         self.statusbar.showMessage("新会话已创建", 3000)
 
     def _on_session_delete(self, session_id: str):
