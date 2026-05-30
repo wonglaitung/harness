@@ -48,31 +48,25 @@ class OpenAIClient(LLMClient):
         self._base_url = base_url or os.environ.get("OPENAI_BASE_URL")
         self._client = None
 
+        # Eagerly initialize the client to catch import errors early
+        # This is especially important on Windows with qasync
+        logger.info(f"OpenAIClient.__init__: api_key={'*' * 8 if self._api_key else 'None'}, base_url={self._base_url}")
+        # Pre-import openai module
+        import openai
+        logger.info(f"OpenAI module pre-imported, version: {openai.__version__}")
+
     def _get_client(self):
         """Get or create the OpenAI client."""
         if self._client is None:
-            logger.info("Creating new OpenAI client...")
-            try:
-                import openai
-                logger.info(f"OpenAI module imported, version: {openai.__version__}")
-            except ImportError as e:
-                logger.error(f"Failed to import openai: {e}")
-                raise ImportError(
-                    "openai package is required. Install with: pip install openai"
-                ) from e
+            logger.info("Creating AsyncOpenAI client instance...")
+            import openai
 
             client_kwargs = {"api_key": self._api_key}
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
-                logger.info(f"Using custom base_url: {self._base_url}")
 
-            logger.info(f"Creating AsyncOpenAI client with kwargs keys: {list(client_kwargs.keys())}")
-            try:
-                self._client = openai.AsyncOpenAI(**client_kwargs)
-                logger.info("AsyncOpenAI client created successfully")
-            except Exception as e:
-                logger.exception(f"Failed to create AsyncOpenAI client: {e}")
-                raise
+            self._client = openai.AsyncOpenAI(**client_kwargs)
+            logger.info("AsyncOpenAI client created")
         return self._client
 
     @property
