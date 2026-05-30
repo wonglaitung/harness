@@ -3,6 +3,7 @@ OpenAI LLM client implementation.
 """
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 from collections.abc import AsyncIterator, Callable
@@ -47,6 +48,11 @@ class OpenAIClient(LLMClient):
 
         self._base_url = base_url or os.environ.get("OPENAI_BASE_URL")
         self._client = None
+
+        # Global thread pool for this client, avoid frequent create/destroy
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="HarnessOpenAI"
+        )
 
         # Eagerly initialize the client to catch import errors early
         # This is especially important on Windows with qasync
@@ -111,9 +117,6 @@ class OpenAIClient(LLMClient):
 
         logger.info(f"OpenAI API request: messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
 
-        # Use separate thread pool + async polling to avoid qasync/Windows issues
-        import concurrent.futures
-
         def sync_call():
             logger.info("sync_call: Starting API request")
             client = self._get_client()  # Returns sync client
@@ -122,16 +125,15 @@ class OpenAIClient(LLMClient):
             return result
 
         try:
-            # Use independent thread pool, completely separate from asyncio
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(sync_call)
+            # Use instance's thread pool directly (no 'with' to avoid shutdown issues)
+            future = self._executor.submit(sync_call)
 
-                # Async polling to check if Future is done, avoiding run_in_executor entirely
-                while not future.done():
-                    await asyncio.sleep(0.02)  # Release control, keep UI responsive
+            # Async polling to check if Future is done, avoiding run_in_executor entirely
+            while not future.done():
+                await asyncio.sleep(0.02)  # Release control, keep UI responsive
 
-                # Get result directly (already completed, non-blocking)
-                response = future.result()
+            # Get result directly (already completed, non-blocking)
+            response = future.result()
 
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
         except Exception as e:
