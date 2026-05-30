@@ -68,6 +68,11 @@ class MainWindow(QMainWindow):
         self.mcp_controller.set_change_callback(self._on_mcp_changed)
         self.skill_controller.set_change_callback(self._on_skills_changed)
 
+        # Connect chat controller callbacks for progress display
+        self.chat_controller.set_tool_call_callback(self._on_tool_call)
+        self.chat_controller.set_tool_result_callback(self._on_tool_result)
+        self.chat_controller.set_thinking_callback(self._on_thinking)
+
         # Initialize UI
         self._setup_menubar()
         self._setup_toolbar()
@@ -269,8 +274,7 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("正在处理中，请稍候...", 2000)
             return
 
-        # Show user message
-        self.chat_panel.append_user_message(message)
+        # User message is already shown by chat_panel._on_send()
         self.statusbar.showMessage("正在思考...")
 
         # Log current config
@@ -308,6 +312,18 @@ class MainWindow(QMainWindow):
         self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
         self.statusbar.showMessage(f"错误: {error}")
         self._current_worker = None
+
+    def _on_tool_call(self, tool_name: str, arguments: dict):
+        """Handle tool call event."""
+        self.chat_panel.append_tool_call(tool_name, arguments)
+
+    def _on_tool_result(self, tool_name: str, result: str, success: bool = True):
+        """Handle tool result event."""
+        self.chat_panel.append_tool_result(tool_name, result, success)
+
+    def _on_thinking(self, message: str):
+        """Handle thinking/progress event."""
+        self.chat_panel.append_thinking(message)
 
     def _on_work_dir_changed(self, path: Path):
         """Handle work directory change."""

@@ -2,6 +2,7 @@
 Chat panel for displaying conversation.
 """
 
+import markdown
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QTextBrowser, QLineEdit, QPushButton, QScrollArea
@@ -112,24 +113,49 @@ class ChatPanel(QWidget):
         # Emit signal
         self.message_sent.emit(text)
 
+    def _render_markdown(self, text: str) -> str:
+        """Render markdown to HTML."""
+        # Configure markdown extensions
+        extensions = [
+            'fenced_code',
+            'codehilite',
+            'tables',
+            'toc',
+            'nl2br',
+        ]
+        return markdown.markdown(text, extensions=extensions)
+
     def _append_message(self, role: str, content: str):
         """Append a message to the chat display."""
+        # Render markdown for assistant messages
+        if role == "assistant":
+            rendered_content = self._render_markdown(content)
+        else:
+            rendered_content = self._escape_html(content)
+
         if role == "user":
+            # User message with blue background and white text
             html = f'''
             <div style="margin: 8px 0; text-align: right;">
-                <div style="display: inline-block; background-color: #0078d4; color: white;
-                            padding: 8px 12px; border-radius: 12px; max-width: 70%;">
-                    <b>你:</b> {self._escape_html(content)}
-                </div>
+                <table style="display: inline-table; background-color: #0078d4;
+                              border-radius: 12px; max-width: 70%;" cellpadding="8" cellspacing="0">
+                    <tr><td style="color: white;">
+                        <b style="color: white;">你:</b> <span style="color: white;">{rendered_content}</span>
+                    </td></tr>
+                </table>
             </div>
             '''
         else:
+            # Assistant message with light gray background
             html = f'''
             <div style="margin: 8px 0;">
-                <div style="display: inline-block; background-color: #f0f0f0; color: #333;
-                            padding: 8px 12px; border-radius: 12px; max-width: 70%;">
-                    <b>🤖 助手:</b><br>{self._escape_html(content)}
-                </div>
+                <table style="display: inline-table; background-color: #f5f5f5;
+                              border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
+                    <tr><td style="color: #333;">
+                        <b style="color: #333;">🤖 助手:</b><br>
+                        <div style="margin-top: 4px; color: #333;">{rendered_content}</div>
+                    </td></tr>
+                </table>
             </div>
             '''
         self.chat_display.append(html)
@@ -149,6 +175,62 @@ class ChatPanel(QWidget):
     def append_user_message(self, content: str):
         """Append a user message."""
         self._append_message("user", content)
+
+    def append_tool_call(self, tool_name: str, arguments: dict):
+        """Append a tool call indicator."""
+        args_str = ", ".join(f"{k}={v}" for k, v in list(arguments.items())[:3])
+        if len(arguments) > 3:
+            args_str += "..."
+        html = f'''
+        <div style="margin: 4px 0; margin-left: 20px;">
+            <div style="display: inline-block; background-color: #e3f2fd; color: #1565c0;
+                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                🔧 调用工具: <b>{self._escape_html(tool_name)}</b>({self._escape_html(args_str)})
+            </div>
+        </div>
+        '''
+        self.chat_display.append(html)
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def append_tool_result(self, tool_name: str, result_preview: str, success: bool = True):
+        """Append a tool result indicator."""
+        preview = result_preview[:100] + "..." if len(result_preview) > 100 else result_preview
+
+        if success:
+            bg_color = "#e8f5e9"
+            text_color = "#2e7d32"
+            icon = "✅"
+        else:
+            bg_color = "#ffebee"
+            text_color = "#c62828"
+            icon = "❌"
+
+        html = f'''
+        <div style="margin: 4px 0; margin-left: 20px;">
+            <div style="display: inline-block; background-color: {bg_color}; color: {text_color};
+                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                {icon} 完成: {self._escape_html(preview)}
+            </div>
+        </div>
+        '''
+        self.chat_display.append(html)
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def append_thinking(self, message: str):
+        """Append a thinking/progress indicator."""
+        html = f'''
+        <div style="margin: 4px 0; margin-left: 20px;">
+            <div style="display: inline-block; background-color: #fff3e0; color: #e65100;
+                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                💭 {self._escape_html(message)}
+            </div>
+        </div>
+        '''
+        self.chat_display.append(html)
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def clear_chat(self):
         """Clear the chat display."""

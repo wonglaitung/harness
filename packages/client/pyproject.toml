@@ -11,6 +11,7 @@ dependencies = [
     "qasync>=0.27.1",
     "openai>=1.0.0",
     "anthropic>=0.18.0",
+    "markdown>=3.4.0",
 ]
 
 [project.optional-dependencies]

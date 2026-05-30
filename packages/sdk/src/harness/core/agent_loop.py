@@ -580,6 +580,13 @@ class AgentLoop:
 
             # Emit tool result
             status = "success" if result.success else "failed"
+            # Create result preview (first 200 chars)
+            result_preview = ""
+            if result.output:
+                result_preview = str(result.output)[:200]
+            elif result.error:
+                result_preview = str(result.error)[:200]
+
             self._emit_progress(
                 ProgressEventType.TOOL_RESULT,
                 f"Tool {tool_call.name}: {status}",
@@ -588,6 +595,7 @@ class AgentLoop:
                     "tool_call_id": tool_call.id,
                     "success": result.success,
                     "error": result.error if not result.success else None,
+                    "result": result_preview,
                 },
                 duration_ms=tool_duration,
             )

@@ -60,6 +60,9 @@ class ChatController:
         self.state = ChatState()
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
+        self._on_tool_call: Callable | None = None
+        self._on_tool_result: Callable | None = None
+        self._on_thinking: Callable | None = None
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -68,6 +71,18 @@ class ChatController:
     def set_stream_callback(self, callback: Callable[[str], None]):
         """Set callback for streaming text."""
         self._on_stream = callback
+
+    def set_tool_call_callback(self, callback: Callable[[str, dict], None]):
+        """Set callback for tool call events."""
+        self._on_tool_call = callback
+
+    def set_tool_result_callback(self, callback: Callable[[str, str, bool], None]):
+        """Set callback for tool result events."""
+        self._on_tool_result = callback
+
+    def set_thinking_callback(self, callback: Callable[[str], None]):
+        """Set callback for thinking/progress messages."""
+        self._on_thinking = callback
 
     def configure(self, config: ChatConfig):
         """Update chat configuration and reset agent."""
@@ -144,6 +159,33 @@ class ChatController:
             def on_progress(event: ProgressEvent):
                 if self._on_progress:
                     self._on_progress(event)
+
+                # Handle different event types
+                if event.type == ProgressEventType.TOOL_CALL:
+                    # Tool call started
+                    if self._on_tool_call and event.data:
+                        tool_name = event.data.get("tool", "unknown")
+                        arguments = event.data.get("arguments", {})
+                        self._on_tool_call(tool_name, arguments)
+
+                elif event.type == ProgressEventType.TOOL_RESULT:
+                    # Tool call completed
+                    if self._on_tool_result and event.data:
+                        tool_name = event.data.get("tool", "unknown")
+                        result = event.data.get("result", "")
+                        success = event.data.get("success", True)
+                        self._on_tool_result(tool_name, result, success)
+
+                elif event.type == ProgressEventType.ITERATION:
+                    # Iteration started
+                    if self._on_thinking:
+                        iteration = event.data.get("iteration", 0)
+                        self._on_thinking(f"思考中... (第 {iteration} 步)")
+
+                elif event.type == ProgressEventType.LLM_CALL:
+                    # LLM call started
+                    if self._on_thinking:
+                        self._on_thinking("正在生成回复...")
 
             # Execute
             logger.info("Calling agent.run()...")
