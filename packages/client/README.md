@@ -59,41 +59,58 @@ uv sync --all-packages
 
 ### 步骤 5: 运行客户端
 
+**方式一：模块方式**
 ```powershell
 cd packages\client
 uv run python -m harness_client
+```
+
+**方式二：入口命令**
+```powershell
+# 在项目根目录
+uv run harness-client
+
+# 或在 packages\client 目录
+cd packages\client
+uv run harness-client
 ```
 
 ---
 
 ## 常见问题
 
-### 问题 1: PyQt6 安装失败
+### 问题 1: No module named 'harness_client.__main__'
+
+确保已拉取最新代码：
+```powershell
+git pull
+uv sync --all-packages
+```
+
+### 问题 2: 找不到 harness 模块
+
+确保在项目根目录运行过：
+```powershell
+uv sync --all-packages
+```
+
+这会自动安装 SDK 和客户端到虚拟环境。
+
+### 问题 3: PyQt6 安装失败
 
 ```powershell
 # 手动安装 PyQt6
 uv pip install PyQt6 qasync
 ```
 
-### 问题 2: 找不到 harness 模块
-
-```powershell
-# 先安装 SDK
-uv pip install -e .\packages\sdk
-
-# 再运行客户端
-cd packages\client
-uv run python -m harness_client
-```
-
-### 问题 3: 缺少依赖
+### 问题 4: 缺少依赖
 
 编辑 `packages/sdk/pyproject.toml`，添加缺失的依赖后重新运行：
 ```powershell
 uv sync
 ```
 
-### 问题 4: uv 命令找不到
+### 问题 5: uv 命令找不到
 
 重启 PowerShell 或手动添加到 PATH：
 ```powershell
@@ -104,29 +121,23 @@ $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
 
 ## 一键启动脚本
 
-创建 `run.ps1` 文件：
+在项目根目录创建 `run.ps1` 文件：
 
 ```powershell
 # run.ps1 - Windows 启动脚本
 
-# 切换到项目根目录
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-# 安装依赖
 Write-Host "安装依赖..." -ForegroundColor Green
 uv sync --all-packages
 
-# 运行客户端
 Write-Host "启动 Harness Client..." -ForegroundColor Green
-Set-Location packages\client
-uv run python -m harness_client
+uv run harness-client
 ```
 
 运行方式：
 ```powershell
-# 右键 run.ps1 -> 使用 PowerShell 运行
-# 或在 PowerShell 中执行：
 .\run.ps1
 ```
 
@@ -266,7 +277,8 @@ dist/
 packages/client/
 ├── src/harness_client/
 │   ├── __init__.py
-│   ├── main.py              # 入口
+│   ├── __main__.py          # 模块入口 (python -m harness_client)
+│   ├── main.py              # 入口函数
 │   ├── app.py               # QApplication
 │   ├── ui/                  # UI 组件
 │   │   ├── main_window.py   # 主窗口
@@ -304,7 +316,7 @@ uv sync --all-packages
 ```powershell
 # 测试 SDK
 cd packages\sdk
-uv run pytest
+PYTHONPATH=src uv run pytest
 
 # 测试客户端
 cd packages\client
