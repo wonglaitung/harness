@@ -101,6 +101,21 @@ allowed-tools: read_file, glob, search_file_content, list_directory, replace, wr
 - ✅ 删除因你的改动而变得无用的导入/变量/函数
 - ❌ 不要删除预先存在的死代码，除非被要求
 
+**先读实现再写代码**：
+- 不要只看设计文档，要检查实际代码
+- 文档可能过时或不完整，代码是真实状态
+- 使用类型检查工具（mypy）在编译期发现问题
+
+```python
+# ❌ 按文档写（文档可能过时）
+return ToolResult.ok(content)
+
+# ✅ 先检查实际实现
+# python -c "from harness.types import ToolResult; print(hasattr(ToolResult, 'ok'))"
+# 如果返回 False，按实际实现写
+return ToolResult(success=True, content=content)
+```
+
 **检验标准**：每一行修改都应该能直接追溯到用户的请求
 
 ### 8. 目标驱动执行
@@ -189,6 +204,28 @@ allowed-tools: read_file, glob, search_file_content, list_directory, replace, wr
 - 每次小修改后立即验证，快速发现和修复问题
 - 测试失败时，立即修复问题再继续下一步
 - 避免累积多个未测试的修改
+
+**测试断言原则**：
+- 检查核心行为而非边界细节
+- 避免过于具体的断言（如精确字符串匹配）
+- 使用包含检查、前缀检查等适度断言
+
+```python
+# ❌ 过于具体，容易因格式变化而失败
+assert result == "exact string"
+assert result == "[REDACTED] email [REDACTED] phone"
+
+# ✅ 检查核心行为
+assert "[REDACTED]" in result
+assert result.startswith("expected_prefix")
+assert len(result) > 0
+assert "error" not in result.lower()
+```
+
+**类型一致性**：
+- 测试用例要与接口类型定义一致
+- 如果接口期望 `Pattern` 类型，不要传字符串
+- 使用类型检查工具（mypy）在编译期发现问题
 
 ---
 
@@ -331,7 +368,134 @@ allowed-tools: read_file, glob, search_file_content, list_directory, replace, wr
 ### 7. 错误处理
 完善的异常处理和错误提示
 
-### 8. 避免硬编码路径（2026-02-15新增）
+### 8. 单一数据源原则（2026-05-31新增）
+
+**核心问题**：同一数据只应在一处存储，其他地方通过查询获取。
+
+**常见错误**：
+- 状态分散：同一概念在多处存储（如 `Controller._cache`, `Panel._current_id`）
+- 数据不一致：修改一处忘记另一处
+- 同步复杂：需要手动协调多个存储点
+
+**正确做法**：
+```python
+# ❌ 错误：状态分散在多处
+class Controller:
+    _session_id: str
+    _session_cache: dict
+
+class Panel:
+    _current_session_id: str  # 重复存储！
+
+# ✅ 正确：单一数据源
+class SessionManager:
+    _sessions: dict
+    _current_id: str | None
+
+    def get_current() -> Session | None
+    def switch_to(session_id) -> bool
+
+class Controller:
+    session_manager: SessionManager  # 唯一数据源
+
+class Panel:
+    # 不存储状态，只负责渲染
+    def update_sessions(self, current, history): ...
+```
+
+**验证方法**：
+- 同一数据是否有多个存储位置？
+- 修改数据时是否需要同步多处？
+- UI 组件是否存储了本应在数据层管理的状态？
+
+### 9. UI 与数据分离（2026-05-31新增）
+
+**核心原则**：UI 组件只负责渲染，状态由数据层管理。
+
+**常见错误**：
+- UI 组件存储业务状态（如 `_current_id`）
+- UI 方法做数据操作（如 `switch_to_session()` 交换 ID）
+- 数据逻辑散落在 UI 代码中
+
+**正确做法**：
+```python
+# ❌ 错误：UI 组件做数据操作
+class SidebarPanel:
+    _current_session_id: str
+
+    def switch_to_session(self, session_id):
+        # 交换列表项的 ID...数据操作！
+        current_item.setData(session_id)
+        target_item.setData(self._current_session_id)
+
+# ✅ 正确：UI 只负责渲染
+class SidebarPanel:
+    # 不存储 _current_session_id
+
+    def update_sessions(self, current, history):
+        """被动接收数据，只负责渲染"""
+        self.session_list.clear()
+        self.session_list.addItem(f"🔵 {current.name}")
+        for s in history:
+            self.session_list.addItem(f"📄 {s.name}")
+
+# 数据操作在数据层
+class MainWindow:
+    def _on_session_switch(self, session_id):
+        self.session_manager.switch_to(session_id)
+        self._refresh_session_list()  # 通知 UI 更新
+```
+
+**验证方法**：
+- UI 组件是否有私有状态变量（`_xxx`）？
+- UI 方法是否修改了数据而非只更新显示？
+- 数据变化时，UI 是被动接收还是主动查询？
+
+### 10. 初始化即使用（2026-05-31新增）
+
+**核心原则**：如果组件初始化但未使用，要么完成实现，要么删除。
+
+**常见错误**：
+```python
+class AgentLoop:
+    def __init__(self):
+        self._error_handler = ErrorHandler()  # 初始化了
+
+    async def run(self):
+        try:
+            ...
+        except Exception as e:
+            # 没用 _error_handler，硬编码处理
+            if "rate limit" in str(e):
+                retry()
+```
+
+**正确做法**：
+```python
+# 选项1：完成实现
+async def run(self):
+    try:
+        ...
+    except Exception as e:
+        decision = self._error_handler.handle(e)
+        if decision.action == ErrorAction.RETRY:
+            ...
+
+# 选项2：删除未使用的组件
+def __init__(self):
+    # 删除 self._error_handler = ErrorHandler()
+    pass
+```
+
+**检查方法**：
+```bash
+# 检查初始化但未使用的私有变量
+grep -r "self\._\w+ =" src/ | cut -d: -f2 | sort | uniq > init.txt
+grep -r "self\._\w+\." src/ | cut -d: -f2 | sort | uniq > use.txt
+diff init.txt use.txt  # 找出未调用的变量
+```
+
+### 11. 避免硬编码路径（2026-02-15新增）
 - **十二要素应用原则**：配置应该外化，不应硬编码
 - **跨环境兼容性**：代码应能在不同环境中运行，不依赖特定路径
 - **使用相对路径**：基于脚本所在目录构建路径，而非绝对路径
@@ -385,7 +549,7 @@ cd "$SCRIPT_DIR"
 - 路径配置清晰，易于维护和修改
 - 支持多环境配置（开发、测试、生产）
 
-### 9. HTTP API超时处理（2026-02-24新增）
+### 12. HTTP API超时处理（2026-02-24新增）
 - 调用任何HTTP API时必须设置合理的超时时间
 - 使用超时装饰器或内置超时参数防止请求无限等待
 - 实现备用方案，当API调用超时时使用缓存数据或默认值
@@ -456,7 +620,7 @@ def fetch_data_from_api():
 - 备用方案在超时情况下正常工作
 - 跨平台兼容性测试通过
 
-### 10. 持续验证
+### 13. 持续验证
 每次修改后立即验证，避免累积错误
 
 ---
