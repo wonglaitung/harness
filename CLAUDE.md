@@ -124,16 +124,26 @@ packages/sdk/src/harness/
 
 ```
 packages/client/src/harness_client/
-├── ui/                       # PyQt6 组件
+├── ui/                       # PyQt6 组件（纯渲染，不存状态）
 │   ├── main_window.py        # 主窗口
 │   ├── chat_panel.py         # 对话面板
 │   ├── sidebar.py            # 左侧边栏
 │   ├── settings_dialog.py    # 设置对话框
 │   └── mcp_panel.py          # MCP 配置面板
-└── controllers/              # 控制器（连接 SDK）
+└── controllers/              # 控制器（数据层）
     ├── chat_controller.py    # 管理 AgentHarness
+    ├── session_manager.py    # 会话状态管理（单一数据源）
     ├── mcp_controller.py     # 管理 MCP 服务器
     └── skill_controller.py   # 管理技能
+```
+
+**会话管理数据流**：
+```
+SessionManager (单一数据源)
+    ↓
+MainWindow._refresh_session_list()
+    ↓
+SidebarPanel.update_sessions() (纯渲染)
 ```
 
 ### 数据流
@@ -244,3 +254,6 @@ uv run python build.py
 **会话开始时**：读取 `progress.txt` 了解项目进展，审查 `lessons.md` 检查错误
 
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
+
+# currentDate
+Today's date is 2026-05-31.
