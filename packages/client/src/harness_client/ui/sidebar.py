@@ -269,6 +269,15 @@ class SidebarPanel(QWidget):
             if session_id:
                 item.setData(Qt.ItemDataRole.UserRole, session_id)
 
+    def _current_session_name(self) -> str:
+        """Get the current session display name (without icon prefix)."""
+        if self.session_list.count() > 0:
+            item = self.session_list.item(0)
+            text = item.text()
+            return text.replace("🔵 ", "").replace("📄 ", "")
+        return "新会话"
+                item.setData(Qt.ItemDataRole.UserRole, session_id)
+
     def switch_to_session(self, session_id: str, name: str = None):
         """Switch to a different session - move it to current position."""
         # Find the session item

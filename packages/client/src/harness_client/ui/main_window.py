@@ -57,14 +57,19 @@ class AsyncWorker(QThread):
                 # Wait for all tasks to be cancelled
                 if pending:
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception:
+                pass  # Best-effort cleanup
             finally:
                 loop.close()
 
-            logger.info(f"AsyncWorker finished with result: {result[:50] if result else 'None'}...")
-            self.finished.emit(result or "")
+            logger.info(f"AsyncWorker finished with result: {str(result)[:50] if result else 'None'}...")
+            self.finished.emit(str(result) if result else "")
         except Exception as e:
             logger.exception(f"AsyncWorker error: {e}")
-            self.error.emit(f"{type(e).__name__}: {str(e)}")
+            try:
+                self.error.emit(f"{type(e).__name__}: {str(e)}")
+            except Exception:
+                pass  # Avoid crash if signal emission fails
 
 
 class MainWindow(QMainWindow):
@@ -364,6 +369,15 @@ class MainWindow(QMainWindow):
         # User message is already shown by chat_panel._on_send()
         self.statusbar.showMessage("正在思考...")
 
+        # Update session name from first user message
+        session_id = self.chat_controller.state.session_id
+        current_name = self.sidebar._current_session_name()
+        if current_name == "新会话" or current_name == "当前会话":
+            first_line = message.strip().split("\n")[0]
+            name = first_line[:20] + "..." if len(first_line) > 20 else first_line
+            if name:
+                self.sidebar.update_current_session(name, session_id)
+
         # Log current config
         config = self.chat_controller.config
         logger.info(f"Current config: provider={config.provider}, model={config.model}, api_key={'*' * 8 if config.api_key else 'NOT SET'}")
@@ -394,10 +408,6 @@ class MainWindow(QMainWindow):
                 self.chat_panel.append_assistant_message(response)
         else:
             self.chat_panel.append_assistant_message("(无响应)")
-        # Update current session name based on first user message
-        session_id = self.chat_controller.state.session_id
-        session_name = self.chat_controller.get_session_name(session_id)
-        self.sidebar.update_current_session(session_name, session_id)
         self.statusbar.showMessage(
             f"完成 | Token: {self.chat_controller.get_token_usage()}"
         )
