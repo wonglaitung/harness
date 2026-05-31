@@ -3,12 +3,16 @@ Chat panel for displaying conversation.
 """
 
 import markdown
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QTextBrowser, QLineEdit, QPushButton, QScrollArea
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont, QFontDatabase
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ChatPanel(QWidget):
@@ -21,6 +25,7 @@ class ChatPanel(QWidget):
         super().__init__()
         self._streaming_text = ""  # Buffer for streaming text
         self._is_streaming = False
+        self._stream_message_start = 0  # Cursor position where streaming message starts
         self._setup_ui()
 
     def _get_font(self) -> QFont:
@@ -242,8 +247,10 @@ class ChatPanel(QWidget):
         """Start streaming mode for assistant response."""
         self._streaming_text = ""
         self._is_streaming = True
+        # Store the initial cursor position to update in place
+        self._stream_start_position = self.chat_display.textCursor().position()
         # Add an empty assistant message that will be updated
-        html = f'''
+        html = '''
         <div style="margin: 8px 0;">
             <div id="streaming" style="display: inline-block; background-color: #f5f5f5; color: #333;
                         padding: 8px 12px; border-radius: 12px; max-width: 90%;">
@@ -253,6 +260,7 @@ class ChatPanel(QWidget):
         </div>
         '''
         self.chat_display.append(html)
+        self._stream_message_start = self.chat_display.textCursor().position()
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
@@ -262,10 +270,8 @@ class ChatPanel(QWidget):
             return
 
         self._streaming_text += chunk
-        # Update the streaming content
+        # Render the full accumulated text so far
         rendered = self._render_markdown(self._streaming_text + "▌")
-        # Use JavaScript-like approach: find and replace the streaming content
-        # For QTextBrowser, we need to regenerate the HTML
         html = f'''
         <div style="margin: 8px 0;">
             <div style="display: inline-block; background-color: #f5f5f5; color: #333;
@@ -275,13 +281,12 @@ class ChatPanel(QWidget):
             </div>
         </div>
         '''
-        # Remove last message and add updated one
+        # Replace content from the streaming start position
         cursor = self.chat_display.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-        cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+        cursor.setPosition(self._stream_message_start)
+        cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
         cursor.removeSelectedText()
-        self.chat_display.append(html)
+        cursor.insertHtml(html)
 
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -305,13 +310,12 @@ class ChatPanel(QWidget):
             </table>
         </div>
         '''
-        # Remove last message and add final one
+        # Replace content from the streaming start position
         cursor = self.chat_display.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-        cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+        cursor.setPosition(self._stream_message_start)
+        cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
         cursor.removeSelectedText()
-        self.chat_display.append(html)
+        cursor.insertHtml(html)
 
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())

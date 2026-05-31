@@ -214,12 +214,47 @@ uv run python -m harness_client
 
 ## 打包为 EXE
 
+### 前提条件
+
+- Windows 10/11
+- Python 3.10+
+- 已安装项目依赖（`uv sync --all-packages`）
+
+### 打包步骤
+
 ```powershell
 cd packages\client
-uv pip install pyinstaller
+
+# 1. 安装 PyInstaller（dev 可选依赖）
+uv sync --extra dev
+
+# 2. 执行打包
 uv run python build.py
+
 # 输出: dist/HarnessClient.exe
 ```
+
+### 清理构建产物
+
+```powershell
+uv run python build.py --clean
+```
+
+清理 `build/`、`dist/`、`__pycache__/` 及 `.spec.bak` 文件。
+
+### 打包配置
+
+打包由 `harness-client.spec` 控制，主要配置：
+
+| 配置 | 说明 |
+|------|------|
+| `console=False` | 隐藏控制台窗口 |
+| `upx=True` | UPX 压缩减小体积 |
+| `icon` | 应用图标 `resources/icons/app.ico` |
+| `datas` | 包含 `resources/` 和 SDK 源码 |
+| `hiddenimports` | PyQt6/SDK/LLM 等隐式依赖 |
+
+> **注意**：如果提示找不到 UPX，可下载 [UPX](https://upx.github.io/) 解压后将 `upx.exe` 放入 `packages/client/` 目录，或将 `upx=True` 改为 `upx=False` 跳过压缩。
 
 ---
 
