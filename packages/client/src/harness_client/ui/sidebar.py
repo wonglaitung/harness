@@ -18,14 +18,13 @@ class SidebarPanel(QWidget):
     work_dir_changed = pyqtSignal(Path)
     mcp_connect_requested = pyqtSignal(str)
     skill_load_requested = pyqtSignal(Path)
-    session_delete_requested = pyqtSignal(str)  # session_id
-    session_switch_requested = pyqtSignal(str)  # session_id
+    session_delete_requested = pyqtSignal(str)
+    session_switch_requested = pyqtSignal(str)
     session_new_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.work_dir = Path.cwd()
-        self._current_session_id = "default"
         self._setup_ui()
 
     def _setup_ui(self):
@@ -39,9 +38,6 @@ class SidebarPanel(QWidget):
         sessions_layout = QVBoxLayout(sessions_group)
 
         self.session_list = QListWidget()
-        current_item = QListWidgetItem("🔵 当前会话")
-        current_item.setData(Qt.ItemDataRole.UserRole, "default")
-        self.session_list.addItem(current_item)
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.session_list.itemClicked.connect(self._on_session_clicked)
@@ -108,75 +104,31 @@ class SidebarPanel(QWidget):
 
         layout.addWidget(work_group)
 
-        # Stretch
         layout.addStretch()
 
-    def _on_add_mcp(self):
-        """Add MCP server dialog."""
-        from harness_client.ui.mcp_panel import MCPServerDialog
-        dialog = MCPServerDialog(self)
-        if dialog.exec():
-            config = dialog.get_config()
-            # Emit signal for controller to handle
-            self.mcp_config = config
+    # === Session List Management ===
 
-    def _on_refresh_mcp(self):
-        """Refresh MCP server list."""
-        # Will be connected to controller
-        pass
+    def update_sessions(self, current_session, history_sessions: list):
+        """
+        Update the session list display.
 
-    def _on_mcp_double_click(self, item: QListWidgetItem):
-        """Handle MCP server double click."""
-        # Extract server name from item text
-        text = item.text()
-        # Format: "✓ server-name (status)" or "○ server-name (status)"
-        parts = text.split()
-        if len(parts) >= 2:
-            server_name = parts[1]
-            self.mcp_connect_requested.emit(server_name)
+        Args:
+            current_session: Current ClientSession object (or None)
+            history_sessions: List of historical ClientSession objects
+        """
+        self.session_list.clear()
 
-    def _on_load_skill(self):
-        """Load skills from directory."""
-        dir_path = QFileDialog.getExistingDirectory(self, "选择技能目录")
-        if dir_path:
-            self.skill_load_requested.emit(Path(dir_path))
+        # Current session (always first)
+        if current_session:
+            item = QListWidgetItem(f"🔵 {current_session.name}")
+            item.setData(Qt.ItemDataRole.UserRole, current_session.id)
+            self.session_list.addItem(item)
 
-    def _on_new_skill(self):
-        """Create new skill."""
-        from harness_client.ui.skill_dialog import SkillEditDialog
-        dialog = SkillEditDialog(self)
-        if dialog.exec():
-            # Will be handled by main window
-            pass
-
-    def _on_skill_double_click(self, item: QListWidgetItem):
-        """Handle skill double click."""
-        # Show skill details
-        pass
-
-    def _on_change_work_dir(self):
-        """Change work directory."""
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "选择工作目录", str(self.work_dir)
-        )
-        if dir_path:
-            self.work_dir = Path(dir_path)
-            self.work_dir_label.setText(str(self.work_dir))
-            self.work_dir_changed.emit(self.work_dir)
-
-    def add_mcp_server(self, name: str, status: str = "未连接"):
-        """Add MCP server to list."""
-        icon = "✓" if status == "已连接" else "○"
-        self.mcp_list.addItem(f"{icon} {name} ({status})")
-
-    def add_skill(self, name: str, status: str = "已启用"):
-        """Add skill to list."""
-        self.skill_list.addItem(f"{name} ({status})")
-
-    def update_work_dir(self, path: Path):
-        """Update work directory display."""
-        self.work_dir = path
-        self.work_dir_label.setText(str(path))
+        # Historical sessions
+        for session in history_sessions:
+            item = QListWidgetItem(f"📄 {session.name}")
+            item.setData(Qt.ItemDataRole.UserRole, session.id)
+            self.session_list.addItem(item)
 
     def _on_new_session(self):
         """Handle new session button click."""
@@ -201,7 +153,6 @@ class SidebarPanel(QWidget):
         if not item:
             return
 
-        # Get session info
         row = self.session_list.row(item)
         text = item.text()
 
@@ -209,15 +160,12 @@ class SidebarPanel(QWidget):
         if row == 0:
             return
 
-        # Extract session ID from item data or text
         session_id = item.data(Qt.ItemDataRole.UserRole)
         if not session_id:
-            # Fallback: use row as ID
-            session_id = f"session_{row}"
+            return
 
         menu = QMenu(self)
 
-        # Delete action
         delete_action = QAction("🗑️ 删除会话", self)
         delete_action.triggered.connect(lambda: self._on_delete_session(session_id, text))
         menu.addAction(delete_action)
@@ -226,12 +174,10 @@ class SidebarPanel(QWidget):
 
     def _on_delete_session(self, session_id: str, session_name: str):
         """Handle delete session request with confirmation."""
-        # Extract session display name
         display_name = session_name.replace("🔵 ", "").replace("📄 ", "")
         if "(" in display_name:
             display_name = display_name.split("(")[0].strip()
 
-        # Show confirmation dialog
         reply = QMessageBox.question(
             self,
             "确认删除",
@@ -243,70 +189,69 @@ class SidebarPanel(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self.session_delete_requested.emit(session_id)
 
-    def add_session(self, session_id: str, name: str = None):
-        """Add a session to the list."""
-        if name is None:
-            name = session_id[:8]
-        item = QListWidgetItem(f"📄 {name}")
-        item.setData(Qt.ItemDataRole.UserRole, session_id)
-        self.session_list.addItem(item)
+    # === MCP Servers ===
 
-    def remove_session(self, session_id: str):
-        """Remove a session from the list."""
-        for i in range(self.session_list.count()):
-            item = self.session_list.item(i)
-            if item and item.data(Qt.ItemDataRole.UserRole) == session_id:
-                self.session_list.takeItem(i)
-                break
+    def _on_add_mcp(self):
+        """Add MCP server dialog."""
+        from harness_client.ui.mcp_panel import MCPServerDialog
+        dialog = MCPServerDialog(self)
+        if dialog.exec():
+            config = dialog.get_config()
+            self.mcp_config = config
 
-    def update_current_session(self, name: str, session_id: str = None):
-        """Update the current session display name."""
-        if session_id:
-            self._current_session_id = session_id
-        if self.session_list.count() > 0:
-            item = self.session_list.item(0)
-            item.setText(f"🔵 {name}")
-            if session_id:
-                item.setData(Qt.ItemDataRole.UserRole, session_id)
+    def _on_refresh_mcp(self):
+        """Refresh MCP server list."""
+        pass
 
-    def _current_session_name(self) -> str:
-        """Get the current session display name (without icon prefix)."""
-        if self.session_list.count() > 0:
-            item = self.session_list.item(0)
-            text = item.text()
-            return text.replace("🔵 ", "").replace("📄 ", "")
-        return "新会话"
+    def _on_mcp_double_click(self, item: QListWidgetItem):
+        """Handle MCP server double click."""
+        text = item.text()
+        parts = text.split()
+        if len(parts) >= 2:
+            server_name = parts[1]
+            self.mcp_connect_requested.emit(server_name)
 
-    def switch_to_session(self, session_id: str, name: str = None):
-        """Switch to a different session - move it to current position."""
-        # Find the session item
-        target_item = None
-        target_row = -1
-        for i in range(self.session_list.count()):
-            item = self.session_list.item(i)
-            if item and item.data(Qt.ItemDataRole.UserRole) == session_id:
-                target_item = item
-                target_row = i
-                break
+    def add_mcp_server(self, name: str, status: str = "未连接"):
+        """Add MCP server to list."""
+        icon = "✓" if status == "已连接" else "○"
+        self.mcp_list.addItem(f"{icon} {name} ({status})")
 
-        if target_item is None or target_row == 0:
-            return  # Not found or already current
+    # === Skills ===
 
-        # Get current session info
-        current_item = self.session_list.item(0)
-        current_session_id = current_item.data(Qt.ItemDataRole.UserRole)
-        current_text = current_item.text()
+    def _on_load_skill(self):
+        """Load skills from directory."""
+        dir_path = QFileDialog.getExistingDirectory(self, "选择技能目录")
+        if dir_path:
+            self.skill_load_requested.emit(Path(dir_path))
 
-        # Swap: move target to current, move current to history
-        if name is None:
-            name = target_item.text().replace("📄 ", "").replace("🔵 ", "")
+    def _on_new_skill(self):
+        """Create new skill."""
+        from harness_client.ui.skill_dialog import SkillEditDialog
+        dialog = SkillEditDialog(self)
+        if dialog.exec():
+            pass
 
-        # Update current item (row 0)
-        current_item.setText(f"🔵 {name}")
-        current_item.setData(Qt.ItemDataRole.UserRole, session_id)
+    def _on_skill_double_click(self, item: QListWidgetItem):
+        """Handle skill double click."""
+        pass
 
-        # Update target item (in history)
-        target_item.setText(current_text.replace("🔵 ", "📄 "))
-        target_item.setData(Qt.ItemDataRole.UserRole, current_session_id)
+    def add_skill(self, name: str, status: str = "已启用"):
+        """Add skill to list."""
+        self.skill_list.addItem(f"{name} ({status})")
 
-        self._current_session_id = session_id
+    # === Work Directory ===
+
+    def _on_change_work_dir(self):
+        """Change work directory."""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "选择工作目录", str(self.work_dir)
+        )
+        if dir_path:
+            self.work_dir = Path(dir_path)
+            self.work_dir_label.setText(str(self.work_dir))
+            self.work_dir_changed.emit(self.work_dir)
+
+    def update_work_dir(self, path: Path):
+        """Update work directory display."""
+        self.work_dir = path
+        self.work_dir_label.setText(str(path))

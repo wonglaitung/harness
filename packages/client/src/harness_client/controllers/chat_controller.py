@@ -19,6 +19,8 @@ from harness import (
 )
 from harness.tools.builtins import ReadTool, WriteTool, GlobTool, GrepTool, BashTool
 
+from harness_client.controllers.session_manager import SessionManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,22 +35,13 @@ class ChatConfig:
     system_prompt: str = "你是一个有帮助的 AI 助手。"
 
 
-@dataclass
-class ChatState:
-    """Current chat state."""
-    is_running: bool = False
-    session_id: str = "default"
-    token_usage: dict = field(default_factory=lambda: {"input": 0, "output": 0})
-    iterations: int = 0
-
-
 class ChatController:
     """
     Controller for managing chat interactions with AgentHarness.
 
     Features:
     - Send messages and receive streaming responses
-    - Manage session and history
+    - Session management via SessionManager
     - Track token usage
     - Support progress callbacks
     """
@@ -57,14 +50,14 @@ class ChatController:
         self.work_dir = work_dir or Path.cwd()
         self.agent: AgentHarness | None = None
         self.config = ChatConfig()
-        self.state = ChatState()
-        self._session_cache: dict[str, list] = {}  # session_id -> messages
+        self.session_manager = SessionManager()
+        self._is_running = False
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
         self._on_tool_call: Callable | None = None
         self._on_tool_result: Callable | None = None
         self._on_thinking: Callable | None = None
-        self._on_text_chunk: Callable | None = None  # For streaming text
+        self._on_text_chunk: Callable | None = None
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -93,14 +86,12 @@ class ChatController:
     def configure(self, config: ChatConfig):
         """Update chat configuration and reset agent."""
         self.config = config
-        # Reset agent so it will be re-initialized with new config
         self.agent = None
 
     async def initialize(self, mcp_tools: list = None):
         """Initialize the AgentHarness with current configuration."""
         logger.info(f"Initializing agent with provider={self.config.provider}, model={self.config.model}")
 
-        # Check if API key is configured
         if not self.config.api_key:
             raise ValueError(
                 "未配置 API Key。请在设置中配置 API Key。\n\n"
@@ -109,7 +100,6 @@ class ChatController:
                 "- OpenAI: OPENAI_API_KEY"
             )
 
-        # Build SDK config
         sdk_config = HarnessConfig(
             model=self.config.model,
             api_key=self.config.api_key or None,
@@ -121,7 +111,6 @@ class ChatController:
 
         logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}")
 
-        # Default tools
         tools = [
             ReadTool(),
             WriteTool(),
@@ -129,11 +118,9 @@ class ChatController:
             GrepTool(),
         ]
 
-        # Add MCP tools if provided
         if mcp_tools:
             tools.extend(mcp_tools)
 
-        # Create agent
         logger.info("Creating AgentHarness...")
         self.agent = AgentHarness(
             config=sdk_config,
@@ -143,13 +130,13 @@ class ChatController:
 
     async def send_message(self, message: str) -> AsyncIterator[str]:
         """
-        Send a message and yield streaming response chunks.
+        Send a message and yield the response.
 
         Args:
             message: User message
 
         Yields:
-            Response text chunks
+            Response text
         """
         logger.info(f"send_message called with: {message[:50]}...")
 
@@ -157,32 +144,23 @@ class ChatController:
             logger.info("Agent not initialized, initializing now...")
             await self.initialize()
 
-        self.state.is_running = True
-        full_response = ""
+        self._is_running = True
 
-        # Cache user message before sending
-        from harness.types import Message
-        user_msg = Message(role="user", content=message)
-        if self.state.session_id not in self._session_cache:
-            self._session_cache[self.state.session_id] = []
-        self._session_cache[self.state.session_id].append(user_msg)
+        # Cache user message BEFORE sending
+        self.session_manager.add_message_to_current("user", message)
 
         try:
-            # Run agent with progress tracking
             def on_progress(event: ProgressEvent):
                 if self._on_progress:
                     self._on_progress(event)
 
-                # Handle different event types
                 if event.type == ProgressEventType.TOOL_CALL:
-                    # Tool call started
                     if self._on_tool_call and event.data:
                         tool_name = event.data.get("tool", "unknown")
                         arguments = event.data.get("arguments", {})
                         self._on_tool_call(tool_name, arguments)
 
                 elif event.type == ProgressEventType.TOOL_RESULT:
-                    # Tool call completed
                     if self._on_tool_result and event.data:
                         tool_name = event.data.get("tool", "unknown")
                         result = event.data.get("result", "")
@@ -190,47 +168,45 @@ class ChatController:
                         self._on_tool_result(tool_name, result, success)
 
                 elif event.type == ProgressEventType.ITERATION:
-                    # Iteration started
                     if self._on_thinking:
                         iteration = event.data.get("iteration", 0)
                         self._on_thinking(f"思考中... (第 {iteration} 步)")
 
                 elif event.type == ProgressEventType.LLM_CALL:
-                    # LLM call started
                     if self._on_thinking:
                         self._on_thinking("正在生成回复...")
 
                 elif event.type == ProgressEventType.TEXT_CHUNK:
-                    # Streaming text chunk
                     if self._on_text_chunk and event.data:
                         chunk = event.data.get("text", "")
                         if chunk:
                             self._on_text_chunk(chunk)
 
-            # Execute
+            current_session = self.session_manager.get_current()
+            session_id = current_session.id if current_session else None
+
             logger.info("Calling agent.run()...")
             result = await self.agent.run(
                 message,
-                session_id=self.state.session_id,
+                session_id=session_id,
                 on_progress=on_progress,
             )
             logger.info(f"agent.run() returned, iterations={result.iterations}")
 
-            # Update state
-            self.state.iterations = result.iterations
+            # Update token usage
             if result.token_usage:
-                self.state.token_usage["input"] += result.token_usage.input_tokens
-                self.state.token_usage["output"] += result.token_usage.output_tokens
+                self.session_manager.update_token_usage(
+                    result.token_usage.input_tokens,
+                    result.token_usage.output_tokens
+                )
 
-            # Cache assistant response for session history
-            if full_response:
-                assistant_msg = Message(role="assistant", content=full_response)
-                self._session_cache[self.state.session_id].append(assistant_msg)
+            # Cache assistant response AFTER receiving
+            response = result.content
+            if response:
+                self.session_manager.add_message_to_current("assistant", response)
 
-            # Yield response
-            full_response = result.content
-            logger.info(f"Response length: {len(full_response)} chars")
-            yield full_response
+            logger.info(f"Response length: {len(response)} chars")
+            yield response
 
         except ValueError as e:
             logger.error(f"ValueError: {e}")
@@ -239,73 +215,44 @@ class ChatController:
             logger.exception(f"Unexpected error: {e}")
             yield f"❌ 错误: {type(e).__name__}: {str(e)}"
         finally:
-            self.state.is_running = False
+            self._is_running = False
 
-    async def send_message_stream(self, message: str) -> AsyncIterator[str]:
-        """
-        Send a message and yield truly streaming response.
+    def new_session(self) -> str:
+        """Create a new session and return its ID."""
+        # Archive current session first
+        self.session_manager.archive_current()
+        # Create new session
+        session = self.session_manager.create()
+        # Reset agent to force re-initialization with new session
+        self.agent = None
+        return session.id
 
-        Note: Requires SDK stream() support.
-        """
-        if not self.agent:
-            await self.initialize()
+    def switch_session(self, session_id: str) -> bool:
+        """Switch to a different session."""
+        if self.session_manager.switch_to(session_id):
+            self.agent = None  # Force re-initialization
+            return True
+        return False
 
-        self.state.is_running = True
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session."""
+        return self.session_manager.delete(session_id)
 
-        try:
-            # Check if agent supports streaming
-            if hasattr(self.agent, 'stream'):
-                async for chunk in self.agent.stream(message, session_id=self.state.session_id):
-                    if chunk.content:
-                        yield chunk.content
-            else:
-                # Fallback to regular run
-                result = await self.agent.run(message, session_id=self.state.session_id)
-                yield result.content
+    def get_current_session_id(self) -> str | None:
+        """Get the current session ID."""
+        return self.session_manager.current_id
 
-        except Exception as e:
-            yield f"❌ 错误: {str(e)}"
-        finally:
-            self.state.is_running = False
-
-    def new_session(self):
-        """Start a new session."""
-        import uuid
-        self.state.session_id = str(uuid.uuid4())[:8]
-        self.state.token_usage = {"input": 0, "output": 0}
-        self.state.iterations = 0
-
-    def get_session_history(self) -> list:
-        """Get current session message history."""
-        return self._session_cache.get(self.state.session_id, [])
-
-    def get_session_messages(self, session_id: str) -> list:
-        """Get messages for a specific session."""
-        return self._session_cache.get(session_id, [])
-
-    def get_session_name(self, session_id: str) -> str:
-        """Generate a name for a session based on its first user message."""
-        messages = self._session_cache.get(session_id, [])
-        for msg in messages:
-            if msg.role == "user" and msg.content:
-                content = msg.content
-                if isinstance(content, list):
-                    content = " ".join(
-                        block.get("text", "")
-                        for block in content
-                        if isinstance(block, dict) and "text" in block
-                    )
-                # Use first line, truncate to 20 chars
-                first_line = content.strip().split("\n")[0]
-                if len(first_line) > 20:
-                    return first_line[:20] + "..."
-                return first_line or "新会话"
-        return "新会话"
+    def get_current_session(self):
+        """Get the current session object."""
+        return self.session_manager.get_current()
 
     def is_busy(self) -> bool:
         """Check if agent is processing."""
-        return self.state.is_running
+        return self._is_running
 
     def get_token_usage(self) -> dict:
-        """Get total token usage."""
-        return self.state.token_usage.copy()
+        """Get current session token usage."""
+        current = self.session_manager.get_current()
+        if current:
+            return current.token_usage.copy()
+        return {"input": 0, "output": 0}

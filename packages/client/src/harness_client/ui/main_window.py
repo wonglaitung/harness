@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout,
     QSplitter, QStatusBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMetaObject, Q_ARG
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.sidebar import SidebarPanel
@@ -41,24 +41,19 @@ class AsyncWorker(QThread):
 
     def run(self):
         try:
-            # Create a new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            # Run the coroutine
             result = loop.run_until_complete(self.coro)
 
-            # Clean up
             try:
-                # Cancel all running tasks
                 pending = asyncio.all_tasks(loop)
                 for task in pending:
                     task.cancel()
-                # Wait for all tasks to be cancelled
                 if pending:
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             except Exception:
-                pass  # Best-effort cleanup
+                pass
             finally:
                 loop.close()
 
@@ -69,7 +64,7 @@ class AsyncWorker(QThread):
             try:
                 self.error.emit(f"{type(e).__name__}: {str(e)}")
             except Exception:
-                pass  # Avoid crash if signal emission fails
+                pass
 
 
 class MainWindow(QMainWindow):
@@ -88,14 +83,12 @@ class MainWindow(QMainWindow):
         # Connect controller callbacks
         self.mcp_controller.set_change_callback(self._on_mcp_changed)
         self.skill_controller.set_change_callback(self._on_skills_changed)
-
-        # Connect chat controller callbacks for progress display
         self.chat_controller.set_tool_call_callback(self._on_tool_call)
         self.chat_controller.set_tool_result_callback(self._on_tool_result)
         self.chat_controller.set_thinking_callback(self._on_thinking)
 
         # Settings
-        self._stream_enabled = True  # Will be loaded from settings
+        self._stream_enabled = True
 
         # Initialize UI
         self._setup_menubar()
@@ -108,20 +101,23 @@ class MainWindow(QMainWindow):
         self._current_worker = None
         self.settings_manager = SettingsManager()
 
-        # Connect chat panel signals
+        # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
 
         # Load saved settings
         self._load_saved_settings()
 
+        # Initialize with a new session
+        self.chat_controller.new_session()
+        self._refresh_session_list()
+
     def _setup_menubar(self):
         """Setup menu bar."""
         menubar = self.menuBar()
 
-        # File menu
-        file_menu = menubar.addMenu("文件(&F)")
-
         from PyQt6.QtGui import QAction
+
+        file_menu = menubar.addMenu("文件(&F)")
 
         new_session_action = QAction("新建会话(&N)", self)
         new_session_action.setShortcut("Ctrl+N")
@@ -135,7 +131,6 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        # Settings menu
         settings_menu = menubar.addMenu("设置(&S)")
 
         preferences_action = QAction("首选项(&P)...", self)
@@ -143,7 +138,6 @@ class MainWindow(QMainWindow):
         preferences_action.triggered.connect(self._on_preferences)
         settings_menu.addAction(preferences_action)
 
-        # Help menu
         help_menu = menubar.addMenu("帮助(&H)")
 
         about_action = QAction("关于(&A)...", self)
@@ -175,7 +169,6 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Left sidebar
         self.sidebar = SidebarPanel()
         self.sidebar.setMaximumWidth(280)
         self.sidebar.work_dir_changed.connect(self._on_work_dir_changed)
@@ -183,10 +176,8 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_new_requested.connect(self._on_new_session)
 
-        # Right chat panel
         self.chat_panel = ChatPanel()
 
-        # Splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.sidebar)
         splitter.addWidget(self.chat_panel)
@@ -201,77 +192,156 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("就绪")
 
+    # === Session Management ===
+
+    def _refresh_session_list(self):
+        """Refresh the session list in sidebar."""
+        current = self.chat_controller.get_current_session()
+        history = self.chat_controller.session_manager.get_history_list()
+        self.sidebar.update_sessions(current, history)
+
     def _on_new_session(self):
-        """Create new session."""
-        # Get current session ID before creating new one
-        old_session_id = self.chat_controller.state.session_id
-
-        # Save old session name based on content
-        old_name = None
-        if old_session_id and old_session_id != "default":
-            old_name = self.chat_controller.get_session_name(old_session_id)
-            self.sidebar.add_session(old_session_id, old_name)
-
-        # Create new session
+        """Create a new session."""
         self.chat_controller.new_session()
-        new_session_id = self.chat_controller.state.session_id
-
-        # Clear chat panel
         self.chat_panel.clear_chat()
-
-        # Update sidebar to show new session as current
-        self.sidebar.update_current_session("新会话", new_session_id)
-
+        self._refresh_session_list()
         self.statusbar.showMessage("新会话已创建", 3000)
 
     def _on_session_switch(self, session_id: str):
-        """Handle session switch request."""
-        # Get current session ID
-        current_session_id = self.chat_controller.state.session_id
+        """Switch to a different session."""
+        if self.chat_controller.switch_session(session_id):
+            # Update sidebar
+            self._refresh_session_list()
 
-        # Switch to the new session
-        self.chat_controller.state.session_id = session_id
-        self.chat_controller.agent = None  # Force re-initialization
+            # Load session messages into chat panel
+            self.chat_panel.clear_chat()
+            session = self.chat_controller.session_manager.get(session_id)
+            if session:
+                for msg in session.messages:
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        content = " ".join(
+                            block.get("text", "")
+                            for block in content
+                            if isinstance(block, dict) and "text" in block
+                        )
+                    if msg.get("role") == "user":
+                        self.chat_panel.append_user_message(content)
+                    elif msg.get("role") == "assistant":
+                        self.chat_panel.append_assistant_message(content)
 
-        # Get session name from content
-        session_name = self.chat_controller.get_session_name(session_id)
-
-        # Update sidebar (switch_to_session handles the swap)
-        self.sidebar.switch_to_session(session_id, session_name)
-
-        # Clear chat panel and load session history
-        self.chat_panel.clear_chat()
-        messages = self.chat_controller.get_session_messages(session_id)
-        for msg in messages:
-            # Handle content that can be str or list[dict]
-            content = msg.content
-            if isinstance(content, list):
-                # Extract text from content blocks
-                content = " ".join(
-                    block.get("text", "") for block in content
-                    if isinstance(block, dict) and "text" in block
-                )
-
-            if msg.role == "user":
-                self.chat_panel.append_user_message(content)
-            elif msg.role == "assistant":
-                self.chat_panel.append_assistant_message(content)
-
-        self.statusbar.showMessage(f"已切换到会话 {session_id[:8]}", 3000)
+            self.statusbar.showMessage(f"已切换到会话", 3000)
 
     def _on_session_delete(self, session_id: str):
-        """Handle session delete request."""
-        # For now, just show a message since we don't have persistent sessions
-        # In the future, this would delete the session from storage
-        self.sidebar.remove_session(session_id)
-        self.statusbar.showMessage(f"会话已删除", 3000)
+        """Delete a session."""
+        self.chat_controller.delete_session(session_id)
+        self._refresh_session_list()
+        self.statusbar.showMessage("会话已删除", 3000)
+
+    # === Message Handling ===
+
+    def _on_message_sent(self, message: str):
+        """Handle message sent from chat panel."""
+        logger.info(f"Message sent: {message[:50]}...")
+
+        if self.chat_controller.is_busy():
+            self.statusbar.showMessage("正在处理中，请稍候...", 2000)
+            return
+
+        self.statusbar.showMessage("正在思考...")
+
+        config = self.chat_controller.config
+        logger.info(f"Current config: provider={config.provider}, model={config.model}")
+
+        async def send_and_receive():
+            response = ""
+            async for chunk in self.chat_controller.send_message(message):
+                response = chunk
+            return response
+
+        self._current_worker = AsyncWorker(send_and_receive())
+        self._current_worker.finished.connect(self._on_response_received)
+        self._current_worker.error.connect(self._on_error)
+        self._current_worker.start()
+
+    def _on_response_received(self, response: str):
+        """Handle response from agent."""
+        logger.info(f"Response received: {response[:50] if response else 'EMPTY'}...")
+
+        if response:
+            settings = self.settings_manager.get()
+            if settings.stream and len(response) > 50:
+                self._simulate_streaming(response)
+            else:
+                self.chat_panel.append_assistant_message(response)
+        else:
+            self.chat_panel.append_assistant_message("(无响应)")
+
+        # Refresh session list (name may have changed)
+        self._refresh_session_list()
+
+        self.statusbar.showMessage(
+            f"完成 | Token: {self.chat_controller.get_token_usage()}"
+        )
+        self._current_worker = None
+
+    def _simulate_streaming(self, text: str):
+        """Simulate streaming output for better UX."""
+        from PyQt6.QtCore import QTimer
+
+        self.chat_panel.start_streaming()
+        self._stream_buffer = text
+        self._stream_pos = 0
+        self._stream_timer = QTimer()
+        self._stream_timer.timeout.connect(self._stream_next_chunk)
+
+        chunk_size = max(1, len(text) // 100)
+        interval = max(10, 1500 // 100)
+
+        self._stream_chunk_size = chunk_size
+        self._stream_timer.start(interval)
+
+    def _stream_next_chunk(self):
+        """Stream the next chunk of text."""
+        if self._stream_pos >= len(self._stream_buffer):
+            self._stream_timer.stop()
+            self.chat_panel.finish_streaming()
+            return
+
+        end = min(self._stream_pos + self._stream_chunk_size, len(self._stream_buffer))
+        chunk = self._stream_buffer[self._stream_pos:end]
+        self._stream_pos = end
+
+        self.chat_panel.append_streaming_chunk(chunk)
+
+    def _on_error(self, error: str):
+        """Handle error from async operation."""
+        logger.error(f"Error received: {error}")
+        self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
+        self.statusbar.showMessage(f"错误: {error}")
+        self._current_worker = None
+
+    # === Progress Callbacks ===
+
+    def _on_tool_call(self, tool_name: str, arguments: dict):
+        """Handle tool call event."""
+        self.chat_panel.append_tool_call(tool_name, arguments)
+
+    def _on_tool_result(self, tool_name: str, result: str, success: bool = True):
+        """Handle tool result event."""
+        self.chat_panel.append_tool_result(tool_name, result, success)
+
+    def _on_thinking(self, message: str):
+        """Handle thinking/progress event."""
+        self.chat_panel.append_thinking(message)
+
+    # === Settings ===
 
     def _on_preferences(self):
         """Open preferences dialog."""
         from harness_client.ui.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self)
 
-        # Populate with current settings
         current = self.settings_manager.get()
         dialog.provider_combo.setCurrentText(current.provider)
         dialog.api_key_edit.setText(current.api_key)
@@ -294,7 +364,6 @@ class MainWindow(QMainWindow):
         from harness_client.controllers.chat_controller import ChatConfig
         from harness_client.utils.settings import AppSettings
 
-        # Create and save settings
         app_settings = AppSettings(
             provider=settings.get("provider", "anthropic"),
             api_key=settings.get("api_key", ""),
@@ -308,10 +377,8 @@ class MainWindow(QMainWindow):
         )
         self.settings_manager.save(app_settings)
 
-        # Update stream setting
         self._stream_enabled = settings.get("stream", True)
 
-        # Apply to chat controller
         chat_config = ChatConfig(
             provider=settings.get("provider", "anthropic"),
             api_key=settings.get("api_key", ""),
@@ -329,11 +396,8 @@ class MainWindow(QMainWindow):
         from harness_client.controllers.chat_controller import ChatConfig
 
         settings = self.settings_manager.get()
-
-        # Store stream setting
         self._stream_enabled = settings.stream
 
-        # Apply to chat controller
         chat_config = ChatConfig(
             provider=settings.provider,
             api_key=settings.api_key,
@@ -343,7 +407,6 @@ class MainWindow(QMainWindow):
         )
         self.chat_controller.configure(chat_config)
 
-        # Apply work directory
         if settings.work_dir:
             self.work_dir = Path(settings.work_dir)
 
@@ -358,112 +421,6 @@ class MainWindow(QMainWindow):
             "© 2024 Harness Team"
         )
 
-    def _on_message_sent(self, message: str):
-        """Handle message sent from chat panel."""
-        logger.info(f"Message sent: {message[:50]}...")
-
-        if self.chat_controller.is_busy():
-            self.statusbar.showMessage("正在处理中，请稍候...", 2000)
-            return
-
-        # User message is already shown by chat_panel._on_send()
-        self.statusbar.showMessage("正在思考...")
-
-        # Update session name from first user message
-        session_id = self.chat_controller.state.session_id
-        current_name = self.sidebar._current_session_name()
-        if current_name == "新会话" or current_name == "当前会话":
-            first_line = message.strip().split("\n")[0]
-            name = first_line[:20] + "..." if len(first_line) > 20 else first_line
-            if name:
-                self.sidebar.update_current_session(name, session_id)
-
-        # Log current config
-        config = self.chat_controller.config
-        logger.info(f"Current config: provider={config.provider}, model={config.model}, api_key={'*' * 8 if config.api_key else 'NOT SET'}")
-
-        # Start async worker
-        async def send_and_receive():
-            response = ""
-            async for chunk in self.chat_controller.send_message(message):
-                response = chunk
-            return response
-
-        self._current_worker = AsyncWorker(send_and_receive())
-        self._current_worker.finished.connect(self._on_response_received)
-        self._current_worker.error.connect(self._on_error)
-        logger.info("Starting AsyncWorker...")
-        self._current_worker.start()
-
-    def _on_response_received(self, response: str):
-        """Handle response from agent."""
-        logger.info(f"Response received: {response[:50] if response else 'EMPTY'}...")
-        if response:
-            # Check if streaming is enabled
-            settings = self.settings_manager.get()
-            if settings.stream and len(response) > 50:
-                # Simulate streaming for better UX
-                self._simulate_streaming(response)
-            else:
-                self.chat_panel.append_assistant_message(response)
-        else:
-            self.chat_panel.append_assistant_message("(无响应)")
-        self.statusbar.showMessage(
-            f"完成 | Token: {self.chat_controller.get_token_usage()}"
-        )
-        self._current_worker = None
-
-    def _simulate_streaming(self, text: str):
-        """Simulate streaming output for better UX."""
-        from PyQt6.QtCore import QTimer
-
-        self.chat_panel.start_streaming()
-        self._stream_buffer = text
-        self._stream_pos = 0
-        self._stream_timer = QTimer()
-        self._stream_timer.timeout.connect(self._stream_next_chunk)
-
-        # Calculate chunk size and interval based on text length
-        chunk_size = max(1, len(text) // 100)  # ~100 chunks
-        interval = max(10, 1500 // 100)  # ~1.5 seconds total
-
-        self._stream_chunk_size = chunk_size
-        self._stream_timer.start(interval)
-
-    def _stream_next_chunk(self):
-        """Stream the next chunk of text."""
-        if self._stream_pos >= len(self._stream_buffer):
-            self._stream_timer.stop()
-            self.chat_panel.finish_streaming()
-            return
-
-        # Get next chunk
-        end = min(self._stream_pos + self._stream_chunk_size, len(self._stream_buffer))
-        chunk = self._stream_buffer[self._stream_pos:end]
-        self._stream_pos = end
-
-        # Append chunk
-        self.chat_panel.append_streaming_chunk(chunk)
-
-    def _on_error(self, error: str):
-        """Handle error from async operation."""
-        logger.error(f"Error received: {error}")
-        self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
-        self.statusbar.showMessage(f"错误: {error}")
-        self._current_worker = None
-
-    def _on_tool_call(self, tool_name: str, arguments: dict):
-        """Handle tool call event."""
-        self.chat_panel.append_tool_call(tool_name, arguments)
-
-    def _on_tool_result(self, tool_name: str, result: str, success: bool = True):
-        """Handle tool result event."""
-        self.chat_panel.append_tool_result(tool_name, result, success)
-
-    def _on_thinking(self, message: str):
-        """Handle thinking/progress event."""
-        self.chat_panel.append_thinking(message)
-
     def _on_work_dir_changed(self, path: Path):
         """Handle work directory change."""
         self.work_dir = path
@@ -472,7 +429,6 @@ class MainWindow(QMainWindow):
 
     def _on_mcp_changed(self):
         """Handle MCP server list change."""
-        # Update sidebar
         self.sidebar.mcp_list.clear()
         for server in self.mcp_controller.get_server_list():
             status_icon = "✓" if server.status == "已连接" else "○"
@@ -480,7 +436,6 @@ class MainWindow(QMainWindow):
 
     def _on_skills_changed(self):
         """Handle skill list change."""
-        # Update sidebar
         self.sidebar.skill_list.clear()
         for skill in self.skill_controller.get_skill_list():
             status = "已启用" if skill.enabled else "已禁用"
