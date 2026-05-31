@@ -54,6 +54,23 @@ uv run python -m harness_client
 uv run python build.py
 ```
 
+**qasync 异步注意事项**：
+
+客户端使用 qasync 集成 PyQt6 和 asyncio。所有异步操作必须在主线程的 `QEventLoop` 中运行：
+
+```python
+from qasync import asyncSlot
+
+class MainWindow(QMainWindow):
+    @asyncSlot()
+    async def _on_message_sent(self, message: str):
+        """信号连接的异步方法必须使用 @asyncSlot()"""
+        async for chunk in self.controller.send_message(message):
+            response = chunk
+```
+
+**禁止**：不要在 `QThread` 中创建新的 event loop，这会导致程序静默崩溃。
+
 ### 安装可选依赖
 
 ```bash
