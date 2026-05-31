@@ -160,6 +160,13 @@ class ChatController:
         self.state.is_running = True
         full_response = ""
 
+        # Cache user message before sending
+        from harness.types import Message
+        user_msg = Message(role="user", content=message)
+        if self.state.session_id not in self._session_cache:
+            self._session_cache[self.state.session_id] = []
+        self._session_cache[self.state.session_id].append(user_msg)
+
         try:
             # Run agent with progress tracking
             def on_progress(event: ProgressEvent):
@@ -215,9 +222,10 @@ class ChatController:
                 self.state.token_usage["input"] += result.token_usage.input_tokens
                 self.state.token_usage["output"] += result.token_usage.output_tokens
 
-            # Cache session messages for later retrieval
-            if result.session:
-                self._session_cache[self.state.session_id] = result.session.messages
+            # Cache assistant response for session history
+            if full_response:
+                assistant_msg = Message(role="assistant", content=full_response)
+                self._session_cache[self.state.session_id].append(assistant_msg)
 
             # Yield response
             full_response = result.content

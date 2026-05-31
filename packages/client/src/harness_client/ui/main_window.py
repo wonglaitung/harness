@@ -233,10 +233,19 @@ class MainWindow(QMainWindow):
         self.chat_panel.clear_chat()
         messages = self.chat_controller.get_session_messages(session_id)
         for msg in messages:
+            # Handle content that can be str or list[dict]
+            content = msg.content
+            if isinstance(content, list):
+                # Extract text from content blocks
+                content = " ".join(
+                    block.get("text", "") for block in content
+                    if isinstance(block, dict) and "text" in block
+                )
+
             if msg.role == "user":
-                self.chat_panel.append_user_message(msg.content)
+                self.chat_panel.append_user_message(content)
             elif msg.role == "assistant":
-                self.chat_panel.append_assistant_message(msg.content)
+                self.chat_panel.append_assistant_message(content)
 
         self.statusbar.showMessage(f"已切换到会话 {session_id[:8]}", 3000)
 
