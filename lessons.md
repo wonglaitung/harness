@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-05-31: QThread + qasync 不兼容导致程序崩溃
+
+### 问题
+
+客户端使用 `AsyncWorker(QThread)` 运行异步协程，在创建 OpenAI client 时程序静默崩溃，无异常输出。
+
+### 原因
+
+`AsyncWorker` 在 QThread 中创建新的 event loop (`asyncio.new_event_loop()`)，这与 qasync 的 `QEventLoop` 不兼容。qasync 要求所有异步操作都在主线程的 `QEventLoop` 中运行。
+
+### 解决
+
+使用 qasync 提供的 `@asyncSlot()` 装饰器，替代 `QThread`：
+
+```python
+# ❌ 错误：QThread + 新 event loop 与 qasync 不兼容
+class AsyncWorker(QThread):
+    def run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(self.coro)
+
+self._current_worker = AsyncWorker(coro)
+self._current_worker.start()
+
+# ✅ 正确：使用 @asyncSlot() 装饰器
+from qasync import asyncSlot
+
+@asyncSlot()
+async def _on_message_sent(self, message: str):
+    async for chunk in self.chat_controller.send_message(message):
+        response = chunk
+    self._on_response_received(response)
+```
+
+### 教训
+
+1. **qasync 使用原则**：所有异步操作必须在主线程的 `QEventLoop` 中运行，不能在 QThread 中创建新的 event loop
+2. **使用 @asyncSlot()**：Qt 信号连接的异步方法应使用 `@asyncSlot()` 装饰器
+3. **查阅官方文档**：遇到框架兼容性问题，先查阅框架文档（如 qasync 文档）
+
+### 参考
+
+- qasync 文档：https://github.com/CabbageDevelopment/qasync
+- 关键提交：`d5082f7 fix: Complete fix for qasync/Windows crashes`
+
+---
+
 ## 2026-05-31: 会话管理重构 - 状态分散问题
 
 ### 问题

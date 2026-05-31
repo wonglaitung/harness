@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout,
     QSplitter, QStatusBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt
+from qasync import asyncSlot
 
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.sidebar import SidebarPanel
@@ -28,43 +29,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-
-class AsyncWorker(QThread):
-    """Worker thread for async operations with proper event loop handling."""
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, coro, parent=None):
-        super().__init__(parent)
-        self.coro = coro
-
-    def run(self):
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            result = loop.run_until_complete(self.coro)
-
-            try:
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            except Exception:
-                pass
-            finally:
-                loop.close()
-
-            logger.info(f"AsyncWorker finished with result: {str(result)[:50] if result else 'None'}...")
-            self.finished.emit(str(result) if result else "")
-        except Exception as e:
-            logger.exception(f"AsyncWorker error: {e}")
-            try:
-                self.error.emit(f"{type(e).__name__}: {str(e)}")
-            except Exception:
-                pass
 
 
 class MainWindow(QMainWindow):
@@ -98,7 +62,7 @@ class MainWindow(QMainWindow):
 
         # State
         self.work_dir = Path.cwd()
-        self._current_worker = None
+        self._is_processing = False
         self.settings_manager = SettingsManager()
 
         # Connect signals
@@ -240,7 +204,8 @@ class MainWindow(QMainWindow):
 
     # === Message Handling ===
 
-    def _on_message_sent(self, message: str):
+    @asyncSlot()
+    async def _on_message_sent(self, message: str):
         """Handle message sent from chat panel."""
         logger.info(f"Message sent: {message[:50]}...")
 
@@ -253,16 +218,14 @@ class MainWindow(QMainWindow):
         config = self.chat_controller.config
         logger.info(f"Current config: provider={config.provider}, model={config.model}")
 
-        async def send_and_receive():
+        try:
             response = ""
             async for chunk in self.chat_controller.send_message(message):
                 response = chunk
-            return response
-
-        self._current_worker = AsyncWorker(send_and_receive())
-        self._current_worker.finished.connect(self._on_response_received)
-        self._current_worker.error.connect(self._on_error)
-        self._current_worker.start()
+            self._on_response_received(response)
+        except Exception as e:
+            logger.exception(f"Error in _on_message_sent: {e}")
+            self._on_error(f"{type(e).__name__}: {str(e)}")
 
     def _on_response_received(self, response: str):
         """Handle response from agent."""
@@ -283,7 +246,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage(
             f"完成 | Token: {self.chat_controller.get_token_usage()}"
         )
-        self._current_worker = None
+        self._is_processing = False
 
     def _simulate_streaming(self, text: str):
         """Simulate streaming output for better UX."""
@@ -319,7 +282,7 @@ class MainWindow(QMainWindow):
         logger.error(f"Error received: {error}")
         self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
         self.statusbar.showMessage(f"错误: {error}")
-        self._current_worker = None
+        self._is_processing = False
 
     # === Progress Callbacks ===
 
@@ -443,6 +406,4 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close."""
-        if self._current_worker and self._current_worker.isRunning():
-            self._current_worker.wait()
         event.accept()

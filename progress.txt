@@ -195,3 +195,19 @@
 
 提交记录:
 - refactor(client): Introduce SessionManager for centralized session state (09a2a65)
+
+### qasync 兼容性修复 ✅ 完成 (NEW)
+
+#### 问题
+重构后测试时，程序在创建 OpenAI client 时静默崩溃。原因是 `AsyncWorker(QThread)` 在子线程中创建新的 event loop，与 qasync 的 `QEventLoop` 不兼容。
+
+#### 解决
+使用 qasync 提供的 `@asyncSlot()` 装饰器替代 `QThread`：
+- 删除 `AsyncWorker` 类
+- `_on_message_sent()` 改为使用 `@asyncSlot()` 装饰器
+- 所有异步操作在主线程的 `QEventLoop` 中运行
+
+#### 教训
+- qasync 要求所有异步操作在主线程的 `QEventLoop` 中运行
+- 不能在 QThread 中创建新的 event loop
+- 遇到框架兼容性问题，先查阅框架文档

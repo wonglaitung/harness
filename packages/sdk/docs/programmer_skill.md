@@ -547,6 +547,67 @@ cd "$SCRIPT_DIR"
 - 代码可在任何目录运行而不出错
 - 项目可以轻松部署到不同位置
 - 路径配置清晰，易于维护和修改
+
+### 14. qasync 与 QThread 不兼容（2026-05-31新增）
+
+**核心原则**：使用 qasync 时，所有异步操作必须在主线程的 `QEventLoop` 中运行，不能在 QThread 中创建新的 event loop。
+
+**常见错误**：
+```python
+# ❌ 错误：QThread + 新 event loop 与 qasync 不兼容
+class AsyncWorker(QThread):
+    finished = pyqtSignal(str)
+    
+    def __init__(self, coro):
+        super().__init__()
+        self.coro = coro
+    
+    def run(self):
+        loop = asyncio.new_event_loop()  # 与 qasync 冲突！
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(self.coro)
+        self.finished.emit(result)
+
+# 使用
+self._worker = AsyncWorker(some_coro())
+self._worker.start()
+```
+
+**正确做法**：
+```python
+# ✅ 正确：使用 @asyncSlot() 装饰器
+from qasync import asyncSlot
+
+class MainWindow(QMainWindow):
+    @asyncSlot()
+    async def _on_message_sent(self, message: str):
+        """信号连接的异步方法使用 @asyncSlot()"""
+        async for chunk in self.controller.send_message(message):
+            response = chunk
+        self._on_response_received(response)
+    
+    @asyncSlot()
+    async def _on_button_clicked(self):
+        """按钮点击的异步处理"""
+        await some_async_operation()
+```
+
+**症状**：
+- 程序静默崩溃，无异常输出
+- 崩溃发生在创建网络客户端（如 OpenAI client）时
+- 日志突然中断，无后续输出
+
+**检查方法**：
+```bash
+# 检查是否有 QThread + asyncio.new_event_loop 的组合
+grep -r "QThread" src/
+grep -r "asyncio.new_event_loop" src/
+```
+
+**验证方法**：
+- 所有异步操作都在主线程执行
+- 使用 `@asyncSlot()` 装饰器处理信号连接的异步方法
+- 使用 `@asyncClose` 装饰器处理异步关闭事件
 - 支持多环境配置（开发、测试、生产）
 
 ### 12. HTTP API超时处理（2026-02-24新增）
