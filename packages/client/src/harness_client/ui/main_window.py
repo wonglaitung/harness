@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
 
     # === Message Handling ===
 
-    @asyncSlot()
+    @asyncSlot(str)
     async def _on_message_sent(self, message: str):
         """Handle message sent from chat panel."""
         logger.info(f"Message sent: {message[:50]}...")
