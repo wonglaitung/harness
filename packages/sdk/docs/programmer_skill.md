@@ -575,20 +575,20 @@ self._worker.start()
 
 **正确做法**：
 ```python
-# ✅ 正确：使用 @asyncSlot() 装饰器
+# ✅ 正确：使用 @asyncSlot() 装饰器，声明信号参数类型
 from qasync import asyncSlot
 
 class MainWindow(QMainWindow):
-    @asyncSlot()
+    @asyncSlot(str)  # 信号发送字符串参数，必须声明类型
     async def _on_message_sent(self, message: str):
-        """信号连接的异步方法使用 @asyncSlot()"""
+        """信号连接的异步方法使用 @asyncSlot(参数类型)"""
         async for chunk in self.controller.send_message(message):
             response = chunk
         self._on_response_received(response)
     
-    @asyncSlot()
+    @asyncSlot()  # 无参数的信号使用 @asyncSlot()
     async def _on_button_clicked(self):
-        """按钮点击的异步处理"""
+        """按钮点击的异步处理（无参数）"""
         await some_async_operation()
 ```
 

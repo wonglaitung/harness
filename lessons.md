@@ -32,7 +32,7 @@ self._current_worker.start()
 # ✅ 正确：使用 @asyncSlot() 装饰器
 from qasync import asyncSlot
 
-@asyncSlot()
+@asyncSlot(str)  # 必须声明信号参数类型
 async def _on_message_sent(self, message: str):
     async for chunk in self.chat_controller.send_message(message):
         response = chunk
