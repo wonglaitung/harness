@@ -4,6 +4,63 @@
 
 ---
 
+## 2026-05-31: 会话管理重构 - 状态分散问题
+
+### 问题
+
+客户端会话管理设计存在多处缺陷：
+
+1. **状态分散**：同一概念（当前会话）在多处存储
+   - `ChatController.state.session_id`
+   - `ChatController._session_cache`
+   - `SidebarPanel._current_session_id`
+
+2. **UI 与数据混合**：`SidebarPanel.switch_to_session()` 做了数据操作（交换会话 ID），违反单一职责
+
+3. **消息缓存 Bug**：
+   ```python
+   # 错误：full_response 还是空的
+   if full_response:
+       assistant_msg = Message(...)
+   full_response = result.content  # 这里才赋值
+   ```
+
+4. **线程安全隐患**：子线程写 `_session_cache`，主线程读，无同步机制
+
+### 原因
+
+功能逐步添加时，没有统一的数据模型，各组件自行存储状态。
+
+### 解决
+
+引入 `SessionManager` 作为单一数据源：
+
+```python
+class SessionManager:
+    _sessions: OrderedDict[str, ClientSession]
+    _current_id: str | None
+
+    def create() -> ClientSession
+    def get_current() -> ClientSession | None
+    def switch_to(session_id) -> bool
+    def get_history_list() -> list[ClientSession]
+```
+
+UI 组件只负责渲染，不存储状态：
+```python
+def update_sessions(self, current: ClientSession, history: list[ClientSession]):
+    """被动接收数据，只负责渲染"""
+```
+
+### 教训
+
+1. **单一数据源原则**：同一数据只应在一处存储，其他地方通过查询获取
+2. **UI 组件不存状态**：UI 只负责渲染，状态由数据层管理
+3. **数据模型要完整**：会话不只是消息列表，还应包含名称、时间戳、元数据
+4. **先设计再实现**：功能逐步添加时，要定期审视整体设计
+
+---
+
 ## 2026-05-31: QListWidget 初始项未设置数据
 
 ### 问题

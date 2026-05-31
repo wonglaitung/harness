@@ -176,3 +176,22 @@
 提交记录:
 - fix(client): Fix session switching not updating current session display (14be5e4)
 - feat(client): Load session history when switching sessions (bb9d57f)
+
+### 会话管理重构 ✅ 完成 (NEW)
+
+#### 问题分析
+- 状态分散：`ChatController._session_cache`, `SidebarPanel._current_session_id` 多处存储
+- 会话数据模型缺失：只有消息列表，无名称、时间戳、token 使用量
+- UI 与数据逻辑混合：`SidebarPanel.switch_to_session()` 在做数据操作
+- 消息缓存 Bug：助手消息未正确缓存（`full_response` 在赋值前检查）
+- 线程安全隐患：子线程和主线程同时访问 `_session_cache`
+
+#### 重构方案
+- 新增 `SessionManager` 类作为单一数据源
+- 新增 `ClientSession` 数据类（id, name, messages, timestamps, token_usage）
+- `SidebarPanel` 简化为纯 UI 组件（移除 `_current_session_id`）
+- `MainWindow` 添加 `_refresh_session_list()` 统一更新 UI
+- 修复消息缓存：在 `send_message` 正确位置缓存用户和助手消息
+
+提交记录:
+- refactor(client): Introduce SessionManager for centralized session state (09a2a65)
