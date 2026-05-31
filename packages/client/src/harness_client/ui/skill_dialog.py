@@ -3,12 +3,18 @@ Skill edit dialog for creating and editing skills.
 """
 
 from pathlib import Path
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit,
-    QTextEdit, QPushButton, QDialogButtonBox, QGroupBox,
-    QCheckBox, QLabel
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QTextEdit,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
 
 
 class SkillEditDialog(QDialog):
@@ -70,14 +76,16 @@ class SkillEditDialog(QDialog):
         content_layout = QVBoxLayout(content_group)
 
         self.content_edit = QTextEdit()
-        self.content_edit.setPlaceholderText("""
+        self.content_edit.setPlaceholderText(
+            """
 你是一个专业的...
 
 当用户请求时，请：
 
 1. **第一步**: ...
 2. **第二步**: ...
-""".strip())
+""".strip()
+        )
         self.content_edit.setMinimumHeight(200)
         content_layout.addWidget(self.content_edit)
 
@@ -90,9 +98,9 @@ class SkillEditDialog(QDialog):
 
         # Buttons
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save |
-            QDialogButtonBox.StandardButton.SaveAll |
-            QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.SaveAll
+            | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -102,6 +110,7 @@ class SkillEditDialog(QDialog):
         """Load skill from file."""
         try:
             from harness import Skill
+
             skill = Skill.from_file(path)
 
             self.name_edit.setText(skill.name)
@@ -115,7 +124,7 @@ class SkillEditDialog(QDialog):
                 if skill.triggers.patterns:
                     self.patterns_edit.setText(", ".join(skill.triggers.patterns))
 
-            if hasattr(skill, 'author'):
+            if hasattr(skill, "author"):
                 self.author_edit.setText(skill.author or "")
 
         except Exception as e:

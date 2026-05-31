@@ -3,11 +3,17 @@ MCP server configuration dialog.
 """
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit,
-    QComboBox, QPushButton, QDialogButtonBox, QGroupBox,
-    QCheckBox, QSpinBox
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGroupBox,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
 
 
 class MCPServerDialog(QDialog):
@@ -90,8 +96,7 @@ class MCPServerDialog(QDialog):
 
         # Buttons
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok |
-            QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         test_btn = QPushButton("测试连接")
         test_btn.clicked.connect(self._test_connection)
@@ -114,6 +119,7 @@ class MCPServerDialog(QDialog):
         """Test MCP server connection."""
         # TODO: Implement actual connection test
         from PyQt6.QtWidgets import QMessageBox
+
         QMessageBox.information(self, "测试连接", "连接测试功能待实现")
 
     def _load_config(self, config: dict):

@@ -2,31 +2,29 @@
 Main window for Harness Client.
 """
 
-import asyncio
 import logging
 import sys
 from pathlib import Path
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout,
-    QSplitter, QStatusBar, QMessageBox
-)
+from typing import override
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QSplitter, QStatusBar, QWidget
 from qasync import asyncSlot
 
-from harness_client.ui.chat_panel import ChatPanel
-from harness_client.ui.sidebar import SidebarPanel
 from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.skill_controller import SkillController
+from harness_client.ui.chat_panel import ChatPanel
+from harness_client.ui.sidebar import SidebarPanel
 from harness_client.utils.settings import SettingsManager
 
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stderr),
-    ]
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -110,8 +108,8 @@ class MainWindow(QMainWindow):
 
     def _setup_toolbar(self):
         """Setup toolbar."""
-        from PyQt6.QtGui import QAction
         from PyQt6.QtCore import QSize
+        from PyQt6.QtGui import QAction
 
         toolbar = self.addToolBar("Main")
         toolbar.setIconSize(QSize(24, 24))
@@ -194,7 +192,7 @@ class MainWindow(QMainWindow):
                     elif msg.get("role") == "assistant":
                         self.chat_panel.append_assistant_message(content)
 
-            self.statusbar.showMessage(f"已切换到会话", 3000)
+            self.statusbar.showMessage("已切换到会话", 3000)
 
     def _on_session_delete(self, session_id: str):
         """Delete a session."""
@@ -243,9 +241,7 @@ class MainWindow(QMainWindow):
         # Refresh session list (name may have changed)
         self._refresh_session_list()
 
-        self.statusbar.showMessage(
-            f"完成 | Token: {self.chat_controller.get_token_usage()}"
-        )
+        self.statusbar.showMessage(f"完成 | Token: {self.chat_controller.get_token_usage()}")
         self._is_processing = False
 
     def _simulate_streaming(self, text: str):
@@ -272,7 +268,7 @@ class MainWindow(QMainWindow):
             return
 
         end = min(self._stream_pos + self._stream_chunk_size, len(self._stream_buffer))
-        chunk = self._stream_buffer[self._stream_pos:end]
+        chunk = self._stream_buffer[self._stream_pos : end]
         self._stream_pos = end
 
         self.chat_panel.append_streaming_chunk(chunk)
@@ -303,6 +299,7 @@ class MainWindow(QMainWindow):
     def _on_preferences(self):
         """Open preferences dialog."""
         from harness_client.ui.settings_dialog import SettingsDialog
+
         dialog = SettingsDialog(self)
 
         current = self.settings_manager.get()
@@ -310,6 +307,7 @@ class MainWindow(QMainWindow):
         dialog.api_key_edit.setText(current.api_key)
         dialog.base_url_edit.setText(current.base_url)
         dialog.model_combo.setCurrentText(current.model)
+        dialog.context_window_combo.setCurrentText(current.context_window)
         dialog.auto_save_check.setChecked(current.auto_save)
         dialog.stream_check.setChecked(current.stream)
         dialog.max_iterations_spin.setValue(current.max_iterations)
@@ -332,6 +330,7 @@ class MainWindow(QMainWindow):
             api_key=settings.get("api_key", ""),
             base_url=settings.get("base_url", ""),
             model=settings.get("model", "claude-sonnet-4-6"),
+            context_window=settings.get("context_window", "auto"),
             auto_save=settings.get("auto_save", True),
             stream=settings.get("stream", True),
             max_iterations=settings.get("max_iterations", 20),
@@ -347,6 +346,7 @@ class MainWindow(QMainWindow):
             api_key=settings.get("api_key", ""),
             base_url=settings.get("base_url", ""),
             model=settings.get("model", "claude-sonnet-4-6"),
+            context_window=settings.get("context_window", "auto"),
             max_iterations=settings.get("max_iterations", 20),
         )
         self.chat_controller.configure(chat_config)
@@ -366,6 +366,7 @@ class MainWindow(QMainWindow):
             api_key=settings.api_key,
             base_url=settings.base_url,
             model=settings.model,
+            context_window=settings.context_window,
             max_iterations=settings.max_iterations,
         )
         self.chat_controller.configure(chat_config)
@@ -381,7 +382,7 @@ class MainWindow(QMainWindow):
             "Harness Client v0.1.0\n\n"
             "Windows 桌面客户端\n"
             "基于 Harness AI Agent SDK\n\n"
-            "© 2024 Harness Team"
+            "© 2024 Harness Team",
         )
 
     def _on_work_dir_changed(self, path: Path):
@@ -404,6 +405,7 @@ class MainWindow(QMainWindow):
             status = "已启用" if skill.enabled else "已禁用"
             self.sidebar.skill_list.addItem(f"{skill.name} ({status})")
 
+    @override
     def closeEvent(self, event):
         """Handle window close."""
         event.accept()

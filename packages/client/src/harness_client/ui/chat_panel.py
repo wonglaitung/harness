@@ -95,14 +95,15 @@ class ChatPanel(QWidget):
         layout.addLayout(input_layout)
 
         # Welcome message
-        self._append_message("assistant",
+        self._append_message(
+            "assistant",
             "你好！我是基于 Harness SDK 的 AI 助手。\n\n"
             "我可以帮助你：\n"
             "- 读取和分析文件\n"
             "- 执行命令\n"
             "- 搜索网络\n"
             "- 管理项目\n\n"
-            "请配置左侧的 MCP 服务器和技能以解锁更多功能。"
+            "请配置左侧的 MCP 服务器和技能以解锁更多功能。",
         )
 
     def _on_send(self):
@@ -124,11 +125,11 @@ class ChatPanel(QWidget):
         """Render markdown to HTML."""
         # Configure markdown extensions
         extensions = [
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'toc',
-            'nl2br',
+            "fenced_code",
+            "codehilite",
+            "tables",
+            "toc",
+            "nl2br",
         ]
         return markdown.markdown(text, extensions=extensions)
 
@@ -142,19 +143,21 @@ class ChatPanel(QWidget):
 
         if role == "user":
             # User message with blue background and white text
-            html = f'''
+            html = f"""
             <div style="margin: 8px 0; text-align: right;">
                 <table style="display: inline-table; background-color: #0078d4;
-                              border-radius: 12px; max-width: 70%;" cellpadding="8" cellspacing="0">
+                              border-radius: 12px; max-width: 70%;"
+                       cellpadding="8" cellspacing="0">
                     <tr><td style="color: white;">
-                        <b style="color: white;">你:</b> <span style="color: white;">{rendered_content}</span>
+                        <b style="color: white;">你:</b>
+                        <span style="color: white;">{rendered_content}</span>
                     </td></tr>
                 </table>
             </div>
-            '''
+            """
         else:
             # Assistant message with light gray background
-            html = f'''
+            html = f"""
             <div style="margin: 8px 0;">
                 <table style="display: inline-table; background-color: #f5f5f5;
                               border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
@@ -164,7 +167,7 @@ class ChatPanel(QWidget):
                     </td></tr>
                 </table>
             </div>
-            '''
+            """
         self.chat_display.append(html)
 
         # Scroll to bottom
@@ -188,14 +191,14 @@ class ChatPanel(QWidget):
         args_str = ", ".join(f"{k}={v}" for k, v in list(arguments.items())[:3])
         if len(arguments) > 3:
             args_str += "..."
-        html = f'''
+        html = f"""
         <div style="margin: 4px 0; margin-left: 20px;">
             <div style="display: inline-block; background-color: #e3f2fd; color: #1565c0;
                         padding: 4px 8px; border-radius: 4px; font-size: 12px;">
                 🔧 调用工具: <b>{self._escape_html(tool_name)}</b>({self._escape_html(args_str)})
             </div>
         </div>
-        '''
+        """
         self.chat_display.append(html)
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -213,28 +216,28 @@ class ChatPanel(QWidget):
             text_color = "#c62828"
             icon = "❌"
 
-        html = f'''
+        html = f"""
         <div style="margin: 4px 0; margin-left: 20px;">
             <div style="display: inline-block; background-color: {bg_color}; color: {text_color};
                         padding: 4px 8px; border-radius: 4px; font-size: 12px;">
                 {icon} 完成: {self._escape_html(preview)}
             </div>
         </div>
-        '''
+        """
         self.chat_display.append(html)
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def append_thinking(self, message: str):
         """Append a thinking/progress indicator."""
-        html = f'''
+        html = f"""
         <div style="margin: 4px 0; margin-left: 20px;">
             <div style="display: inline-block; background-color: #fff3e0; color: #e65100;
                         padding: 4px 8px; border-radius: 4px; font-size: 12px;">
                 💭 {self._escape_html(message)}
             </div>
         </div>
-        '''
+        """
         self.chat_display.append(html)
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -250,15 +253,15 @@ class ChatPanel(QWidget):
         # Store the initial cursor position to update in place
         self._stream_start_position = self.chat_display.textCursor().position()
         # Add an empty assistant message that will be updated
-        html = '''
+        html = """
         <div style="margin: 8px 0;">
-            <div id="streaming" style="display: inline-block; background-color: #f5f5f5; color: #333;
-                        padding: 8px 12px; border-radius: 12px; max-width: 90%;">
+            <div id="streaming" style="display: inline-block; background-color: #f5f5f5;
+                        color: #333; padding: 8px 12px; border-radius: 12px; max-width: 90%;">
                 <b style="color: #333;">🤖 助手:</b><br>
                 <div id="streaming-content" style="margin-top: 4px; color: #333;">▌</div>
             </div>
         </div>
-        '''
+        """
         self.chat_display.append(html)
         self._stream_message_start = self.chat_display.textCursor().position()
         scrollbar = self.chat_display.verticalScrollBar()
@@ -272,7 +275,7 @@ class ChatPanel(QWidget):
         self._streaming_text += chunk
         # Render the full accumulated text so far
         rendered = self._render_markdown(self._streaming_text + "▌")
-        html = f'''
+        html = f"""
         <div style="margin: 8px 0;">
             <div style="display: inline-block; background-color: #f5f5f5; color: #333;
                         padding: 8px 12px; border-radius: 12px; max-width: 90%;">
@@ -280,7 +283,7 @@ class ChatPanel(QWidget):
                 <div style="margin-top: 4px; color: #333;">{rendered}</div>
             </div>
         </div>
-        '''
+        """
         # Replace content from the streaming start position
         cursor = self.chat_display.textCursor()
         cursor.setPosition(self._stream_message_start)
@@ -299,7 +302,7 @@ class ChatPanel(QWidget):
         self._is_streaming = False
         # Render final text without cursor
         rendered = self._render_markdown(self._streaming_text)
-        html = f'''
+        html = f"""
         <div style="margin: 8px 0;">
             <table style="display: inline-table; background-color: #f5f5f5;
                           border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
@@ -309,7 +312,7 @@ class ChatPanel(QWidget):
                 </td></tr>
             </table>
         </div>
-        '''
+        """
         # Replace content from the streaming start position
         cursor = self.chat_display.textCursor()
         cursor.setPosition(self._stream_message_start)

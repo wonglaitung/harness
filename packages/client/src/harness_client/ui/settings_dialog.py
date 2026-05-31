@@ -3,12 +3,22 @@ Settings dialog for API configuration and preferences.
 """
 
 from pathlib import Path
+
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QPushButton, QComboBox, QCheckBox,
-    QSpinBox, QDialogButtonBox, QFileDialog, QTabWidget, QWidget
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
 
 
 class SettingsDialog(QDialog):
@@ -46,22 +56,39 @@ class SettingsDialog(QDialog):
 
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)  # 允许自定义输入
-        self.model_combo.addItems([
-            "claude-sonnet-4-6",
-            "claude-opus-4-6",
-            "claude-haiku-4-5",
-            "gpt-4o",
-            "gpt-4-turbo",
-            "glm-4",
-            "glm-5",
-            "deepseek-chat",
-            "deepseek-coder",
-            "qwen-max",
-            "qwen-plus",
-        ])
+        self.model_combo.addItems(
+            [
+                "claude-sonnet-4-6",
+                "claude-opus-4-6",
+                "claude-haiku-4-5",
+                "gpt-4o",
+                "gpt-4-turbo",
+                "glm-4",
+                "glm-5",
+                "deepseek-chat",
+                "deepseek-coder",
+                "qwen-max",
+                "qwen-plus",
+            ]
+        )
         self.model_combo.setCurrentText("claude-sonnet-4-6")
         self.model_combo.lineEdit().setPlaceholderText("选择或输入模型名称")
         api_layout.addRow("Model:", self.model_combo)
+
+        self.context_window_combo = QComboBox()
+        self.context_window_combo.setEditable(True)  # 允许自定义输入
+        self.context_window_combo.addItems(
+            [
+                "auto",
+                "32k",
+                "64k",
+                "128k",
+                "200k",
+            ]
+        )
+        self.context_window_combo.setCurrentText("auto")
+        self.context_window_combo.lineEdit().setPlaceholderText("选择或输入上下文长度")
+        api_layout.addRow("Context:", self.context_window_combo)
 
         tabs.addTab(api_tab, "API")
 
@@ -107,9 +134,9 @@ class SettingsDialog(QDialog):
 
         # Buttons
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok |
-            QDialogButtonBox.StandardButton.Cancel |
-            QDialogButtonBox.StandardButton.Apply
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Apply
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -117,9 +144,7 @@ class SettingsDialog(QDialog):
 
     def _browse_work_dir(self):
         """Browse for work directory."""
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "选择工作目录", self.work_dir_edit.text()
-        )
+        dir_path = QFileDialog.getExistingDirectory(self, "选择工作目录", self.work_dir_edit.text())
         if dir_path:
             self.work_dir_edit.setText(dir_path)
 
@@ -130,6 +155,7 @@ class SettingsDialog(QDialog):
             "api_key": self.api_key_edit.text(),
             "base_url": self.base_url_edit.text(),
             "model": self.model_combo.currentText(),
+            "context_window": self.context_window_combo.currentText(),
             "auto_save": self.auto_save_check.isChecked(),
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),

@@ -9,5 +9,6 @@ import sys
 
 if sys.platform == "win32":
     import asyncio
+
     # Force SelectorEventLoop to fix qasync crashes on Windows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

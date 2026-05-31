@@ -2,10 +2,9 @@
 MCP controller - manages MCP server connections.
 """
 
-import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
-from dataclasses import dataclass, field
 
 # SDK imports
 from harness import MCPManager, MCPServerConfig
@@ -14,6 +13,7 @@ from harness import MCPManager, MCPServerConfig
 @dataclass
 class MCPServerInfo:
     """Information about an MCP server."""
+
     name: str
     transport: str
     status: str = "未连接"  # 未连接, 已连接, 错误
@@ -196,7 +196,7 @@ class MCPController:
         import json
 
         config = {"mcpServers": {}}
-        for name, info in self.servers.items():
+        for name, _info in self.servers.items():
             # Get original config from manager
             for c in self.manager.list_server_configs():
                 if c.name == name:

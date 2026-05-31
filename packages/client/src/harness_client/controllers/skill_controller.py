@@ -2,17 +2,18 @@
 Skill controller - manages skill loading and injection.
 """
 
-from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 # SDK imports
-from harness import Skill, SkillRegistry, SkillLoader, SkillInjector
+from harness import Skill, SkillInjector, SkillLoader, SkillRegistry
 
 
 @dataclass
 class SkillInfo:
     """Information about a skill."""
+
     name: str
     version: str
     description: str
@@ -167,8 +168,15 @@ class SkillController:
         """Get a skill by name."""
         return self.registry.get(name)
 
-    def create_skill(self, path: Path, name: str, description: str, content: str,
-                     keywords: list[str] = None, patterns: list[str] = None) -> bool:
+    def create_skill(
+        self,
+        path: Path,
+        name: str,
+        description: str,
+        content: str,
+        keywords: list[str] = None,
+        patterns: list[str] = None,
+    ) -> bool:
         """
         Create a new skill file.
 

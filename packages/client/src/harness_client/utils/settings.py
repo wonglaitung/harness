@@ -3,10 +3,9 @@ Settings manager for persisting user configuration.
 """
 
 import json
-from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass, asdict
 import platform
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 
 def get_config_dir() -> Path:
@@ -27,10 +26,12 @@ def get_config_dir() -> Path:
 @dataclass
 class AppSettings:
     """Application settings."""
+
     provider: str = "anthropic"
     api_key: str = ""
     base_url: str = ""
     model: str = "claude-sonnet-4-6"
+    context_window: str = "auto"  # "auto", "32k", "64k", "128k", "200k", or number string
     auto_save: bool = True
     stream: bool = True
     max_iterations: int = 20
@@ -49,6 +50,7 @@ class AppSettings:
             api_key=data.get("api_key", ""),
             base_url=data.get("base_url", ""),
             model=data.get("model", "claude-sonnet-4-6"),
+            context_window=data.get("context_window", "auto"),
             auto_save=data.get("auto_save", True),
             stream=data.get("stream", True),
             max_iterations=data.get("max_iterations", 20),
@@ -63,7 +65,7 @@ class SettingsManager:
     def __init__(self):
         self.config_dir = get_config_dir()
         self.config_file = self.config_dir / "settings.json"
-        self._settings: Optional[AppSettings] = None
+        self._settings: AppSettings | None = None
 
     def load(self) -> AppSettings:
         """Load settings from disk."""
@@ -90,8 +92,7 @@ class SettingsManager:
 
         # Write settings
         self.config_file.write_text(
-            json.dumps(settings.to_dict(), indent=2, ensure_ascii=False),
-            encoding="utf-8"
+            json.dumps(settings.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
     def get(self) -> AppSettings:

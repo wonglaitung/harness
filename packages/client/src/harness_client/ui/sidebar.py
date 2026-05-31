@@ -3,12 +3,22 @@ Sidebar panel with sessions, MCP servers, and skills.
 """
 
 from pathlib import Path
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QHBoxLayout, QGroupBox, QFileDialog, QMessageBox, QMenu
-)
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class SidebarPanel(QWidget):
@@ -183,7 +193,7 @@ class SidebarPanel(QWidget):
             "确认删除",
             f"确定要删除会话「{display_name}」吗？\n\n此操作无法撤销。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.No,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
@@ -194,6 +204,7 @@ class SidebarPanel(QWidget):
     def _on_add_mcp(self):
         """Add MCP server dialog."""
         from harness_client.ui.mcp_panel import MCPServerDialog
+
         dialog = MCPServerDialog(self)
         if dialog.exec():
             config = dialog.get_config()
@@ -227,6 +238,7 @@ class SidebarPanel(QWidget):
     def _on_new_skill(self):
         """Create new skill."""
         from harness_client.ui.skill_dialog import SkillEditDialog
+
         dialog = SkillEditDialog(self)
         if dialog.exec():
             pass
@@ -243,9 +255,7 @@ class SidebarPanel(QWidget):
 
     def _on_change_work_dir(self):
         """Change work directory."""
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "选择工作目录", str(self.work_dir)
-        )
+        dir_path = QFileDialog.getExistingDirectory(self, "选择工作目录", str(self.work_dir))
         if dir_path:
             self.work_dir = Path(dir_path)
             self.work_dir_label.setText(str(self.work_dir))

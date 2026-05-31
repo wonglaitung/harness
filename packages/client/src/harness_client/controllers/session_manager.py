@@ -2,15 +2,15 @@
 Session management for Harness Client.
 """
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
-from collections import OrderedDict
 
 
 @dataclass
 class ClientSession:
     """Single session state for the client."""
+
     id: str
     name: str = "新会话"
     messages: list = field(default_factory=list)
@@ -50,25 +50,26 @@ class SessionManager:
 
     def __init__(self, max_sessions: int = 50):
         self._sessions: OrderedDict[str, ClientSession] = OrderedDict()
-        self._current_id: Optional[str] = None
+        self._current_id: str | None = None
         self._max_sessions = max_sessions
 
     def create(self, session_id: str = None) -> ClientSession:
         """Create a new session and make it current."""
         import uuid
+
         sid = session_id or str(uuid.uuid4())[:8]
         session = ClientSession(id=sid)
         self._sessions[sid] = session
         self._current_id = sid
         return session
 
-    def get_current(self) -> Optional[ClientSession]:
+    def get_current(self) -> ClientSession | None:
         """Get the current active session."""
         if self._current_id:
             return self._sessions.get(self._current_id)
         return None
 
-    def get(self, session_id: str) -> Optional[ClientSession]:
+    def get(self, session_id: str) -> ClientSession | None:
         """Get a specific session by ID."""
         return self._sessions.get(session_id)
 
@@ -79,7 +80,7 @@ class SessionManager:
             return True
         return False
 
-    def archive_current(self) -> Optional[str]:
+    def archive_current(self) -> str | None:
         """
         Archive the current session when creating a new one.
 
@@ -122,8 +123,7 @@ class SessionManager:
             return list(self._sessions.values())
 
         # Return in reverse order (most recent first)
-        history = [s for s in reversed(self._sessions.values())
-                   if s.id != self._current_id]
+        history = [s for s in reversed(self._sessions.values()) if s.id != self._current_id]
         return history
 
     def add_message_to_current(self, role: str, content: str):
@@ -140,7 +140,7 @@ class SessionManager:
             current.token_usage["output"] += output_tokens
 
     @property
-    def current_id(self) -> Optional[str]:
+    def current_id(self) -> str | None:
         """Get the current session ID."""
         return self._current_id
 

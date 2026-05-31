@@ -6,10 +6,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication
+import qasync
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontDatabase
-import qasync
+from PyQt6.QtWidgets import QApplication
 
 from harness_client.ui.main_window import MainWindow
 

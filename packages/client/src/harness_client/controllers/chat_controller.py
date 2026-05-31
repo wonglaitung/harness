@@ -2,22 +2,19 @@
 Chat controller - manages conversation with AgentHarness.
 """
 
-import asyncio
 import logging
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncIterator, Callable
-from dataclasses import dataclass, field
 
 # SDK imports
 from harness import (
     AgentHarness,
     HarnessConfig,
-    Session,
-    LoopResult,
     ProgressEvent,
     ProgressEventType,
 )
-from harness.tools.builtins import ReadTool, WriteTool, GlobTool, GrepTool, BashTool
+from harness.tools.builtins import GlobTool, GrepTool, ReadTool, WriteTool
 
 from harness_client.controllers.session_manager import SessionManager
 
@@ -27,10 +24,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ChatConfig:
     """Chat configuration."""
+
     provider: str = "anthropic"
     api_key: str = ""
     base_url: str = ""
     model: str = "claude-sonnet-4-6"
+    context_window: str = "auto"
     max_iterations: int = 20
     system_prompt: str = "你是一个有帮助的 AI 助手。"
 
@@ -90,7 +89,9 @@ class ChatController:
 
     async def initialize(self, mcp_tools: list = None):
         """Initialize the AgentHarness with current configuration."""
-        logger.info(f"Initializing agent with provider={self.config.provider}, model={self.config.model}")
+        logger.info(
+            f"Initializing agent with provider={self.config.provider}, model={self.config.model}"
+        )
 
         if not self.config.api_key:
             raise ValueError(
@@ -105,6 +106,7 @@ class ChatController:
             api_key=self.config.api_key or None,
             provider=self.config.provider,
             base_url=self.config.base_url or None,
+            context_window=self.config.context_window,
             max_iterations=self.config.max_iterations,
             system_prompt=self.config.system_prompt,
         )
@@ -150,6 +152,7 @@ class ChatController:
         self.session_manager.add_message_to_current("user", message)
 
         try:
+
             def on_progress(event: ProgressEvent):
                 if self._on_progress:
                     self._on_progress(event)
@@ -176,11 +179,9 @@ class ChatController:
                     if self._on_thinking:
                         self._on_thinking("正在生成回复...")
 
-                elif event.type == ProgressEventType.TEXT_CHUNK:
-                    if self._on_text_chunk and event.data:
-                        chunk = event.data.get("text", "")
-                        if chunk:
-                            self._on_text_chunk(chunk)
+                elif event.type == ProgressEventType.TEXT_CHUNK:  # noqa: SIM102
+                    if self._on_text_chunk and event.data and (chunk := event.data.get("text", "")):
+                        self._on_text_chunk(chunk)
 
             current_session = self.session_manager.get_current()
             session_id = current_session.id if current_session else None
@@ -196,8 +197,7 @@ class ChatController:
             # Update token usage
             if result.token_usage:
                 self.session_manager.update_token_usage(
-                    result.token_usage.input_tokens,
-                    result.token_usage.output_tokens
+                    result.token_usage.input_tokens, result.token_usage.output_tokens
                 )
 
             # Cache assistant response AFTER receiving
