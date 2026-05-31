@@ -276,7 +276,6 @@ class SidebarPanel(QWidget):
             text = item.text()
             return text.replace("🔵 ", "").replace("📄 ", "")
         return "新会话"
-                item.setData(Qt.ItemDataRole.UserRole, session_id)
 
     def switch_to_session(self, session_id: str, name: str = None):
         """Switch to a different session - move it to current position."""
