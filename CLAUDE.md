@@ -62,9 +62,9 @@ uv run python build.py
 from qasync import asyncSlot
 
 class MainWindow(QMainWindow):
-    @asyncSlot()
+    @asyncSlot(str)
     async def _on_message_sent(self, message: str):
-        """信号连接的异步方法必须使用 @asyncSlot()"""
+        """信号连接的异步方法必须使用 @asyncSlot()，参数类型要与信号一致"""
         async for chunk in self.controller.send_message(message):
             response = chunk
 ```
