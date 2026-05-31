@@ -201,19 +201,21 @@ class MainWindow(QMainWindow):
         # Get current session ID before creating new one
         old_session_id = self.chat_controller.state.session_id
 
+        # Save old session name based on content
+        old_name = None
+        if old_session_id and old_session_id != "default":
+            old_name = self.chat_controller.get_session_name(old_session_id)
+            self.sidebar.add_session(old_session_id, old_name)
+
         # Create new session
         self.chat_controller.new_session()
         new_session_id = self.chat_controller.state.session_id
-
-        # Add old session to sidebar history (if not the default empty session)
-        if old_session_id and old_session_id != "default":
-            self.sidebar.add_session(old_session_id, f"会话 {old_session_id[:8]}")
 
         # Clear chat panel
         self.chat_panel.clear_chat()
 
         # Update sidebar to show new session as current
-        self.sidebar.update_current_session(f"会话 {new_session_id[:8]}", new_session_id)
+        self.sidebar.update_current_session("新会话", new_session_id)
 
         self.statusbar.showMessage("新会话已创建", 3000)
 
@@ -226,8 +228,11 @@ class MainWindow(QMainWindow):
         self.chat_controller.state.session_id = session_id
         self.chat_controller.agent = None  # Force re-initialization
 
+        # Get session name from content
+        session_name = self.chat_controller.get_session_name(session_id)
+
         # Update sidebar (switch_to_session handles the swap)
-        self.sidebar.switch_to_session(session_id, f"会话 {session_id[:8]}")
+        self.sidebar.switch_to_session(session_id, session_name)
 
         # Clear chat panel and load session history
         self.chat_panel.clear_chat()
@@ -389,6 +394,10 @@ class MainWindow(QMainWindow):
                 self.chat_panel.append_assistant_message(response)
         else:
             self.chat_panel.append_assistant_message("(无响应)")
+        # Update current session name based on first user message
+        session_id = self.chat_controller.state.session_id
+        session_name = self.chat_controller.get_session_name(session_id)
+        self.sidebar.update_current_session(session_name, session_id)
         self.statusbar.showMessage(
             f"完成 | Token: {self.chat_controller.get_token_usage()}"
         )

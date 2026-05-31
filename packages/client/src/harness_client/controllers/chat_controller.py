@@ -283,6 +283,25 @@ class ChatController:
         """Get messages for a specific session."""
         return self._session_cache.get(session_id, [])
 
+    def get_session_name(self, session_id: str) -> str:
+        """Generate a name for a session based on its first user message."""
+        messages = self._session_cache.get(session_id, [])
+        for msg in messages:
+            if msg.role == "user" and msg.content:
+                content = msg.content
+                if isinstance(content, list):
+                    content = " ".join(
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and "text" in block
+                    )
+                # Use first line, truncate to 20 chars
+                first_line = content.strip().split("\n")[0]
+                if len(first_line) > 20:
+                    return first_line[:20] + "..."
+                return first_line or "新会话"
+        return "新会话"
+
     def is_busy(self) -> bool:
         """Check if agent is processing."""
         return self.state.is_running
