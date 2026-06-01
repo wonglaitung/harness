@@ -784,6 +784,156 @@ class ErrorHandler:
         )
 ```
 
+## Stuck Detection & Adaptive Feedback
+
+Agent Loop 是纯前向循环——调用 LLM、执行工具、继续。当工具连续失败或返回空结果时，Agent 会空转直到 `max_iterations`，浪费 token 而无进展。
+
+Stuck Detection 用纯规则检测停滞状态，通过向上下文注入反馈提示，利用 LLM 自身的反思能力改换策略。零额外 API 调用，零独立模块。
+
+### 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| 规则层检测 | 不调用 LLM 评估，用纯规则判断是否卡住 |
+| 反馈注入 | 不新建评估器/策略适配器，往上下文加一条提示让 LLM 自行调整 |
+| 最小实现 | 先覆盖 80% 场景，收集真实数据后再扩展规则 |
+| 有界重试 | 反馈最多注入 2 次，之后直接终止 |
+
+### 检测规则
+
+```python
+def _is_stuck(self, session: Session, iteration: int) -> bool:
+    """
+    检测 Agent 是否陷入停滞状态。
+
+    仅检查最近 3 轮（6 条消息）中的工具结果：
+    - 空结果占比 > 80%：工具执行成功但无实质输出
+    - 错误结果占比 > 80%：工具连续失败
+
+    Args:
+        session: 当前会话
+        iteration: 当前迭代次数
+
+    Returns:
+        True 表示检测到停滞
+    """
+    if iteration < 3:
+        return False
+
+    recent = session.messages[-6:]
+    tool_msgs = [m for m in recent if m.role == "tool"]
+
+    if not tool_msgs:
+        return False
+
+    # 规则1：工具结果大部分为空或极短（<10 字符）
+    empty_count = sum(1 for m in tool_msgs if len(m.content.strip()) < 10)
+    if empty_count / len(tool_msgs) > 0.8:
+        return True
+
+    # 规则2：工具结果包含错误模式
+    error_count = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
+    if error_count / len(tool_msgs) > 0.8:
+        return True
+
+    return False
+```
+
+### 反馈注入
+
+当检测到停滞时，向 session 注入一条提示消息。下一轮 `context.build()` 会自然包含此提示，LLM 在后续调用中可据此调整策略。
+
+```python
+# 在 AgentLoop._run_impl() 的循环中，工具执行之后
+if self._is_stuck(session, iteration):
+    if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
+        session.add_message(Message(
+            role="user",
+            content=(
+                "[系统提示] 你似乎陷入了重复或无进展的模式。请：\n"
+                "1. 停下来评估问题本身\n"
+                "2. 尝试完全不同的方法（换个工具、换个角度）\n"
+                "3. 如果无法解决，请明确说出遇到的困难"
+            ),
+        ))
+        self._stuck_feedback_count += 1
+        self._emit_progress(
+            ProgressEventType.STATE_CHANGE,
+            f"Stuck state detected at iteration {iteration}, injecting feedback "
+            f"({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
+            {"stuck_feedback_count": self._stuck_feedback_count},
+        )
+    else:
+        # 反馈已用尽，终止循环
+        self.state = LoopState.ERROR
+        self._emit_progress(
+            ProgressEventType.ERROR,
+            "Agent stuck: repeated failures after feedback attempts",
+            {"stuck_feedback_count": self._stuck_feedback_count},
+        )
+        return LoopResult(
+            status=LoopState.ERROR,
+            session=session,
+            iterations=iteration,
+            error="Agent stuck: repeated failures after feedback attempts",
+            token_usage=total_usage,
+        )
+```
+
+### 配置
+
+```python
+@dataclass
+class LoopConfig:
+    # ... 其他配置 ...
+
+    # Stuck Detection
+    max_stuck_feedbacks: int = 2   # 最大反馈注入次数
+    stuck_min_iterations: int = 3  # 开始检测的最小迭代次数
+    stuck_error_threshold: float = 0.8  # 错误/空结果触发阈值
+```
+
+### 与现有机制的关系
+
+| 机制 | 职责 | 重复？ |
+|------|------|--------|
+| CircuitBreaker | 检测**相同工具**重复调用，熔断 | 不重复——CB 检测工具级循环，Stuck 检测结果级停滞 |
+| ErrorHandler | 处理 LLM 调用异常（重试/降级） | 不重复——EH 处理网络/API 错误，Stuck 处理逻辑停滞 |
+| CostController | 控制预算不超限 | 不重复——成本控制是硬限制，Stuck 是效率优化 |
+
+CircuitBreaker 和 Stuck Detection 的区别：
+
+```
+CircuitBreaker 检测: read_file(path="a") → read_file(path="a") → read_file(path="a") (同一调用重复)
+Stuck Detection 检测: read_file(成功但空) → grep(成功但空) → search(错误) (不同工具，但整体无进展)
+```
+
+### 进度事件
+
+Stuck Detection 新增一个进度事件场景：
+
+```python
+# 检测到停滞时
+ProgressEventType.STATE_CHANGE  # message: "Stuck state detected at iteration N"
+ProgressEventType.ERROR         # message: "Agent stuck: repeated failures after feedback attempts" (反馈用尽时)
+```
+
+不需要新增事件类型，复用 `STATE_CHANGE` 和 `ERROR` 即可。
+
+### 扩展路径
+
+当前最小实现只覆盖"工具结果空/错误"场景。后续根据真实数据可扩展：
+
+| 扩展方向 | 触发条件 | 优先级 |
+|---------|---------|--------|
+| 重复内容检测 | LLM 连续返回相似文本 | 收集数据后评估 |
+| 上下文膨胀检测 | 消息增长但无新实质信息 | 收集数据后评估 |
+| 自适应反馈 | 根据失败类型定制反馈内容 | 当前通用反馈够用 |
+
+**不加的场景**：用 LLM 评估每轮输出质量——成本翻倍、延迟翻倍，ROI 不合算。
+
+---
+
 ## 性能优化
 
 ### Token 计数与预估

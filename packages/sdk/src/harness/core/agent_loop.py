@@ -63,6 +63,11 @@ class LoopConfig:
     cost_config: CostConfig | None = None  # Cost control configuration
     security_config: SecurityConfig | None = None  # Security configuration
 
+    # Stuck Detection
+    max_stuck_feedbacks: int = 2  # Maximum feedback injection attempts
+    stuck_min_iterations: int = 3  # Minimum iterations before stuck detection
+    stuck_error_threshold: float = 0.8  # Error/empty ratio threshold to trigger
+
 
 class AgentLoop:
     """
@@ -95,6 +100,7 @@ class AgentLoop:
         self._loop_start_time: float | None = None
         self._last_event_time: float | None = None
         self._iteration = 0  # Track current iteration for error context
+        self._stuck_feedback_count = 0  # Track stuck feedback injections
 
         # Initialize circuit breaker
         self._circuit_breaker = CircuitBreaker(
@@ -248,6 +254,7 @@ class AgentLoop:
         iteration = 0
         total_usage = session.token_usage
         self._iteration = 0  # Reset for error handler context
+        self._stuck_feedback_count = 0  # Reset for stuck detection
 
         try:
             logger.info(f"Starting loop, max_iterations={self.config.max_iterations}")
@@ -412,17 +419,58 @@ class AgentLoop:
                         session,
                     )
 
-                    # Add tool results to session
+                    # Add tool results to session (encode errors in content for stuck detection)
                     for result in tool_results:
+                        content = result.content if result.success else f"Error: {result.error}"
                         tool_msg = Message(
                             role="tool",
-                            content=result.content,
-                            metadata={"tool_call_id": result.tool_call_id},
+                            content=content,
+                            metadata={
+                                "tool_call_id": result.tool_call_id,
+                                "is_error": not result.success,
+                            },
                         )
                         session.add_message(tool_msg)
 
                     iteration += 1
                     self._iteration = iteration
+
+                    # Stuck detection: check if agent is making progress
+                    if self._is_stuck(session, iteration):
+                        if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
+                            session.add_message(Message(
+                                role="user",
+                                content=(
+                                    "[系统提示] 你似乎陷入了重复或无进展的模式。请：\n"
+                                    "1. 停下来评估问题本身\n"
+                                    "2. 尝试完全不同的方法（换个工具、换个角度）\n"
+                                    "3. 如果无法解决，请明确说出遇到的困难"
+                                ),
+                            ))
+                            self._stuck_feedback_count += 1
+                            self._emit_progress(
+                                ProgressEventType.STATE_CHANGE,
+                                f"Stuck state detected at iteration {iteration}, injecting feedback "
+                                f"({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
+                                {"stuck_feedback_count": self._stuck_feedback_count},
+                            )
+                        else:
+                            # Feedback exhausted, terminate
+                            self.state = LoopState.STUCK
+                            self._emit_progress(
+                                ProgressEventType.ERROR,
+                                "Agent stuck: repeated failures after feedback attempts",
+                                {"stuck_feedback_count": self._stuck_feedback_count},
+                            )
+                            return LoopResult(
+                                status=LoopState.STUCK,
+                                session=session,
+                                messages=session.messages,
+                                iterations=iteration,
+                                error="Agent stuck: repeated failures after feedback attempts",
+                                token_usage=total_usage,
+                            )
+
                     continue
 
                 # Done!
@@ -609,6 +657,43 @@ class AgentLoop:
         """Interrupt the current loop."""
         self._interrupt_flag = True
 
+    def _is_stuck(self, session: Session, iteration: int) -> bool:
+        """
+        Detect if the agent is stuck in a non-progressing state.
+
+        Checks recent tool results for patterns of empty or error responses.
+        Uses pure rules (no LLM calls) for zero-cost detection.
+
+        Args:
+            session: Current session with message history
+            iteration: Current iteration number
+
+        Returns:
+            True if stuck state is detected
+        """
+        if iteration < self.config.stuck_min_iterations:
+            return False
+
+        recent = session.messages[-6:]  # Last 3 rounds
+        tool_msgs = [m for m in recent if m.role == "tool"]
+
+        if not tool_msgs:
+            return False
+
+        threshold = self.config.stuck_error_threshold
+
+        # Rule 1: Most tool results are empty or very short (< 10 chars)
+        empty_count = sum(1 for m in tool_msgs if len(m.content.strip()) < 10)
+        if len(tool_msgs) > 0 and empty_count / len(tool_msgs) > threshold:
+            return True
+
+        # Rule 2: Most tool results contain error patterns
+        error_count = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
+        if len(tool_msgs) > 0 and error_count / len(tool_msgs) > threshold:
+            return True
+
+        return False
+
     def create_snapshot(
         self,
         session: Session,
@@ -694,10 +779,14 @@ class AgentLoop:
                     session,
                 )
                 for result in tool_results:
+                    content = result.content if result.success else f"Error: {result.error}"
                     tool_msg = Message(
                         role="tool",
-                        content=result.content,
-                        metadata={"tool_call_id": result.tool_call_id},
+                        content=content,
+                        metadata={
+                            "tool_call_id": result.tool_call_id,
+                            "is_error": not result.success,
+                        },
                     )
                     session.add_message(tool_msg)
                 iteration += 1
@@ -783,10 +872,14 @@ class AgentLoop:
                     tool_results = await self._execute_tools(response.tool_calls, session)
 
                     for result in tool_results:
+                        content = result.content if result.success else f"Error: {result.error}"
                         tool_msg = Message(
                             role="tool",
-                            content=result.content,
-                            metadata={"tool_call_id": result.tool_call_id},
+                            content=content,
+                            metadata={
+                                "tool_call_id": result.tool_call_id,
+                                "is_error": not result.success,
+                            },
                         )
                         session.add_message(tool_msg)
 

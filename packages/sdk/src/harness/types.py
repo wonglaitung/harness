@@ -71,6 +71,7 @@ class LoopState(Enum):
     COMPLETED = "completed"          # 完成
     ERROR = "error"                  # 错误状态
     INTERRUPTED = "interrupted"      # 被中断
+    STUCK = "stuck"                  # 陷入停滞
 
 
 class StopReason(Enum):
