@@ -21,6 +21,13 @@ from harness.core.hooks import (
     LoggingHook,
     MaxToolCallsHook,
 )
+from harness.core.ralph_loop import RalphLoopConfig, RalphLoopHook
+from harness.core.subagent import (
+    SubAgentConfig,
+    SubAgentManager,
+    SubAgentResult,
+    SubAgentStatus,
+)
 from harness.core.observability import (
     ObservabilityConfig,
     ObservabilityManager,
@@ -63,6 +70,14 @@ __all__ = [
     "LoggingHook",
     "AbortOnDangerousToolHook",
     "MaxToolCallsHook",
+    # Ralph Loop
+    "RalphLoopHook",
+    "RalphLoopConfig",
+    # Sub-Agent
+    "SubAgentConfig",
+    "SubAgentManager",
+    "SubAgentResult",
+    "SubAgentStatus",
     # Observability
     "ObservabilityManager",
     "ObservabilityConfig",

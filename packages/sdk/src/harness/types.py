@@ -522,6 +522,7 @@ class HookAction(Enum):
     - INJECT_MESSAGE: Add a message to the context
     - MODIFY_ARGS: Modify tool arguments (before execution)
     - MODIFY_RESULT: Modify tool result (after execution)
+    - REINJECT: Clear context and reinject a prompt (for Ralph Loop)
     """
     CONTINUE = "continue"
     ABORT = "abort"
@@ -529,6 +530,7 @@ class HookAction(Enum):
     INJECT_MESSAGE = "inject_message"
     MODIFY_ARGS = "modify_args"
     MODIFY_RESULT = "modify_result"
+    REINJECT = "reinject"
 
 
 @dataclass

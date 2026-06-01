@@ -278,3 +278,33 @@
 
 提交记录:
 - feat(sdk): Implement Lifecycle Hooks (P0) and Dynamic System Prompt Assembly (P0)
+
+### Phase 18: Ralph Loop (P1) ✅ 完成 (NEW)
+
+#### 实现
+- RalphLoopConfig: 配置（max_loops, task_complete_check, continuation_prompt_template）
+- RalphLoopHook: 通过 ON_EXIT_ATTEMPT 钩子拦截提前退出
+- 任务完成检测：关键词检测 + 自定义检测函数
+- 上下文重置：保存进度、重置上下文、注入继续提示
+- 内置完成短语检测：task complete, all done, finished successfully 等
+- 内置未完成短语检测：I'll continue, next step 等
+
+测试状态: 12 个新增测试通过
+
+### Phase 19: Sub-Agent 管理 (P1) ✅ 完成 (NEW)
+
+#### 实现
+- SubAgentConfig: 子代理配置（name, task, tools, max_iterations, report_format）
+- SubAgentStatus: 状态枚举（PENDING, RUNNING, COMPLETED, FAILED, CANCELLED）
+- SubAgentResult: 结果数据类（success, summary, full_response, structured_result）
+- SubAgentManager: 子代理管理器
+  - spawn(): 创建子代理
+  - run(): 运行单个子代理
+  - run_all(): 并行运行所有子代理
+  - cancel(): 取消子代理
+  - clear(): 清除所有子代理
+
+测试状态: 13 个新增测试通过，总计 349 个测试通过
+
+提交记录:
+- feat(sdk): Implement Ralph Loop and Sub-Agent Management (P1)
