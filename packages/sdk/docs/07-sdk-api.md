@@ -855,6 +855,10 @@ class RunResult:
     def was_interrupted(self) -> bool:
         return self.status == LoopState.INTERRUPTED
 
+    @property
+    def was_stuck(self) -> bool:
+        return self.status == LoopState.STUCK
+
 
 @dataclass
 class StreamChunk:

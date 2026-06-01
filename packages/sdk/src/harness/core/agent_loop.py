@@ -66,7 +66,7 @@ class LoopConfig:
     # Stuck Detection
     max_stuck_feedbacks: int = 2  # Maximum feedback injection attempts
     stuck_min_iterations: int = 3  # Minimum iterations before stuck detection
-    stuck_error_threshold: float = 0.8  # Error/empty ratio threshold to trigger
+    stuck_consecutive_failures: int = 3  # Consecutive empty/error results to trigger
 
 
 class AgentLoop:
@@ -438,16 +438,15 @@ class AgentLoop:
                     # Stuck detection: check if agent is making progress
                     if self._is_stuck(session, iteration):
                         if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
+                            self._stuck_feedback_count += 1
+                            feedback = self._generate_stuck_feedback(
+                                self._stuck_feedback_count, session
+                            )
                             session.add_message(Message(
                                 role="user",
-                                content=(
-                                    "[系统提示] 你似乎陷入了重复或无进展的模式。请：\n"
-                                    "1. 停下来评估问题本身\n"
-                                    "2. 尝试完全不同的方法（换个工具、换个角度）\n"
-                                    "3. 如果无法解决，请明确说出遇到的困难"
-                                ),
+                                content=feedback,
+                                metadata={"type": "stuck_feedback", "injected": True},
                             ))
-                            self._stuck_feedback_count += 1
                             self._emit_progress(
                                 ProgressEventType.STATE_CHANGE,
                                 f"Stuck state detected at iteration {iteration}, injecting feedback "
@@ -662,7 +661,8 @@ class AgentLoop:
         Detect if the agent is stuck in a non-progressing state.
 
         Checks recent tool results for patterns of empty or error responses.
-        Uses pure rules (no LLM calls) for zero-cost detection.
+        Uses absolute count (not ratio) for predictable behavior.
+        No LLM calls — zero-cost detection.
 
         Args:
             session: Current session with message history
@@ -677,22 +677,75 @@ class AgentLoop:
         recent = session.messages[-6:]  # Last 3 rounds
         tool_msgs = [m for m in recent if m.role == "tool"]
 
-        if not tool_msgs:
+        if len(tool_msgs) < self.config.stuck_consecutive_failures:
             return False
 
-        threshold = self.config.stuck_error_threshold
+        n = self.config.stuck_consecutive_failures
 
-        # Rule 1: Most tool results are empty or very short (< 10 chars)
-        empty_count = sum(1 for m in tool_msgs if len(m.content.strip()) < 10)
-        if len(tool_msgs) > 0 and empty_count / len(tool_msgs) > threshold:
+        # Rule 1: consecutive empty results (completely empty, not just short)
+        empty_count = sum(1 for m in tool_msgs[-n:] if not m.content.strip())
+        if empty_count >= n:
             return True
 
-        # Rule 2: Most tool results contain error patterns
-        error_count = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
-        if len(tool_msgs) > 0 and error_count / len(tool_msgs) > threshold:
+        # Rule 2: consecutive error results
+        error_count = sum(1 for m in tool_msgs[-n:] if m.content.startswith("Error:"))
+        if error_count >= n:
             return True
 
         return False
+
+    def _generate_stuck_feedback(self, feedback_count: int, session: Session) -> str:
+        """
+        Generate differentiated feedback based on how many times we've injected.
+
+        Args:
+            feedback_count: Which feedback attempt this is (1-based)
+            session: Current session for error analysis
+
+        Returns:
+            Feedback message content
+        """
+        if feedback_count == 1:
+            return (
+                "[循环检测] 最近几步操作无进展（工具返回空结果或错误）。\n"
+                "请尝试：\n"
+                "1. 使用不同的工具或方法\n"
+                "2. 调整参数或搜索策略\n"
+                "3. 重新评估当前问题是否可解决"
+            )
+
+        # 2nd+ feedback: forceful, include error analysis
+        error_summary = self._summarize_recent_errors(session)
+        return (
+            "[循环检测 - 最后机会] 已尝试调整但仍无进展。\n"
+            f"观察到的问题：{error_summary}\n"
+            "\n请立即：\n"
+            "1. 承认无法继续并说明遇到的困难，或\n"
+            "2. 采用完全不同的方法（根本性改变策略）"
+        )
+
+    def _summarize_recent_errors(self, session: Session) -> str:
+        """
+        Summarize error patterns in recent tool results.
+
+        Args:
+            session: Current session
+
+        Returns:
+            Human-readable summary of recent failures
+        """
+        recent = session.messages[-6:]
+        tool_msgs = [m for m in recent if m.role == "tool"]
+
+        parts = []
+        empty = sum(1 for m in tool_msgs if not m.content.strip())
+        errors = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
+        if empty:
+            parts.append(f"空结果 {empty} 次")
+        if errors:
+            parts.append(f"错误 {errors} 次")
+
+        return " | ".join(parts) if parts else "工具调用无进展"
 
     def create_snapshot(
         self,

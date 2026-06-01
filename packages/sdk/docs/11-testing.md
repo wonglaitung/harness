@@ -181,6 +181,58 @@ class TestToolExecutor:
             )
 ```
 
+```python
+# tests/unit/test_stuck_detection.py
+
+import pytest
+from harness.types import LoopState, Message, Session
+from harness.core.agent_loop import AgentLoop, LoopConfig
+
+class TestIsStuck:
+    """Stuck Detection 单元测试"""
+
+    def test_early_iterations_not_stuck(self):
+        """迭代次数不足时不触发"""
+        loop = AgentLoop(...)
+        session = Session(id="test")
+        assert loop._is_stuck(session, iteration=2) is False
+
+    def test_consecutive_empty_results(self):
+        """连续空结果触发检测"""
+        loop = AgentLoop(...)
+        session = Session(id="test")
+        for i in range(3):
+            session.add_message(Message(role="tool", content=""))
+        assert loop._is_stuck(session, iteration=4) is True
+
+    def test_short_valid_content_not_stuck(self):
+        """短但有效的内容（如 'True'）不触发空检测"""
+        loop = AgentLoop(...)
+        session = Session(id="test")
+        session.add_message(Message(role="tool", content="True"))
+        session.add_message(Message(role="tool", content="OK"))
+        session.add_message(Message(role="tool", content="No results"))
+        assert loop._is_stuck(session, iteration=4) is False
+
+class TestGenerateStuckFeedback:
+    """差异化反馈测试"""
+
+    def test_first_feedback_gentle(self):
+        """第一次反馈温和"""
+        loop = AgentLoop(...)
+        session = Session(id="test")
+        feedback = loop._generate_stuck_feedback(1, session)
+        assert "请尝试" in feedback
+        assert "最后机会" not in feedback
+
+    def test_second_feedback_forceful(self):
+        """第二次反馈强硬，含错误分析"""
+        loop = AgentLoop(...)
+        session = Session(id="test")
+        feedback = loop._generate_stuck_feedback(2, session)
+        assert "最后机会" in feedback
+```
+
 ---
 
 ### Level 2: 集成测试

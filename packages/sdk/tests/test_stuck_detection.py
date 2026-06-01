@@ -31,7 +31,6 @@ class TestIsStuck:
         loop = _make_loop(LoopConfig(stuck_min_iterations=3))
         session = Session(id="test")
 
-        # No messages, early iteration
         assert loop._is_stuck(session, iteration=0) is False
         assert loop._is_stuck(session, iteration=2) is False
 
@@ -44,88 +43,108 @@ class TestIsStuck:
 
         assert loop._is_stuck(session, iteration=5) is False
 
+    def test_too_few_tool_messages_not_stuck(self):
+        """Fewer tool messages than stuck_consecutive_failures should not trigger."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
+        session = Session(id="test")
+        # Only 2 tool messages, need 3 consecutive
+        session.add_message(Message(role="tool", content=""))
+        session.add_message(Message(role="tool", content=""))
+
+        assert loop._is_stuck(session, iteration=4) is False
+
     def test_detects_empty_tool_results(self):
-        """Majority empty tool results should trigger stuck detection."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.8))
+        """Consecutive empty tool results should trigger stuck detection."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
 
-        # Add 5 empty tool results (> 80% of recent tool messages)
-        for i in range(5):
+        # 3 consecutive empty results
+        for i in range(3):
             session.add_message(Message(role="tool", content=""))
 
         assert loop._is_stuck(session, iteration=4) is True
 
     def test_detects_error_tool_results(self):
-        """Majority error tool results should trigger stuck detection."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.8))
+        """Consecutive error tool results should trigger stuck detection."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
 
-        # Add 5 error tool results (> 80% of recent tool messages)
-        for i in range(5):
-            session.add_message(Message(role="tool", content=f"Error: file not found"))
+        # 3 consecutive error results
+        for i in range(3):
+            session.add_message(Message(role="tool", content="Error: file not found"))
 
         assert loop._is_stuck(session, iteration=4) is True
 
-    def test_mixed_results_below_threshold(self):
-        """Mixed success/failure below threshold should not trigger."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.8))
+    def test_short_but_nonempty_not_stuck(self):
+        """Short but non-empty content (e.g. 'True', 'OK') should NOT trigger empty rule."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
 
-        # 2 successes + 1 error = 33% error rate, well below 80%
-        session.add_message(Message(role="tool", content="File contents here"))
-        session.add_message(Message(role="tool", content="Another file contents"))
-        session.add_message(Message(role="tool", content="Error: not found"))
-
-        assert loop._is_stuck(session, iteration=4) is False
-
-    def test_mixed_results_at_threshold(self):
-        """Results at exactly the threshold boundary should not trigger (>)."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.8))
-        session = Session(id="test")
-
-        # 4 errors + 1 success = 80% = NOT > 80%, so should not trigger
-        for i in range(4):
-            session.add_message(Message(role="tool", content="Error: failed"))
+        # "True" and "OK" are legitimate short results
+        session.add_message(Message(role="tool", content="True"))
         session.add_message(Message(role="tool", content="OK"))
+        session.add_message(Message(role="tool", content="No results found"))
 
         assert loop._is_stuck(session, iteration=4) is False
 
-    def test_only_checks_recent_messages(self):
-        """Should only look at the last 6 messages (3 rounds), not older ones."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.8))
+    def test_mixed_success_and_failure_not_stuck(self):
+        """Mixed success/failure without consecutive failures should not trigger."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
+        session = Session(id="test")
+
+        # Alternating: not consecutive
+        session.add_message(Message(role="tool", content="Error: fail"))
+        session.add_message(Message(role="tool", content="File contents"))
+        session.add_message(Message(role="tool", content="Error: fail"))
+
+        assert loop._is_stuck(session, iteration=4) is False
+
+    def test_only_checks_last_n(self):
+        """Should only check the last N tool messages, ignoring older ones."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
 
         # Old messages: all successes
         for i in range(10):
             session.add_message(Message(role="tool", content=f"Content {i}"))
 
-        # Recent messages: all empty
-        for i in range(5):
+        # Recent 3: all empty
+        for i in range(3):
             session.add_message(Message(role="tool", content=""))
 
-        # Recent 6 messages: 5 empty tool msgs out of 5 = 100% > 0.8
         assert loop._is_stuck(session, iteration=10) is True
 
-    def test_custom_threshold(self):
-        """Custom threshold should be respected."""
-        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_error_threshold=0.5))
+    def test_custom_consecutive_failures(self):
+        """Custom stuck_consecutive_failures should be respected."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=5))
         session = Session(id="test")
 
-        # 2 errors + 2 successes = 50% = NOT > 50%
-        session.add_message(Message(role="tool", content="Error: fail"))
-        session.add_message(Message(role="tool", content="OK"))
-        session.add_message(Message(role="tool", content="Error: fail"))
-        session.add_message(Message(role="tool", content="OK"))
+        # 3 errors not enough for threshold of 5
+        for i in range(3):
+            session.add_message(Message(role="tool", content="Error: fail"))
 
         assert loop._is_stuck(session, iteration=4) is False
 
-        # 3 errors + 1 success = 75% > 50%
-        session.add_message(Message(role="tool", content="Error: another"))
+        # 5 errors triggers
+        session.add_message(Message(role="tool", content="Error: fail"))
+        session.add_message(Message(role="tool", content="Error: fail"))
+
         assert loop._is_stuck(session, iteration=5) is True
+
+    def test_whitespace_only_counts_as_empty(self):
+        """Whitespace-only content should count as empty."""
+        loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
+        session = Session(id="test")
+
+        session.add_message(Message(role="tool", content="   "))
+        session.add_message(Message(role="tool", content="\n\t"))
+        session.add_message(Message(role="tool", content="  "))
+
+        assert loop._is_stuck(session, iteration=4) is True
 
 
 class TestToolErrorEncoding:
-    """Tests for the tool error encoding fix in _execute_tools / _run_impl."""
+    """Tests for the tool error encoding fix."""
 
     def test_tool_result_error_in_content(self):
         """Failed ToolResult content should be 'Error: {error}' in Message."""
@@ -199,18 +218,18 @@ class TestLoopConfigStuckDetection:
         config = LoopConfig()
         assert config.max_stuck_feedbacks == 2
         assert config.stuck_min_iterations == 3
-        assert config.stuck_error_threshold == 0.8
+        assert config.stuck_consecutive_failures == 3
 
     def test_custom_config(self):
         """Custom LoopConfig stuck detection settings should be respected."""
         config = LoopConfig(
             max_stuck_feedbacks=5,
             stuck_min_iterations=5,
-            stuck_error_threshold=0.6,
+            stuck_consecutive_failures=5,
         )
         assert config.max_stuck_feedbacks == 5
         assert config.stuck_min_iterations == 5
-        assert config.stuck_error_threshold == 0.6
+        assert config.stuck_consecutive_failures == 5
 
 
 class TestStuckFeedbackCount:
@@ -226,7 +245,109 @@ class TestStuckFeedbackCount:
         loop = _make_loop()
         loop._stuck_feedback_count = 5
 
-        # The reset happens inside _run_impl — we verify the attribute
-        # is present and initialized correctly at construction time
         fresh_loop = _make_loop()
         assert fresh_loop._stuck_feedback_count == 0
+
+
+class TestGenerateStuckFeedback:
+    """Tests for differentiated feedback generation."""
+
+    def test_first_feedback_is_gentle(self):
+        """First feedback should be a gentle suggestion."""
+        loop = _make_loop()
+        session = Session(id="test")
+        feedback = loop._generate_stuck_feedback(1, session)
+
+        assert "循环检测" in feedback
+        assert "请尝试" in feedback
+        assert "最后机会" not in feedback
+
+    def test_second_feedback_is_forceful(self):
+        """Second feedback should be forceful with error analysis."""
+        loop = _make_loop()
+        session = Session(id="test")
+        # Add some error tool messages for the summary
+        for i in range(3):
+            session.add_message(Message(role="tool", content="Error: not found"))
+
+        feedback = loop._generate_stuck_feedback(2, session)
+
+        assert "最后机会" in feedback
+        assert "承认无法继续" in feedback or "承认困难" in feedback
+
+    def test_third_feedback_same_as_second(self):
+        """Third+ feedback should use same forceful template."""
+        loop = _make_loop()
+        session = Session(id="test")
+        feedback = loop._generate_stuck_feedback(3, session)
+
+        assert "最后机会" in feedback
+
+
+class TestSummarizeRecentErrors:
+    """Tests for error pattern summarization."""
+
+    def test_empty_results_counted(self):
+        """Empty tool results should be counted in summary."""
+        loop = _make_loop()
+        session = Session(id="test")
+        for i in range(3):
+            session.add_message(Message(role="tool", content=""))
+
+        summary = loop._summarize_recent_errors(session)
+        assert "空结果" in summary
+        assert "3 次" in summary
+
+    def test_error_results_counted(self):
+        """Error tool results should be counted in summary."""
+        loop = _make_loop()
+        session = Session(id="test")
+        for i in range(2):
+            session.add_message(Message(role="tool", content="Error: permission denied"))
+
+        summary = loop._summarize_recent_errors(session)
+        assert "错误" in summary
+        assert "2 次" in summary
+
+    def test_mixed_errors_summarized(self):
+        """Both empty and error results should appear in summary."""
+        loop = _make_loop()
+        session = Session(id="test")
+        session.add_message(Message(role="tool", content=""))
+        session.add_message(Message(role="tool", content="Error: not found"))
+
+        summary = loop._summarize_recent_errors(session)
+        assert "空结果" in summary
+        assert "错误" in summary
+
+    def test_no_tool_messages_default(self):
+        """No tool messages should return default summary."""
+        loop = _make_loop()
+        session = Session(id="test")
+
+        summary = loop._summarize_recent_errors(session)
+        assert summary == "工具调用无进展"
+
+    def test_all_successful_results(self):
+        """Successful results should return default summary."""
+        loop = _make_loop()
+        session = Session(id="test")
+        session.add_message(Message(role="tool", content="File contents here"))
+
+        summary = loop._summarize_recent_errors(session)
+        assert summary == "工具调用无进展"
+
+
+class TestFeedbackMetadata:
+    """Tests for feedback message metadata."""
+
+    def test_feedback_has_metadata(self):
+        """Injected feedback messages should have stuck_feedback metadata."""
+        msg = Message(
+            role="user",
+            content="[循环检测] test",
+            metadata={"type": "stuck_feedback", "injected": True},
+        )
+
+        assert msg.metadata["type"] == "stuck_feedback"
+        assert msg.metadata["injected"] is True

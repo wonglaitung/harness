@@ -806,9 +806,9 @@ def _is_stuck(self, session: Session, iteration: int) -> bool:
     """
     检测 Agent 是否陷入停滞状态。
 
-    仅检查最近 3 轮（6 条消息）中的工具结果：
-    - 空结果占比 > 80%：工具执行成功但无实质输出
-    - 错误结果占比 > 80%：工具连续失败
+    使用绝对计数（非比例）检测最近工具结果的失败模式：
+    - 连续 N 条空结果：工具执行成功但无实质输出
+    - 连续 N 条错误结果：工具连续失败
 
     Args:
         session: 当前会话
@@ -817,23 +817,25 @@ def _is_stuck(self, session: Session, iteration: int) -> bool:
     Returns:
         True 表示检测到停滞
     """
-    if iteration < 3:
+    if iteration < self.config.stuck_min_iterations:
         return False
 
-    recent = session.messages[-6:]
+    recent = session.messages[-6:]  # 最近 3 轮
     tool_msgs = [m for m in recent if m.role == "tool"]
 
-    if not tool_msgs:
+    if len(tool_msgs) < self.config.stuck_consecutive_failures:
         return False
 
-    # 规则1：工具结果大部分为空或极短（<10 字符）
-    empty_count = sum(1 for m in tool_msgs if len(m.content.strip()) < 10)
-    if empty_count / len(tool_msgs) > 0.8:
+    n = self.config.stuck_consecutive_failures
+
+    # 规则1：连续空结果（完全为空，而非仅短内容）
+    empty_count = sum(1 for m in tool_msgs[-n:] if not m.content.strip())
+    if empty_count >= n:
         return True
 
-    # 规则2：工具结果包含错误模式
-    error_count = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
-    if error_count / len(tool_msgs) > 0.8:
+    # 规则2：连续错误结果
+    error_count = sum(1 for m in tool_msgs[-n:] if m.content.startswith("Error:"))
+    if error_count >= n:
         return True
 
     return False
@@ -843,41 +845,69 @@ def _is_stuck(self, session: Session, iteration: int) -> bool:
 
 当检测到停滞时，向 session 注入一条提示消息。下一轮 `context.build()` 会自然包含此提示，LLM 在后续调用中可据此调整策略。
 
+反馈分两轮，内容不同：
+- **第 1 次**：温和提示，建议换方法
+- **第 2 次**：更强硬，包含错误模式分析，要求 LLM 承认困难或根本改变策略
+
 ```python
 # 在 AgentLoop._run_impl() 的循环中，工具执行之后
 if self._is_stuck(session, iteration):
     if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
+        self._stuck_feedback_count += 1
+        feedback = self._generate_stuck_feedback(self._stuck_feedback_count, session)
         session.add_message(Message(
             role="user",
-            content=(
-                "[系统提示] 你似乎陷入了重复或无进展的模式。请：\n"
-                "1. 停下来评估问题本身\n"
-                "2. 尝试完全不同的方法（换个工具、换个角度）\n"
-                "3. 如果无法解决，请明确说出遇到的困难"
-            ),
+            content=feedback,
+            metadata={"type": "stuck_feedback", "injected": True},
         ))
-        self._stuck_feedback_count += 1
-        self._emit_progress(
-            ProgressEventType.STATE_CHANGE,
-            f"Stuck state detected at iteration {iteration}, injecting feedback "
-            f"({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
-            {"stuck_feedback_count": self._stuck_feedback_count},
-        )
+        self._emit_progress(...)
     else:
         # 反馈已用尽，终止循环
-        self.state = LoopState.ERROR
-        self._emit_progress(
-            ProgressEventType.ERROR,
-            "Agent stuck: repeated failures after feedback attempts",
-            {"stuck_feedback_count": self._stuck_feedback_count},
-        )
+        self.state = LoopState.STUCK
         return LoopResult(
-            status=LoopState.ERROR,
+            status=LoopState.STUCK,
             session=session,
             iterations=iteration,
             error="Agent stuck: repeated failures after feedback attempts",
             token_usage=total_usage,
         )
+```
+
+### 自适应反馈生成
+
+```python
+def _generate_stuck_feedback(self, feedback_count: int, session: Session) -> str:
+    """根据反馈次数生成差异化反馈"""
+    if feedback_count == 1:
+        return (
+            "[循环检测] 最近几步操作无进展（工具返回空结果或错误）。\n"
+            "请尝试：\n"
+            "1. 使用不同的工具或方法\n"
+            "2. 调整参数或搜索策略\n"
+            "3. 重新评估当前问题是否可解决"
+        )
+    else:
+        error_summary = self._summarize_recent_errors(session)
+        return (
+            "[循环检测 - 最后机会] 已尝试调整但仍无进展。\n"
+            f"观察到的问题：{error_summary}\n"
+            "\n请立即：\n"
+            "1. 承认无法继续并说明遇到的困难，或\n"
+            "2. 采用完全不同的方法（根本性改变策略）"
+        )
+
+def _summarize_recent_errors(self, session: Session) -> str:
+    """提取最近工具结果的错误模式摘要"""
+    recent = session.messages[-6:]
+    tool_msgs = [m for m in recent if m.role == "tool"]
+    parts = []
+    empty = sum(1 for m in tool_msgs if not m.content.strip())
+    errors = sum(1 for m in tool_msgs if m.content.startswith("Error:"))
+    if empty:
+        parts.append(f"空结果 {empty} 次")
+    if errors:
+        parts.append(f"错误 {errors} 次")
+    return " | ".join(parts) if parts else "工具调用无进展"
 ```
 
 ### 配置
@@ -890,7 +920,7 @@ class LoopConfig:
     # Stuck Detection
     max_stuck_feedbacks: int = 2   # 最大反馈注入次数
     stuck_min_iterations: int = 3  # 开始检测的最小迭代次数
-    stuck_error_threshold: float = 0.8  # 错误/空结果触发阈值
+    stuck_consecutive_failures: int = 3  # 连续空/错误结果触发数
 ```
 
 ### 与现有机制的关系
