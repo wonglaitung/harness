@@ -386,35 +386,35 @@ AI 开发范式的演进：
 
 | 组件 | Harness SDK | Claude Code | LangGraph | 差距 |
 |------|-------------|-------------|-----------|------|
-| **Orchestration Loop** | ✅ ReAct + 熔断 | ✅ | ✅ | 无 |
+| **Orchestration Loop** | ✅ ReAct + 熔断 + 卡住检测 | ✅ | ✅ | 无 |
 | **Tools** | ✅ 8 内置 + MCP | ✅ 6 类 | ✅ | 无 |
 | **Filesystem** | ✅ 权限控制 | ✅ Git 集成 | ✅ | 无 |
 | **Bash Execution** | ✅ 沙箱 + 黑名单 | ✅ | ✅ | 无 |
 | **Sandbox** | ✅ LightweightSandbox | ✅ 容器 | ✅ Daytona | 生产级容器待集成 |
-| **Memory** | ⚠️ 单层 Session | ✅ 四层 + MEMORY.md | ✅ 向量检索 | 需要扩展 |
-| **Context Management** | ✅ ContextBuilder | ✅ 优先级栈 | ✅ | 无 |
-| **Context Rot Defense** | ⚠️ 压缩器 | ✅ 工具卸载 + 渐进加载 | ✅ Compaction | 需要增强 |
-| **Long-Horizon** | ⚠️ 快照恢复 | ✅ Ralph Loop + 自验证 | ✅ | 需要增强 |
-| **Error Handling** | ✅ 熔断 + 卡住检测 | ✅ 步骤预算 | ✅ | 无 |
+| **Memory** | ✅ 四层 + 向量检索 + MEMORY.md | ✅ 四层 + MEMORY.md | ✅ 向量检索 | 无 |
+| **Context Management** | ✅ ContextBuilder + 动态组装 | ✅ 优先级栈 | ✅ | 无 |
+| **Context Rot Defense** | ✅ 渐进加载 + 压缩器 | ✅ 工具卸载 + 渐进加载 | ✅ Compaction | 工具输出卸载待实现 |
+| **Long-Horizon** | ✅ Hooks + Ralph Loop + 自验证 + Sub-Agent | ✅ Ralph Loop + 自验证 | ✅ | 无 |
+| **Error Handling** | ✅ 熔断 + 卡住检测 + 成本控制 | ✅ 步骤预算 | ✅ | 步骤预算待实现 |
 | **Serving Layer** | ❌ SDK 不含 | ✅ CLI + Web + API | ✅ | Client 层职责 |
 
 ### 优先级路线图（完整版）
 
-| 优先级 | 功能 | 工作量 | 影响 | 依赖 |
-|--------|------|--------|------|------|
-| **P0** | Lifecycle Hooks | 2-3 天 | 企业定制基础，所有高级功能依赖 | 无 |
-| **P0** | 动态系统提示组装 | 1-2 天 | 项目级约定，AGENTS.md 支持 | 无 |
-| **P1** | Sub-Agent 管理 | 3-5 天 | 大任务分解，并行处理 | Hooks |
-| **P1** | Ralph Loop | 2-3 天 | 长任务保障，防止上下文焦虑 | Hooks |
-| **P2** | 自验证钩子 | 2 天 | 代码质量保障 | Hooks |
-| **P2** | 渐进式技能加载 | 2 天 | 上下文效率 | 无 |
-| **P2** | MEMORY.md 标准 | 1-2 天 | 跨会话记忆持久化 | 无 |
-| **P2** | 向量检索 | 3-5 天 | 智能检索历史对话 | 无 |
-| **P3** | 工具输出卸载 | 1-2 天 | 上下文预算优化 | 无 |
-| **P3** | 步骤预算 | 0.5 天 | 成本预警 | 无 |
+| 优先级 | 功能 | 状态 | 说明 |
+|--------|------|------|------|
+| **P0** | Lifecycle Hooks | ✅ 已实现 | 8 个钩子点，支持拦截、修改、注入 |
+| **P0** | 动态系统提示组装 | ✅ 已实现 | 多源组装、AGENTS.md 支持 |
+| **P1** | Sub-Agent 管理 | ✅ 已实现 | 创建子代理处理子任务 |
+| **P1** | Ralph Loop | ✅ 已实现 | 长任务循环，防止上下文焦虑 |
+| **P2** | 自验证钩子 | ✅ 已实现 | write-code → run-tests → fix-errors 循环 |
+| **P2** | 渐进式技能加载 | ✅ 已实现 | 三级加载：Frontmatter → Full → Reference |
+| **P2** | MEMORY.md 标准 | ✅ 已实现 | 持久记忆文件格式 |
+| **P2** | 向量检索 | ✅ 已实现 | 语义搜索历史对话、技能、文档 |
+| **P3** | 工具输出卸载 | ⚠️ 待实现 | 上下文预算优化 |
+| **P3** | 步骤预算 | ⚠️ 待实现 | 成本预警 |
 
-**实施建议**：
-1. **Phase 1 (P0)**: 完成 Hooks + 动态系统提示 → 解锁企业定制能力
-2. **Phase 2 (P1)**: 完成 Sub-Agent + Ralph Loop → 解锁长任务处理
-3. **Phase 3 (P2)**: 完成自验证 + 渐进加载 + MEMORY.md + 向量检索 → 生产级优化
-4. **Phase 4 (P3)**: 完成输出卸载 + 步骤预算 → 性能微调
+**实施状态**：
+1. **Phase 1 (P0)**: ✅ 完成 Hooks + 动态系统提示 → 解锁企业定制能力
+2. **Phase 2 (P1)**: ✅ 完成 Sub-Agent + Ralph Loop → 解锁长任务处理
+3. **Phase 3 (P2)**: ✅ 完成自验证 + 渐进加载 + MEMORY.md + 向量检索 → 生产级优化
+4. **Phase 4 (P3)**: ⚠️ 待完成输出卸载 + 步骤预算 → 性能微调

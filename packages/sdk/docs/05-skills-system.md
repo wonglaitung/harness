@@ -1346,13 +1346,13 @@ class SkillReviewManager:
 
 ---
 
-## 渐进式技能加载 (待实现) - P2 优先级
+---
 
-当前实现：启动时全部加载技能内容。
+## 渐进式技能加载 ✅ 已实现
 
-**问题**：浪费上下文预算，大技能库会快速填充 token。
+渐进式技能加载通过三级加载机制优化上下文使用，避免一次性加载所有技能内容消耗大量 token。
 
-**解决方案**：三级渐进加载
+### 设计原理
 
 ```
 Level 1: Frontmatter Only (~100 tokens)
@@ -1367,57 +1367,93 @@ Level 3: Reference Files (按需)
     └── 加载技能引用的外部文件
 ```
 
-### 实现示例
+### 使用方式
 
 ```python
+from harness.skills import ProgressiveSkillLoader, LoadingLevel
+
+# 创建加载器
+loader = ProgressiveSkillLoader(skills_dir=Path(".agent/skills"))
+
+# Level 1: 发现技能（仅 frontmatter）
+skills = await loader.discover_skills()
+for skill in skills:
+    print(f"{skill.name}: {skill.description}")  # ~100 tokens
+
+# Level 2: 加载完整内容
+full_skill = await loader.load_full_content(skills[0])
+
+# Level 3: 加载引用文件
+skill_with_refs = await loader.load_with_references(skills[0])
+
+# 匹配技能
+matched = loader.match_skills("review this code", skills)
+```
+
+### SkillMetadata
+
+```python
+from harness.skills import SkillMetadata
+
 @dataclass
 class SkillMetadata:
-    """技能元数据（轻量）"""
+    """轻量级技能元数据"""
     name: str
     description: str
     path: Path
     loaded: bool = False
     skill: Skill | None = None
-
-class ProgressiveSkillLoader:
-    """渐进式技能加载器"""
-
-    def load_frontmatter_only(self, skill_path: Path) -> SkillMetadata:
-        """仅加载 frontmatter，返回轻量元数据"""
-        content = skill_path.read_text()
-        frontmatter = self._parse_frontmatter(content)
-        return SkillMetadata(
-            name=frontmatter["name"],
-            description=frontmatter["description"],
-            path=skill_path,
-            loaded=False
-        )
-
-    def load_full_content(self, metadata: SkillMetadata) -> Skill:
-        """按需加载完整内容"""
-        if metadata.loaded:
-            return metadata.skill
-
-        skill = Skill.from_file(metadata.path)
-        metadata.skill = skill
-        metadata.loaded = True
-        return skill
+    references: list[Path] = field(default_factory=list)
 ```
 
-### ContextBuilder 集成
+### LoadingLevel
 
 ```python
-class ContextBuilder:
-    def build(self, session: Session, skills: List[SkillMetadata]) -> Context:
-        # Level 1: 所有技能的 frontmatter
-        available_skills = [f"- {s.name}: {s.description}" for s in skills]
-        system_prompt += f"\n\n# Available Skills\n" + "\n".join(available_skills)
+from harness.skills import LoadingLevel
 
-        # Level 2: 匹配激活的技能完整内容
-        active_skills = self._match_skills(session.user_input, skills)
-        for skill_meta in active_skills:
-            skill = self.loader.load_full_content(skill_meta)
-            system_prompt += f"\n\n{skill.content}"
+class LoadingLevel:
+    """三级加载常量"""
+    FRONTMATTER = 1      # 仅 frontmatter (~100 tokens)
+    FULL_CONTENT = 2     # 完整内容 (~1000-2000 tokens)
+    REFERENCES = 3       # 包含引用文件
+```
 
-        return Context(system_prompt=system_prompt, ...)
+### 与 ContextBuilder 集成
+
+```python
+from harness.memory import ContextBuilder
+from harness.skills import ProgressiveSkillLoader
+
+loader = ProgressiveSkillLoader()
+
+# 构建上下文时渐进加载
+async def build_context(session, skills_dir):
+    # Level 1: 所有技能的 frontmatter
+    all_skills = await loader.discover_skills(skills_dir)
+    available_list = [f"- {s.name}: {s.description}" for s in all_skills]
+    
+    system_prompt = f"# Available Skills\n" + "\n".join(available_list)
+    
+    # Level 2: 匹配激活的技能完整内容
+    matched = loader.match_skills(session.user_input, all_skills)
+    for skill_meta in matched:
+        full_skill = await loader.load_full_content(skill_meta)
+        system_prompt += f"\n\n## Skill: {full_skill.name}\n{full_skill.content}"
+    
+    return system_prompt
+```
+
+### 缓存机制
+
+ProgressiveSkillLoader 内置 LRU 缓存，避免重复加载：
+
+```python
+loader = ProgressiveSkillLoader(cache_size=100)
+
+# 第一次加载（从文件读取）
+skill1 = await loader.load_full_content(metadata)
+
+# 第二次加载（从缓存读取）
+skill2 = await loader.load_full_content(metadata)
+assert skill1 is skill2  # 同一对象
 ```

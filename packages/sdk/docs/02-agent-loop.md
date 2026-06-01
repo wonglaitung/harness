@@ -1801,121 +1801,191 @@ result = await agent._loop.resume_from_snapshot(snapshot)
 
 ---
 
-## Lifecycle Hooks (待实现) - P0 优先级
+## Lifecycle Hooks ✅ 已实现
 
-Lifecycle Hooks 是最基础的缺失功能，所有其他高级功能（Ralph Loop、自验证）都依赖它。
+Lifecycle Hooks 允许在 Agent Loop 的关键点插入自定义逻辑，支持拦截、修改、注入消息等操作。
 
-### 问题场景
-
-当前无法在工具执行前后插入自定义逻辑：
-- 无法拦截危险工具调用
-- 无法在代码修改后自动运行测试
-- 无法记录详细审计日志
-- 无法实现自定义重试逻辑
-
-### 钩子系统设计
+### 钩子点 (HookPoint)
 
 ```python
-from dataclasses import dataclass
-from enum import Enum
-from typing import Callable, Any
+from harness.types import HookPoint
 
 class HookPoint(Enum):
     """钩子触发点"""
-    BEFORE_LLM_CALL = "before_llm_call"
-    AFTER_LLM_CALL = "after_llm_call"
-    BEFORE_TOOL_EXECUTE = "before_tool_execute"
-    AFTER_TOOL_EXECUTE = "after_tool_execute"
-    ON_ERROR = "on_error"
-    ON_LOOP_START = "on_loop_start"
-    ON_LOOP_END = "on_loop_end"
-    ON_EXIT_ATTEMPT = "on_exit_attempt"  # Ralph Loop 使用
+    ON_LOOP_START = "on_loop_start"        # 循环开始
+    ON_LOOP_END = "on_loop_end"            # 循环结束
+    BEFORE_LLM_CALL = "before_llm_call"    # LLM 调用前
+    AFTER_LLM_CALL = "after_llm_call"      # LLM 调用后
+    BEFORE_TOOL_EXECUTE = "before_tool_execute"  # 工具执行前
+    AFTER_TOOL_EXECUTE = "after_tool_execute"    # 工具执行后
+    ON_ERROR = "on_error"                  # 错误发生时
+    ON_EXIT_ATTEMPT = "on_exit_attempt"    # 退出尝试时（Ralph Loop）
+```
 
-@dataclass
-class HookContext:
-    """钩子上下文"""
-    hook_point: HookPoint
-    session_id: str
-    iteration: int
-    tool_name: str | None = None
-    tool_args: dict | None = None
-    tool_result: ToolResult | None = None
-    llm_response: LLMResponse | None = None
-    error: Exception | None = None
-    messages: list[Message] | None = None
-    metadata: dict = None
+### 钩子动作 (HookAction)
 
-@dataclass
-class HookResult:
-    """钩子返回结果"""
-    action: str  # "continue", "abort", "retry", "inject_message", "modify_args"
-    modified_args: dict | None = None
-    modified_result: ToolResult | None = None
-    inject_message: Message | None = None
-    delay_seconds: float = 0
+```python
+from harness.types import HookAction
 
-class LifecycleHook:
-    """生命周期钩子基类"""
+class HookAction(Enum):
+    """钩子可请求的动作"""
+    CONTINUE = "continue"              # 继续正常执行
+    ABORT = "abort"                    # 中止执行
+    RETRY = "retry"                    # 重试当前操作
+    INJECT_MESSAGE = "inject_message"  # 注入消息到上下文
+    MODIFY_ARGS = "modify_args"        # 修改工具参数
+    MODIFY_RESULT = "modify_result"    # 修改工具结果
+    REINJECT = "reinject"              # 重置上下文并重新注入（Ralph Loop）
+```
 
+### 使用示例
+
+```python
+from harness.core import LifecycleHook, HookManager
+from harness.types import HookPoint, HookContext, HookResult, HookAction
+
+# 自定义钩子
+class MyCustomHook(LifecycleHook):
     @property
     def hook_points(self) -> list[HookPoint]:
-        """订阅的钩子点"""
-        return []
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
 
     async def execute(self, context: HookContext) -> HookResult:
-        """执行钩子逻辑"""
-        return HookResult(action="continue")
+        if context.tool_name == "dangerous_tool":
+            return HookResult.abort("Dangerous tool blocked")
+        return HookResult.continue_()
 
 # 注册钩子
 agent = AgentHarness()
-agent.add_hook(MyCustomHook(), points=[HookPoint.BEFORE_TOOL_EXECUTE])
+agent._loop.add_hook(MyCustomHook())
 ```
 
-### AgentLoop 集成
+### 内置钩子
 
 ```python
-class AgentLoop:
-    def __init__(self, ...):
-        self._hooks: dict[HookPoint, list[LifecycleHook]] = defaultdict(list)
+from harness.core import (
+    LoggingHook,              # 记录所有钩子事件
+    AbortOnDangerousToolHook, # 阻止危险工具调用
+    MaxToolCallsHook,         # 限制工具调用次数
+)
 
-    def add_hook(self, hook: LifecycleHook, points: list[HookPoint] | None = None):
-        """注册钩子"""
-        points = points or hook.hook_points
-        for point in points:
-            self._hooks[point].append(hook)
+# 阻止危险工具
+agent._loop.add_hook(AbortOnDangerousToolHook(
+    blocked_tools=["rm", "sudo", "chmod"]
+))
 
-    async def _execute_with_hooks(self, tool_call: ToolCall, context: ToolContext) -> ToolResult:
-        """带钩子的工具执行"""
-        # Before hook
-        for hook in self._hooks[HookPoint.BEFORE_TOOL_EXECUTE]:
-            result = await hook.execute(HookContext(
-                hook_point=HookPoint.BEFORE_TOOL_EXECUTE,
-                tool_name=tool_call.name,
-                tool_args=tool_call.arguments,
-            ))
-            if result.action == "abort":
-                return ToolResult(success=False, error="Aborted by hook")
-            if result.action == "modify_args":
-                tool_call.arguments = result.modified_args
-
-        # Execute tool
-        tool_result = await self.tools.execute(tool_call, context)
-
-        # After hook
-        for hook in self._hooks[HookPoint.AFTER_TOOL_EXECUTE]:
-            result = await hook.execute(HookContext(
-                hook_point=HookPoint.AFTER_TOOL_EXECUTE,
-                tool_name=tool_call.name,
-                tool_result=tool_result,
-            ))
-            if result.action == "inject_message":
-                # 注入消息到上下文
-                session.add_message(result.inject_message)
-            if result.action == "modify_result":
-                tool_result = result.modified_result
-
-        return tool_result
+# 限制工具调用次数
+agent._loop.add_hook(MaxToolCallsHook(
+    tool_name="grep",
+    max_calls=5
+))
 ```
+
+---
+
+## Ralph Loop ✅ 已实现
+
+Ralph Loop 拦截提前退出，保存进度，重置上下文继续长任务。通过 `ON_EXIT_ATTEMPT` 钩子实现。
+
+### 使用示例
+
+```python
+from harness.core import RalphLoopHook, RalphLoopConfig
+
+# 创建钩子
+ralph_hook = RalphLoopHook(config=RalphLoopConfig(
+    max_loops=3,
+    task_complete_check=lambda r: "done" in r.lower(),
+))
+
+# 注册钩子
+agent = AgentHarness()
+agent._loop.add_hook(ralph_hook)
+
+# 长任务会自动循环直到真正完成
+result = await agent.run("重构整个代码库")
+```
+
+### 配置选项
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| max_loops | int | 5 | 最大循环次数 |
+| task_complete_check | callable | None | 自定义完成检测函数 |
+| continuation_prompt_template | str | ... | 继续提示模板 |
+
+---
+
+## 自验证钩子 ✅ 已实现
+
+代码修改后自动运行测试，失败时注入错误让 LLM 修复。
+
+### 使用示例
+
+```python
+from harness.core import SelfVerificationHook, SelfVerificationConfig
+
+# 创建钩子
+verification_hook = SelfVerificationHook(config=SelfVerificationConfig(
+    test_command="pytest",
+    test_args=["-x", "--tb=short"],
+    trigger_tools=["write", "edit"],
+    max_retries=3,
+))
+
+# 注册钩子
+agent = AgentHarness()
+agent._loop.add_hook(verification_hook)
+```
+
+### 配置选项
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| test_command | str | "pytest" | 测试命令 |
+| test_args | list | ["-x", "--tb=short"] | 测试参数 |
+| trigger_tools | list | ["write", "edit"] | 触发验证的工具 |
+| max_retries | int | 3 | 最大重试次数 |
+| verify_on_change | bool | True | 每次修改后验证 |
+
+---
+
+## Sub-Agent 管理 ✅ 已实现
+
+创建子代理处理子任务，支持委托和结果收集。
+
+### 使用示例
+
+```python
+from harness.core import SubAgentManager, SubAgentConfig
+
+# 创建管理器
+manager = SubAgentManager(parent_agent)
+
+# 创建子代理
+await manager.spawn(SubAgentConfig(
+    name="code_analyzer",
+    task="分析 src/core 目录",
+    max_iterations=20,
+))
+
+# 并行运行所有子代理
+results = await manager.run_all()
+
+# 收集结果
+for name, result in results.items():
+    print(f"{name}: {result.summary}")
+```
+
+### SubAgentConfig 选项
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| name | str | 必填 | 子代理名称 |
+| task | str | 必填 | 任务描述 |
+| tools | list | None | 可用工具（None=继承父代理） |
+| max_iterations | int | 20 | 最大迭代次数 |
+| report_format | str | "summary" | 报告格式（summary/full/structured） |
 
 ---
 

@@ -1415,26 +1415,89 @@ class IncrementalTokenCounter:
 
 ---
 
-## 待实现功能
+---
 
-### 多时间尺度记忆
+## Dynamic System Prompt Assembly ✅ 已实现
 
-当前实现：单一 Session 存储。
+动态系统提示组装允许根据项目上下文自动构建系统提示，支持从多个源（静态内容、AGENTS.md、MEMORY.md）按优先级组装。
 
-**需要扩展为四层记忆**：
+### SystemPromptSource
 
-| 层级 | 时间尺度 | 用途 | 实现状态 |
-|------|----------|------|----------|
-| Working Memory | 当前会话 | 最近 N 条消息 | ✅ 已实现 |
-| Session Memory | 跨会话 | 摘要、关键决策 | ⚠️ 部分（缺自动摘要） |
-| Long-term Memory | 持久 | 技能、项目知识、偏好 | ❌ 未实现 |
-| Retrieved Memory | 按需 | 向量检索、语义搜索 | ❌ 未实现 |
+```python
+from harness.memory import SystemPromptSource, SystemPromptConfig, SystemPromptBuilder
 
-### MEMORY.md 标准 - P2 优先级
+# 静态内容源
+static_source = SystemPromptSource(
+    name="base",
+    content="You are an AI assistant.",
+    priority=100,  # 优先级越高越靠前
+)
 
-Claude Code 使用 MEMORY.md 文件存储持久记忆，Harness 应支持读写此标准格式。
+# 可调用源
+def get_time_context() -> str:
+    from datetime import datetime
+    return f"Current time: {datetime.now().isoformat()}"
 
-**MEMORY.md 格式示例**：
+dynamic_source = SystemPromptSource(
+    name="time",
+    content=get_time_context,  # 支持 Callable
+    priority=50,
+)
+
+# 文件源
+file_source = SystemPromptSource(
+    name="project",
+    path=Path(".agent/AGENTS.md"),
+    priority=80,
+)
+```
+
+### SystemPromptBuilder
+
+```python
+builder = SystemPromptBuilder(config=SystemPromptConfig(
+    base_prompt="You are a helpful assistant.",
+    agents_md_path=".agent/AGENTS.md",
+    memory_md_path="MEMORY.md",
+    auto_discover=True,  # 自动发现项目上下文
+))
+
+# 构建系统提示
+system_prompt = builder.build()
+
+# 添加自定义源
+builder.add_source(SystemPromptSource(
+    name="custom",
+    content="Custom instructions here.",
+    priority=90,
+))
+```
+
+### discover_project_context()
+
+自动发现项目上下文文件：
+
+```python
+from harness.memory import discover_project_context
+
+context = discover_project_context(project_root=Path.cwd())
+
+# 返回找到的文件路径
+if context.agents_md:
+    print(f"Found AGENTS.md: {context.agents_md}")
+if context.memory_md:
+    print(f"Found MEMORY.md: {context.memory_md}")
+if context.claude_md:
+    print(f"Found CLAUDE.md: {context.claude_md}")
+```
+
+---
+
+## MEMORY.md 标准 ✅ 已实现
+
+Harness 支持 Claude Code 风格的 MEMORY.md 文件格式，用于持久化跨会话记忆。
+
+### 格式规范
 
 ```markdown
 # MEMORY.md
@@ -1442,104 +1505,186 @@ Claude Code 使用 MEMORY.md 文件存储持久记忆，Harness 应支持读写�
 ## User Profile
 - Role: Software Developer
 - Preferred Language: Python
+- Response Style: Concise
 
 ## Key Decisions
 - 2026-05-28: 选择 SQLite 作为会话存储（原因：零配置、跨平台）
+- 2026-05-30: 使用 qasync 而非 QThread（原因：避免静默崩溃）
 
 ## Learned Patterns
 - 用户偏好简洁响应，无尾部总结
+- 测试失败时优先检查类型一致性
 - 避免在 QThread 中创建 asyncio event loop
+
+## Project Context
+- 项目结构: Monorepo (sdk + client)
+- 主要框架: PyQt6 + qasync
 ```
 
-**实现路径**:
-
-1. `MemoryFileManager` 支持读取项目根目录的 `MEMORY.md`
-2. 会话结束时自动更新 Learned Patterns
-3. 通过 ContextBuilder 注入到系统提示
+### MemoryFileManager
 
 ```python
-class MemoryFileManager:
-    """MEMORY.md 文件管理器"""
+from harness.memory import MemoryFileManager, MemoryEntry, MemoryCategory
 
-    def __init__(self, project_root: Path | None = None):
-        self.project_root = project_root or Path.cwd()
-        self.memory_file = self.project_root / "MEMORY.md"
+manager = MemoryFileManager(project_root=Path.cwd())
 
-    def load(self) -> dict[str, list[str]]:
-        """加载 MEMORY.md 内容"""
-        if not self.memory_file.exists():
-            return {}
-        return self._parse_sections(self.memory_file.read_text())
+# 加载 MEMORY.md
+sections = manager.load()
 
-    def add_entry(self, category: str, content: str) -> None:
-        """添加新记忆条目"""
-        sections = self.load()
-        if category not in sections:
-            sections[category] = []
-        sections[category].append(f"- {content}")
-        self.save(sections)
+# 添加记忆条目
+manager.add_entry(MemoryEntry(
+    category=MemoryCategory.KEY_DECISIONS,
+    content="选择 SQLite 作为会话存储",
+    source="agent_observation",
+))
+
+# 格式化为上下文字符串
+context_str = manager.to_context_string()
 ```
 
-### 向量检索支持 - P2 优先级
+### 数据类型
 
-当前实现：简单的关键词匹配。
+```python
+from harness.memory import MemoryCategory, MemorySource, MemoryEntry
 
-**需要实现**：语义搜索历史对话、技能、文档。
+# 分类枚举
+class MemoryCategory(Enum):
+    USER_PROFILE = "User Profile"
+    KEY_DECISIONS = "Key Decisions"
+    LEARNED_PATTERNS = "Learned Patterns"
+    PROJECT_CONTEXT = "Project Context"
 
-可选依赖 `harness-ai[vector]`:
+# 来源枚举
+class MemorySource(Enum):
+    USER_INPUT = "user_input"
+    AGENT_OBSERVATION = "agent_observation"
+    EXPLICIT_SAVE = "explicit_save"
+
+# 记忆条目
+@dataclass
+class MemoryEntry:
+    category: MemoryCategory
+    content: str
+    created_at: datetime
+    source: MemorySource
+```
+
+---
+
+## 向量检索 ✅ 已实现
+
+Harness 提供向量记忆存储，支持语义搜索历史对话、技能和文档。
+
+### 安装
 
 ```bash
 pip install harness-ai[vector]
 ```
 
+### VectorMemoryStore
+
 ```python
-from harness.memory import VectorMemoryStore
+from harness.memory import VectorMemoryStore, VectorMemoryConfig
 
-store = VectorMemoryStore(
-    embedding_model="text-embedding-3-small",
-    persist_dir="~/.harness/vectors"
-)
-
-# 存储记忆
-await store.store(MemoryEntry(
-    id="decision_001",
-    type="decision",
-    content="选择 SQLite 作为会话存储"
+# 创建向量存储
+store = VectorMemoryStore(config=VectorMemoryConfig(
+    embedding_model="mock",  # 或 "openai", "sentence-transformers"
+    embedding_dimension=384,
+    collection_name="harness_memory",
 ))
 
-# 语义检索
-results = await store.retrieve("数据存储方案")
+# 添加文档
+await store.add("doc1", "Python is a programming language")
+await store.add("doc2", "JavaScript is also a programming language")
+
+# 语义搜索
+results = await store.search("programming languages", top_k=5)
+for result in results:
+    print(f"{result.score:.2f}: {result.content}")
 ```
 
-### LLM-based Summarization
-
-当前实现：简单启发式摘要。
-
-**需要改进**：使用 LLM 生成高质量摘要。
+### 对话历史搜索
 
 ```python
-class LLMCompressor(ContextCompressor):
-    """LLM 增强的上下文压缩器"""
+# 添加对话
+await store.add_conversation("session_123", [
+    {"role": "user", "content": "What is Python?"},
+    {"role": "assistant", "content": "Python is a programming language."},
+])
 
-    async def compress_session(self, session: Session, target_tokens: int) -> str:
-        """使用 LLM 生成摘要"""
-        prompt = f"""Summarize the following conversation, preserving:
-1. Key decisions made
-2. Important context established
-3. Outstanding tasks or questions
-4. User preferences discovered
-
-Conversation:
-{self._format_messages(session.messages)}
-
-Summary (concise, under {target_tokens // 4} words):"""
-
-        response = await self.llm.call(
-            Context(
-                system_prompt="You are a concise summarizer.",
-                messages=[Message(role="user", content=prompt)],
-                tools=[]
-            )
-        )
-        return response.message.content
+# 搜索对话
+results = await store.search_conversations("Python", session_id="session_123")
 ```
+
+### 技能语义匹配
+
+```python
+# 添加技能
+await store.add_skill("code_review", "Review code for bugs and issues")
+await store.add_skill("testing", "Write comprehensive tests")
+
+# 语义搜索技能
+results = await store.search_skills("find bugs in code")
+```
+
+### 自定义嵌入模型
+
+```python
+from harness.memory import MockEmbeddingModel
+
+# 使用 Mock 模型（测试用）
+mock_model = MockEmbeddingModel(dimension=128)
+store = VectorMemoryStore(embedding_model=mock_model)
+
+# 使用 OpenAI 嵌入
+store = VectorMemoryStore(config=VectorMemoryConfig(
+    embedding_model="openai",
+    embedding_dimension=1536,
+))
+
+# 使用 sentence-transformers
+store = VectorMemoryStore(config=VectorMemoryConfig(
+    embedding_model="sentence-transformers",
+    embedding_dimension=384,
+))
+```
+
+### SimpleInMemoryVectorStore
+
+用于测试的简单内存向量存储：
+
+```python
+from harness.memory import SimpleInMemoryVectorStore
+
+store = SimpleInMemoryVectorStore()
+
+# 添加向量
+await store.add(
+    ids=["a", "b"],
+    embeddings=[[1.0, 0.0], [0.0, 1.0]],
+    documents=["Document A", "Document B"],
+)
+
+# 搜索
+results = await store.search([1.0, 0.1], top_k=10)
+
+# 删除
+await store.delete(["a"])
+
+# 清空
+await store.clear()
+```
+
+---
+
+## 实现状态总结
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| Working Memory | ✅ | Session 消息存储 |
+| Session Memory | ✅ | SQLiteSessionStore + WAL 模式 |
+| Context Builder | ✅ | Token 预算管理 + 自动压缩 |
+| Dynamic System Prompt | ✅ | 多源组装 + AGENTS.md 支持 |
+| MEMORY.md 标准 | ✅ | 持久化记忆文件格式 |
+| 向量检索 | ✅ | 语义搜索（可选依赖） |
+| LLM-based Summarization | ⚠️ | 部分（可扩展） |

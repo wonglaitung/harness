@@ -244,34 +244,34 @@ You are a code reviewer. Your task is to:
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
-| Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器 |
+| Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测 |
 | Tools | ✅ | 文件操作、搜索、Bash、Web、MCP |
 | Filesystem | ✅ | 通过工具实现，支持权限检查 |
 | Bash & Code Execution | ✅ | 沙箱执行、命令黑名单、超时控制 |
 | Sandbox | ✅ | LightweightSandbox + SandboxExecutor |
-| Memory | ⚠️ | 缺向量检索、MEMORY.md 标准 |
+| Memory | ✅ | 向量检索、MEMORY.md 标准、动态系统提示 |
 | Context Management | ✅ | ContextBuilder 处理组装 |
-| Context Rot Defense | ⚠️ | 缺工具输出卸载、渐进加载 |
-| Long-Horizon Execution | ⚠️ | 缺 Lifecycle Hooks、Ralph Loop、自验证钩子、Sub-Agent |
+| Context Rot Defense | ✅ | 渐进式技能加载、上下文压缩 |
+| Long-Horizon Execution | ✅ | Lifecycle Hooks、Ralph Loop、自验证钩子、Sub-Agent |
 | Error Handling | ✅ | 熔断器、成本控制、卡住检测 |
 | Serving Layer | ❌ | SDK 不包含（client 层职责） |
 
 详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
 
-### 完全缺失的关键功能
+### 功能实现状态
 
-| # | 功能 | 描述 | 影响 | 优先级 |
-|---|------|------|------|--------|
-| 1 | **Lifecycle Hooks** | 工具执行前后的钩子系统 | 企业定制基础 | P0 |
-| 2 | **Ralph Loop** | 拦截提前退出，重置上下文继续长任务 | 长任务保障 | P1 |
-| 3 | **工具输出卸载** | 大输出保存到文件，只注入引用 | 上下文预算优化 | P3 |
-| 4 | **渐进式技能加载** | 三级加载：Frontmatter → Full → Reference | 上下文效率 | P2 |
-| 5 | **自验证钩子** | write-code → run-tests → fix-errors 循环 | 代码质量保障 | P2 |
-| 6 | **Sub-Agent 管理** | 创建子代理处理子任务 | 大任务分解 | P1 |
-| 7 | **MEMORY.md 标准** | 读写项目根目录的持久记忆文件 | 跨会话记忆 | P2 |
-| 8 | **向量检索** | 语义搜索历史对话、技能、文档 | 智能检索 | P2 |
-| 9 | **动态系统提示组装** | 根据项目上下文动态调整系统提示 | 项目级约定 | P0 |
-| 10 | **步骤预算** | 软限制总步骤数，提前警告 | 成本预警 | P3 |
+| # | 功能 | 状态 | 说明 |
+|---|------|------|------|
+| 1 | **Lifecycle Hooks** | ✅ | 8 个钩子点，支持拦截、修改、注入 |
+| 2 | **Ralph Loop** | ✅ | 长任务循环，防止上下文焦虑 |
+| 3 | **工具输出卸载** | ⚠️ | P3 待实现 |
+| 4 | **渐进式技能加载** | ✅ | 三级加载：Frontmatter → Full → Reference |
+| 5 | **自验证钩子** | ✅ | write-code → run-tests → fix-errors 循环 |
+| 6 | **Sub-Agent 管理** | ✅ | 创建子代理处理子任务 |
+| 7 | **MEMORY.md 标准** | ✅ | 持久记忆文件格式 |
+| 8 | **向量检索** | ✅ | 语义搜索历史对话、技能、文档 |
+| 9 | **动态系统提示组装** | ✅ | 多源组装、AGENTS.md 支持 |
+| 10 | **步骤预算** | ⚠️ | P3 待实现 |
 
 ## 数据流
 
