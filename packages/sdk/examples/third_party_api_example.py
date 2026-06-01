@@ -6,7 +6,7 @@ Harness SDK 功能演示 - 开箱即用案例
 运行方式:
     python examples/third_party_api_example.py
 
-功能模块 (16 个演示):
+功能模块 (24 个演示):
     演示 1:  基础对话 - 简单问答
     演示 2:  文件工具 - ReadTool, GlobTool, GrepTool
     演示 3:  多轮对话 - Session 会话管理
@@ -23,6 +23,14 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 14: 中断恢复 - LoopSnapshot
     演示 15: 配置管理 - HarnessConfig, Model presets
     演示 16: 完整工作流 - 综合示例
+    演示 17: Lifecycle Hooks - 工具执行前后的钩子系统 (P0)
+    演示 18: 动态系统提示 - SystemPromptBuilder, AGENTS.md (P0)
+    演示 19: Ralph Loop - 长任务循环，防止上下文焦虑 (P1)
+    演示 20: Sub-Agent 管理 - 创建子代理处理子任务 (P1)
+    演示 21: 自验证钩子 - 代码修改后自动运行测试 (P2)
+    演示 22: 渐进式技能加载 - 三级加载优化上下文 (P2)
+    演示 23: MEMORY.md 标准 - 持久记忆文件管理 (P2)
+    演示 24: 向量检索 - 语义搜索历史对话 (P2)
 
 作者: Harness Team
 """
@@ -86,8 +94,7 @@ from harness import (
 )
 
 # Mock 测试 - 不需要真实 API 的测试
-from harness.testing import MockHarness
-from harness.testing.mock_harness import MockResponse
+from harness.testing import MockHarness, MockResponse
 
 # Skills 技能系统 - 模块化能力单元
 from harness import (
@@ -132,6 +139,81 @@ from harness import (
     AsyncSQLiteSessionStore,  # 异步 SQLite 存储
     CostControlConfig,     # 成本控制配置（新增）
     StorageConfig,         # 存储配置（新增）
+)
+
+
+# Lifecycle Hooks - 工具执行前后的钩子系统 (P0)
+from harness import (
+    HookPoint,           # 钩子触发点
+    HookAction,          # 钩子动作
+    HookContext,         # 钩子上下文
+    HookResult,          # 钩子结果
+    LifecycleHook,       # 钩子基类
+    HookManager,         # 钩子管理器
+    LoggingHook,         # 日志钩子
+    AbortOnDangerousToolHook,  # 阻止危险工具钩子
+    MaxToolCallsHook,    # 限制工具调用次数钩子
+)
+
+
+# 动态系统提示组装 (P0)
+from harness import (
+    SystemPromptSource,    # 系统提示源
+    SystemPromptConfig,    # 系统提示配置
+    SystemPromptBuilder,   # 系统提示构建器
+    discover_project_context,  # 发现项目上下文
+)
+
+
+# Ralph Loop - 长任务循环 (P1)
+from harness import (
+    RalphLoopConfig,    # Ralph Loop 配置
+    RalphLoopHook,      # Ralph Loop 钩子
+)
+
+
+# Sub-Agent 管理 (P1)
+from harness import (
+    SubAgentConfig,     # 子代理配置
+    SubAgentStatus,     # 子代理状态
+    SubAgentResult,     # 子代理结果
+    SubAgentManager,    # 子代理管理器
+)
+
+
+# 自验证钩子 (P2)
+from harness import (
+    SelfVerificationConfig,  # 自验证配置
+    SelfVerificationHook,    # 自验证钩子
+)
+
+
+# 渐进式技能加载 (P2)
+from harness import (
+    ProgressiveSkillLoader,  # 渐进式技能加载器
+    SkillMetadata,           # 技能元数据
+    LoadingLevel,            # 加载级别
+)
+
+
+# MEMORY.md 标准 (P2)
+from harness import (
+    MemoryFileManager,   # MEMORY.md 文件管理器
+    MemoryEntry,         # 记忆条目
+    MemoryCategory,      # 记忆分类
+    MemorySource,        # 记忆来源
+    MemorySections,      # 记忆章节
+    create_default_memory,  # 创建默认记忆
+)
+
+
+# 向量检索 (P2)
+from harness import (
+    VectorMemoryStore,        # 向量记忆存储
+    VectorMemoryConfig,       # 向量配置
+    VectorSearchResult,       # 搜索结果
+    SimpleInMemoryVectorStore,  # 简单内存向量存储
+    MockEmbeddingModel,       # Mock 嵌入模型
 )
 
 

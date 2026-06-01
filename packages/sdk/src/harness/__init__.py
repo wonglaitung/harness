@@ -18,6 +18,23 @@ from harness.core import (
     ObservabilityManager,
     setup_observability,
     UserBudgetStatus,
+    # Lifecycle Hooks (P0)
+    LifecycleHook,
+    HookManager,
+    LoggingHook,
+    AbortOnDangerousToolHook,
+    MaxToolCallsHook,
+    # Ralph Loop (P1)
+    RalphLoopConfig,
+    RalphLoopHook,
+    # Sub-Agent Management (P1)
+    SubAgentConfig,
+    SubAgentStatus,
+    SubAgentResult,
+    SubAgentManager,
+    # Self-Verification (P2)
+    SelfVerificationConfig,
+    SelfVerificationHook,
 )
 from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
 from harness.mcp import (
@@ -37,6 +54,24 @@ from harness.memory import (
     FileSessionStore,
     SessionStore,
     SQLiteSessionStore,
+    # Dynamic System Prompt (P0)
+    SystemPromptSource,
+    SystemPromptConfig,
+    SystemPromptBuilder,
+    discover_project_context,
+    # MEMORY.md Standard (P2)
+    MemoryFileManager,
+    MemoryEntry,
+    MemoryCategory,
+    MemorySource,
+    MemorySections,
+    create_default_memory,
+    # Vector Store (P2)
+    VectorMemoryStore,
+    VectorMemoryConfig,
+    VectorSearchResult,
+    SimpleInMemoryVectorStore,
+    MockEmbeddingModel,
 )
 from harness.model_presets import (
     CONTEXT_LEVELS,
@@ -74,6 +109,10 @@ from harness.skills import (
     SkillRegistry,
     SkillTools,
     SkillTrigger,
+    # Progressive Skill Loading (P2)
+    ProgressiveSkillLoader,
+    SkillMetadata,
+    LoadingLevel,
 )
 from harness.tools.builtins import (
     BashTool,
@@ -102,6 +141,11 @@ from harness.types import (
     ToolResult,
     UserBudgetExceededError,
     UserUsage,
+    # Hook Types (P0)
+    HookPoint,
+    HookAction,
+    HookContext,
+    HookResult,
 )
 
 __version__ = "0.1.0"
@@ -172,6 +216,10 @@ __all__ = [
     "SkillInjector",
     "SkillLoader",
     "InjectionConfig",
+    # Progressive Skill Loading (P2)
+    "ProgressiveSkillLoader",
+    "SkillMetadata",
+    "LoadingLevel",
     # Security
     "SandboxExecutor",
     "LightweightSandbox",
@@ -200,4 +248,43 @@ __all__ = [
     "ObservabilityManager",
     "ObservabilityConfig",
     "setup_observability",
+    # Lifecycle Hooks (P0)
+    "HookPoint",
+    "HookAction",
+    "HookContext",
+    "HookResult",
+    "LifecycleHook",
+    "HookManager",
+    "LoggingHook",
+    "AbortOnDangerousToolHook",
+    "MaxToolCallsHook",
+    # Dynamic System Prompt (P0)
+    "SystemPromptSource",
+    "SystemPromptConfig",
+    "SystemPromptBuilder",
+    "discover_project_context",
+    # Ralph Loop (P1)
+    "RalphLoopConfig",
+    "RalphLoopHook",
+    # Sub-Agent Management (P1)
+    "SubAgentConfig",
+    "SubAgentStatus",
+    "SubAgentResult",
+    "SubAgentManager",
+    # Self-Verification (P2)
+    "SelfVerificationConfig",
+    "SelfVerificationHook",
+    # MEMORY.md Standard (P2)
+    "MemoryFileManager",
+    "MemoryEntry",
+    "MemoryCategory",
+    "MemorySource",
+    "MemorySections",
+    "create_default_memory",
+    # Vector Store (P2)
+    "VectorMemoryStore",
+    "VectorMemoryConfig",
+    "VectorSearchResult",
+    "SimpleInMemoryVectorStore",
+    "MockEmbeddingModel",
 ]
