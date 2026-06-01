@@ -308,3 +308,65 @@
 
 提交记录:
 - feat(sdk): Implement Ralph Loop and Sub-Agent Management (P1)
+
+### Phase 20: 自验证钩子 (P2) ✅ 完成 (NEW)
+
+#### 实现
+- SelfVerificationConfig: 配置（test_command, test_args, trigger_tools, max_retries）
+- SelfVerificationHook: 代码修改后自动运行测试
+- 触发工具检测：write, edit, write_file, edit_file
+- 测试失败时注入错误消息到上下文
+- 重试限制：防止无限循环
+- 测试检测：自动检测 tests/ 目录
+
+测试状态: 15 个新增测试通过
+
+### Phase 21: 渐进式技能加载 (P2) ✅ 完成 (NEW)
+
+#### 实现
+- LoadingLevel: 三级加载常量（FRONTMATTER, FULL_CONTENT, REFERENCES）
+- SkillMetadata: 轻量级元数据（~100 tokens）
+- ProgressiveSkillLoader: 渐进式加载器
+  - discover_skills(): 发现技能（Level 1）
+  - load_full_content(): 加载完整内容（Level 2）
+  - load_with_references(): 加载引用文件（Level 3）
+  - match_skills(): 匹配用户输入
+- 缓存机制：LRU 缓存避免重复加载
+
+测试状态: 19 个新增测试通过
+
+### Phase 22: MEMORY.md 标准 (P2) ✅ 完成 (NEW)
+
+#### 实现
+- MemoryCategory: 分类枚举（USER_PROFILE, KEY_DECISIONS, LEARNED_PATTERNS, PROJECT_CONTEXT）
+- MemorySource: 来源枚举（USER_INPUT, AGENT_OBSERVATION, EXPLICIT_SAVE）
+- MemoryEntry: 记忆条目
+- MemorySections: 所有记忆章节
+- MemoryFileManager: MEMORY.md 文件管理器
+  - load()/save(): 读写文件
+  - add_entry()/remove_entry(): 添加/删除条目
+  - to_context_string(): 格式化为上下文字符串
+- create_default_memory(): 创建默认模板
+
+测试状态: 24 个新增测试通过
+
+### Phase 23: 向量检索 (P2) ✅ 完成 (NEW)
+
+#### 实现
+- VectorSearchResult: 搜索结果数据类
+- EmbeddingModel Protocol: 嵌入模型接口
+- VectorStore Protocol: 向量存储接口
+- SimpleInMemoryVectorStore: 简单内存向量存储（用于测试）
+- MockEmbeddingModel: 模拟嵌入模型（用于测试）
+- VectorMemoryConfig: 向量配置
+- VectorMemoryStore: 向量记忆存储
+  - add()/add_batch(): 添加文档
+  - search(): 语义搜索
+  - add_conversation()/search_conversations(): 对话历史
+  - add_skill()/search_skills(): 技能搜索
+- 支持可选嵌入模型：openai, sentence-transformers
+
+测试状态: 17 个新增测试通过，总计 424 个测试通过
+
+提交记录:
+- feat(sdk): Implement P2 features - Self-verification, Progressive Skills, MEMORY.md, Vector Store

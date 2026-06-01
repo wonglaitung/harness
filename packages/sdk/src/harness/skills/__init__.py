@@ -13,6 +13,12 @@ from harness.skills.base import (
 )
 from harness.skills.injector import InjectionConfig, SkillInjector
 from harness.skills.loader import SkillLoader
+from harness.skills.progressive import (
+    LoadingLevel,
+    ProgressiveLoadResult,
+    ProgressiveSkillLoader,
+    SkillMetadata,
+)
 from harness.skills.registry import SkillRegistry
 
 __all__ = [
@@ -28,4 +34,9 @@ __all__ = [
     "InjectionConfig",
     # Loading
     "SkillLoader",
+    # Progressive Loading
+    "ProgressiveSkillLoader",
+    "SkillMetadata",
+    "LoadingLevel",
+    "ProgressiveLoadResult",
 ]

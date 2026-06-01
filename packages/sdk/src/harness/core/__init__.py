@@ -28,6 +28,10 @@ from harness.core.subagent import (
     SubAgentResult,
     SubAgentStatus,
 )
+from harness.core.self_verification import (
+    SelfVerificationConfig,
+    SelfVerificationHook,
+)
 from harness.core.observability import (
     ObservabilityConfig,
     ObservabilityManager,
@@ -78,6 +82,9 @@ __all__ = [
     "SubAgentManager",
     "SubAgentResult",
     "SubAgentStatus",
+    # Self-Verification
+    "SelfVerificationConfig",
+    "SelfVerificationHook",
     # Observability
     "ObservabilityManager",
     "ObservabilityConfig",
