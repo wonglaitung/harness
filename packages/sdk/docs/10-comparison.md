@@ -319,3 +319,102 @@ agent.load_skill("downloaded_from_clawhub.md")
 - 需要独立服务 → Hermes/OpenClaw
 - 需要内嵌集成 → 本 Harness
 - 可以混合使用 → 共享技能/记忆格式
+
+## 行业趋势与启示
+
+### "Bitter Lesson" 对 Agent 开发的启示
+
+Rich Sutton 的 "Bitter Lesson" 论文指出：**利用计算的通用方法总是击败手工编码的人类知识**。这一教训正在 Agent 开发中重演：
+
+| 案例 | 变化 |
+|------|------|
+| **Manus** | 6 个月内重构 Harness 5 次，移除刚性假设 |
+| **LangChain** | 一年内重构 "Open Deep Research" Agent 3 次 |
+| **Vercel** | 移除 80% 的 Agent 工具，减少步骤、token、响应时间 |
+
+**关键教训**: 如果过度工程化控制流，下一次模型更新就会破坏你的系统。
+
+### Harness 设计原则
+
+#### 1. 保持简单
+
+- ❌ 不要构建复杂的控制流
+- ✅ 提供健壮的原子工具
+- ✅ 让模型自己制定计划
+
+#### 2. 为删除而构建
+
+- 架构必须模块化
+- 新模型会替换你的逻辑
+- 随时准备删除代码
+
+#### 3. Harness 即数据集
+
+竞争优势不再是提示词，而是 Harness 捕获的执行轨迹：
+
+- 每次 Agent 在长任务后期无法遵循指令的失败
+- 都可用于训练下一轮模型
+- 形成"训练-推理环境"的闭环
+
+### 未来方向
+
+| 趋势 | 说明 |
+|------|------|
+| **训练与推理融合** | Harness 捕获的数据直接反馈到模型训练 |
+| **上下文耐久性** | Harness 成为解决"模型漂移"的主要工具 |
+| **步骤级检测** | 精确检测模型在第 N 步后停止遵循指令 |
+
+### 从 Prompt Engineering 到 Harness Engineering
+
+AI 开发范式的演进：
+
+```
+2022-2023: Prompt Engineering  → "如何表述问题？"
+2024-2025: Context Engineering → "上下文中放什么信息？"
+2026+:     Harness Engineering → "构建什么样的系统？"
+```
+
+**核心转变**: 随着上下文窗口扩展到 100 万+ token，问题不再是"如何措辞"，而是"什么信息应该放入上下文，以什么顺序，什么优先级"。这是工程问题，而非写作问题。
+
+---
+
+## Production Harness 组件对比
+
+### 与行业标准的差距
+
+基于 LangChain、Anthropic、Stanford IRIS Lab 的最佳实践：
+
+| 组件 | Harness SDK | Claude Code | LangGraph | 差距 |
+|------|-------------|-------------|-----------|------|
+| **Orchestration Loop** | ✅ ReAct + 熔断 | ✅ | ✅ | 无 |
+| **Tools** | ✅ 8 内置 + MCP | ✅ 6 类 | ✅ | 无 |
+| **Filesystem** | ✅ 权限控制 | ✅ Git 集成 | ✅ | 无 |
+| **Bash Execution** | ✅ 沙箱 + 黑名单 | ✅ | ✅ | 无 |
+| **Sandbox** | ✅ LightweightSandbox | ✅ 容器 | ✅ Daytona | 生产级容器待集成 |
+| **Memory** | ⚠️ 单层 Session | ✅ 四层 + MEMORY.md | ✅ 向量检索 | 需要扩展 |
+| **Context Management** | ✅ ContextBuilder | ✅ 优先级栈 | ✅ | 无 |
+| **Context Rot Defense** | ⚠️ 压缩器 | ✅ 工具卸载 + 渐进加载 | ✅ Compaction | 需要增强 |
+| **Long-Horizon** | ⚠️ 快照恢复 | ✅ Ralph Loop + 自验证 | ✅ | 需要增强 |
+| **Error Handling** | ✅ 熔断 + 卡住检测 | ✅ 步骤预算 | ✅ | 无 |
+| **Serving Layer** | ❌ SDK 不含 | ✅ CLI + Web + API | ✅ | Client 层职责 |
+
+### 优先级路线图（完整版）
+
+| 优先级 | 功能 | 工作量 | 影响 | 依赖 |
+|--------|------|--------|------|------|
+| **P0** | Lifecycle Hooks | 2-3 天 | 企业定制基础，所有高级功能依赖 | 无 |
+| **P0** | 动态系统提示组装 | 1-2 天 | 项目级约定，AGENTS.md 支持 | 无 |
+| **P1** | Sub-Agent 管理 | 3-5 天 | 大任务分解，并行处理 | Hooks |
+| **P1** | Ralph Loop | 2-3 天 | 长任务保障，防止上下文焦虑 | Hooks |
+| **P2** | 自验证钩子 | 2 天 | 代码质量保障 | Hooks |
+| **P2** | 渐进式技能加载 | 2 天 | 上下文效率 | 无 |
+| **P2** | MEMORY.md 标准 | 1-2 天 | 跨会话记忆持久化 | 无 |
+| **P2** | 向量检索 | 3-5 天 | 智能检索历史对话 | 无 |
+| **P3** | 工具输出卸载 | 1-2 天 | 上下文预算优化 | 无 |
+| **P3** | 步骤预算 | 0.5 天 | 成本预警 | 无 |
+
+**实施建议**：
+1. **Phase 1 (P0)**: 完成 Hooks + 动态系统提示 → 解锁企业定制能力
+2. **Phase 2 (P1)**: 完成 Sub-Agent + Ralph Loop → 解锁长任务处理
+3. **Phase 3 (P2)**: 完成自验证 + 渐进加载 + MEMORY.md + 向量检索 → 生产级优化
+4. **Phase 4 (P3)**: 完成输出卸载 + 步骤预算 → 性能微调

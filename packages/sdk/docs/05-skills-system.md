@@ -1343,3 +1343,81 @@ class SkillReviewManager:
 # harness skill approve <draft_id>      # 批准
 # harness skill reject <draft_id> -r "不安全"
 ```
+
+---
+
+## 渐进式技能加载 (待实现) - P2 优先级
+
+当前实现：启动时全部加载技能内容。
+
+**问题**：浪费上下文预算，大技能库会快速填充 token。
+
+**解决方案**：三级渐进加载
+
+```
+Level 1: Frontmatter Only (~100 tokens)
+    ├── 读取 YAML frontmatter：name, description
+    └── 模型可见技能列表，选择激活
+
+Level 2: Full Content (~1000-2000 tokens)
+    ├── 加载完整 skill.md
+    └── 仅在模型确定需要时加载
+
+Level 3: Reference Files (按需)
+    └── 加载技能引用的外部文件
+```
+
+### 实现示例
+
+```python
+@dataclass
+class SkillMetadata:
+    """技能元数据（轻量）"""
+    name: str
+    description: str
+    path: Path
+    loaded: bool = False
+    skill: Skill | None = None
+
+class ProgressiveSkillLoader:
+    """渐进式技能加载器"""
+
+    def load_frontmatter_only(self, skill_path: Path) -> SkillMetadata:
+        """仅加载 frontmatter，返回轻量元数据"""
+        content = skill_path.read_text()
+        frontmatter = self._parse_frontmatter(content)
+        return SkillMetadata(
+            name=frontmatter["name"],
+            description=frontmatter["description"],
+            path=skill_path,
+            loaded=False
+        )
+
+    def load_full_content(self, metadata: SkillMetadata) -> Skill:
+        """按需加载完整内容"""
+        if metadata.loaded:
+            return metadata.skill
+
+        skill = Skill.from_file(metadata.path)
+        metadata.skill = skill
+        metadata.loaded = True
+        return skill
+```
+
+### ContextBuilder 集成
+
+```python
+class ContextBuilder:
+    def build(self, session: Session, skills: List[SkillMetadata]) -> Context:
+        # Level 1: 所有技能的 frontmatter
+        available_skills = [f"- {s.name}: {s.description}" for s in skills]
+        system_prompt += f"\n\n# Available Skills\n" + "\n".join(available_skills)
+
+        # Level 2: 匹配激活的技能完整内容
+        active_skills = self._match_skills(session.user_input, skills)
+        for skill_meta in active_skills:
+            skill = self.loader.load_full_content(skill_meta)
+            system_prompt += f"\n\n{skill.content}"
+
+        return Context(system_prompt=system_prompt, ...)
+```

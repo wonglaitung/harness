@@ -101,6 +101,41 @@
 
 ## 核心概念
 
+### Agent Harness 定义
+
+**Agent Harness（智能体框架）** 是包裹在 LLM 外层的完整软件基础设施，用于管理长时间运行的任务。它不是 Agent 本身，而是控制 Agent 如何运行的软件系统。
+
+#### 核心类比
+
+| 组件 | 类比 | 职责 |
+|------|------|------|
+| **模型 (Model)** | CPU | 提供原始处理能力 |
+| **上下文窗口 (Context Window)** | RAM | 有限的易失性工作内存 |
+| **Agent Harness** | 操作系统 | 管理上下文、处理启动序列、提供标准驱动 |
+| **Agent** | 应用程序 | 运行在 OS 之上的具体业务逻辑 |
+
+### 为什么 Harness 重要？
+
+#### 70% 的性能来自 Harness
+
+研究表明，AI Agent 约 70% 的性能表现来自 Harness 而非模型本身。斯坦福 IRIS Lab 的实验显示：使用自动化 Harness 演化系统 (Meta-Harness) 配合 Claude Opus 4.6，在 SWE-Bench 上达到 76.4%，超越了所有手工设计的系统。
+
+#### 基准测试问题
+
+传统单轮对话基准测试无法衡量模型在长时间任务中的可靠性：
+
+- **静态基准局限**: 模型在静态排行榜上的差距正在缩小
+- **耐久性缺失**: 1% 的基准差距无法检测模型在 50 步后是否偏离指令
+- **真实需求**: 生产环境需要执行数百次工具调用的可靠性
+
+#### Harness 的核心价值
+
+| 价值点 | 说明 |
+|--------|------|
+| **验证真实进展** | 基准与用户需求错位，Harness 允许在实际场景中测试 |
+| **提升用户体验** | 没有Harness，用户体验可能落后于模型潜力 |
+| **支持持续优化** | 稳定的环境创造反馈循环，支持"爬山"式改进 |
+
 ### Agent Loop（代理循环）
 
 代理循环是 Harness 的心脏，实现了"代理"行为的核心机制：
@@ -200,6 +235,43 @@ You are a code reviewer. Your task is to:
 | Webhook | 外部事件触发 | GitHub PR 事件 |
 | Heartbeat | 周期性心跳 | 每 5 分钟检查状态 |
 | FileWatch | 文件变化触发 | 配置文件更新 |
+
+## Production Harness 组件实现状态
+
+基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 11 个核心组件。
+
+### 实现状态总览
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器 |
+| Tools | ✅ | 文件操作、搜索、Bash、Web、MCP |
+| Filesystem | ✅ | 通过工具实现，支持权限检查 |
+| Bash & Code Execution | ✅ | 沙箱执行、命令黑名单、超时控制 |
+| Sandbox | ✅ | LightweightSandbox + SandboxExecutor |
+| Memory | ⚠️ | 缺向量检索、MEMORY.md 标准 |
+| Context Management | ✅ | ContextBuilder 处理组装 |
+| Context Rot Defense | ⚠️ | 缺工具输出卸载、渐进加载 |
+| Long-Horizon Execution | ⚠️ | 缺 Lifecycle Hooks、Ralph Loop、自验证钩子、Sub-Agent |
+| Error Handling | ✅ | 熔断器、成本控制、卡住检测 |
+| Serving Layer | ❌ | SDK 不包含（client 层职责） |
+
+详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
+
+### 完全缺失的关键功能
+
+| # | 功能 | 描述 | 影响 | 优先级 |
+|---|------|------|------|--------|
+| 1 | **Lifecycle Hooks** | 工具执行前后的钩子系统 | 企业定制基础 | P0 |
+| 2 | **Ralph Loop** | 拦截提前退出，重置上下文继续长任务 | 长任务保障 | P1 |
+| 3 | **工具输出卸载** | 大输出保存到文件，只注入引用 | 上下文预算优化 | P3 |
+| 4 | **渐进式技能加载** | 三级加载：Frontmatter → Full → Reference | 上下文效率 | P2 |
+| 5 | **自验证钩子** | write-code → run-tests → fix-errors 循环 | 代码质量保障 | P2 |
+| 6 | **Sub-Agent 管理** | 创建子代理处理子任务 | 大任务分解 | P1 |
+| 7 | **MEMORY.md 标准** | 读写项目根目录的持久记忆文件 | 跨会话记忆 | P2 |
+| 8 | **向量检索** | 语义搜索历史对话、技能、文档 | 智能检索 | P2 |
+| 9 | **动态系统提示组装** | 根据项目上下文动态调整系统提示 | 项目级约定 | P0 |
+| 10 | **步骤预算** | 软限制总步骤数，提前警告 | 成本预警 | P3 |
 
 ## 数据流
 
@@ -338,7 +410,10 @@ You are a code reviewer. Your task is to:
 ## 参考资源
 
 - [Harness Engineering - Martin Fowler](https://martinfowler.com/articles/harness-engineering.html)
+- [The importance of Agent Harness in 2026 - Philschmid](https://www.philschmid.de/agent-harness-2026)
+- [The Agent Harness: Why 70% of Performance Lives Outside the Model](https://medium.com/@tentenco/the-agent-harness-why-70-of-your-ai-agents-performance-lives-outside-the-model-5093cfe03df1)
 - [OpenClaw Documentation](https://docs.openclaw.ai)
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 - [OpenHarness](https://github.com/HKUDS/OpenHarness)
 - [Anthropic Tool Use](https://docs.anthropic.com/en/docs/tool-use)
+- [The Bitter Lesson - Rich Sutton](http://www.incompleteideas.net/IncIdeas/BitterLesson.html)

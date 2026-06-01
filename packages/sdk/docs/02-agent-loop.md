@@ -1801,6 +1801,567 @@ result = await agent._loop.resume_from_snapshot(snapshot)
 
 ---
 
+## Lifecycle Hooks (待实现) - P0 优先级
+
+Lifecycle Hooks 是最基础的缺失功能，所有其他高级功能（Ralph Loop、自验证）都依赖它。
+
+### 问题场景
+
+当前无法在工具执行前后插入自定义逻辑：
+- 无法拦截危险工具调用
+- 无法在代码修改后自动运行测试
+- 无法记录详细审计日志
+- 无法实现自定义重试逻辑
+
+### 钩子系统设计
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+from typing import Callable, Any
+
+class HookPoint(Enum):
+    """钩子触发点"""
+    BEFORE_LLM_CALL = "before_llm_call"
+    AFTER_LLM_CALL = "after_llm_call"
+    BEFORE_TOOL_EXECUTE = "before_tool_execute"
+    AFTER_TOOL_EXECUTE = "after_tool_execute"
+    ON_ERROR = "on_error"
+    ON_LOOP_START = "on_loop_start"
+    ON_LOOP_END = "on_loop_end"
+    ON_EXIT_ATTEMPT = "on_exit_attempt"  # Ralph Loop 使用
+
+@dataclass
+class HookContext:
+    """钩子上下文"""
+    hook_point: HookPoint
+    session_id: str
+    iteration: int
+    tool_name: str | None = None
+    tool_args: dict | None = None
+    tool_result: ToolResult | None = None
+    llm_response: LLMResponse | None = None
+    error: Exception | None = None
+    messages: list[Message] | None = None
+    metadata: dict = None
+
+@dataclass
+class HookResult:
+    """钩子返回结果"""
+    action: str  # "continue", "abort", "retry", "inject_message", "modify_args"
+    modified_args: dict | None = None
+    modified_result: ToolResult | None = None
+    inject_message: Message | None = None
+    delay_seconds: float = 0
+
+class LifecycleHook:
+    """生命周期钩子基类"""
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        """订阅的钩子点"""
+        return []
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """执行钩子逻辑"""
+        return HookResult(action="continue")
+
+# 注册钩子
+agent = AgentHarness()
+agent.add_hook(MyCustomHook(), points=[HookPoint.BEFORE_TOOL_EXECUTE])
+```
+
+### AgentLoop 集成
+
+```python
+class AgentLoop:
+    def __init__(self, ...):
+        self._hooks: dict[HookPoint, list[LifecycleHook]] = defaultdict(list)
+
+    def add_hook(self, hook: LifecycleHook, points: list[HookPoint] | None = None):
+        """注册钩子"""
+        points = points or hook.hook_points
+        for point in points:
+            self._hooks[point].append(hook)
+
+    async def _execute_with_hooks(self, tool_call: ToolCall, context: ToolContext) -> ToolResult:
+        """带钩子的工具执行"""
+        # Before hook
+        for hook in self._hooks[HookPoint.BEFORE_TOOL_EXECUTE]:
+            result = await hook.execute(HookContext(
+                hook_point=HookPoint.BEFORE_TOOL_EXECUTE,
+                tool_name=tool_call.name,
+                tool_args=tool_call.arguments,
+            ))
+            if result.action == "abort":
+                return ToolResult(success=False, error="Aborted by hook")
+            if result.action == "modify_args":
+                tool_call.arguments = result.modified_args
+
+        # Execute tool
+        tool_result = await self.tools.execute(tool_call, context)
+
+        # After hook
+        for hook in self._hooks[HookPoint.AFTER_TOOL_EXECUTE]:
+            result = await hook.execute(HookContext(
+                hook_point=HookPoint.AFTER_TOOL_EXECUTE,
+                tool_name=tool_call.name,
+                tool_result=tool_result,
+            ))
+            if result.action == "inject_message":
+                # 注入消息到上下文
+                session.add_message(result.inject_message)
+            if result.action == "modify_result":
+                tool_result = result.modified_result
+
+        return tool_result
+```
+
+---
+
+## 工具输出卸载 (待实现) - P3 优先级
+
+当工具返回大量输出时，直接注入上下文会快速消耗 token 预算。工具输出卸载通过将大输出保存到文件，只注入引用来解决这个问题。
+
+### 问题场景
+
+```
+工具: Grep "function" in src/ (500+ 匹配)
+输出: 15,000 tokens
+结果: 单次工具调用消耗 7.5% 的 200k 上下文
+```
+
+### 卸载机制
+
+```python
+class ToolOutputOffloader:
+    """工具输出卸载器"""
+
+    def __init__(self, threshold_tokens: int = 1000):
+        self.threshold = threshold_tokens
+        self.offload_dir = Path(".harness/offloads")
+
+    def should_offload(self, result: ToolResult) -> bool:
+        """判断是否需要卸载"""
+        return result.token_count > self.threshold
+
+    def offload(self, result: ToolResult) -> str:
+        """卸载到文件，返回引用路径"""
+        offload_id = str(uuid.uuid4())[:8]
+        offload_path = self.offload_dir / f"{offload_id}.txt"
+        offload_path.write_text(result.content)
+
+        # 返回截断内容 + 文件引用
+        preview = result.content[:500]
+        return f"{preview}\n\n... [输出已卸载到 {offload_path}，完整内容 {result.token_count} tokens]"
+```
+
+### 配置示例
+
+```python
+from harness import AgentHarness
+from harness.core import ToolOutputOffloader
+
+agent = AgentHarness()
+agent.tool_executor.offloader = ToolOutputOffloader(
+    threshold_tokens=2000,  # 超过 2000 tokens 则卸载
+    offload_dir=".harness/offloads"
+)
+```
+
+---
+
+## Ralph Loop 模式 (待实现) - P1 优先级
+
+当 Agent 在长时间任务中接近上下文限制时，会产生"上下文焦虑"——提前结束任务。Ralph Loop 通过拦截退出并重置上下文来解决此问题。
+
+### 问题场景
+
+```
+任务: 重构整个代码库 (预计需要 50+ 步)
+上下文: 开始时 0 tokens，20 步后 80,000 tokens
+结果: 模型在第 25 步声称"任务完成"，实际只做了 50%
+```
+
+### Ralph Loop 机制
+
+```python
+class RalphLoopHook(LifecycleHook):
+    """Ralph Loop 钩子"""
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [HookPoint.ON_EXIT_ATTEMPT]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """拦截提前退出"""
+        if not self._is_task_complete(context):
+            # 保存当前状态到文件系统
+            self._save_progress(context)
+
+            # 在干净上下文中重新注入提示
+            return HookResult(
+                action="inject_message",
+                inject_message=Message(
+                    role="user",
+                    content=self._build_continuation_prompt(context)
+                ),
+                metadata={"clear_context": True}  # 重置上下文
+            )
+
+        return HookResult(action="continue")
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+from harness.hooks import RalphLoopHook
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+agent.add_hook(RalphLoopHook())
+
+# 长任务会自动循环直到真正完成
+result = await agent.run("重构整个代码库，更新所有 API 调用")
+```
+
+---
+
+## 自验证钩子 (待实现) - P2 优先级
+
+实现 write-code → run-tests → fix-errors 循环。
+
+```python
+class SelfVerificationHook(LifecycleHook):
+    """自验证钩子"""
+
+    def __init__(self, test_command: str = "pytest"):
+        self.test_command = test_command
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [HookPoint.AFTER_TOOL_EXECUTE]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """代码修改后自动运行测试"""
+        if context.tool_name in ("write", "edit"):
+            # 运行测试
+            test_result = await self._run_tests(context)
+
+            if not test_result.success:
+                # 测试失败，将错误注入上下文让 LLM 修复
+                return HookResult(
+                    action="inject_message",
+                    inject_message=Message(
+                        role="user",
+                        content=f"测试失败，请修复：\n{test_result.output}"
+                    )
+                )
+
+        return HookResult(action="continue")
+```
+
+---
+
+## Sub-Agent 管理 (待实现) - P1 优先级
+
+当任务过大需要分解时，主 Agent 可以创建子代理处理子任务。
+
+### 问题场景
+
+```
+任务: 分析整个代码库并生成架构文档
+步骤:
+  1. 分析 src/core 目录 → 需要 10+ 步
+  2. 分析 src/tools 目录 → 需要 10+ 步
+  3. 汇总生成文档
+
+问题: 主 Agent 上下文会被单个目录分析占满，无法保持全局视图
+```
+
+### Sub-Agent 架构
+
+```python
+from dataclasses import dataclass
+from typing import Literal
+
+@dataclass
+class SubAgentConfig:
+    """子代理配置"""
+    name: str                           # 子代理名称
+    task: str                           # 子任务描述
+    tools: list[str] | None = None      # 可用工具（None = 继承父代理）
+    max_iterations: int = 20            # 子代理最大迭代
+    inherit_context: bool = False       # 是否继承父代理上下文
+    report_format: Literal["summary", "full", "structured"] = "summary"
+
+class SubAgentManager:
+    """子代理管理器"""
+
+    def __init__(self, parent_agent: AgentHarness):
+        self.parent = parent_agent
+        self._sub_agents: dict[str, AgentHarness] = {}
+
+    async def spawn(self, config: SubAgentConfig) -> str:
+        """创建子代理"""
+        sub_agent = AgentHarness(
+            model=self.parent.model,
+            tools=config.tools or self.parent.tools,
+            max_iterations=config.max_iterations,
+        )
+        self._sub_agents[config.name] = sub_agent
+        return config.name
+
+    async def run(self, name: str, input: str) -> SubAgentResult:
+        """运行子代理"""
+        sub_agent = self._sub_agents.get(name)
+        result = await sub_agent.run(input)
+        return SubAgentResult(
+            name=name,
+            success=result.status == LoopState.COMPLETED,
+            summary=result.final_response[:500],
+        )
+
+    async def collect_all(self) -> dict[str, SubAgentResult]:
+        """收集所有子代理结果"""
+        results = {}
+        for name in self._sub_agents:
+            results[name] = await self.get_result(name)
+        return results
+```
+
+---
+
+## MEMORY.md 标准 (待实现) - P2 优先级
+
+Claude Code 使用 MEMORY.md 文件存储持久记忆，Harness 应支持读写此标准格式。
+
+### MEMORY.md 格式
+
+```markdown
+# MEMORY.md
+
+## User Profile
+- Role: Software Developer
+- Preferred Language: Python
+
+## Key Decisions
+- 2026-05-28: 选择 SQLite 作为会话存储（原因：零配置、跨平台）
+
+## Learned Patterns
+- 用户偏好简洁响应，无尾部总结
+- 避免在 QThread 中创建 asyncio event loop
+```
+
+### 实现设计
+
+```python
+from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime
+
+class MemoryFileManager:
+    """MEMORY.md 文件管理器"""
+
+    def __init__(self, project_root: Path | None = None):
+        self.project_root = project_root or Path.cwd()
+        self.memory_file = self.project_root / "MEMORY.md"
+
+    def load(self) -> dict[str, list[str]]:
+        """加载 MEMORY.md 内容"""
+        if not self.memory_file.exists():
+            return {}
+        return self._parse_sections(self.memory_file.read_text())
+
+    def save(self, sections: dict[str, list[str]]) -> None:
+        """保存到 MEMORY.md"""
+        self.memory_file.write_text(self._build_content(sections))
+
+    def add_entry(self, category: str, content: str) -> None:
+        """添加新记忆条目"""
+        sections = self.load()
+        if category not in sections:
+            sections[category] = []
+        sections[category].append(f"- {content}")
+        self.save(sections)
+```
+
+---
+
+## 动态系统提示组装 (待实现) - P0 优先级
+
+根据项目上下文动态调整系统提示，支持 AGENTS.md 标准。
+
+### 问题场景
+
+当前系统提示是静态的，无法根据：
+- 项目类型（Python/JavaScript/Rust）
+- 框架特性（Django/FastAPI/React）
+- 团队规范（代码风格、测试框架）
+- 项目结构（Monorepo/Microservice）
+
+自动调整行为。
+
+### AGENTS.md 标准
+
+类似 Claude Code 的 CLAUDE.md 和 Cursor 的 .cursorrules：
+
+```markdown
+# AGENTS.md
+
+## Project Context
+- Type: Python Monorepo
+- Framework: FastAPI + PyQt6
+- Test Framework: pytest
+- Package Manager: uv
+
+## Code Style
+- Use type hints for all public functions
+- Prefer composition over inheritance
+- Keep functions under 50 lines
+
+## Testing Requirements
+- Run pytest after any code modification
+- Minimum 80% coverage for new modules
+
+## Deployment
+- Build: uv build
+- Test: uv run pytest
+- Release: uv publish
+```
+
+### 实现设计
+
+```python
+from pathlib import Path
+from dataclasses import dataclass
+
+@dataclass
+class ProjectContext:
+    """项目上下文"""
+    project_type: str
+    framework: str | None
+    test_command: str | None
+    build_command: str | None
+    code_style_rules: list[str]
+    custom_instructions: list[str]
+
+class DynamicSystemPromptBuilder:
+    """动态系统提示构建器"""
+
+    def __init__(self, project_root: Path | None = None):
+        self.project_root = project_root or Path.cwd()
+        self.agents_file = self.project_root / "AGENTS.md"
+
+    def build(self, base_prompt: str) -> str:
+        """构建动态系统提示"""
+        if not self.agents_file.exists():
+            return base_prompt
+
+        context = self._parse_agents_md(self.agents_file.read_text())
+
+        # 组装系统提示
+        parts = [base_prompt]
+
+        if context.project_type:
+            parts.append(f"\n## Project Context\n- Type: {context.project_type}")
+            if context.framework:
+                parts.append(f"- Framework: {context.framework}")
+
+        if context.code_style_rules:
+            parts.append("\n## Code Style Guidelines")
+            parts.extend(f"- {rule}" for rule in context.code_style_rules)
+
+        if context.test_command:
+            parts.append(f"\n## Testing\nAfter code modifications, run: `{context.test_command}`")
+
+        return "\n".join(parts)
+
+    def _parse_agents_md(self, content: str) -> ProjectContext:
+        """解析 AGENTS.md"""
+        # 解析各章节...
+        return ProjectContext(...)
+```
+
+### ContextBuilder 集成
+
+```python
+class ContextBuilder:
+    def build(self, session: Session, ...) -> BuiltContext:
+        # 动态组装系统提示
+        prompt_builder = DynamicSystemPromptBuilder()
+        system_prompt = prompt_builder.build(self.config.base_system_prompt)
+
+        # 继续构建上下文...
+```
+
+---
+
+## 步骤预算 (待实现) - P3 优先级
+
+软限制总步骤数，提前警告（与 max_iterations 硬限制不同）。
+
+### 与 max_iterations 的区别
+
+| 特性 | max_iterations | 步骤预算 |
+|------|----------------|----------|
+| 类型 | 硬限制 | 软限制 |
+| 行为 | 强制终止 | 警告提示 |
+| 目的 | 防止无限循环 | 成本预警 |
+| 时机 | 达到时终止 | 80%时警告 |
+
+### 实现设计
+
+```python
+@dataclass
+class StepBudgetConfig:
+    """步骤预算配置"""
+    warning_threshold: int = 40   # 警告阈值
+    max_iterations: int = 50      # 最大迭代（硬限制）
+    warning_message: str = "Approaching step limit, consider wrapping up."
+
+class StepBudgetController:
+    """步骤预算控制器"""
+
+    def __init__(self, config: StepBudgetConfig):
+        self.config = config
+
+    def check(self, current_iteration: int) -> StepBudgetStatus:
+        """检查步骤预算状态"""
+        if current_iteration >= self.config.max_iterations:
+            return StepBudgetStatus(
+                action="abort",
+                reason="Max iterations reached"
+            )
+
+        if current_iteration >= self.config.warning_threshold:
+            return StepBudgetStatus(
+                action="warn",
+                reason=self.config.warning_message,
+                remaining=self.config.max_iterations - current_iteration
+            )
+
+        return StepBudgetStatus(action="continue")
+
+# AgentLoop 集成
+async def run(self, ...):
+    step_budget = StepBudgetController(config.step_budget)
+
+    while iteration < self.config.max_iterations:
+        budget_status = step_budget.check(iteration)
+
+        if budget_status.action == "warn":
+            # 注入警告消息
+            session.add_message(Message(
+                role="system",
+                content=f"[警告] {budget_status.reason} (剩余 {budget_status.remaining} 步)"
+            ))
+
+        # 继续循环...
+```
+
+---
+
 ## OpenTelemetry 集成
 
 原生集成 OpenTelemetry，导出标准 Span，兼容 Langfuse、Datadog、Jaeger 等观测平台。

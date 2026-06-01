@@ -1412,3 +1412,134 @@ class IncrementalTokenCounter:
 - LRU 缓存编码器
 - 大文本近似估算
 - 消息内容哈希缓存
+
+---
+
+## 待实现功能
+
+### 多时间尺度记忆
+
+当前实现：单一 Session 存储。
+
+**需要扩展为四层记忆**：
+
+| 层级 | 时间尺度 | 用途 | 实现状态 |
+|------|----------|------|----------|
+| Working Memory | 当前会话 | 最近 N 条消息 | ✅ 已实现 |
+| Session Memory | 跨会话 | 摘要、关键决策 | ⚠️ 部分（缺自动摘要） |
+| Long-term Memory | 持久 | 技能、项目知识、偏好 | ❌ 未实现 |
+| Retrieved Memory | 按需 | 向量检索、语义搜索 | ❌ 未实现 |
+
+### MEMORY.md 标准 - P2 优先级
+
+Claude Code 使用 MEMORY.md 文件存储持久记忆，Harness 应支持读写此标准格式。
+
+**MEMORY.md 格式示例**：
+
+```markdown
+# MEMORY.md
+
+## User Profile
+- Role: Software Developer
+- Preferred Language: Python
+
+## Key Decisions
+- 2026-05-28: 选择 SQLite 作为会话存储（原因：零配置、跨平台）
+
+## Learned Patterns
+- 用户偏好简洁响应，无尾部总结
+- 避免在 QThread 中创建 asyncio event loop
+```
+
+**实现路径**:
+
+1. `MemoryFileManager` 支持读取项目根目录的 `MEMORY.md`
+2. 会话结束时自动更新 Learned Patterns
+3. 通过 ContextBuilder 注入到系统提示
+
+```python
+class MemoryFileManager:
+    """MEMORY.md 文件管理器"""
+
+    def __init__(self, project_root: Path | None = None):
+        self.project_root = project_root or Path.cwd()
+        self.memory_file = self.project_root / "MEMORY.md"
+
+    def load(self) -> dict[str, list[str]]:
+        """加载 MEMORY.md 内容"""
+        if not self.memory_file.exists():
+            return {}
+        return self._parse_sections(self.memory_file.read_text())
+
+    def add_entry(self, category: str, content: str) -> None:
+        """添加新记忆条目"""
+        sections = self.load()
+        if category not in sections:
+            sections[category] = []
+        sections[category].append(f"- {content}")
+        self.save(sections)
+```
+
+### 向量检索支持 - P2 优先级
+
+当前实现：简单的关键词匹配。
+
+**需要实现**：语义搜索历史对话、技能、文档。
+
+可选依赖 `harness-ai[vector]`:
+
+```bash
+pip install harness-ai[vector]
+```
+
+```python
+from harness.memory import VectorMemoryStore
+
+store = VectorMemoryStore(
+    embedding_model="text-embedding-3-small",
+    persist_dir="~/.harness/vectors"
+)
+
+# 存储记忆
+await store.store(MemoryEntry(
+    id="decision_001",
+    type="decision",
+    content="选择 SQLite 作为会话存储"
+))
+
+# 语义检索
+results = await store.retrieve("数据存储方案")
+```
+
+### LLM-based Summarization
+
+当前实现：简单启发式摘要。
+
+**需要改进**：使用 LLM 生成高质量摘要。
+
+```python
+class LLMCompressor(ContextCompressor):
+    """LLM 增强的上下文压缩器"""
+
+    async def compress_session(self, session: Session, target_tokens: int) -> str:
+        """使用 LLM 生成摘要"""
+        prompt = f"""Summarize the following conversation, preserving:
+1. Key decisions made
+2. Important context established
+3. Outstanding tasks or questions
+4. User preferences discovered
+
+Conversation:
+{self._format_messages(session.messages)}
+
+Summary (concise, under {target_tokens // 4} words):"""
+
+        response = await self.llm.call(
+            Context(
+                system_prompt="You are a concise summarizer.",
+                messages=[Message(role="user", content=prompt)],
+                tools=[]
+            )
+        )
+        return response.message.content
+```
