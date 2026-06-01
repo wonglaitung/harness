@@ -4,10 +4,12 @@ Core type definitions for Harness SDK.
 These types form the foundation of the agent loop, tool system, and memory management.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine
 
 
 # =============================================================================
@@ -483,3 +485,136 @@ class LoopSnapshot:
             last_llm_response=data.get("last_llm_response"),
             created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
         )
+
+
+# =============================================================================
+# Lifecycle Hooks - 生命周期钩子
+# =============================================================================
+
+class HookPoint(Enum):
+    """
+    Points in the agent loop where hooks can be triggered.
+
+    Hooks allow custom logic to be injected at key points:
+    - Before/after LLM calls
+    - Before/after tool execution
+    - On errors
+    - On loop start/end
+    - On exit attempts (for Ralph Loop)
+    """
+    BEFORE_LLM_CALL = "before_llm_call"        # LLM 调用前
+    AFTER_LLM_CALL = "after_llm_call"          # LLM 调用后
+    BEFORE_TOOL_EXECUTE = "before_tool_execute"  # 工具执行前
+    AFTER_TOOL_EXECUTE = "after_tool_execute"    # 工具执行后
+    ON_ERROR = "on_error"                      # 错误发生时
+    ON_LOOP_START = "on_loop_start"            # 循环开始
+    ON_LOOP_END = "on_loop_end"                # 循环结束
+    ON_EXIT_ATTEMPT = "on_exit_attempt"        # 尝试退出时（Ralph Loop）
+
+
+class HookAction(Enum):
+    """
+    Actions a hook can request.
+
+    - CONTINUE: Normal execution continues
+    - ABORT: Stop execution immediately
+    - RETRY: Retry the current operation
+    - INJECT_MESSAGE: Add a message to the context
+    - MODIFY_ARGS: Modify tool arguments (before execution)
+    - MODIFY_RESULT: Modify tool result (after execution)
+    """
+    CONTINUE = "continue"
+    ABORT = "abort"
+    RETRY = "retry"
+    INJECT_MESSAGE = "inject_message"
+    MODIFY_ARGS = "modify_args"
+    MODIFY_RESULT = "modify_result"
+
+
+@dataclass
+class HookContext:
+    """
+    Context passed to hooks during execution.
+
+    Contains all relevant information about the current state
+    of the agent loop at the hook point.
+
+    Attributes:
+        hook_point: Which hook point triggered this
+        session_id: Current session ID
+        iteration: Current iteration number
+        tool_name: Tool name (for tool hooks)
+        tool_args: Tool arguments (for BEFORE_TOOL_EXECUTE)
+        tool_result: Tool result (for AFTER_TOOL_EXECUTE)
+        llm_response: LLM response (for AFTER_LLM_CALL)
+        error: Exception (for ON_ERROR)
+        messages: Current messages (optional)
+        metadata: Additional context data
+    """
+    hook_point: HookPoint
+    session_id: str
+    iteration: int = 0
+    tool_name: str | None = None
+    tool_args: dict[str, Any] | None = None
+    tool_result: ToolResult | None = None
+    llm_response: LLMResponse | None = None
+    error: Exception | None = None
+    messages: list[Message] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class HookResult:
+    """
+    Result returned by a hook.
+
+    Controls what happens after the hook executes.
+
+    Attributes:
+        action: What action to take
+        modified_args: New arguments (for MODIFY_ARGS)
+        modified_result: New result (for MODIFY_RESULT)
+        inject_message: Message to add to context (for INJECT_MESSAGE)
+        delay_seconds: Delay before retry (for RETRY)
+        clear_context: Whether to clear context (for Ralph Loop)
+        metadata: Additional data (e.g., abort reason)
+    """
+    action: HookAction = HookAction.CONTINUE
+    modified_args: dict[str, Any] | None = None
+    modified_result: ToolResult | None = None
+    inject_message: Message | None = None
+    delay_seconds: float = 0.0
+    clear_context: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def continue_(cls) -> "HookResult":
+        """Convenience method for continue action."""
+        return cls(action=HookAction.CONTINUE)
+
+    @classmethod
+    def abort(cls, reason: str = "") -> "HookResult":
+        """Convenience method for abort action."""
+        return cls(action=HookAction.ABORT, metadata={"reason": reason} if reason else {})
+
+    @classmethod
+    def inject(cls, message: Message) -> "HookResult":
+        """Convenience method for inject message action."""
+        return cls(action=HookAction.INJECT_MESSAGE, inject_message=message)
+
+    # Alias for consistency
+    inject_message = inject
+
+    @classmethod
+    def modify_args(cls, args: dict[str, Any]) -> "HookResult":
+        """Convenience method for modify args action."""
+        return cls(action=HookAction.MODIFY_ARGS, modified_args=args)
+
+    @classmethod
+    def modify_result(cls, result: ToolResult) -> "HookResult":
+        """Convenience method for modify result action."""
+        return cls(action=HookAction.MODIFY_RESULT, modified_result=result)
+
+
+# Hook callback type
+HookCallback = Callable[[HookContext], HookResult | Coroutine[Any, Any, HookResult]]

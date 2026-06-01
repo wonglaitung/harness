@@ -211,3 +211,70 @@
 - qasync 要求所有异步操作在主线程的 `QEventLoop` 中运行
 - 不能在 QThread 中创建新的 event loop
 - 遇到框架兼容性问题，先查阅框架文档
+
+## 2026-06-01
+
+### Production Harness 组件差距分析 ✅ 完成
+
+基于 Akshay Pachaar 的 "The 11 Components of a Production Harness" 文章，深度审查了 SDK 实现：
+- 11 个组件中 6 个完整实现、3 个部分实现、2 个缺失
+- 识别出 10 个完全缺失的关键功能
+- 创建了详细的差距分析文档
+
+文档更新：
+- packages/sdk/docs/01-overview.md: 组件状态表格 + 10 个缺失功能
+- packages/sdk/docs/02-agent-loop.md: 8 个待实现功能详细说明
+- packages/sdk/docs/04-memory-system.md: 待实现功能说明
+- packages/sdk/docs/05-skills-system.md: 渐进式技能加载
+- packages/sdk/docs/10-comparison.md: 组件对比表 + 优先级路线图
+- packages/sdk/docs/13-production-readiness.md: 生产就绪检查清单
+
+提交记录:
+- docs: Add Production Harness gap analysis to SDK documentation (pending)
+
+### Phase 16: Lifecycle Hooks (P0) ✅ 完成 (NEW)
+
+#### 实现
+- HookPoint enum (8 个钩子点): ON_LOOP_START, ON_LOOP_END, BEFORE_LLM_CALL, AFTER_LLM_CALL, BEFORE_TOOL_EXECUTE, AFTER_TOOL_EXECUTE, ON_ERROR, ON_EXIT_ATTEMPT
+- HookAction enum (6 个动作): CONTINUE, ABORT, RETRY, INJECT_MESSAGE, MODIFY_ARGS, MODIFY_RESULT, REINJECT
+- HookContext dataclass: 钩子上下文
+- HookResult dataclass: 钩子返回结果
+- LifecycleHook 抽象基类: hook_points 属性 + execute() 方法
+- HookManager: 注册、注销、执行钩子
+
+#### 内置钩子
+- LoggingHook: 记录所有钩子事件
+- AbortOnDangerousToolHook: 阻止危险工具调用（rm, sudo, chmod 等）
+- MaxToolCallsHook: 限制单个工具的调用次数
+
+#### AgentLoop 集成
+- ON_LOOP_START: 循环开始时触发
+- BEFORE_LLM_CALL: LLM 调用前触发
+- AFTER_LLM_CALL: LLM 响应后触发
+- BEFORE_TOOL_EXECUTE: 工具执行前触发（支持拦截、修改参数）
+- AFTER_TOOL_EXECUTE: 工具执行后触发（支持注入消息、修改结果）
+- ON_ERROR: 错误发生时触发
+- ON_EXIT_ATTEMPT: 退出尝试时触发（Ralph Loop 支持）
+- ON_LOOP_END: 循环结束时触发
+
+测试状态: 14 个新增测试通过，总计 308 个测试通过
+
+### Phase 17: 动态系统提示组装 (P0) ✅ 完成 (NEW)
+
+#### 实现
+- SystemPromptSource: 系统提示源（静态内容、可调用、文件）
+- SystemPromptConfig: 配置（base_prompt, AGENTS.md 路径, MEMORY.md 路径, 自动发现）
+- SystemPromptBuilder: 从多个源构建系统提示
+- discover_project_context(): 发现项目上下文（AGENTS.md, MEMORY.md, CLAUDE.md）
+
+#### ContextBuilder 集成
+- 支持从 AGENTS.md 加载项目特定指令
+- 支持从 MEMORY.md 加载持久记忆
+- 支持自定义提示源（按优先级排序）
+- set_project_root(): 设置项目根目录
+- add_prompt_source(): 添加自定义提示源
+
+测试状态: 16 个新增测试通过，总计 324 个测试通过
+
+提交记录:
+- feat(sdk): Implement Lifecycle Hooks (P0) and Dynamic System Prompt Assembly (P0)

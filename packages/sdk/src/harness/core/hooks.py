@@ -1,0 +1,282 @@
+"""
+Lifecycle Hooks for Agent Loop.
+
+Hooks allow custom logic to be injected at key points in the agent loop.
+This is the foundation for advanced features like:
+- Ralph Loop (long-horizon task continuation)
+- Self-verification (auto-run tests after code changes)
+- Audit logging
+- Custom retry logic
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from typing import TYPE_CHECKING
+
+from harness.types import HookAction, HookContext, HookPoint, HookResult, Message
+
+if TYPE_CHECKING:
+    from harness.core.agent_loop import AgentLoop
+
+logger = logging.getLogger(__name__)
+
+
+class LifecycleHook(ABC):
+    """
+    Base class for lifecycle hooks.
+
+    Hooks are called at specific points in the agent loop.
+    Subclasses implement execute() to define custom behavior.
+
+    Example:
+        class MyHook(LifecycleHook):
+            @property
+            def hook_points(self) -> list[HookPoint]:
+                return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+            async def execute(self, context: HookContext) -> HookResult:
+                if context.tool_name == "dangerous_tool":
+                    return HookResult.abort("Dangerous tool blocked")
+                return HookResult.continue_()
+
+        # Register with agent
+        agent.add_hook(MyHook())
+    """
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        """
+        Which hook points this hook subscribes to.
+
+        Override to specify which points to hook into.
+        """
+        return []
+
+    @abstractmethod
+    async def execute(self, context: HookContext) -> HookResult:
+        """
+        Execute the hook logic.
+
+        Args:
+            context: Context about the current state
+
+        Returns:
+            HookResult controlling what happens next
+        """
+        pass
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} hook_points={self.hook_points}>"
+
+
+class HookManager:
+    """
+    Manages registration and execution of lifecycle hooks.
+
+    Used internally by AgentLoop to invoke hooks at appropriate points.
+
+    Example:
+        manager = HookManager()
+        manager.register(MyHook())
+
+        # Execute hooks at a point
+        result = await manager.execute_hooks(
+            HookPoint.BEFORE_TOOL_EXECUTE,
+            HookContext(...)
+        )
+    """
+
+    def __init__(self):
+        self._hooks: dict[HookPoint, list[LifecycleHook]] = defaultdict(list)
+
+    def register(
+        self,
+        hook: LifecycleHook,
+        points: list[HookPoint] | None = None,
+    ) -> None:
+        """
+        Register a hook for specific points.
+
+        Args:
+            hook: The hook to register
+            points: Specific points to register for (uses hook.hook_points if None)
+        """
+        points = points or hook.hook_points
+        for point in points:
+            self._hooks[point].append(hook)
+            logger.debug(f"Registered hook {hook} for point {point}")
+
+    def unregister(self, hook: LifecycleHook) -> None:
+        """
+        Unregister a hook from all points.
+
+        Args:
+            hook: The hook to unregister
+        """
+        for point in list(self._hooks.keys()):
+            if hook in self._hooks[point]:
+                self._hooks[point].remove(hook)
+                logger.debug(f"Unregistered hook {hook} from point {point}")
+
+    def has_hooks(self, point: HookPoint) -> bool:
+        """Check if there are hooks registered for a point."""
+        return len(self._hooks[point]) > 0
+
+    async def execute_hooks(
+        self,
+        point: HookPoint,
+        context: HookContext,
+    ) -> HookResult:
+        """
+        Execute all hooks for a point in sequence.
+
+        Hooks are executed in registration order.
+        If any hook returns a non-CONTINUE action, execution stops
+        and that result is returned.
+
+        Args:
+            point: The hook point being triggered
+            context: Context for the hook execution
+
+        Returns:
+            The final HookResult (CONTINUE if all hooks continue)
+        """
+        hooks = self._hooks[point]
+
+        if not hooks:
+            return HookResult.continue_()
+
+        for hook in hooks:
+            try:
+                result = await hook.execute(context)
+
+                if result.action != HookAction.CONTINUE:
+                    logger.debug(
+                        f"Hook {hook} returned action {result.action} at {point}"
+                    )
+                    return result
+
+            except Exception as e:
+                logger.exception(f"Hook {hook} raised exception at {point}: {e}")
+                # Continue with other hooks on error
+                continue
+
+        return HookResult.continue_()
+
+    def clear(self) -> None:
+        """Remove all registered hooks."""
+        self._hooks.clear()
+
+
+# =============================================================================
+# Built-in Hooks
+# =============================================================================
+
+class LoggingHook(LifecycleHook):
+    """
+    A hook that logs all hook point events.
+
+    Useful for debugging and monitoring.
+    """
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return list(HookPoint)
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """Log the hook event."""
+        logger.info(
+            f"[Hook] {context.hook_point.value} "
+            f"session={context.session_id} iteration={context.iteration}"
+        )
+        return HookResult.continue_()
+
+
+class AbortOnDangerousToolHook(LifecycleHook):
+    """
+    A hook that blocks dangerous tool calls.
+
+    Prevents execution of tools that match a blocklist.
+    """
+
+    def __init__(self, blocked_tools: list[str] | None = None):
+        self.blocked_tools = blocked_tools or [
+            "rm",
+            "sudo",
+            "chmod",
+            "chown",
+            "dd",
+            "mkfs",
+            "fdisk",
+        ]
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """Check if tool is blocked."""
+        if context.tool_name in self.blocked_tools:
+            logger.warning(f"Blocked dangerous tool: {context.tool_name}")
+            return HookResult.abort(f"Tool '{context.tool_name}' is blocked for safety")
+
+        # Also check bash commands
+        if context.tool_name == "bash" and context.tool_args:
+            command = context.tool_args.get("command", "")
+            for blocked in self.blocked_tools:
+                if blocked in command.split():
+                    logger.warning(f"Blocked dangerous command: {blocked}")
+                    return HookResult.abort(
+                        f"Command contains blocked tool '{blocked}'"
+                    )
+
+        return HookResult.continue_()
+
+
+class MaxToolCallsHook(LifecycleHook):
+    """
+    A hook that limits the number of calls to a specific tool.
+
+    Useful to prevent infinite loops with a single tool.
+    """
+
+    def __init__(self, tool_name: str, max_calls: int = 5):
+        self.tool_name = tool_name
+        self.max_calls = max_calls
+        self._call_counts: dict[str, int] = defaultdict(int)
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """Check if tool call limit is reached."""
+        if context.tool_name != self.tool_name:
+            return HookResult.continue_()
+
+        key = f"{context.session_id}:{self.tool_name}"
+        self._call_counts[key] += 1
+
+        if self._call_counts[key] > self.max_calls:
+            logger.warning(
+                f"Tool {self.tool_name} called {self._call_counts[key]} times, "
+                f"exceeds limit of {self.max_calls}"
+            )
+            return HookResult.abort(
+                f"Tool '{self.tool_name}' exceeded max calls ({self.max_calls})"
+            )
+
+        return HookResult.continue_()
+
+    def reset(self, session_id: str | None = None) -> None:
+        """Reset call counts."""
+        if session_id:
+            keys_to_remove = [k for k in self._call_counts if k.startswith(session_id)]
+            for key in keys_to_remove:
+                del self._call_counts[key]
+        else:
+            self._call_counts.clear()

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from harness.memory.compressor import CompressionConfig, CompressionResult, ContextCompressor
+from harness.memory.system_prompt import SystemPromptBuilder, SystemPromptConfig
 from harness.memory.token_counter import TokenCounter
 from harness.types import Message, Session
 
@@ -137,6 +139,10 @@ class ContextConfig:
     enable_compression: bool = True  # Enable automatic compression
     compression_config: CompressionConfig | None = None  # Compression settings
 
+    # Dynamic system prompt configuration
+    system_prompt_config: SystemPromptConfig | None = None  # Advanced prompt assembly
+    project_root: Path | None = None  # Project root for AGENTS.md/MEMORY.md discovery
+
 
 @dataclass
 class BuiltContext:
@@ -154,10 +160,11 @@ class ContextBuilder:
     Builds context for LLM calls.
 
     Handles:
-    - System prompt injection
+    - System prompt injection (static and dynamic)
     - Message windowing with token budget
     - Automatic compression detection and execution
     - Integration with TokenCounter for accurate counting
+    - AGENTS.md / MEMORY.md discovery and loading
     """
 
     def __init__(
@@ -180,6 +187,26 @@ class ContextBuilder:
             )
         else:
             self._compressor = None
+
+        # Initialize system prompt builder
+        self._init_system_prompt_builder()
+
+    def _init_system_prompt_builder(self) -> None:
+        """Initialize the system prompt builder based on config."""
+        if self.config.system_prompt_config:
+            # Use provided config
+            self._prompt_builder = SystemPromptBuilder(self.config.system_prompt_config)
+        elif self.config.project_root or self.config.system_prompt:
+            # Create config from simple settings
+            prompt_config = SystemPromptConfig(
+                base_prompt=self.config.system_prompt,
+                project_root=self.config.project_root,
+                auto_discover=True,
+            )
+            self._prompt_builder = SystemPromptBuilder(prompt_config)
+        else:
+            # No dynamic prompt building
+            self._prompt_builder = None
 
     def build(
         self,
@@ -248,16 +275,22 @@ class ContextBuilder:
 
         return BuiltContext(
             messages=messages,
-            system_prompt=self.config.system_prompt,
+            system_prompt=self._get_system_prompt(),
             estimated_tokens=estimated,
             budget=budget,
             compression_needed=compression_needed,
             compression_result=compression_result,
         )
 
+    def _get_system_prompt(self) -> str:
+        """Get the system prompt, using dynamic builder if available."""
+        if self._prompt_builder:
+            return self._prompt_builder.build()
+        return self.config.system_prompt
+
     def _calculate_budget(self, tools: list[ToolDefinition] | None = None) -> ContextBudget:
         """Calculate token budget allocation."""
-        system_tokens = self._token_counter.count(self.config.system_prompt)
+        system_tokens = self._token_counter.count(self._get_system_prompt())
         tool_tokens = self._token_counter.estimate_tool_overhead(tools or [])
 
         return ContextBudget.allocate(
@@ -351,6 +384,41 @@ class ContextBuilder:
     def set_system_prompt(self, prompt: str) -> None:
         """Set the system prompt."""
         self.config.system_prompt = prompt
+        # Update prompt builder if exists
+        if self._prompt_builder:
+            # Update base prompt in config
+            self._prompt_builder.config.base_prompt = prompt
+            # Re-setup sources to pick up the new base prompt
+            self._prompt_builder._setup_default_sources()
+
+    def set_project_root(self, project_root: Path) -> None:
+        """
+        Set the project root for AGENTS.md / MEMORY.md discovery.
+
+        Args:
+            project_root: Path to project root directory
+        """
+        self.config.project_root = project_root
+        # Re-initialize prompt builder with new project root
+        self._init_system_prompt_builder()
+
+    def add_prompt_source(self, source: "SystemPromptSource") -> None:
+        """
+        Add a custom system prompt source.
+
+        Args:
+            source: SystemPromptSource to add
+        """
+        if self._prompt_builder is None:
+            # Initialize builder if not exists
+            self._init_system_prompt_builder()
+        self._prompt_builder.add_source(source)
+
+    def get_available_prompt_sources(self) -> list[str]:
+        """Get list of prompt sources that have content."""
+        if self._prompt_builder:
+            return self._prompt_builder.get_available_sources()
+        return ["base"] if self.config.system_prompt else []
 
     def estimate_tokens(self, content: str) -> int:
         """Estimate token count for content using tiktoken."""

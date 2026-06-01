@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from harness.core.cost_controller import CostController
 from harness.core.error_handler import ErrorAction, ErrorContext, ErrorDecision, ErrorHandler
+from harness.core.hooks import HookManager, LifecycleHook
 from harness.core.observability import (
     SpanBuilder,
     is_tracing,
@@ -35,6 +36,10 @@ from harness.tools.executor import ToolContext, ToolExecutor
 from harness.types import (
     BudgetExceededError,
     CostConfig,
+    HookAction,
+    HookContext,
+    HookPoint,
+    HookResult,
     LoopResult,
     LoopSnapshot,
     LoopState,
@@ -144,6 +149,33 @@ class AgentLoop:
             self._sanitizer = ResultSanitizer()
             self._audit_logger = AuditLogger()
 
+        # Initialize hook manager
+        self._hooks = HookManager()
+
+    def add_hook(
+        self,
+        hook: LifecycleHook,
+        points: list[HookPoint] | None = None,
+    ) -> None:
+        """
+        Register a lifecycle hook.
+
+        Args:
+            hook: The hook to register
+            points: Specific hook points (uses hook.hook_points if None)
+        """
+        self._hooks.register(hook, points)
+        logger.debug(f"Added hook: {hook}")
+
+    def remove_hook(self, hook: LifecycleHook) -> None:
+        """
+        Unregister a lifecycle hook.
+
+        Args:
+            hook: The hook to unregister
+        """
+        self._hooks.unregister(hook)
+
     def _emit_progress(
         self,
         event_type: ProgressEventType,
@@ -250,6 +282,24 @@ class AgentLoop:
             {"prompt": prompt_preview, "session_id": session.id},
         )
 
+        # Execute ON_LOOP_START hooks
+        hook_result = await self._hooks.execute_hooks(
+            HookPoint.ON_LOOP_START,
+            HookContext(
+                hook_point=HookPoint.ON_LOOP_START,
+                session_id=session.id,
+                iteration=0,
+            ),
+        )
+        if hook_result.action == HookAction.ABORT:
+            self.state = LoopState.ERROR
+            return LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                iterations=0,
+                error=hook_result.metadata.get("reason", "Aborted by hook"),
+            )
+
         self.state = LoopState.BUILDING_CONTEXT
         iteration = 0
         total_usage = session.token_usage
@@ -325,6 +375,27 @@ class AgentLoop:
                 max_llm_retries = 3
                 for llm_attempt in range(max_llm_retries):
                     try:
+                        # Execute BEFORE_LLM_CALL hooks
+                        hook_result = await self._hooks.execute_hooks(
+                            HookPoint.BEFORE_LLM_CALL,
+                            HookContext(
+                                hook_point=HookPoint.BEFORE_LLM_CALL,
+                                session_id=session.id,
+                                iteration=iteration,
+                                messages=context.messages,
+                            ),
+                        )
+                        if hook_result.action == HookAction.ABORT:
+                            self.state = LoopState.ERROR
+                            return LoopResult(
+                                status=LoopState.ERROR,
+                                session=session,
+                                iterations=iteration,
+                                error=hook_result.metadata.get("reason", "Aborted by hook"),
+                            )
+                        if hook_result.action == HookAction.INJECT_MESSAGE:
+                            session.add_message(hook_result.inject_message)
+
                         logger.info(f"Calling LLM, attempt={llm_attempt + 1}, messages={len(context.messages)}")
                         response = await self.llm.call(
                             messages=context.messages,
@@ -332,6 +403,26 @@ class AgentLoop:
                             system=context.system_prompt,
                         )
                         logger.info(f"LLM response: content_len={len(response.content) if response.content else 0}, stop_reason={response.stop_reason}, tool_calls={len(response.tool_calls) if response.tool_calls else 0}")
+
+                        # Execute AFTER_LLM_CALL hooks
+                        hook_result = await self._hooks.execute_hooks(
+                            HookPoint.AFTER_LLM_CALL,
+                            HookContext(
+                                hook_point=HookPoint.AFTER_LLM_CALL,
+                                session_id=session.id,
+                                iteration=iteration,
+                                llm_response=response,
+                            ),
+                        )
+                        if hook_result.action == HookAction.ABORT:
+                            self.state = LoopState.ERROR
+                            return LoopResult(
+                                status=LoopState.ERROR,
+                                session=session,
+                                iterations=iteration,
+                                error=hook_result.metadata.get("reason", "Aborted by hook"),
+                            )
+
                         break  # Success, exit retry loop
                     except Exception as e:
                         logger.exception(f"LLM call exception: {type(e).__name__}: {e}")
@@ -476,6 +567,44 @@ class AgentLoop:
                 self.state = LoopState.COMPLETED
                 session.token_usage = total_usage
 
+                # Execute ON_EXIT_ATTEMPT hooks (for Ralph Loop)
+                exit_hook_result = await self._hooks.execute_hooks(
+                    HookPoint.ON_EXIT_ATTEMPT,
+                    HookContext(
+                        hook_point=HookPoint.ON_EXIT_ATTEMPT,
+                        session_id=session.id,
+                        iteration=iteration,
+                        llm_response=response,
+                    ),
+                )
+                if exit_hook_result.action == HookAction.REINJECT:
+                    # Ralph Loop: clear context and reinject continuation prompt
+                    self._emit_progress(
+                        ProgressEventType.STATE_CHANGE,
+                        "Ralph Loop: Reinjecting continuation prompt",
+                        {"reason": exit_hook_result.metadata.get("reason", "Long task continuation")},
+                    )
+                    # Clear session messages except the first user message
+                    if session.messages:
+                        first_user_msg = next(
+                            (m for m in session.messages if m.role == "user"),
+                            None
+                        )
+                        session.messages.clear()
+                        if first_user_msg:
+                            session.add_message(first_user_msg)
+                    # Add continuation prompt
+                    if exit_hook_result.inject_message:
+                        session.add_message(exit_hook_result.inject_message)
+                    else:
+                        session.add_message(Message(
+                            role="user",
+                            content="[继续] 请继续之前的任务。",
+                        ))
+                    iteration += 1
+                    self._iteration = iteration
+                    continue  # Continue the loop with fresh context
+
                 # Emit completion
                 total_duration = (time.time() - self._loop_start_time) * 1000
                 self._emit_progress(
@@ -487,6 +616,16 @@ class AgentLoop:
                         "total_tokens": total_usage.total_tokens,
                     },
                     duration_ms=total_duration,
+                )
+
+                # Execute ON_LOOP_END hooks
+                await self._hooks.execute_hooks(
+                    HookPoint.ON_LOOP_END,
+                    HookContext(
+                        hook_point=HookPoint.ON_LOOP_END,
+                        session_id=session.id,
+                        iteration=iteration,
+                    ),
                 )
 
                 # Reset error handler state
@@ -509,6 +648,17 @@ class AgentLoop:
                 "Max iterations reached",
                 {"iterations": iteration},
             )
+
+            # Execute ON_LOOP_END hooks
+            await self._hooks.execute_hooks(
+                HookPoint.ON_LOOP_END,
+                HookContext(
+                    hook_point=HookPoint.ON_LOOP_END,
+                    session_id=session.id,
+                    iteration=iteration,
+                ),
+            )
+
             return LoopResult(
                 status=LoopState.ERROR,
                 session=session,
@@ -520,6 +670,18 @@ class AgentLoop:
 
         except Exception as e:
             logger.exception(f"Loop exception: {type(e).__name__}: {e}")
+
+            # Execute ON_ERROR hooks
+            await self._hooks.execute_hooks(
+                HookPoint.ON_ERROR,
+                HookContext(
+                    hook_point=HookPoint.ON_ERROR,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                    error=e,
+                ),
+            )
+
             # Use ErrorHandler to determine action
             error_ctx = ErrorContext(
                 error=e,
@@ -538,6 +700,16 @@ class AgentLoop:
                     "action": decision.action.value,
                     "message": decision.message,
                 },
+            )
+
+            # Execute ON_LOOP_END hooks
+            await self._hooks.execute_hooks(
+                HookPoint.ON_LOOP_END,
+                HookContext(
+                    hook_point=HookPoint.ON_LOOP_END,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                ),
             )
 
             # Reset error handler state
@@ -601,9 +773,49 @@ class AgentLoop:
                 },
             )
 
+            # Execute BEFORE_TOOL_EXECUTE hooks
+            from harness.types import ToolResult
+            hook_result = await self._hooks.execute_hooks(
+                HookPoint.BEFORE_TOOL_EXECUTE,
+                HookContext(
+                    hook_point=HookPoint.BEFORE_TOOL_EXECUTE,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                    tool_name=tool_call.name,
+                    tool_args=tool_call.arguments,
+                ),
+            )
+            if hook_result.action == HookAction.ABORT:
+                results.append(ToolResult(
+                    tool_call_id=tool_call.id,
+                    success=False,
+                    content="",
+                    error=hook_result.metadata.get("reason", "Aborted by hook"),
+                ))
+                continue
+            if hook_result.action == HookAction.MODIFY_ARGS:
+                tool_call.arguments = hook_result.modified_args
+
             tool_start = time.time()
             result = await self.tools.execute(tool_call, context)
             tool_duration = (time.time() - tool_start) * 1000
+
+            # Execute AFTER_TOOL_EXECUTE hooks
+            hook_result = await self._hooks.execute_hooks(
+                HookPoint.AFTER_TOOL_EXECUTE,
+                HookContext(
+                    hook_point=HookPoint.AFTER_TOOL_EXECUTE,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                    tool_name=tool_call.name,
+                    tool_args=tool_call.arguments,
+                    tool_result=result,
+                ),
+            )
+            if hook_result.action == HookAction.INJECT_MESSAGE:
+                session.add_message(hook_result.inject_message)
+            if hook_result.action == HookAction.MODIFY_RESULT:
+                result = hook_result.modified_result
 
             # Sanitize output
             if self._sanitizer and result.success and result.content:

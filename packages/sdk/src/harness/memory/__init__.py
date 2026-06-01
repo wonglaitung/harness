@@ -19,6 +19,12 @@ from harness.memory.store import (
     SessionStore,
     SQLiteSessionStore,
 )
+from harness.memory.system_prompt import (
+    SystemPromptBuilder,
+    SystemPromptConfig,
+    SystemPromptSource,
+    discover_project_context,
+)
 from harness.memory.token_counter import TokenCounter, count_tokens
 
 __all__ = [
@@ -37,4 +43,9 @@ __all__ = [
     "CompressionConfig",
     "CompressionResult",
     "IncrementalTokenCounter",
+    # Dynamic System Prompt
+    "SystemPromptBuilder",
+    "SystemPromptConfig",
+    "SystemPromptSource",
+    "discover_project_context",
 ]

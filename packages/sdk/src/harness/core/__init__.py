@@ -14,6 +14,13 @@ from harness.core.cost_storage import (
     SQLiteCostStorage,
 )
 from harness.core.error_handler import ErrorHandler, ErrorAction, ErrorContext, ErrorDecision
+from harness.core.hooks import (
+    AbortOnDangerousToolHook,
+    HookManager,
+    LifecycleHook,
+    LoggingHook,
+    MaxToolCallsHook,
+)
 from harness.core.observability import (
     ObservabilityConfig,
     ObservabilityManager,
@@ -50,6 +57,12 @@ __all__ = [
     "StreamingHandler",
     "StreamingConfig",
     "StreamingStats",
+    # Hooks
+    "LifecycleHook",
+    "HookManager",
+    "LoggingHook",
+    "AbortOnDangerousToolHook",
+    "MaxToolCallsHook",
     # Observability
     "ObservabilityManager",
     "ObservabilityConfig",
