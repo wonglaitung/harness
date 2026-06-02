@@ -142,9 +142,10 @@ packages/sdk/src/harness/
 ```
 packages/client/src/harness_client/
 ├── ui/                       # PyQt6 组件（纯渲染，不存状态）
-│   ├── main_window.py        # 主窗口
-│   ├── chat_panel.py         # 对话面板
-│   ├── sidebar.py            # 左侧边栏
+│   ├── main_window.py        # 主窗口（三栏布局）
+│   ├── chat_panel.py         # 中央对话面板
+│   ├── sidebar.py            # 左侧可折叠导航栏
+│   ├── right_panel.py        # 右侧面板（技能/MCP/文件树）
 │   ├── settings_dialog.py    # 设置对话框
 │   └── mcp_panel.py          # MCP 配置面板
 └── controllers/              # 控制器（数据层）
@@ -153,6 +154,11 @@ packages/client/src/harness_client/
     ├── mcp_controller.py     # 管理 MCP 服务器
     └── skill_controller.py   # 管理技能
 ```
+
+**界面布局**：三栏结构
+- **左侧栏**：可折叠导航（COLLAPSED_WIDTH=56px, EXPANDED_WIDTH=220px）
+- **中央区**：对话面板（Markdown 渲染 + 流式输出）
+- **右侧面板**：可折叠区块（技能/MCP 服务器/文件树）
 
 **会话管理数据流**：
 ```
