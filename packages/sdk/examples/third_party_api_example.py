@@ -1978,9 +1978,10 @@ async def demo_lifecycle_hooks():
 
     - BEFORE_TOOL_EXECUTE:  工具执行前 (可拦截、修改参数)
     - AFTER_TOOL_EXECUTE:   工具执行后 (可修改结果)
-    - LOOP_START:           Agent 循环开始
-    - LOOP_END:             Agent 循环结束
+    - ON_LOOP_START:        Agent 循环开始
+    - ON_LOOP_END:          Agent 循环结束
     - ON_ERROR:             发生错误时
+    - ON_EXIT_ATTEMPT:      尝试退出时 (Ralph Loop 使用)
     """)
 
     print("\n✅ Lifecycle Hooks 演示完成")
@@ -2278,34 +2279,36 @@ async def demo_sub_agent():
     - 子代理可以执行独立的子任务
     - 支持并行执行提高效率
     - SubAgentResult 包含执行结果和状态
-    - 子代理与主代理共享或隔离工具和上下文
+    - 子代理可以有独立的系统提示和工具集
     """
     print("\n" + "=" * 70)
     print("演示 20: Sub-Agent 管理 (P1)")
     print("=" * 70)
 
     # -------------------------------------------------------------------------
-    # 1. 创建 SubAgentManager
+    # 1. 创建主代理和 SubAgentManager
     # -------------------------------------------------------------------------
-    print("\n--- 1. 创建 SubAgentManager ---")
+    print("\n--- 1. 创建主代理和 SubAgentManager ---")
 
-    manager = SubAgentManager(
+    parent = AgentHarness(
         base_url=BASE_URL,
         api_key=API_KEY,
         model=MODEL,
         provider=PROVIDER,
     )
-    print(f"已创建 SubAgentManager")
+
+    manager = SubAgentManager(parent_agent=parent)
+    print(f"已创建 SubAgentManager (基于主代理)")
 
     # -------------------------------------------------------------------------
-    # 2. 创建子代理配置
+    # 2. 创建 SubAgentConfig
     # -------------------------------------------------------------------------
-    print("\n--- 2. 创建子代理配置 ---")
+    print("\n--- 2. 创建 SubAgentConfig ---")
 
     # 子代理 1: 代码分析
     config1 = SubAgentConfig(
         name="code-analyzer",
-        description="分析代码结构和质量",
+        task="分析代码结构和质量",
         system_prompt="你是一个代码分析专家，请简洁地分析代码。",
         tools=["read", "glob", "grep"],  # 允许的工具名
         max_iterations=3,
@@ -2314,15 +2317,16 @@ async def demo_sub_agent():
     # 子代理 2: 文档生成
     config2 = SubAgentConfig(
         name="doc-generator",
-        description="根据分析结果生成文档",
+        task="根据分析结果生成文档",
         system_prompt="你是一个技术文档专家，请根据给定的信息生成文档。",
         tools=["read"],  # 只读权限
         max_iterations=2,
+        report_format="summary",  # 结果报告格式: summary, full, structured
     )
 
     print(f"子代理配置:")
-    print(f"  - {config1.name}: {config1.description}")
-    print(f"  - {config2.name}: {config2.description}")
+    print(f"  - {config1.name}: {config1.task}")
+    print(f"  - {config2.name}: {config2.task}")
 
     # -------------------------------------------------------------------------
     # 3. 创建和运行子代理
@@ -2330,20 +2334,20 @@ async def demo_sub_agent():
     print("\n--- 3. 创建和运行子代理 ---")
 
     # 创建子代理
-    sub1 = manager.create_agent(config1)
-    sub2 = manager.create_agent(config2)
+    agent_id1 = await manager.spawn(config1)
+    agent_id2 = await manager.spawn(config2)
 
-    print(f"已创建子代理: {[a.name for a in manager.list_agents()]}")
+    print(f"已创建子代理: {manager.list_sub_agents()}")
 
     # 运行单个子代理
     print(f"\n运行子代理 '{config1.name}'...")
-    result1 = await manager.run_agent(
-        config1.name,
-        "请分析当前目录下的项目结构，简要说明主要模块。",
-    )
+    result1: SubAgentResult = await manager.run(config1.name)
     print(f"子代理结果:")
+    print(f"  - 名称: {result1.name}")
+    print(f"  - 成功: {result1.success}")
     print(f"  - 状态: {result1.status.value}")
-    print(f"  - 响应: {result1.content[:200]}...")
+    if result1.summary:
+        print(f"  - 概要: {result1.summary[:200]}...")
     print(f"  - 迭代次数: {result1.iterations}")
 
     # -------------------------------------------------------------------------
@@ -2355,48 +2359,45 @@ async def demo_sub_agent():
 
     ┌─────────────────────────────────────────────────────────────┐
     │  主代理                                                      │
-    │    ├── SubAgent 1: 分析代码  ──→ 结果 1                     │
-    │    ├── SubAgent 2: 生成文档  ──→ 结果 2                     │
-    │    └── SubAgent 3: 运行测试  ──→ 结果 3                     │
+    │    ├── SubAgent 1: 分析代码  ──→ SubAgentResult 1            │
+    │    ├── SubAgent 2: 生成文档  ──→ SubAgentResult 2            │
+    │    └── SubAgent 3: 运行测试  ──→ SubAgentResult 3            │
     │    ↓                                                        │
     │  汇总所有子代理结果                                          │
     └─────────────────────────────────────────────────────────────┘
     """)
 
-    # 定义并行任务
-    tasks = {
-        "analyzer": "请用一句话描述 Python 项目的典型结构。",
-        "generator": "请用一句话说明如何写好技术文档。",
-    }
-
-    # 并行运行
-    print("并行运行子代理...")
-    results = await manager.run_all(tasks)
+    # 并行运行所有待执行的子代理
+    print("并行运行所有待执行的子代理...")
+    results: dict[str, SubAgentResult] = await manager.run_all()
     print(f"\n并行执行完成，共 {len(results)} 个结果:")
     for name, result in results.items():
-        print(f"  - {name}: {result.content[:100]}...")
+        status = "✅" if result.success else "❌"
+        summary = result.summary[:100] if result.summary else "无概要"
+        print(f"  - {name}: {status} {summary}")
 
     # -------------------------------------------------------------------------
     # 5. 子代理状态和结果
     # -------------------------------------------------------------------------
     print("\n--- 5. 子代理状态和结果 ---")
-
-    agents_status = manager.list_agents()
-    for agent_info in agents_status:
-        print(f"  - {agent_info.name}: 已创建")
-
     print("""
     SubAgentStatus 状态:
-    - PENDING: 等待执行
-    - RUNNING: 正在执行
+    - PENDING:   等待执行
+    - RUNNING:   正在执行
     - COMPLETED: 执行完成
-    - FAILED: 执行失败
+    - FAILED:    执行失败
+    - CANCELLED: 已取消
 
     SubAgentResult 包含:
-    - content: 执行结果文本
-    - status: 执行状态
-    - iterations: 迭代次数
-    - token_usage: Token 使用量
+    - name:             子代理名称
+    - success:          是否成功
+    - status:           执行状态
+    - summary:          结果概要 (report_format="summary")
+    - full_response:    完整响应 (report_format="full")
+    - structured_result: 结构化结果 (report_format="structured")
+    - iterations:       迭代次数
+    - token_usage:      Token 使用量
+    - error:            错误信息 (如果失败)
     """)
 
     print("\n✅ Sub-Agent 管理演示完成")
@@ -2549,7 +2550,7 @@ async def demo_progressive_skills():
     学习要点:
     - L1 (discover): 只加载名称和描述，用于匹配
     - L2 (load): 加载完整技能内容
-    - L3 (load_with_references): 加载技能和关联的参考文档
+    - L3 (with_references): 加载技能和关联的参考文档
     - 估算 token 使用量避免超出上下文窗口
     """
     print("\n" + "=" * 70)
@@ -2561,47 +2562,65 @@ async def demo_progressive_skills():
     # -------------------------------------------------------------------------
     print("\n--- 1. 创建 ProgressiveSkillLoader ---")
 
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+
     loader = ProgressiveSkillLoader(
-        skill_dirs=["skills", ".harness/skills"],  # 技能目录
-        max_context_tokens=4000,  # 可用于技能的最大 token 数
+        skill_dirs=[tmpdir],           # 技能目录
+        max_context_tokens=4000,       # 可用于技能的最大 token 数
+        embedding_dim=64,              # 嵌入维度
     )
-    print(f"已创建 ProgressiveSkillLoader，最大上下文: {loader.max_context_tokens} tokens")
+    print(f"已创建 ProgressiveSkillLoader")
+    print(f"  - 最大上下文: {loader.max_context_tokens} tokens")
+    print(f"  - 嵌入维度: {loader.embedding_dim}")
 
     # -------------------------------------------------------------------------
     # 2. Level 1: 发现技能 - 只加载元信息
     # -------------------------------------------------------------------------
     print("\n--- 2. Level 1: 发现技能 (只加载元信息) ---")
 
-    # 注册一些测试技能元信息
-    meta1 = SkillMetadata(
-        name="code-review",
-        description="代码审查技能，帮助审查和改进代码质量",
-        loading_level=LoadingLevel.DISCOVER,
-        token_estimate=500,
-        keywords=["review", "审查", "代码"],
-    )
-    meta2 = SkillMetadata(
-        name="testing",
-        description="测试技能，帮助编写和运行测试",
-        loading_level=LoadingLevel.DISCOVER,
-        token_estimate=300,
-        keywords=["test", "测试", "unit test"],
-    )
-    meta3 = SkillMetadata(
-        name="deployment",
-        description="部署技能，帮助配置和部署应用",
-        loading_level=LoadingLevel.DISCOVER,
-        token_estimate=400,
-        keywords=["deploy", "部署", "ci/cd"],
-    )
+    # 创建一些技能文件用于演示
+    from pathlib import Path
+    skills_dir = Path(tmpdir)
+    (skills_dir / "code-review.md").write_text("""---
+name: code-review
+description: 代码审查技能，帮助审查和改进代码质量
+keywords:
+  - review
+  - 审查
+  - 代码
+---
 
-    loader.register_metadata(meta1)
-    loader.register_metadata(meta2)
-    loader.register_metadata(meta3)
+你是一个代码审查专家，请检查代码质量、潜在问题和改进建议。
+""")
+    (skills_dir / "testing.md").write_text("""---
+name: testing
+description: 测试技能，帮助编写和运行测试
+keywords:
+  - test
+  - 测试
+  - unit test
+---
 
-    print(f"已注册 {len(loader.list_metadata())} 个技能元信息:")
-    for m in loader.list_metadata():
-        print(f"  - {m.name}: {m.description} (~{m.token_estimate} tokens)")
+你是一个测试专家，请帮助编写全面的单元测试和集成测试。
+""")
+    (skills_dir / "deployment.md").write_text("""---
+name: deployment
+description: 部署技能，帮助配置和部署应用
+keywords:
+  - deploy
+  - 部署
+  - ci/cd
+---
+
+你是一个部署专家，请帮助配置 CI/CD 流水线和部署策略。
+""")
+
+    # Level 1: 发现技能（只加载元信息，不加载内容）
+    discovered = loader.discover_skills()
+    print(f"Level 1 - 发现了 {len(discovered)} 个技能:")
+    for skill_meta in discovered:
+        print(f"  - {skill_meta.name}: {skill_meta.description} (~{skill_meta.token_estimate} tokens)")
 
     # -------------------------------------------------------------------------
     # 3. 匹配技能 - 根据用户输入筛选相关技能
@@ -2624,47 +2643,31 @@ async def demo_progressive_skills():
     # -------------------------------------------------------------------------
     print("\n--- 4. Level 2: 加载完整技能内容 ---")
 
-    # 升级技能到 Level 2
-    skill_content = """
-你是一个专业的代码审查专家。当审查代码时，请：
-1. 检查代码质量和可读性
-2. 识别潜在的 bug 和安全问题
-3. 提供具体的改进建议
-请用结构化方式输出审查结果。
-"""
-    loader.load_full_content("code-review", skill_content)
-    print(f"已加载 'code-review' 的完整内容 ({len(skill_content)} 字符)")
+    # 加载匹配技能的完整内容
+    loaded_skills = loader.load_skills([m.name for m in matched])
+    for skill in loaded_skills:
+        print(f"  ✅ 已加载 '{skill.name}' 的完整内容")
+        print(f"     内容长度: {len(skill.content)} 字符")
+        print(f"     Token 估算: {skill.token_estimate}")
 
     # -------------------------------------------------------------------------
-    # 5. Level 3: 加载带参考文档
+    # 5. 选择技能 - 根据上下文预算
     # -------------------------------------------------------------------------
-    print("\n--- 5. Level 3: 加载带参考文档 ---")
-
-    references = [
-        "PEP 8 -- Style Guide for Python Code",
-        "OWASP Top 10 Security Risks",
-    ]
-    loader.load_with_references("code-review", skill_content, references)
-    print(f"已加载 'code-review' 及 {len(references)} 个参考文档")
-
-    # -------------------------------------------------------------------------
-    # 6. 构建技能选择提示
-    # -------------------------------------------------------------------------
-    print("\n--- 6. 构建技能选择提示 ---")
+    print("\n--- 5. 选择技能 (根据上下文预算) ---")
 
     # 根据匹配结果和 token 预算，选择要注入的技能
-    selection_prompt = loader.build_skill_selection_prompt(
+    selected = loader.select_skills(
         user_input="请 review 我的代码",
         available_budget=1000,  # 可用 token 预算
     )
-    print(f"技能选择提示 (长度: {len(selection_prompt)} 字符):")
-    print("-" * 40)
-    print(selection_prompt[:500] + "..." if len(selection_prompt) > 500 else selection_prompt)
+    print(f"在 1000 token 预算内选择的技能: {[s.name for s in selected]}")
+    total_tokens = sum(s.token_estimate for s in selected)
+    print(f"总估算 token: {total_tokens}")
 
     # -------------------------------------------------------------------------
-    # 7. 三级加载对比
+    # 6. 三级加载对比
     # -------------------------------------------------------------------------
-    print("\n--- 7. 三级加载对比 ---")
+    print("\n--- 6. 三级加载对比 ---")
     print("""
     ┌─────────────────────────────────────────────────────────────┐
     │  Level 1 (DISCOVER): 名称 + 描述 + 关键词                  │
@@ -2696,11 +2699,11 @@ async def demo_memory_md():
     - 创建 MemoryFileManager 管理 MEMORY.md 文件
     - 使用 MemoryEntry 添加记忆条目
     - 使用 MemoryCategory 分类记忆
-    - 导出为 LLM 上下文字符串
+    - 保存/加载和导出为 LLM 上下文
 
     学习要点:
     - MEMORY.md 是持久化记忆的标准格式
-    - 支持多种分类: user, feedback, project, reference
+    - 支持多种分类: USER_PROFILE, KEY_DECISIONS, LEARNED_PATTERNS, PROJECT_CONTEXT
     - 可以与 Agent 的系统提示集成
     - 记忆文件可以在多个会话间共享
     """
@@ -2715,10 +2718,10 @@ async def demo_memory_md():
 
     import tempfile
     tmpdir = tempfile.mkdtemp()
-    memory_path = Path(tmpdir) / "MEMORY.md"
+    project_root = Path(tmpdir)
 
-    manager = MemoryFileManager(memory_path=str(memory_path))
-    print(f"已创建 MemoryFileManager，路径: {memory_path}")
+    manager = MemoryFileManager(project_root=project_root)
+    print(f"已创建 MemoryFileManager，路径: {project_root / 'MEMORY.md'}")
 
     # -------------------------------------------------------------------------
     # 2. 添加记忆条目
@@ -2726,67 +2729,61 @@ async def demo_memory_md():
     print("\n--- 2. 添加记忆条目 ---")
 
     # 用户信息
-    user_entry = MemoryEntry(
-        category=MemoryCategory.USER,
-        title="用户角色",
+    manager.add_entry(MemoryEntry(
+        category=MemoryCategory.USER_PROFILE,
         content="用户是 Python 后端开发者，熟悉 FastAPI 和 SQLAlchemy。",
-    )
-    manager.add_entry(user_entry)
-    print(f"  ✅ 添加用户记忆: {user_entry.title}")
+        source=MemorySource.USER_INPUT,
+    ))
+    print(f"  ✅ 添加用户信息 (USER_PROFILE)")
 
-    # 反馈信息
-    feedback_entry = MemoryEntry(
-        category=MemoryCategory.FEEDBACK,
-        title="代码风格偏好",
+    # 关键决策
+    manager.add_entry(MemoryEntry(
+        category=MemoryCategory.KEY_DECISIONS,
+        content="使用分层架构: routes → services → models，数据库用 PostgreSQL。",
+        source=MemorySource.AGENT_OBSERVATION,
+    ))
+    print(f"  ✅ 添加关键决策 (KEY_DECISIONS)")
+
+    # 学到的模式
+    manager.add_entry(MemoryEntry(
+        category=MemoryCategory.LEARNED_PATTERNS,
         content="用户偏好使用类型注解，不偏好过多的注释。",
-        source=MemorySource.USER_FEEDBACK,
-    )
-    manager.add_entry(feedback_entry)
-    print(f"  ✅ 添加反馈记忆: {feedback_entry.title}")
+        source=MemorySource.USER_INPUT,
+    ))
+    print(f"  ✅ 添加学到模式 (LEARNED_PATTERNS)")
 
-    # 项目信息
-    project_entry = MemoryEntry(
-        category=MemoryCategory.PROJECT,
-        title="项目架构",
-        content="项目使用分层架构: routes → services → models，数据库用 PostgreSQL。",
-        source=MemorySource.CODE_ANALYSIS,
-    )
-    manager.add_entry(project_entry)
-    print(f"  ✅ 添加项目记忆: {project_entry.title}")
-
-    # 参考信息
-    ref_entry = MemoryEntry(
-        category=MemoryCategory.REFERENCE,
-        title="API 文档位置",
+    # 项目上下文
+    manager.add_entry(MemoryEntry(
+        category=MemoryCategory.PROJECT_CONTEXT,
         content="项目 API 文档在 /docs/api/ 目录下，使用 OpenAPI 格式。",
-        source=MemorySource.FILE_DISCOVERY,
-    )
-    manager.add_entry(ref_entry)
-    print(f"  ✅ 添加参考记忆: {ref_entry.title}")
+        source=MemorySource.AGENT_OBSERVATION,
+    ))
+    print(f"  ✅ 添加项目上下文 (PROJECT_CONTEXT)")
 
     # -------------------------------------------------------------------------
     # 3. 保存和加载
     # -------------------------------------------------------------------------
     print("\n--- 3. 保存和加载 ---")
 
-    # 保存到文件
-    manager.save()
-    print(f"已保存记忆到: {memory_path}")
-    print(f"文件大小: {memory_path.stat().st_size} 字节")
+    # add_entry 会自动保存，读取文件内容确认
+    memory_file = project_root / "MEMORY.md"
+    print(f"记忆已保存到: {memory_file}")
+    print(f"文件大小: {memory_file.stat().st_size} 字节")
 
     # 读取文件内容
-    file_content = memory_path.read_text(encoding="utf-8")
+    file_content = memory_file.read_text(encoding="utf-8")
     print(f"\nMEMORY.md 内容预览:")
     print("-" * 40)
     print(file_content[:600] + "..." if len(file_content) > 600 else file_content)
 
     # 从文件加载
-    loaded_manager = MemoryFileManager(memory_path=str(memory_path))
-    loaded_manager.load()
-    entries = loaded_manager.list_entries()
-    print(f"\n从文件加载了 {len(entries)} 条记忆:")
-    for entry in entries:
-        print(f"  - [{entry.category.value}] {entry.title}")
+    loaded_manager = MemoryFileManager(project_root=project_root)
+    sections = loaded_manager.load()
+    print(f"\n从文件加载了记忆:")
+    print(f"  - 用户信息: {sections.user_profile}")
+    print(f"  - 关键决策: {len(sections.key_decisions)} 条")
+    print(f"  - 学到模式: {len(sections.learned_patterns)} 条")
+    print(f"  - 项目上下文: {len(sections.project_context)} 条")
 
     # -------------------------------------------------------------------------
     # 4. 导出为 LLM 上下文
@@ -2805,20 +2802,34 @@ async def demo_memory_md():
     # -------------------------------------------------------------------------
     print("\n--- 5. create_default_memory ---")
 
-    default = create_default_memory(
-        project_name="Harness SDK",
-        project_description="一个可内嵌的 Python AI Agent SDK",
-    )
-    print(f"默认记忆条目数: {len(default.entries)}")
-    for entry in default.entries:
-        print(f"  - [{entry.category.value}] {entry.title}")
+    default_root = Path(tempfile.mkdtemp())
+    default = create_default_memory(project_root=default_root)
+    print(f"已创建默认 MEMORY.md 到: {default_root / 'MEMORY.md'}")
+
+    # 加载查看内容
+    default_manager = MemoryFileManager(project_root=default_root)
+    default_sections = default_manager.load()
+    print(f"默认记忆内容:")
+    print(f"  - 用户信息: {default_sections.user_profile}")
+    print(f"  - 项目上下文: {default_sections.project_context}")
 
     # -------------------------------------------------------------------------
-    # 6. 与 AgentHarness 集成
+    # 6. MemoryCategory 和 MemorySource 说明
     # -------------------------------------------------------------------------
-    print("\n--- 6. 与 AgentHarness 集成 ---")
+    print("\n--- 6. MemoryCategory 和 MemorySource ---")
     print("""
-    MEMORY.md 与 AgentHarness 的集成方式：
+    MemoryCategory 分类:
+    - USER_PROFILE:      用户信息和偏好
+    - KEY_DECISIONS:     项目关键决策
+    - LEARNED_PATTERNS:  从交互中学到的模式
+    - PROJECT_CONTEXT:   项目特定上下文
+
+    MemorySource 来源:
+    - USER_INPUT:        用户直接输入
+    - AGENT_OBSERVATION: Agent 观察到的事实
+    - EXPLICIT_SAVE:     用户明确要求保存
+
+    与 AgentHarness 集成方式：
 
     ┌─────────────────────────────────────────────────────────────┐
     │  方式 1: 注入到系统提示                                     │
@@ -2833,7 +2844,7 @@ async def demo_memory_md():
     │  ─────────────────────────                  │
     │  builder.add_source(SystemPromptSource(                     │
     │      name="memory",                                         │
-    │      content_callback=lambda: manager.to_context_string(),  │
+    │      content=lambda: manager.to_context_string(),           │
     │  ))                                                         │
     └─────────────────────────────────────────────────────────────┘
     """)
@@ -2852,13 +2863,13 @@ async def demo_vector_search():
     功能:
     - 创建 VectorMemoryStore 语义搜索
     - 使用 MockEmbeddingModel 无需外部依赖
-    - 存储和搜索对话、技能、文档
-    - 与 AgentHarness 集成检索历史
+    - 存储和搜索文档
+    - 使用 SimpleInMemoryVectorStore 进行内存存储
 
     学习要点:
     - 向量检索支持语义匹配而非关键词匹配
     - MockEmbeddingModel 使用简单哈希，生产环境应替换为真实嵌入模型
-    - 支持对话、技能、文档等多种类型的内容
+    - VectorMemoryStore 封装了嵌入生成和搜索
     - SimpleInMemoryVectorStore 适合开发测试
     """
     print("\n" + "=" * 70)
@@ -2871,141 +2882,122 @@ async def demo_vector_search():
     print("\n--- 1. 创建 VectorMemoryStore ---")
 
     config = VectorMemoryConfig(
-        embedding_dim=64,        # 嵌入维度 (Mock 使用小维度)
-        max_entries=1000,        # 最大存储条目数
-        similarity_threshold=0.5, # 相似度阈值
+        embedding_model="mock",    # 使用 Mock 嵌入模型
+        embedding_dimension=64,    # 嵌入维度 (Mock 使用小维度)
+        collection_name="demo",
     )
 
     # 使用 MockEmbeddingModel（无需外部 API）
     store = VectorMemoryStore(
         config=config,
-        embedding_model=MockEmbeddingModel(dim=config.embedding_dim),
+        embedding_model=MockEmbeddingModel(dimension=config.embedding_dimension),
     )
     print(f"已创建 VectorMemoryStore")
-    print(f"  - 嵌入维度: {config.embedding_dim}")
-    print(f"  - 相似度阈值: {config.similarity_threshold}")
+    print(f"  - 嵌入模型: mock")
+    print(f"  - 嵌入维度: {config.embedding_dimension}")
 
     # -------------------------------------------------------------------------
-    # 2. 添加和搜索对话
+    # 2. 添加和搜索文档
     # -------------------------------------------------------------------------
-    print("\n--- 2. 添加和搜索对话 ---")
+    print("\n--- 2. 添加和搜索文档 ---")
 
-    # 添加对话记录
-    await store.add_conversation(
-        session_id="session-001",
-        user_message="如何使用 FastAPI 创建 REST API？",
-        assistant_message="FastAPI 创建 REST API 的步骤：1. 安装 FastAPI...",
-        metadata={"topic": "fastapi"},
-    )
-    await store.add_conversation(
-        session_id="session-002",
-        user_message="Python 虚拟环境怎么创建？",
-        assistant_message="使用 python -m venv myenv 创建虚拟环境...",
-        metadata={"topic": "python"},
-    )
-    await store.add_conversation(
-        session_id="session-003",
-        user_message="FastAPI 中如何处理数据库连接？",
-        assistant_message="推荐使用 SQLAlchemy + FastAPI 的依赖注入...",
-        metadata={"topic": "fastapi"},
-    )
-    print("已添加 3 条对话记录")
-
-    # 语义搜索对话
-    results = await store.search_conversations(
-        query="FastAPI 开发 API",
-        top_k=2,
-    )
-    print(f"\n搜索 'FastAPI 开发 API' 结果:")
-    for r in results:
-        print(f"  - 相似度: {r.similarity:.3f}, 会话: {r.id}")
-        print(f"    内容预览: {r.content[:80]}...")
-
-    # -------------------------------------------------------------------------
-    # 3. 添加和搜索技能
-    # -------------------------------------------------------------------------
-    print("\n--- 3. 添加和搜索技能 ---")
-
-    await store.add_skill(
-        skill_name="code-review",
-        description="代码审查技能，帮助审查和改进代码质量",
-        content="你是一个代码审查专家，请检查代码质量、潜在问题和改进建议。",
-    )
-    await store.add_skill(
-        skill_name="testing",
-        description="测试技能，帮助编写和运行单元测试",
-        content="你是一个测试专家，请帮助编写全面的单元测试和集成测试。",
-    )
-    print("已添加 2 条技能记录")
-
-    # 搜索技能
-    skill_results = await store.search_skills(
-        query="代码质量检查",
-        top_k=2,
-    )
-    print(f"\n搜索 '代码质量检查' 结果:")
-    for r in skill_results:
-        print(f"  - 相似度: {r.similarity:.3f}, 技能: {r.id}")
-
-    # -------------------------------------------------------------------------
-    # 4. 通用添加和搜索
-    # -------------------------------------------------------------------------
-    print("\n--- 4. 通用添加和搜索 ---")
-
-    # 添加任意文本
+    # 添加文档
     await store.add(
         id="doc-001",
         content="Harness SDK 是一个可内嵌的 Python AI Agent SDK，支持工具调用、会话管理和技能系统。",
-        metadata={"type": "documentation"},
+        metadata={"type": "documentation", "topic": "overview"},
     )
     await store.add(
         id="doc-002",
         content="Agent Loop 是 SDK 的核心循环，负责调用 LLM、解析响应、执行工具的迭代过程。",
-        metadata={"type": "documentation"},
+        metadata={"type": "documentation", "topic": "agent-loop"},
     )
     await store.add(
         id="doc-003",
         content="MCP 协议允许 Agent 连接外部工具服务器，扩展可用工具集。",
-        metadata={"type": "documentation"},
+        metadata={"type": "documentation", "topic": "mcp"},
     )
     print("已添加 3 条文档记录")
 
-    # 搜索
-    doc_results = await store.search(
+    # 语义搜索
+    results = await store.search(
         query="如何扩展 Agent 的工具能力",
         top_k=3,
     )
     print(f"\n搜索 '如何扩展 Agent 的工具能力' 结果:")
-    for r in doc_results:
-        print(f"  - 相似度: {r.similarity:.3f}, ID: {r.id}")
+    for r in results:
+        print(f"  - 相似度: {r.score:.3f}, ID: {r.id}")
         print(f"    内容: {r.content[:80]}...")
 
     # -------------------------------------------------------------------------
-    # 5. SimpleInMemoryVectorStore
+    # 3. 批量添加
     # -------------------------------------------------------------------------
-    print("\n--- 5. SimpleInMemoryVectorStore ---")
+    print("\n--- 3. 批量添加 ---")
 
-    simple_store = SimpleInMemoryVectorStore(dim=config.embedding_dim)
-    print(f"已创建 SimpleInMemoryVectorStore (更轻量的实现)")
+    await store.add_batch(
+        ids=["conv-001", "conv-002", "conv-003"],
+        contents=[
+            "用户询问如何使用 FastAPI 创建 REST API",
+            "Python 虚拟环境创建方法：python -m venv myenv",
+            "FastAPI 中使用 SQLAlchemy 进行数据库操作",
+        ],
+        metadatas=[
+            {"type": "conversation", "session": "s1"},
+            {"type": "conversation", "session": "s2"},
+            {"type": "conversation", "session": "s3"},
+        ],
+    )
+    print("已批量添加 3 条对话记录")
+
+    # 搜索对话
+    conv_results = await store.search(
+        query="FastAPI 开发 API",
+        top_k=2,
+        filter={"type": "conversation"},
+    )
+    print(f"\n搜索 'FastAPI 开发 API' (仅对话) 结果:")
+    for r in conv_results:
+        print(f"  - 相似度: {r.score:.3f}, ID: {r.id}")
+        print(f"    内容: {r.content[:80]}...")
+
+    # -------------------------------------------------------------------------
+    # 4. SimpleInMemoryVectorStore
+    # -------------------------------------------------------------------------
+    print("\n--- 4. SimpleInMemoryVectorStore ---")
+
+    simple_store = SimpleInMemoryVectorStore()
+    print(f"已创建 SimpleInMemoryVectorStore (更轻量的底层存储)")
 
     # 添加数据
+    mock_model = MockEmbeddingModel(dimension=64)
+    embeddings = await mock_model.embed(["简单的向量存储示例"])
     await simple_store.add(
-        id="simple-001",
-        content="简单的向量存储示例",
-        embedding=MockEmbeddingModel(dim=config.embedding_dim).embed("简单的向量存储示例"),
+        ids=["simple-001"],
+        embeddings=embeddings,
+        documents=["简单的向量存储示例"],
     )
     print("已添加 1 条记录到 SimpleInMemoryVectorStore")
 
+    # 搜索
+    query_embeddings = await mock_model.embed(["向量存储"])
+    search_results = await simple_store.search(
+        query_embedding=query_embeddings[0],
+        top_k=1,
+    )
+    print(f"搜索结果: {len(search_results)} 条")
+    for r in search_results:
+        print(f"  - 相似度: {r.score:.3f}, 内容: {r.content}")
+
     # -------------------------------------------------------------------------
-    # 6. VectorSearchResult 说明
+    # 5. VectorSearchResult 说明
     # -------------------------------------------------------------------------
-    print("\n--- 6. VectorSearchResult 结构 ---")
+    print("\n--- 5. VectorSearchResult 结构 ---")
     print("""
     VectorSearchResult 包含以下字段：
 
     - id: 条目唯一标识
     - content: 匹配的文本内容
-    - similarity: 相似度分数 (0.0 - 1.0)
+    - score: 相似度分数 (0.0 - 1.0)
     - metadata: 附加元数据
 
     与 AgentHarness 集成：
@@ -3019,6 +3011,11 @@ async def demo_vector_search():
     │    ↓                                                        │
     │  执行后，将新对话存入向量存储                                │
     └─────────────────────────────────────────────────────────────┘
+
+    生产环境建议：
+    - 替换 MockEmbeddingModel 为真实嵌入模型 (OpenAI / sentence-transformers)
+    - 替换 SimpleInMemoryVectorStore 为持久化存储 (ChromaDB / FAISS)
+    - 设置合理的 embedding_dimension (通常 384 或 1536)
     """)
 
     print("\n✅ 向量检索演示完成")
