@@ -138,10 +138,10 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
     def _setup_header_bar(self):
-        """Setup header bar with logo, title, and quick actions."""
+        """Setup slim header bar with logo and quick actions (~36px)."""
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setContentsMargins(8, 4, 8, 4)
 
         header_widget.setStyleSheet("""
             QWidget {
@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #3e3e42;
             }
         """)
+        header_widget.setMaximumHeight(40)
 
         # Logo icon
         logo_label = QLabel("A")
@@ -156,51 +157,30 @@ class MainWindow(QMainWindow):
             QLabel {
                 background-color: #007acc;
                 color: white;
-                border-radius: 12px;
-                font-size: 14px;
+                border-radius: 10px;
+                font-size: 12px;
                 font-weight: bold;
-                min-width: 24px;
-                max-width: 24px;
-                min-height: 24px;
-                max-height: 24px;
+                min-width: 20px;
+                max-width: 20px;
+                min-height: 20px;
+                max-height: 20px;
             }
         """)
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(logo_label)
 
-        # App name and subtitle
-        title_widget = QWidget()
-        title_layout = QVBoxLayout(title_widget)
-        title_layout.setContentsMargins(8, 0, 0, 0)
-        title_layout.setSpacing(0)
-
+        # App name (single line, no subtitle)
         app_name = QLabel("Harness Client")
         app_name.setStyleSheet("""
             QLabel {
                 color: #d4d4d4;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
+                margin-left: 8px;
             }
         """)
-        title_layout.addWidget(app_name)
-
-        subtitle = QLabel("AI Agent 助手")
-        subtitle.setStyleSheet("""
-            QLabel {
-                color: #808080;
-                font-size: 11px;
-            }
-        """)
-        title_layout.addWidget(subtitle)
-
-        header_layout.addWidget(title_widget)
+        header_layout.addWidget(app_name)
         header_layout.addStretch()
-
-        # Quick actions toolbar
-        actions_widget = QWidget()
-        actions_layout = QHBoxLayout(actions_widget)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(8)
 
         # Clear context button
         clear_btn = QPushButton("清空上下文")
@@ -209,9 +189,9 @@ class MainWindow(QMainWindow):
                 background-color: transparent;
                 border: 1px solid #3e3e42;
                 border-radius: 4px;
-                padding: 6px 12px;
+                padding: 4px 10px;
                 color: #d4d4d4;
-                font-size: 12px;
+                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #2a2a2a;
@@ -219,12 +199,7 @@ class MainWindow(QMainWindow):
             }
         """)
         clear_btn.clicked.connect(self._on_clear_context)
-        actions_layout.addWidget(clear_btn)
-
-        header_layout.addWidget(actions_widget)
-
-        # Add header as a widget at top (not toolbar)
-        # We'll add it to central widget layout
+        header_layout.addWidget(clear_btn)
 
         self.header_widget = header_widget
 

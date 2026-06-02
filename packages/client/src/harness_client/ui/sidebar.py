@@ -66,10 +66,10 @@ class SidebarPanel(QWidget):
         self._main_layout.setContentsMargins(4, 4, 4, 4)
         self._main_layout.setSpacing(4)
 
-        # Top: Logo/App name area
+        # Top: Logo/App name area (compact)
         self._header_widget = QWidget()
         header_layout = QHBoxLayout(self._header_widget)
-        header_layout.setContentsMargins(4, 4, 4, 4)
+        header_layout.setContentsMargins(4, 2, 4, 2)
 
         # Logo button (clickable to toggle)
         self.logo_btn = QToolButton()
@@ -78,13 +78,13 @@ class SidebarPanel(QWidget):
             QToolButton {
                 background-color: #007acc;
                 color: white;
-                border-radius: 14px;
-                font-size: 16px;
+                border-radius: 12px;
+                font-size: 14px;
                 font-weight: bold;
-                min-width: 28px;
-                max-width: 28px;
-                min-height: 28px;
-                max-height: 28px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
             }
             QToolButton:hover {
                 background-color: #106ebe;
@@ -98,8 +98,9 @@ class SidebarPanel(QWidget):
         self.app_name_label.setStyleSheet("""
             QLabel {
                 color: #d4d4d4;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
+                margin-left: 4px;
             }
         """)
         header_layout.addWidget(self.app_name_label)
@@ -126,7 +127,7 @@ class SidebarPanel(QWidget):
         nav_layout.addWidget(self.chat_btn)
 
         # Settings button
-        self.settings_btn = self._create_nav_button("⚙️", "设置")
+        self.settings_btn = self._create_nav_button("⚙", "设置")
         self.settings_btn.setToolTip("设置")
         self.settings_btn.clicked.connect(self._on_settings_click)
         nav_layout.addWidget(self.settings_btn)
@@ -138,7 +139,7 @@ class SidebarPanel(QWidget):
         nav_layout.addWidget(nav_separator)
 
         # New session button
-        self.new_session_btn = self._create_nav_button("➕", "新建会话")
+        self.new_session_btn = self._create_nav_button("+", "新建会话")
         self.new_session_btn.setToolTip("新建会话")
         self.new_session_btn.clicked.connect(self._on_new_session)
         nav_layout.addWidget(self.new_session_btn)
@@ -199,7 +200,7 @@ class SidebarPanel(QWidget):
 
     def _create_nav_button(self, icon: str, text: str) -> QPushButton:
         """Create a navigation button with icon and optional text."""
-        btn = QPushButton(f"{icon}")
+        btn = QPushButton()
         btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
@@ -208,7 +209,7 @@ class SidebarPanel(QWidget):
                 padding: 8px;
                 text-align: left;
                 color: #d4d4d4;
-                font-size: 14px;
+                font-size: 16px;
             }
             QPushButton:hover {
                 background-color: #2a2a2a;
@@ -217,9 +218,14 @@ class SidebarPanel(QWidget):
                 background-color: #094771;
             }
         """)
-        btn.setFont(self._get_font())
+        # Set font that supports emoji
+        font = QFont()
+        font.setPointSize(12)
+        font.setFamily("Segoe UI Emoji")
+        btn.setFont(font)
         btn.setProperty("icon", icon)
         btn.setProperty("text", text)
+        btn.setText(icon)  # Initial state: show only icon
         return btn
 
     def _apply_collapsed_state(self):
