@@ -2179,7 +2179,7 @@ async def demo_ralph_loop():
         context_threshold=0.8,           # 上下文使用率超 80% 时压缩
         task_complete_check=check_complete,  # 自定义完成检查
         continuation_prompt_template=(
-            "以下是之前的进展摘要：\n{summary}\n\n请继续完成任务。"
+            "以下是之前的进展摘要：\n{previous_response}\n\n请继续完成任务。"
         ),
         progress_dir=None,               # 进度保存目录（None 则不持久化）
     )
