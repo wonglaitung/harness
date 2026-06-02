@@ -1891,8 +1891,7 @@ async def demo_lifecycle_hooks():
 
     # 阻止危险工具钩子 - 阻止 bash, write 等危险操作
     abort_hook = AbortOnDangerousToolHook(
-        dangerous_tools=["bash", "write", "edit"],
-        reason="当前会话禁止修改文件和执行命令",
+        blocked_tools=["bash", "write_file", "edit_file"],
     )
     print(f"阻止危险工具钩子: AbortOnDangerousToolHook")
 
@@ -2564,31 +2563,17 @@ async def demo_progressive_skills():
 
     import tempfile
     tmpdir = tempfile.mkdtemp()
-
-    loader = ProgressiveSkillLoader(
-        skill_dirs=[tmpdir],           # 技能目录
-        max_context_tokens=4000,       # 可用于技能的最大 token 数
-        embedding_dim=64,              # 嵌入维度
-    )
-    print(f"已创建 ProgressiveSkillLoader")
-    print(f"  - 最大上下文: {loader.max_context_tokens} tokens")
-    print(f"  - 嵌入维度: {loader.embedding_dim}")
-
-    # -------------------------------------------------------------------------
-    # 2. Level 1: 发现技能 - 只加载元信息
-    # -------------------------------------------------------------------------
-    print("\n--- 2. Level 1: 发现技能 (只加载元信息) ---")
+    skills_dir = Path(tmpdir)
 
     # 创建一些技能文件用于演示
-    from pathlib import Path
-    skills_dir = Path(tmpdir)
     (skills_dir / "code-review.md").write_text("""---
 name: code-review
 description: 代码审查技能，帮助审查和改进代码质量
-keywords:
-  - review
-  - 审查
-  - 代码
+triggers:
+  keywords:
+    - review
+    - 审查
+    - 代码
 ---
 
 你是一个代码审查专家，请检查代码质量、潜在问题和改进建议。
@@ -2596,10 +2581,11 @@ keywords:
     (skills_dir / "testing.md").write_text("""---
 name: testing
 description: 测试技能，帮助编写和运行测试
-keywords:
-  - test
-  - 测试
-  - unit test
+triggers:
+  keywords:
+    - test
+    - 测试
+    - unit test
 ---
 
 你是一个测试专家，请帮助编写全面的单元测试和集成测试。
@@ -2607,20 +2593,29 @@ keywords:
     (skills_dir / "deployment.md").write_text("""---
 name: deployment
 description: 部署技能，帮助配置和部署应用
-keywords:
-  - deploy
-  - 部署
-  - ci/cd
+triggers:
+  keywords:
+    - deploy
+    - 部署
+    - ci/cd
 ---
 
 你是一个部署专家，请帮助配置 CI/CD 流水线和部署策略。
 """)
 
+    loader = ProgressiveSkillLoader(cache_size=50)
+    print(f"已创建 ProgressiveSkillLoader")
+
+    # -------------------------------------------------------------------------
+    # 2. Level 1: 发现技能 - 只加载元信息
+    # -------------------------------------------------------------------------
+    print("\n--- 2. Level 1: 发现技能 (只加载元信息) ---")
+
     # Level 1: 发现技能（只加载元信息，不加载内容）
-    discovered = loader.discover_skills()
+    discovered = loader.discover_skills(skills_dir)
     print(f"Level 1 - 发现了 {len(discovered)} 个技能:")
     for skill_meta in discovered:
-        print(f"  - {skill_meta.name}: {skill_meta.description} (~{skill_meta.token_estimate} tokens)")
+        print(f"  - {skill_meta.name}: {skill_meta.description}")
 
     # -------------------------------------------------------------------------
     # 3. 匹配技能 - 根据用户输入筛选相关技能
@@ -2628,13 +2623,13 @@ keywords:
     print("\n--- 3. 匹配技能 ---")
 
     user_input = "请 review 我的代码"
-    matched = loader.match_skills(user_input)
+    matched = loader.match_skills(user_input, discovered)
     print(f"用户输入: '{user_input}'")
     print(f"匹配的技能: {[m.name for m in matched]}")
 
     # 另一个输入
     user_input2 = "帮我写单元测试"
-    matched2 = loader.match_skills(user_input2)
+    matched2 = loader.match_skills(user_input2, discovered)
     print(f"\n用户输入: '{user_input2}'")
     print(f"匹配的技能: {[m.name for m in matched2]}")
 
@@ -2644,35 +2639,47 @@ keywords:
     print("\n--- 4. Level 2: 加载完整技能内容 ---")
 
     # 加载匹配技能的完整内容
-    loaded_skills = loader.load_skills([m.name for m in matched])
-    for skill in loaded_skills:
+    for meta in matched:
+        skill = loader.load_full_content(meta)
         print(f"  ✅ 已加载 '{skill.name}' 的完整内容")
         print(f"     内容长度: {len(skill.content)} 字符")
-        print(f"     Token 估算: {skill.token_estimate}")
 
     # -------------------------------------------------------------------------
-    # 5. 选择技能 - 根据上下文预算
+    # 5. 构建技能选择提示 & Token 估算
     # -------------------------------------------------------------------------
-    print("\n--- 5. 选择技能 (根据上下文预算) ---")
+    print("\n--- 5. 构建技能选择提示 & Token 估算 ---")
 
-    # 根据匹配结果和 token 预算，选择要注入的技能
-    selected = loader.select_skills(
-        user_input="请 review 我的代码",
-        available_budget=1000,  # 可用 token 预算
-    )
-    print(f"在 1000 token 预算内选择的技能: {[s.name for s in selected]}")
-    total_tokens = sum(s.token_estimate for s in selected)
-    print(f"总估算 token: {total_tokens}")
+    # 构建技能列表提示（用于让 LLM 选择使用哪个技能）
+    prompt = loader.build_skill_selection_prompt(discovered, format_style="list")
+    print(f"技能选择提示 (list 格式):")
+    print(f"  {prompt[:200]}")
+
+    # Token 估算
+    l1_tokens = loader.estimate_tokens(discovered, level=1)
+    l2_tokens = loader.estimate_tokens(discovered, level=2)
+    print(f"\nToken 估算:")
+    print(f"  - Level 1 (元信息): ~{l1_tokens} tokens")
+    print(f"  - Level 2 (完整内容): ~{l2_tokens} tokens")
 
     # -------------------------------------------------------------------------
-    # 6. 三级加载对比
+    # 6. Level 3: 加载技能和参考文档
     # -------------------------------------------------------------------------
-    print("\n--- 6. 三级加载对比 ---")
+    print("\n--- 6. Level 3: 加载技能和参考文档 ---")
+
+    if matched:
+        skill, refs = loader.load_with_references(matched[0])
+        print(f"  已加载 '{skill.name}' 及其引用")
+        print(f"  引用文件数: {len(refs)}")
+
+    # -------------------------------------------------------------------------
+    # 7. 三级加载对比
+    # -------------------------------------------------------------------------
+    print("\n--- 7. 三级加载对比 ---")
     print("""
     ┌─────────────────────────────────────────────────────────────┐
-    │  Level 1 (DISCOVER): 名称 + 描述 + 关键词                  │
+    │  Level 1 (DISCOVER): 名称 + 描述 + 触发条件                │
     │  用途: 快速匹配相关技能                                      │
-    │  Token: ~20-50 / 技能                                       │
+    │  Token: ~50-100 / 技能                                      │
     │                                                             │
     │  Level 2 (LOAD): 完整技能内容                               │
     │  用途: 提供详细的执行指令                                    │
@@ -2803,7 +2810,7 @@ async def demo_memory_md():
     print("\n--- 5. create_default_memory ---")
 
     default_root = Path(tempfile.mkdtemp())
-    default = create_default_memory(project_root=default_root)
+    create_default_memory(project_root=default_root)  # 创建默认模板，返回 None
     print(f"已创建默认 MEMORY.md 到: {default_root / 'MEMORY.md'}")
 
     # 加载查看内容
