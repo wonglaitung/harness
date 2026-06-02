@@ -26,9 +26,11 @@ from harness.sdk.config import (
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
+from harness.core.hooks import HookPoint, LifecycleHook
 from harness.types import (
     CostConfig,
     LoopResult,
+    LoopSnapshot,
     ProgressCallback,
     Session,
 )
@@ -499,6 +501,148 @@ class AgentHarness:
     def interrupt(self) -> None:
         """Interrupt the current execution."""
         self._loop.interrupt()
+
+    def add_hook(
+        self,
+        hook: LifecycleHook,
+        points: list[HookPoint] | None = None,
+    ) -> None:
+        """
+        Register a lifecycle hook.
+
+        Hooks allow custom logic to be injected at key points in the agent loop:
+        - Before/after LLM calls
+        - Before/after tool execution
+        - On errors
+        - On loop start/end
+
+        Args:
+            hook: The hook to register (subclass of LifecycleHook)
+            points: Specific hook points to register for (uses hook.hook_points if None)
+
+        Example:
+            ```python
+            from harness import AgentHarness, LifecycleHook, HookPoint, HookContext, HookResult
+
+            class MyHook(LifecycleHook):
+                @property
+                def hook_points(self) -> list[HookPoint]:
+                    return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+                async def execute(self, context: HookContext) -> HookResult:
+                    print(f"About to execute: {context.tool_name}")
+                    return HookResult.continue_()
+
+            agent = AgentHarness()
+            agent.add_hook(MyHook())
+            ```
+        """
+        self._loop.add_hook(hook, points)
+
+    def remove_hook(self, hook: LifecycleHook) -> None:
+        """
+        Unregister a lifecycle hook.
+
+        Args:
+            hook: The hook to unregister
+        """
+        self._loop.remove_hook(hook)
+
+    def create_snapshot(
+        self,
+        session_id: str | None = None,
+        iteration: int = 0,
+    ) -> "LoopSnapshot":
+        """
+        Create a snapshot of the current loop state.
+
+        Snapshots can be used to save progress and resume later.
+
+        Args:
+            session_id: Session ID (uses current session if None)
+            iteration: Current iteration number
+
+        Returns:
+            LoopSnapshot capturing the current state
+
+        Example:
+            ```python
+            agent = AgentHarness()
+            result = await agent.run("Long task...", session_id="my-session")
+
+            # Save snapshot for later
+            snapshot = agent.create_snapshot(session_id="my-session")
+            snapshot_dict = snapshot.to_dict()
+
+            # Resume later
+            from harness import LoopSnapshot
+            loaded = LoopSnapshot.from_dict(snapshot_dict)
+            ```
+        """
+        from harness.types import LoopSnapshot
+
+        session = None
+        if session_id:
+            session = self._session_manager.get_session(session_id)
+        if session is None:
+            session = self._session_manager.get_or_create(session_id)
+
+        return self._loop.create_snapshot(
+            session=session,
+            iteration=iteration,
+        )
+
+    async def restore_from_snapshot(
+        self,
+        snapshot: LoopSnapshot,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> LoopResult:
+        """
+        Resume execution from a snapshot.
+
+        This allows continuing a previously interrupted execution.
+
+        Args:
+            snapshot: Snapshot to resume from
+            tools: Available tools (uses registered tools if None)
+            on_chunk: Streaming callback
+            on_progress: Progress callback
+
+        Returns:
+            LoopResult from resumed execution
+
+        Example:
+            ```python
+            # Save snapshot
+            snapshot = agent.create_snapshot(session_id="my-session")
+
+            # Later, resume from snapshot
+            result = await agent.restore_from_snapshot(snapshot)
+            ```
+        """
+        # Restore session from snapshot
+        session = self._session_manager.get_or_create(snapshot.session_id)
+        session.messages = snapshot.messages.copy()
+
+        # Get tool definitions
+        tool_defs = tools or [
+            ToolDefinition(
+                name=t.name,
+                description=t.description,
+                input_schema=t.input_schema,
+            )
+            for t in self._tool_registry.get_all()
+        ]
+
+        # Resume from snapshot
+        return await self._loop.resume_from_snapshot(
+            snapshot=snapshot,
+            tools=tool_defs if tool_defs else None,
+            on_chunk=on_chunk,
+            on_progress=on_progress,
+        )
 
     @classmethod
     def from_config(cls, path: str) -> "AgentHarness":

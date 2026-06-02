@@ -174,23 +174,64 @@ class SubAgentManager:
         from harness.sdk.config import HarnessConfig
 
         # Create sub-agent configuration
+        # Inherit API settings from parent
+        parent_config = getattr(self.parent, 'config', None)
         sub_config = HarnessConfig(
-            model=self.parent.config.model if hasattr(self.parent, 'config') else "claude-sonnet-4-6",
+            model=getattr(parent_config, 'model', "claude-sonnet-4-6") if parent_config else "claude-sonnet-4-6",
+            api_key=getattr(parent_config, 'api_key', None) if parent_config else None,
+            provider=getattr(parent_config, 'provider', "anthropic") if parent_config else "anthropic",
+            base_url=getattr(parent_config, 'base_url', None) if parent_config else None,
             max_iterations=config.max_iterations,
             system_prompt=config.system_prompt or self._build_default_prompt(config),
         )
 
-        # Create the sub-agent
-        # Note: In production, we'd properly inherit tools and settings
+        # Inherit tools from parent, filtered by config.tools if specified
+        inherited_tools = None
+        if hasattr(self.parent, '_tool_registry'):
+            all_tools = self.parent._tool_registry.get_all()
+            if config.tools is not None:
+                # Filter tools by name - support both exact names and common aliases
+                tool_aliases = {
+                    "read": "read",
+                    "write": "write_file",
+                    "edit": "edit_file",
+                    "glob": "glob",
+                    "grep": "grep",
+                    "bash": "bash",
+                    "websearch": "web_search",
+                    "webfetch": "web_fetch",
+                }
+                allowed_names = set()
+                for name in config.tools:
+                    # Add the name as-is
+                    allowed_names.add(name)
+                    # Add any alias for the name
+                    if name in tool_aliases:
+                        allowed_names.add(tool_aliases[name])
+                    # Check if name is an alias value
+                    for alias, target in tool_aliases.items():
+                        if target == name:
+                            allowed_names.add(alias)
+
+                inherited_tools = [
+                    tool for tool in all_tools
+                    if tool.name in allowed_names
+                ]
+            else:
+                # Inherit all tools if not specified
+                inherited_tools = all_tools
+
+        # Create the sub-agent with inherited tools
         if llm_client:
             sub_agent = AgentHarness(
                 llm_client=llm_client,
-                max_iterations=sub_config.max_iterations,
+                config=sub_config,
+                tools=inherited_tools,
             )
         else:
             sub_agent = AgentHarness(
-                model=sub_config.model,
-                max_iterations=sub_config.max_iterations,
+                config=sub_config,
+                tools=inherited_tools,
             )
 
         # Store references

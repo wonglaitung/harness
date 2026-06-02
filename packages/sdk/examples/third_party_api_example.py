@@ -1100,6 +1100,7 @@ async def demo_security_system():
         # 审计日志
         enable_audit_log=True,             # 审计日志（默认启用）
         audit_log_dir="~/.harness/audit",  # 审计日志目录
+        audit_retention_days=30,           # 审计日志保留天数
 
         # 沙箱配置
         enable_sandbox=True,               # 沙箱执行（默认启用）
@@ -1111,7 +1112,15 @@ async def demo_security_system():
             "chmod -R 777",
             "mkfs",
         ],
+        sandbox_blocked_patterns=[         # 阻止的命令模式
+            "rm -rf",
+            "curl | bash",
+            "wget | bash",
+        ],
         sandbox_allowed_commands=None,     # None = 允许所有非阻止命令
+        sandbox_allowed_env_vars=[         # 允许传递的环境变量
+            "PATH", "HOME", "USER", "LANG",
+        ],
     )
 
     print("\n安全配置:")
@@ -1605,8 +1614,9 @@ async def demo_interrupt_and_resume():
 
     from harness import LoopSnapshot
 
-    snapshot = agent._loop.create_snapshot(
-        session=result.session,
+    # 使用公开 API 创建快照（需要先有 session）
+    snapshot = agent.create_snapshot(
+        session_id="demo-session",
         iteration=result.iterations,
     )
 
@@ -1647,11 +1657,8 @@ async def demo_interrupt_and_resume():
             timeout_task.cancel()
             return result
         except asyncio.CancelledError:
-            # 创建快照用于恢复
-            snapshot = agent._loop.create_snapshot(
-                session=agent._loop.session,
-                iteration=agent._loop.current_iteration,
-            )
+            # 创建快照用于恢复（使用公开 API）
+            snapshot = agent.create_snapshot(session_id="timeout-session")
             print(f"已保存快照: {snapshot.session_id}")
             return None
 
@@ -1682,10 +1689,8 @@ async def demo_interrupt_and_resume():
     # 使用场景：断点续传
     async def resume_from_file(agent: AgentHarness, snapshot_path: str):
         snapshot = load_snapshot(snapshot_path)
-        # 恢复 session 状态
-        agent._loop.restore_from_snapshot(snapshot)
-        # 继续执行
-        return await agent.run("请继续...")
+        # 使用公开 API 恢复执行
+        return await agent.restore_from_snapshot(snapshot)
     """)
 
     print("\n✅ 中断与恢复与 AgentHarness 集成演示完成")
@@ -1895,9 +1900,9 @@ async def demo_lifecycle_hooks():
     )
     print(f"阻止危险工具钩子: AbortOnDangerousToolHook")
 
-    # 限制工具调用次数钩子
-    max_calls_hook = MaxToolCallsHook(max_calls=10)
-    print(f"限制调用次数钩子: MaxToolCallsHook (最多 10 次)")
+    # 限制工具调用次数钩子（需要指定工具名称）
+    max_calls_hook = MaxToolCallsHook(tool_name="bash", max_calls=10)
+    print(f"限制调用次数钩子: MaxToolCallsHook (工具 'bash' 最多 10 次)")
 
     # -------------------------------------------------------------------------
     # 3. 使用 HookManager 管理钩子
@@ -1950,7 +1955,7 @@ async def demo_lifecycle_hooks():
 
     # 注册钩子到 Agent 的循环
     for hook in [timing_hook, logging_hook, max_calls_hook]:
-        agent._loop.add_hook(hook)
+        agent.add_hook(hook)
 
     print(f"已注册钩子到 Agent 的循环")
 
@@ -2225,8 +2230,8 @@ async def demo_ralph_loop():
         tools=[ReadTool(), GlobTool()],
     )
 
-    # 注册 Ralph Loop Hook 到 Agent 的循环
-    agent._loop.add_hook(ralph_hook)
+    # 注册 Ralph Loop Hook 到 Agent
+    agent.add_hook(ralph_hook)
     print(f"已注册 RalphLoopHook 到 Agent")
 
     # 运行一个简单的任务
@@ -2332,13 +2337,14 @@ async def demo_sub_agent():
     # -------------------------------------------------------------------------
     print("\n--- 3. 创建和运行子代理 ---")
 
-    # 创建子代理
-    agent_id1 = await manager.spawn(config1)
-    agent_id2 = await manager.spawn(config2)
+    # 创建子代理（spawn 返回配置中的名称）
+    sub_agent_name_1 = await manager.spawn(config1)
+    sub_agent_name_2 = await manager.spawn(config2)
 
     print(f"已创建子代理: {manager.list_sub_agents()}")
+    print(f"  - spawn() 返回值即 config.name: '{sub_agent_name_1}', '{sub_agent_name_2}'")
 
-    # 运行单个子代理
+    # 运行单个子代理（使用配置中的名称）
     print(f"\n运行子代理 '{config1.name}'...")
     result1: SubAgentResult = await manager.run(config1.name)
     print(f"子代理结果:")
@@ -2500,8 +2506,8 @@ async def demo_self_verification():
         tools=[ReadTool(), GlobTool()],
     )
 
-    # 注册自验证钩子到 Agent 的循环
-    agent._loop.add_hook(verify_hook)
+    # 注册自验证钩子到 Agent
+    agent.add_hook(verify_hook)
     print(f"已注册自验证钩子到 Agent")
 
     # 运行 Agent（当前只读操作，不会触发验证）
