@@ -1824,6 +1824,1207 @@ async def demo_complete_workflow():
 
 
 # ============================================================================
+# 演示 17: Lifecycle Hooks - 工具执行前后的钩子系统 (P0)
+# ============================================================================
+
+async def demo_lifecycle_hooks():
+    """
+    演示 17: Lifecycle Hooks - 工具执行前后的钩子系统 (P0)
+
+    功能:
+    - 创建自定义 LifecycleHook 子类
+    - 使用 HookManager 注册和管理钩子
+    - 展示内置钩子: LoggingHook, AbortOnDangerousToolHook, MaxToolCallsHook
+    - 与 AgentHarness 集成使用钩子
+
+    学习要点:
+    - HookPoint 定义钩子触发时机 (BEFORE_TOOL, AFTER_TOOL 等)
+    - HookAction 控制钩子行为 (CONTINUE, ABORT, MODIFY)
+    - 钩子可以拦截、修改或阻止工具调用
+    - 内置钩子提供常见的安全和日志功能
+    """
+    print("\n" + "=" * 70)
+    print("演示 17: Lifecycle Hooks - 工具执行前后的钩子系统 (P0)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 自定义钩子 - 继承 LifecycleHook
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 自定义钩子 ---")
+
+    class TimingHook(LifecycleHook):
+        """记录工具执行时间的钩子"""
+
+        def __init__(self):
+            self._start_times = {}
+            self.timings = {}
+
+        async def execute(self, context: HookContext) -> HookResult:
+            """钩子执行逻辑"""
+            if context.hook_point == HookPoint.BEFORE_TOOL_EXECUTE:
+                tool_name = context.tool_name
+                self._start_times[tool_name] = asyncio.get_event_loop().time()
+                print(f"  ⏱️ 开始执行工具: {tool_name}")
+                return HookResult(action=HookAction.CONTINUE)
+
+            elif context.hook_point == HookPoint.AFTER_TOOL_EXECUTE:
+                tool_name = context.tool_name
+                start = self._start_times.get(tool_name, 0)
+                elapsed = (asyncio.get_event_loop().time() - start) * 1000
+                self.timings[tool_name] = elapsed
+                print(f"  ⏱️ 工具 {tool_name} 执行完成，耗时: {elapsed:.1f}ms")
+                return HookResult(action=HookAction.CONTINUE)
+
+            return HookResult(action=HookAction.CONTINUE)
+
+    timing_hook = TimingHook()
+    print(f"已创建自定义钩子: TimingHook")
+
+    # -------------------------------------------------------------------------
+    # 2. 内置钩子 - LoggingHook
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 内置钩子 ---")
+
+    # 日志钩子 - 记录所有工具调用
+    logging_hook = LoggingHook()
+    print(f"日志钩子: LoggingHook")
+
+    # 阻止危险工具钩子 - 阻止 bash, write 等危险操作
+    abort_hook = AbortOnDangerousToolHook(
+        dangerous_tools=["bash", "write", "edit"],
+        reason="当前会话禁止修改文件和执行命令",
+    )
+    print(f"阻止危险工具钩子: AbortOnDangerousToolHook")
+
+    # 限制工具调用次数钩子
+    max_calls_hook = MaxToolCallsHook(max_calls=10)
+    print(f"限制调用次数钩子: MaxToolCallsHook (最多 10 次)")
+
+    # -------------------------------------------------------------------------
+    # 3. 使用 HookManager 管理钩子
+    # -------------------------------------------------------------------------
+    print("\n--- 3. HookManager 管理钩子 ---")
+
+    hook_manager = HookManager()
+    hook_manager.register(timing_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE, HookPoint.AFTER_TOOL_EXECUTE])
+    hook_manager.register(logging_hook)
+    hook_manager.register(abort_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE])
+    hook_manager.register(max_calls_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE])
+
+    # 检查哪些 HookPoint 有注册的钩子
+    print(f"已注册钩子到 HookManager:")
+    for point in HookPoint:
+        if hook_manager.has_hooks(point):
+            print(f"  - {point.value}: 有钩子")
+
+    # -------------------------------------------------------------------------
+    # 4. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 与 AgentHarness 集成 ---")
+    print("""
+    Lifecycle Hooks 与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  AgentHarness.run("用户输入")                               │
+    │    ↓                                                        │
+    │  AgentLoop 执行循环                                         │
+    │    ↓                                                        │
+    │  LLM 返回工具调用 → on_before_tool()                        │
+    │    ↓  HookAction.CONTINUE                                   │
+    │  执行工具 → on_after_tool()                                 │
+    │    ↓  HookAction.CONTINUE                                   │
+    │  继续循环...                                                │
+    │                                                             │
+    │  如果 HookAction.ABORT → 跳过工具执行                       │
+    │  如果 HookAction.MODIFY → 修改工具参数                      │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 创建带钩子的 Agent
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    # 注册钩子到 Agent 的循环
+    for hook in [timing_hook, logging_hook, max_calls_hook]:
+        agent._loop.add_hook(hook)
+
+    print(f"已注册钩子到 Agent 的循环")
+
+    # 运行 Agent
+    print("\n用户: 列出所有 Python 文件")
+    result = await agent.run(
+        "使用 glob 工具列出所有 *.py 文件。",
+        verbose=False,
+    )
+    print(f"\n响应: {result.content[:200]}...")
+
+    # 查看计时结果
+    if timing_hook.timings:
+        print(f"\n工具执行计时:")
+        for tool, elapsed in timing_hook.timings.items():
+            print(f"  - {tool}: {elapsed:.1f}ms")
+
+    # -------------------------------------------------------------------------
+    # 5. HookPoint 触发时机说明
+    # -------------------------------------------------------------------------
+    print("\n--- 5. HookPoint 触发时机 ---")
+    print("""
+    HookPoint 定义了钩子的触发时机：
+
+    - BEFORE_TOOL_EXECUTE:  工具执行前 (可拦截、修改参数)
+    - AFTER_TOOL_EXECUTE:   工具执行后 (可修改结果)
+    - LOOP_START:           Agent 循环开始
+    - LOOP_END:             Agent 循环结束
+    - ON_ERROR:             发生错误时
+    """)
+
+    print("\n✅ Lifecycle Hooks 演示完成")
+
+
+# ============================================================================
+# 演示 18: 动态系统提示 - SystemPromptBuilder (P0)
+# ============================================================================
+
+async def demo_dynamic_system_prompt():
+    """
+    演示 18: 动态系统提示 - SystemPromptBuilder (P0)
+
+    功能:
+    - 使用 SystemPromptBuilder 从多个源组装系统提示
+    - 定义 SystemPromptSource (文本、文件、回调)
+    - 使用 discover_project_context 发现项目上下文
+    - 与 AgentHarness 集成使用动态提示
+
+    学习要点:
+    - 系统提示可以从多个源组合，按优先级排列
+    - 文件源可以引用 AGENTS.md 等项目文件
+    - content 可以是字符串或 Callable，支持动态生成
+    - discover_project_context 自动发现项目信息
+    """
+    print("\n" + "=" * 70)
+    print("演示 18: 动态系统提示 - SystemPromptBuilder (P0)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 SystemPromptBuilder
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 SystemPromptBuilder ---")
+
+    config = SystemPromptConfig(
+        base_prompt="你是一个有帮助的 AI 助手。",  # 基础系统提示
+        auto_discover=True,          # 自动发现项目中的 AGENTS.md、MEMORY.md
+        project_root=Path("."),      # 项目根目录（用于自动发现）
+        section_separator="\n\n---\n\n",  # 各源之间的分隔符
+    )
+
+    builder = SystemPromptBuilder(config=config)
+    print(f"已创建 SystemPromptBuilder")
+    print(f"  - 基础提示: '{config.base_prompt}'")
+    print(f"  - 自动发现: {config.auto_discover}")
+
+    # -------------------------------------------------------------------------
+    # 2. 添加不同类型的 SystemPromptSource
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 添加不同类型的提示源 ---")
+
+    # 文本源 - 直接提供内容
+    builder.add_source(SystemPromptSource(
+        name="base-role",
+        content="你是一个专业的编程助手，擅长 Python 开发。",
+        priority=100,  # 优先级越高越靠前
+    ))
+    print("  ✅ 添加文本源: base-role (priority=100)")
+
+    # 回调源 - content 为 Callable，动态生成内容
+    import datetime
+    def get_time_context() -> str:
+        now = datetime.datetime.now()
+        return f"当前时间: {now.strftime('%Y-%m-%d %H:%M')}，请根据当前时间回答。"
+
+    builder.add_source(SystemPromptSource(
+        name="time-context",
+        content=get_time_context,  # content 可以是字符串或 Callable
+        priority=50,
+    ))
+    print("  ✅ 添加回调源: time-context (priority=50)")
+
+    # 文件源 - 从文件读取内容
+    # 如果存在 AGENTS.md，会自动加载项目说明
+    builder.add_source(SystemPromptSource(
+        name="agents-md",
+        file_path=Path("AGENTS.md"),
+        priority=80,
+        required=False,  # 文件不存在时不报错
+    ))
+    print("  ✅ 添加文件源: agents-md (priority=80, 可选)")
+
+    # -------------------------------------------------------------------------
+    # 3. 构建系统提示
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 构建系统提示 ---")
+
+    system_prompt = builder.build()
+    print(f"构建的系统提示长度: {len(system_prompt)} 字符")
+
+    # 查看可用的源
+    available_sources = builder.get_available_sources()
+    print(f"可用源: {available_sources}")
+
+    print(f"\n系统提示内容预览:")
+    print("-" * 40)
+    preview = system_prompt[:600] + "..." if len(system_prompt) > 600 else system_prompt
+    print(preview)
+
+    # -------------------------------------------------------------------------
+    # 4. discover_project_context - 发现项目上下文
+    # -------------------------------------------------------------------------
+    print("\n--- 4. discover_project_context ---")
+
+    project_context = discover_project_context()
+    print(f"发现的项目上下文:")
+    for key, value in project_context.items():
+        if value:
+            val_str = str(value)[:100]
+            print(f"  - {key}: {val_str}")
+    if not project_context:
+        print("  (未发现 AGENTS.md、MEMORY.md 或 CLAUDE.md)")
+
+    # -------------------------------------------------------------------------
+    # 5. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 与 AgentHarness 集成 ---")
+
+    # 方式 1: 使用构建好的系统提示
+    config_with_prompt = HarnessConfig(
+        model=MODEL,
+        api_key=API_KEY,
+        provider=PROVIDER,
+        base_url=BASE_URL,
+        system_prompt=system_prompt,
+        max_iterations=3,
+    )
+
+    agent = AgentHarness(config=config_with_prompt)
+
+    result = await agent.run("你好，请介绍一下你自己，包括你的专长领域。")
+    print(f"\nAgent 响应:\n{result.content[:300]}...")
+
+    # -------------------------------------------------------------------------
+    # 6. 动态更新系统提示
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 动态更新系统提示 ---")
+    print("""
+    SystemPromptBuilder 支持动态更新：
+
+    # 添加新的源
+    builder.add_source(SystemPromptSource(
+        name="user-preference",
+        content="用户偏好使用中文回答。",
+        priority=90,
+    ))
+
+    # 重新构建
+    new_prompt = builder.build()
+
+    # content 为 Callable 的源每次 build() 都会重新调用
+    # 适合注入运行时信息（如时间、用户状态等）
+
+    # 移除某个源
+    builder.remove_source("time-context")
+    """)
+
+    print("\n✅ 动态系统提示演示完成")
+
+
+# ============================================================================
+# 演示 19: Ralph Loop - 长任务循环 (P1)
+# ============================================================================
+
+async def demo_ralph_loop():
+    """
+    演示 19: Ralph Loop - 长任务循环 (P1)
+
+    功能:
+    - 配置 RalphLoopConfig 控制循环行为
+    - 创建 RalphLoopHook 注册到 Agent
+    - 自定义 task_complete_check 判断任务是否完成
+    - 防止长任务中的上下文焦虑
+
+    学习要点:
+    - Ralph Loop 适用于需要多步迭代的复杂任务
+    - context_threshold 控制何时压缩上下文
+    - task_complete_check 可以自定义完成条件
+    - continuation_prompt_template 自定义继续循环的提示
+    """
+    print("\n" + "=" * 70)
+    print("演示 19: Ralph Loop - 长任务循环 (P1)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 RalphLoopConfig
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 RalphLoopConfig ---")
+
+    def check_complete(result_content: str) -> bool:
+        """自定义完成检查：响应中包含 DONE 标记时视为完成"""
+        return "DONE" in result_content or "完成" in result_content
+
+    ralph_config = RalphLoopConfig(
+        max_loops=5,                     # 最大循环次数
+        context_threshold=0.8,           # 上下文使用率超 80% 时压缩
+        task_complete_check=check_complete,  # 自定义完成检查
+        continuation_prompt_template=(
+            "以下是之前的进展摘要：\n{summary}\n\n请继续完成任务。"
+        ),
+        progress_dir=None,               # 进度保存目录（None 则不持久化）
+    )
+
+    print(f"Ralph Loop 配置:")
+    print(f"  - 最大循环次数: {ralph_config.max_loops}")
+    print(f"  - 上下文阈值: {ralph_config.context_threshold * 100}%")
+    print(f"  - 自定义完成检查: {'是' if ralph_config.task_complete_check else '否'}")
+
+    # -------------------------------------------------------------------------
+    # 2. 创建 RalphLoopHook
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 创建 RalphLoopHook ---")
+
+    ralph_hook = RalphLoopHook(config=ralph_config)
+    print(f"已创建 RalphLoopHook")
+
+    # -------------------------------------------------------------------------
+    # 3. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 与 AgentHarness 集成 ---")
+    print("""
+    Ralph Loop 工作流程：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  用户输入: "请重构整个项目的错误处理"                       │
+    │    ↓                                                        │
+    │  第 1 轮: Agent 分析项目，制定计划                          │
+    │    ↓  task_complete_check → False                           │
+    │  第 2 轮: Agent 修改第一个模块                              │
+    │    ↓  上下文接近阈值 → 自动压缩历史                        │
+    │  第 3 轮: Agent 继续修改其他模块                            │
+    │    ↓  task_complete_check → True (包含"完成")               │
+    │  输出最终结果                                               │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    # 注册 Ralph Loop Hook 到 Agent 的循环
+    agent._loop.add_hook(ralph_hook)
+    print(f"已注册 RalphLoopHook 到 Agent")
+
+    # 运行一个简单的任务
+    print("\n用户: 列出项目中的 Python 文件并总结项目结构")
+    result = await agent.run(
+        "请使用 glob 工具列出所有 *.py 文件，然后简要总结项目结构。最后说'完成'。",
+        verbose=False,
+    )
+    print(f"\n响应: {result.content[:300]}...")
+    print(f"迭代次数: {result.iterations}")
+
+    # -------------------------------------------------------------------------
+    # 4. 使用场景说明
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 使用场景 ---")
+    print("""
+    Ralph Loop 适合以下场景：
+
+    1. 大规模代码重构 - 需要修改多个文件
+    2. 自动化测试 - 需要多轮修复和验证
+    3. 文档生成 - 需要分析大量文件后生成文档
+    4. 数据迁移 - 需要分步处理大量数据
+
+    关键参数调优：
+    - max_loops: 根据任务复杂度设置 (通常 5-20)
+    - context_threshold: 根据模型上下文窗口设置 (0.6-0.9)
+    - task_complete_check: 根据任务定义完成标志
+    - continuation_prompt_template: 自定义继续执行的提示模板
+    """)
+
+    print("\n✅ Ralph Loop 演示完成")
+
+
+# ============================================================================
+# 演示 20: Sub-Agent 管理 (P1)
+# ============================================================================
+
+async def demo_sub_agent():
+    """
+    演示 20: Sub-Agent 管理 (P1)
+
+    功能:
+    - 创建 SubAgentConfig 配置子代理
+    - 使用 SubAgentManager 创建和管理子代理
+    - 并行执行多个子代理任务
+    - 收集子代理结果
+
+    学习要点:
+    - 子代理可以执行独立的子任务
+    - 支持并行执行提高效率
+    - SubAgentResult 包含执行结果和状态
+    - 子代理与主代理共享或隔离工具和上下文
+    """
+    print("\n" + "=" * 70)
+    print("演示 20: Sub-Agent 管理 (P1)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 SubAgentManager
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 SubAgentManager ---")
+
+    manager = SubAgentManager(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+    )
+    print(f"已创建 SubAgentManager")
+
+    # -------------------------------------------------------------------------
+    # 2. 创建子代理配置
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 创建子代理配置 ---")
+
+    # 子代理 1: 代码分析
+    config1 = SubAgentConfig(
+        name="code-analyzer",
+        description="分析代码结构和质量",
+        system_prompt="你是一个代码分析专家，请简洁地分析代码。",
+        tools=["read", "glob", "grep"],  # 允许的工具名
+        max_iterations=3,
+    )
+
+    # 子代理 2: 文档生成
+    config2 = SubAgentConfig(
+        name="doc-generator",
+        description="根据分析结果生成文档",
+        system_prompt="你是一个技术文档专家，请根据给定的信息生成文档。",
+        tools=["read"],  # 只读权限
+        max_iterations=2,
+    )
+
+    print(f"子代理配置:")
+    print(f"  - {config1.name}: {config1.description}")
+    print(f"  - {config2.name}: {config2.description}")
+
+    # -------------------------------------------------------------------------
+    # 3. 创建和运行子代理
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 创建和运行子代理 ---")
+
+    # 创建子代理
+    sub1 = manager.create_agent(config1)
+    sub2 = manager.create_agent(config2)
+
+    print(f"已创建子代理: {[a.name for a in manager.list_agents()]}")
+
+    # 运行单个子代理
+    print(f"\n运行子代理 '{config1.name}'...")
+    result1 = await manager.run_agent(
+        config1.name,
+        "请分析当前目录下的项目结构，简要说明主要模块。",
+    )
+    print(f"子代理结果:")
+    print(f"  - 状态: {result1.status.value}")
+    print(f"  - 响应: {result1.content[:200]}...")
+    print(f"  - 迭代次数: {result1.iterations}")
+
+    # -------------------------------------------------------------------------
+    # 4. 并行执行多个子代理
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 并行执行多个子代理 ---")
+    print("""
+    SubAgentManager 支持并行执行多个子代理：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  主代理                                                      │
+    │    ├── SubAgent 1: 分析代码  ──→ 结果 1                     │
+    │    ├── SubAgent 2: 生成文档  ──→ 结果 2                     │
+    │    └── SubAgent 3: 运行测试  ──→ 结果 3                     │
+    │    ↓                                                        │
+    │  汇总所有子代理结果                                          │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 定义并行任务
+    tasks = {
+        "analyzer": "请用一句话描述 Python 项目的典型结构。",
+        "generator": "请用一句话说明如何写好技术文档。",
+    }
+
+    # 并行运行
+    print("并行运行子代理...")
+    results = await manager.run_all(tasks)
+    print(f"\n并行执行完成，共 {len(results)} 个结果:")
+    for name, result in results.items():
+        print(f"  - {name}: {result.content[:100]}...")
+
+    # -------------------------------------------------------------------------
+    # 5. 子代理状态和结果
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 子代理状态和结果 ---")
+
+    agents_status = manager.list_agents()
+    for agent_info in agents_status:
+        print(f"  - {agent_info.name}: 已创建")
+
+    print("""
+    SubAgentStatus 状态:
+    - PENDING: 等待执行
+    - RUNNING: 正在执行
+    - COMPLETED: 执行完成
+    - FAILED: 执行失败
+
+    SubAgentResult 包含:
+    - content: 执行结果文本
+    - status: 执行状态
+    - iterations: 迭代次数
+    - token_usage: Token 使用量
+    """)
+
+    print("\n✅ Sub-Agent 管理演示完成")
+
+
+# ============================================================================
+# 演示 21: 自验证钩子 (P2)
+# ============================================================================
+
+async def demo_self_verification():
+    """
+    演示 21: 自验证钩子 (P2)
+
+    功能:
+    - 创建 SelfVerificationConfig 配置验证规则
+    - 创建 SelfVerificationHook 注册到 Agent
+    - 代码修改后自动运行测试验证
+    - 验证失败时自动注入错误信息供 LLM 修复
+
+    学习要点:
+    - 自验证适用于代码修改场景
+    - trigger_tools 指定哪些工具触发验证
+    - verify_on_change 控制是否每次修改都验证
+    - 通过 Hook 机制无缝集成到 Agent 循环
+    """
+    print("\n" + "=" * 70)
+    print("演示 21: 自验证钩子 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 SelfVerificationConfig
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 SelfVerificationConfig ---")
+
+    verify_config = SelfVerificationConfig(
+        # 测试命令
+        test_command="pytest",
+        test_args=["-x", "--tb=short"],  # pytest 参数
+
+        # 验证触发条件：当使用 write 或 edit 工具后触发验证
+        trigger_tools=["write", "edit", "write_file", "edit_file"],
+
+        # 验证超时时间（秒）
+        timeout=60.0,
+
+        # 最大重试次数（测试失败后最多重试几次）
+        max_retries=3,
+
+        # 是否在每次代码修改后都验证
+        verify_on_change=True,
+
+        # 如果没有测试文件是否跳过
+        skip_if_no_tests=True,
+
+        # 测试文件匹配模式
+        test_pattern="test_*.py",
+    )
+
+    print(f"自验证配置:")
+    print(f"  - 测试命令: {verify_config.test_command} {' '.join(verify_config.test_args)}")
+    print(f"  - 触发工具: {verify_config.trigger_tools}")
+    print(f"  - 超时时间: {verify_config.timeout}s")
+    print(f"  - 最大重试: {verify_config.max_retries}")
+    print(f"  - 每次修改后验证: {verify_config.verify_on_change}")
+
+    # -------------------------------------------------------------------------
+    # 2. 创建 SelfVerificationHook
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 创建 SelfVerificationHook ---")
+
+    verify_hook = SelfVerificationHook(config=verify_config)
+    print(f"已创建自验证钩子: {verify_hook}")
+
+    # -------------------------------------------------------------------------
+    # 3. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 与 AgentHarness 集成 ---")
+    print("""
+    自验证钩子工作流程：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  Agent 执行 edit 工具修改文件                                │
+    │    ↓                                                        │
+    │  SelfVerificationHook.execute() 触发                        │
+    │  (hook_point = AFTER_TOOL_EXECUTE)                          │
+    │    ↓                                                        │
+    │  运行 test_command (如 pytest)                              │
+    │    ↓                                                        │
+    │  检查结果:                                                  │
+    │    ✅ 测试通过 → HookAction.CONTINUE                        │
+    │    ❌ 测试失败 → 注入错误信息，LLM 自动修复                 │
+    │    ❌ 超过 max_retries → 停止验证，继续执行                │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    # 注册自验证钩子到 Agent 的循环
+    agent._loop.add_hook(verify_hook)
+    print(f"已注册自验证钩子到 Agent")
+
+    # 运行 Agent（当前只读操作，不会触发验证）
+    result = await agent.run("请列出当前目录下的 Python 文件。")
+    print(f"\n响应: {result.content[:200]}...")
+    print("  (只读操作不会触发自验证)")
+
+    # -------------------------------------------------------------------------
+    # 4. 使用场景说明
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 使用场景 ---")
+    print("""
+    自验证钩子适合以下场景：
+
+    1. 代码修改 - 修改后自动运行 pytest
+    2. 配置文件更新 - 验证配置格式正确
+    3. 文档更新 - 检查链接和格式
+    4. 数据库迁移 - 验证迁移脚本可执行
+
+    最佳实践：
+    - 设置 verify_on_change=True 在开发时实时验证
+    - 配置合理的 timeout 避免长时间等待
+    - 使用 max_retries 限制修复循环次数
+    - 使用 skip_if_no_tests=True 在无测试时自动跳过
+    - trigger_tools 只包含会修改代码的工具
+    """)
+
+    print("\n✅ 自验证钩子演示完成")
+
+
+# ============================================================================
+# 演示 22: 渐进式技能加载 (P2)
+# ============================================================================
+
+async def demo_progressive_skills():
+    """
+    演示 22: 渐进式技能加载 (P2)
+
+    功能:
+    - 创建 ProgressiveSkillLoader 三级加载
+    - 使用 SkillMetadata 管理技能元信息
+    - 根据用户输入匹配相关技能
+    - 按需加载技能内容，优化上下文使用
+
+    学习要点:
+    - L1 (discover): 只加载名称和描述，用于匹配
+    - L2 (load): 加载完整技能内容
+    - L3 (load_with_references): 加载技能和关联的参考文档
+    - 估算 token 使用量避免超出上下文窗口
+    """
+    print("\n" + "=" * 70)
+    print("演示 22: 渐进式技能加载 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 ProgressiveSkillLoader
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 ProgressiveSkillLoader ---")
+
+    loader = ProgressiveSkillLoader(
+        skill_dirs=["skills", ".harness/skills"],  # 技能目录
+        max_context_tokens=4000,  # 可用于技能的最大 token 数
+    )
+    print(f"已创建 ProgressiveSkillLoader，最大上下文: {loader.max_context_tokens} tokens")
+
+    # -------------------------------------------------------------------------
+    # 2. Level 1: 发现技能 - 只加载元信息
+    # -------------------------------------------------------------------------
+    print("\n--- 2. Level 1: 发现技能 (只加载元信息) ---")
+
+    # 注册一些测试技能元信息
+    meta1 = SkillMetadata(
+        name="code-review",
+        description="代码审查技能，帮助审查和改进代码质量",
+        loading_level=LoadingLevel.DISCOVER,
+        token_estimate=500,
+        keywords=["review", "审查", "代码"],
+    )
+    meta2 = SkillMetadata(
+        name="testing",
+        description="测试技能，帮助编写和运行测试",
+        loading_level=LoadingLevel.DISCOVER,
+        token_estimate=300,
+        keywords=["test", "测试", "unit test"],
+    )
+    meta3 = SkillMetadata(
+        name="deployment",
+        description="部署技能，帮助配置和部署应用",
+        loading_level=LoadingLevel.DISCOVER,
+        token_estimate=400,
+        keywords=["deploy", "部署", "ci/cd"],
+    )
+
+    loader.register_metadata(meta1)
+    loader.register_metadata(meta2)
+    loader.register_metadata(meta3)
+
+    print(f"已注册 {len(loader.list_metadata())} 个技能元信息:")
+    for m in loader.list_metadata():
+        print(f"  - {m.name}: {m.description} (~{m.token_estimate} tokens)")
+
+    # -------------------------------------------------------------------------
+    # 3. 匹配技能 - 根据用户输入筛选相关技能
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 匹配技能 ---")
+
+    user_input = "请 review 我的代码"
+    matched = loader.match_skills(user_input)
+    print(f"用户输入: '{user_input}'")
+    print(f"匹配的技能: {[m.name for m in matched]}")
+
+    # 另一个输入
+    user_input2 = "帮我写单元测试"
+    matched2 = loader.match_skills(user_input2)
+    print(f"\n用户输入: '{user_input2}'")
+    print(f"匹配的技能: {[m.name for m in matched2]}")
+
+    # -------------------------------------------------------------------------
+    # 4. Level 2: 加载完整内容
+    # -------------------------------------------------------------------------
+    print("\n--- 4. Level 2: 加载完整技能内容 ---")
+
+    # 升级技能到 Level 2
+    skill_content = """
+你是一个专业的代码审查专家。当审查代码时，请：
+1. 检查代码质量和可读性
+2. 识别潜在的 bug 和安全问题
+3. 提供具体的改进建议
+请用结构化方式输出审查结果。
+"""
+    loader.load_full_content("code-review", skill_content)
+    print(f"已加载 'code-review' 的完整内容 ({len(skill_content)} 字符)")
+
+    # -------------------------------------------------------------------------
+    # 5. Level 3: 加载带参考文档
+    # -------------------------------------------------------------------------
+    print("\n--- 5. Level 3: 加载带参考文档 ---")
+
+    references = [
+        "PEP 8 -- Style Guide for Python Code",
+        "OWASP Top 10 Security Risks",
+    ]
+    loader.load_with_references("code-review", skill_content, references)
+    print(f"已加载 'code-review' 及 {len(references)} 个参考文档")
+
+    # -------------------------------------------------------------------------
+    # 6. 构建技能选择提示
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 构建技能选择提示 ---")
+
+    # 根据匹配结果和 token 预算，选择要注入的技能
+    selection_prompt = loader.build_skill_selection_prompt(
+        user_input="请 review 我的代码",
+        available_budget=1000,  # 可用 token 预算
+    )
+    print(f"技能选择提示 (长度: {len(selection_prompt)} 字符):")
+    print("-" * 40)
+    print(selection_prompt[:500] + "..." if len(selection_prompt) > 500 else selection_prompt)
+
+    # -------------------------------------------------------------------------
+    # 7. 三级加载对比
+    # -------------------------------------------------------------------------
+    print("\n--- 7. 三级加载对比 ---")
+    print("""
+    ┌─────────────────────────────────────────────────────────────┐
+    │  Level 1 (DISCOVER): 名称 + 描述 + 关键词                  │
+    │  用途: 快速匹配相关技能                                      │
+    │  Token: ~20-50 / 技能                                       │
+    │                                                             │
+    │  Level 2 (LOAD): 完整技能内容                               │
+    │  用途: 提供详细的执行指令                                    │
+    │  Token: ~200-1000 / 技能                                    │
+    │                                                             │
+    │  Level 3 (WITH_REFERENCES): 内容 + 参考文档                │
+    │  用途: 提供完整的上下文信息                                  │
+    │  Token: ~500-3000 / 技能                                    │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    print("\n✅ 渐进式技能加载演示完成")
+
+
+# ============================================================================
+# 演示 23: MEMORY.md 标准 (P2)
+# ============================================================================
+
+async def demo_memory_md():
+    """
+    演示 23: MEMORY.md 标准 (P2)
+
+    功能:
+    - 创建 MemoryFileManager 管理 MEMORY.md 文件
+    - 使用 MemoryEntry 添加记忆条目
+    - 使用 MemoryCategory 分类记忆
+    - 导出为 LLM 上下文字符串
+
+    学习要点:
+    - MEMORY.md 是持久化记忆的标准格式
+    - 支持多种分类: user, feedback, project, reference
+    - 可以与 Agent 的系统提示集成
+    - 记忆文件可以在多个会话间共享
+    """
+    print("\n" + "=" * 70)
+    print("演示 23: MEMORY.md 标准 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 MemoryFileManager
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 MemoryFileManager ---")
+
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+    memory_path = Path(tmpdir) / "MEMORY.md"
+
+    manager = MemoryFileManager(memory_path=str(memory_path))
+    print(f"已创建 MemoryFileManager，路径: {memory_path}")
+
+    # -------------------------------------------------------------------------
+    # 2. 添加记忆条目
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 添加记忆条目 ---")
+
+    # 用户信息
+    user_entry = MemoryEntry(
+        category=MemoryCategory.USER,
+        title="用户角色",
+        content="用户是 Python 后端开发者，熟悉 FastAPI 和 SQLAlchemy。",
+    )
+    manager.add_entry(user_entry)
+    print(f"  ✅ 添加用户记忆: {user_entry.title}")
+
+    # 反馈信息
+    feedback_entry = MemoryEntry(
+        category=MemoryCategory.FEEDBACK,
+        title="代码风格偏好",
+        content="用户偏好使用类型注解，不偏好过多的注释。",
+        source=MemorySource.USER_FEEDBACK,
+    )
+    manager.add_entry(feedback_entry)
+    print(f"  ✅ 添加反馈记忆: {feedback_entry.title}")
+
+    # 项目信息
+    project_entry = MemoryEntry(
+        category=MemoryCategory.PROJECT,
+        title="项目架构",
+        content="项目使用分层架构: routes → services → models，数据库用 PostgreSQL。",
+        source=MemorySource.CODE_ANALYSIS,
+    )
+    manager.add_entry(project_entry)
+    print(f"  ✅ 添加项目记忆: {project_entry.title}")
+
+    # 参考信息
+    ref_entry = MemoryEntry(
+        category=MemoryCategory.REFERENCE,
+        title="API 文档位置",
+        content="项目 API 文档在 /docs/api/ 目录下，使用 OpenAPI 格式。",
+        source=MemorySource.FILE_DISCOVERY,
+    )
+    manager.add_entry(ref_entry)
+    print(f"  ✅ 添加参考记忆: {ref_entry.title}")
+
+    # -------------------------------------------------------------------------
+    # 3. 保存和加载
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 保存和加载 ---")
+
+    # 保存到文件
+    manager.save()
+    print(f"已保存记忆到: {memory_path}")
+    print(f"文件大小: {memory_path.stat().st_size} 字节")
+
+    # 读取文件内容
+    file_content = memory_path.read_text(encoding="utf-8")
+    print(f"\nMEMORY.md 内容预览:")
+    print("-" * 40)
+    print(file_content[:600] + "..." if len(file_content) > 600 else file_content)
+
+    # 从文件加载
+    loaded_manager = MemoryFileManager(memory_path=str(memory_path))
+    loaded_manager.load()
+    entries = loaded_manager.list_entries()
+    print(f"\n从文件加载了 {len(entries)} 条记忆:")
+    for entry in entries:
+        print(f"  - [{entry.category.value}] {entry.title}")
+
+    # -------------------------------------------------------------------------
+    # 4. 导出为 LLM 上下文
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 导出为 LLM 上下文 ---")
+
+    # 转换为可注入系统提示的文本
+    context_str = manager.to_context_string()
+    print(f"上下文字符串长度: {len(context_str)} 字符")
+    print(f"\n上下文内容:")
+    print("-" * 40)
+    print(context_str[:500] + "..." if len(context_str) > 500 else context_str)
+
+    # -------------------------------------------------------------------------
+    # 5. create_default_memory - 创建默认记忆
+    # -------------------------------------------------------------------------
+    print("\n--- 5. create_default_memory ---")
+
+    default = create_default_memory(
+        project_name="Harness SDK",
+        project_description="一个可内嵌的 Python AI Agent SDK",
+    )
+    print(f"默认记忆条目数: {len(default.entries)}")
+    for entry in default.entries:
+        print(f"  - [{entry.category.value}] {entry.title}")
+
+    # -------------------------------------------------------------------------
+    # 6. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 与 AgentHarness 集成 ---")
+    print("""
+    MEMORY.md 与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  方式 1: 注入到系统提示                                     │
+    │  ─────────────────────                                      │
+    │  context = manager.to_context_string()                      │
+    │  system_prompt = f"你是助手。\\n\\n{context}"                 │
+    │  agent = AgentHarness(config=HarnessConfig(                 │
+    │      system_prompt=system_prompt,                           │
+    │  ))                                                         │
+    │                                                             │
+    │  方式 2: 使用 SystemPromptBuilder                           │
+    │  ─────────────────────────                  │
+    │  builder.add_source(SystemPromptSource(                     │
+    │      name="memory",                                         │
+    │      content_callback=lambda: manager.to_context_string(),  │
+    │  ))                                                         │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    print("\n✅ MEMORY.md 标准演示完成")
+
+
+# ============================================================================
+# 演示 24: 向量检索 (P2)
+# ============================================================================
+
+async def demo_vector_search():
+    """
+    演示 24: 向量检索 (P2)
+
+    功能:
+    - 创建 VectorMemoryStore 语义搜索
+    - 使用 MockEmbeddingModel 无需外部依赖
+    - 存储和搜索对话、技能、文档
+    - 与 AgentHarness 集成检索历史
+
+    学习要点:
+    - 向量检索支持语义匹配而非关键词匹配
+    - MockEmbeddingModel 使用简单哈希，生产环境应替换为真实嵌入模型
+    - 支持对话、技能、文档等多种类型的内容
+    - SimpleInMemoryVectorStore 适合开发测试
+    """
+    print("\n" + "=" * 70)
+    print("演示 24: 向量检索 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 VectorMemoryStore
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 VectorMemoryStore ---")
+
+    config = VectorMemoryConfig(
+        embedding_dim=64,        # 嵌入维度 (Mock 使用小维度)
+        max_entries=1000,        # 最大存储条目数
+        similarity_threshold=0.5, # 相似度阈值
+    )
+
+    # 使用 MockEmbeddingModel（无需外部 API）
+    store = VectorMemoryStore(
+        config=config,
+        embedding_model=MockEmbeddingModel(dim=config.embedding_dim),
+    )
+    print(f"已创建 VectorMemoryStore")
+    print(f"  - 嵌入维度: {config.embedding_dim}")
+    print(f"  - 相似度阈值: {config.similarity_threshold}")
+
+    # -------------------------------------------------------------------------
+    # 2. 添加和搜索对话
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 添加和搜索对话 ---")
+
+    # 添加对话记录
+    await store.add_conversation(
+        session_id="session-001",
+        user_message="如何使用 FastAPI 创建 REST API？",
+        assistant_message="FastAPI 创建 REST API 的步骤：1. 安装 FastAPI...",
+        metadata={"topic": "fastapi"},
+    )
+    await store.add_conversation(
+        session_id="session-002",
+        user_message="Python 虚拟环境怎么创建？",
+        assistant_message="使用 python -m venv myenv 创建虚拟环境...",
+        metadata={"topic": "python"},
+    )
+    await store.add_conversation(
+        session_id="session-003",
+        user_message="FastAPI 中如何处理数据库连接？",
+        assistant_message="推荐使用 SQLAlchemy + FastAPI 的依赖注入...",
+        metadata={"topic": "fastapi"},
+    )
+    print("已添加 3 条对话记录")
+
+    # 语义搜索对话
+    results = await store.search_conversations(
+        query="FastAPI 开发 API",
+        top_k=2,
+    )
+    print(f"\n搜索 'FastAPI 开发 API' 结果:")
+    for r in results:
+        print(f"  - 相似度: {r.similarity:.3f}, 会话: {r.id}")
+        print(f"    内容预览: {r.content[:80]}...")
+
+    # -------------------------------------------------------------------------
+    # 3. 添加和搜索技能
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 添加和搜索技能 ---")
+
+    await store.add_skill(
+        skill_name="code-review",
+        description="代码审查技能，帮助审查和改进代码质量",
+        content="你是一个代码审查专家，请检查代码质量、潜在问题和改进建议。",
+    )
+    await store.add_skill(
+        skill_name="testing",
+        description="测试技能，帮助编写和运行单元测试",
+        content="你是一个测试专家，请帮助编写全面的单元测试和集成测试。",
+    )
+    print("已添加 2 条技能记录")
+
+    # 搜索技能
+    skill_results = await store.search_skills(
+        query="代码质量检查",
+        top_k=2,
+    )
+    print(f"\n搜索 '代码质量检查' 结果:")
+    for r in skill_results:
+        print(f"  - 相似度: {r.similarity:.3f}, 技能: {r.id}")
+
+    # -------------------------------------------------------------------------
+    # 4. 通用添加和搜索
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 通用添加和搜索 ---")
+
+    # 添加任意文本
+    await store.add(
+        id="doc-001",
+        content="Harness SDK 是一个可内嵌的 Python AI Agent SDK，支持工具调用、会话管理和技能系统。",
+        metadata={"type": "documentation"},
+    )
+    await store.add(
+        id="doc-002",
+        content="Agent Loop 是 SDK 的核心循环，负责调用 LLM、解析响应、执行工具的迭代过程。",
+        metadata={"type": "documentation"},
+    )
+    await store.add(
+        id="doc-003",
+        content="MCP 协议允许 Agent 连接外部工具服务器，扩展可用工具集。",
+        metadata={"type": "documentation"},
+    )
+    print("已添加 3 条文档记录")
+
+    # 搜索
+    doc_results = await store.search(
+        query="如何扩展 Agent 的工具能力",
+        top_k=3,
+    )
+    print(f"\n搜索 '如何扩展 Agent 的工具能力' 结果:")
+    for r in doc_results:
+        print(f"  - 相似度: {r.similarity:.3f}, ID: {r.id}")
+        print(f"    内容: {r.content[:80]}...")
+
+    # -------------------------------------------------------------------------
+    # 5. SimpleInMemoryVectorStore
+    # -------------------------------------------------------------------------
+    print("\n--- 5. SimpleInMemoryVectorStore ---")
+
+    simple_store = SimpleInMemoryVectorStore(dim=config.embedding_dim)
+    print(f"已创建 SimpleInMemoryVectorStore (更轻量的实现)")
+
+    # 添加数据
+    await simple_store.add(
+        id="simple-001",
+        content="简单的向量存储示例",
+        embedding=MockEmbeddingModel(dim=config.embedding_dim).embed("简单的向量存储示例"),
+    )
+    print("已添加 1 条记录到 SimpleInMemoryVectorStore")
+
+    # -------------------------------------------------------------------------
+    # 6. VectorSearchResult 说明
+    # -------------------------------------------------------------------------
+    print("\n--- 6. VectorSearchResult 结构 ---")
+    print("""
+    VectorSearchResult 包含以下字段：
+
+    - id: 条目唯一标识
+    - content: 匹配的文本内容
+    - similarity: 相似度分数 (0.0 - 1.0)
+    - metadata: 附加元数据
+
+    与 AgentHarness 集成：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  用户输入 → 向量搜索历史对话和技能                           │
+    │    ↓                                                        │
+    │  将搜索结果注入 system prompt                               │
+    │    ↓                                                        │
+    │  Agent 可以参考相关的历史上下文                              │
+    │    ↓                                                        │
+    │  执行后，将新对话存入向量存储                                │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    print("\n✅ 向量检索演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -1884,6 +3085,30 @@ async def main():
 
         # 完整工作流
         await demo_complete_workflow()
+
+        # Lifecycle Hooks (P0)
+        await demo_lifecycle_hooks()
+
+        # 动态系统提示 (P0)
+        await demo_dynamic_system_prompt()
+
+        # Ralph Loop (P1)
+        await demo_ralph_loop()
+
+        # Sub-Agent 管理 (P1)
+        await demo_sub_agent()
+
+        # 自验证钩子 (P2)
+        await demo_self_verification()
+
+        # 渐进式技能加载 (P2)
+        await demo_progressive_skills()
+
+        # MEMORY.md 标准 (P2)
+        await demo_memory_md()
+
+        # 向量检索 (P2)
+        await demo_vector_search()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")

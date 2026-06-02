@@ -1,209 +1,232 @@
-# 13 - Production Readiness 生产就绪检查
+# 13 - 生产就绪
 
 ## 概述
 
-本文档提供将 Harness SDK 部署到生产环境的检查清单。
+本文档评估 Harness SDK 的生产就绪程度，列出已实现和待实现的功能，以及部署最佳实践。
 
-## 组件状态检查
+## Production Harness 组件状态
 
-### ✅ 已就绪
+基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 11 个核心组件。
 
-| 组件 | 检查项 | 验证方法 |
-|------|--------|----------|
-| Orchestration Loop | 熔断器启用 | `loop._circuit_breaker is not None` |
-| Tools | 权限检查 | `tool_executor._check_permissions()` |
-| Sandbox | 命令黑名单 | `sandbox.validate_command("rm -rf /")` |
-| Error Handling | 卡住检测 | `loop._is_stuck()` |
-| Cost Control | 预算控制 | `CostController.check()` |
+### 组件实现状态
 
-### ⚠️ 需配置
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| **Orchestration Loop** | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测 |
+| **Tools** | ✅ | 8 内置工具 (Read/Write/Edit/Glob/Grep/Bash/WebSearch/WebFetch) + MCP |
+| **Filesystem** | ✅ | 通过工具实现，支持权限检查 |
+| **Bash & Code Execution** | ✅ | 沙箱执行、命令黑名单、超时控制 |
+| **Sandbox** | ✅ | LightweightSandbox + SandboxExecutor |
+| **Memory** | ✅ | 四层记忆 + 向量检索 + MEMORY.md 标准 + 动态系统提示 |
+| **Context Management** | ✅ | ContextBuilder + SystemPromptBuilder 动态组装 |
+| **Context Rot Defense** | ✅ | 渐进式技能加载 + 上下文压缩 |
+| **Long-Horizon Execution** | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
+| **Error Handling** | ✅ | 熔断器 + 成本控制 + 卡住检测 |
+| **Serving Layer** | ❌ | SDK 不包含（client 层职责） |
 
-| 组件 | 检查项 | 配置方法 |
-|------|--------|----------|
-| Memory | 持久化存储 | `SessionStore(path="~/.harness/sessions")` |
-| Context Management | 压缩阈值 | `compression_threshold=0.8` |
-| Cost Control | 预算限制 | `CostConfig(max_tokens_per_session=1000000)` |
-| Audit Log | 审计日志 | `SecurityConfig(enable_audit_log=True)` |
+### 功能实现状态
 
-### ❌ 待实现
+| # | 功能 | 优先级 | 状态 | 说明 |
+|---|------|--------|------|------|
+| 1 | **Lifecycle Hooks** | P0 | ✅ | 8 个钩子点，支持拦截、修改、注入 |
+| 2 | **动态系统提示组装** | P0 | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
+| 3 | **Sub-Agent 管理** | P1 | ✅ | 创建子代理处理子任务，支持并行执行 |
+| 4 | **Ralph Loop** | P1 | ✅ | 长任务循环，自动摘要 + 压缩，防止上下文焦虑 |
+| 5 | **自验证钩子** | P2 | ✅ | write-code → run-tests → fix-errors 循环 |
+| 6 | **渐进式技能加载** | P2 | ✅ | 三级加载：Frontmatter → Full → Reference |
+| 7 | **MEMORY.md 标准** | P2 | ✅ | 持久记忆文件格式，4 种记忆类型 |
+| 8 | **向量检索** | P2 | ✅ | VectorMemoryStore 语义搜索 |
+| 9 | **工具输出卸载** | P3 | ⚠️ | 上下文预算优化，待实现 |
+| 10 | **步骤预算** | P3 | ⚠️ | 成本预警，待实现 |
 
-| 组件 | 功能 | 替代方案 |
-|------|------|----------|
-| Lifecycle Hooks | 工具拦截 | 子类化 ToolExecutor |
-| Ralph Loop | 长任务循环 | 手动重启 session |
-| 向量检索 | 语义搜索 | 使用外部 RAG 服务 |
-| MEMORY.md | 跨会话记忆 | 手动维护项目文档 |
+## 部署最佳实践
 
----
+### 1. API 密钥管理
 
-## 生产部署清单
+```python
+import os
+from harness import AgentHarness
 
-### 必需配置
+# 从环境变量读取
+agent = AgentHarness(
+    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    # 或 OpenAI
+    # api_key=os.environ.get("OPENAI_API_KEY"),
+    # model="gpt-4o",
+)
+```
 
-- [ ] **配置持久化存储**
-  ```python
-  from harness import AgentHarness, SQLiteSessionStore
-  
-  agent = AgentHarness(
-      session_store=SQLiteSessionStore("~/.harness/harness.db")
-  )
-  ```
+### 2. 成本控制
 
-- [ ] **设置成本控制预算**
-  ```python
-  from harness.types import CostConfig
-  
-  agent = AgentHarness(
-      cost_config=CostConfig(
-          max_tokens_per_session=1_000_000,
-          daily_token_limit=10_000_000,
-      )
-  )
-  ```
+```python
+from harness import AgentHarness, HarnessConfig
 
-- [ ] **启用审计日志**
-  ```python
-  from harness.sdk.config import SecurityConfig
-  
-  agent = AgentHarness(
-      security_config=SecurityConfig(
-          enable_audit_log=True,
-          audit_log_dir="/var/log/harness/audit",
-      )
-  )
-  ```
+agent = AgentHarness(
+    config=HarnessConfig(
+        max_cost_per_run=5.0,      # 单次运行最多 $5
+        max_tokens_per_run=500000, # 单次运行最多 500K tokens
+        max_iterations=50,         # 最多 50 步
+    ),
+)
+```
 
-### 推荐配置
+### 3. 安全配置
 
-- [ ] **配置命令白名单**
-  ```python
-  from harness.security import SandboxConfig
-  
-  agent = AgentHarness(
-      sandbox_config=SandboxConfig(
-          allowed_commands=["git", "npm", "pytest", "python"],
-          blocked_patterns=["rm -rf /", "sudo", "chmod 777"],
-      )
-  )
-  ```
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.security.sandbox import PermissionSet, PermissionLevel
 
-- [ ] **设置超时限制**
-  ```python
-  from harness.core import LoopConfig
-  
-  agent = AgentHarness(
-      loop_config=LoopConfig(
-          max_iterations=50,
-          timeout_per_tool=30.0,
-      )
-  )
-  ```
+agent = AgentHarness(
+    config=HarnessConfig(
+        sandbox_enabled=True,
+        bash_timeout=60000,
+        bash_blacklist=["rm -rf /", "sudo", "mkfs"],
+    ),
+    permissions=PermissionSet(
+        max_permission=PermissionLevel.EXECUTE,
+        denied_tools={"bash"},  # 按需禁用
+    ),
+)
+```
 
-- [ ] **准备错误恢复策略**
-  ```python
-  # 保存快照
-  snapshot = agent._loop.create_snapshot(session, iteration)
-  
-  # 从快照恢复
-  result = await agent._loop.resume_from_snapshot(snapshot)
-  ```
+### 4. 记忆管理
 
----
+```python
+agent = AgentHarness(
+    memory_dir="/secure/harness/memory",  # 指定安全目录
+    vector_store=True,                     # 启用向量检索
+)
+```
+
+### 5. 集成到 Web 服务
+
+```python
+from fastapi import FastAPI
+from harness import AgentHarness
+
+app = FastAPI()
+agent = AgentHarness.from_config("harness.yaml")
+
+@app.post("/ai")
+async def ai_endpoint(message: str):
+    result = await agent.run(message)
+    return {"response": result.content}
+```
 
 ## 监控与可观测性
 
-### 启用 OpenTelemetry
+### 成本监控
 
 ```python
-from harness import setup_observability, ObservabilityConfig
+from harness import AgentHarness
+from harness.core.hooks import HookPoint, HookContext
 
-setup_observability(ObservabilityConfig(
-    service_name="production-agent",
-    export_otlp=True,
-    otlp_endpoint="http://jaeger:4317",
-))
+agent = AgentHarness()
+
+cost_tracker = {"total": 0.0}
+
+@agent.hook(HookPoint.AFTER_LLM_CALL)
+async def track_cost(ctx: HookContext):
+    if ctx.response and ctx.response.usage:
+        input_cost = ctx.response.usage.input_tokens * 0.000003
+        output_cost = ctx.response.usage.output_tokens * 0.000015
+        cost_tracker["total"] += input_cost + output_cost
+    return ctx
+
+result = await agent.run("分析代码")
+print(f"本次运行成本: ${cost_tracker['total']:.4f}")
 ```
 
-### 进度事件监控
+### 审计日志
 
 ```python
-def on_progress(event: ProgressEvent):
-    if event.type == ProgressEventType.ERROR:
-        logger.error(f"Agent error: {event.message}")
-    elif event.type == ProgressEventType.LOOP_END:
-        logger.info(f"Completed in {event.duration_ms}ms")
-
-agent.set_progress_callback(on_progress)
+# 审计日志自动记录到 .harness/audit/
+# 包含所有工具调用、权限检查、错误事件
 ```
 
----
+## 可靠性
 
-## 安全检查清单
+### 重试策略
 
-### 工具权限
+| 错误类型 | 策略 |
+|----------|------|
+| API 限流 (429) | 指数退避重试 |
+| 服务器错误 (5xx) | 重试最多 3 次 |
+| 超时 | 重试 1 次 |
+| 上下文超长 | 自动压缩 |
 
-- [ ] 检查敏感工具是否需要权限确认
-- [ ] 配置沙箱隔离级别
-- [ ] 验证命令黑名单是否完整
-
-### 数据安全
-
-- [ ] 确认 API 密钥存储安全（环境变量/密钥管理服务）
-- [ ] 检查日志是否包含敏感信息
-- [ ] 验证审计日志的访问权限
-
-### 网络安全
-
-- [ ] 配置 HTTP 超时
-- [ ] 验证外部 API 调用的安全性
-- [ ] 检查 MCP 服务器连接是否需要认证
-
----
-
-## 性能优化建议
-
-### Token 效率
-
-- 启用上下文压缩（默认启用）
-- 配置合理的压缩阈值（0.8-0.9）
-- 使用 token 计数缓存
-
-### 并发处理
-
-- 启用并行工具执行（默认启用）
-- 配置合理的并发限制
-- 使用异步存储后端
-
-### 内存管理
-
-- 限制单会话消息数量
-- 定期清理过期会话
-- 使用增量 token 计数
-
----
-
-## 故障排查指南
-
-### 常见问题
-
-| 问题 | 可能原因 | 解决方案 |
-|------|----------|----------|
-| `BudgetExceededError` | Token 超限 | 增加 `max_tokens_per_session` 或优化上下文 |
-| `CircuitBreakerError` | 重复调用同一工具 | 检查 Agent 是否陷入循环 |
-| `TimeoutError` | 工具执行超时 | 增加 `timeout_per_tool` 或优化工具 |
-| Agent 卡住 | 连续空/错误结果 | 检查 Stuck Detection 日志 |
-
-### 日志级别
+### 熔断器
 
 ```python
-import logging
-logging.getLogger("harness").setLevel(logging.DEBUG)
+# 连续 5 次失败触发熔断
+# 可通过 HarnessConfig 配置
 ```
 
----
+### 卡住检测
 
-## 版本兼容性
+```python
+# 检测重复输出和循环工具调用
+# 自动注入提醒或中断
+```
 
-| Harness SDK | Python | Anthropic SDK | OpenAI SDK |
-|-------------|--------|---------------|------------|
-| 0.1.x | 3.10+ | 0.30+ | 1.0+ |
+## 扩展性
+
+### 自定义 LLM 客户端
+
+```python
+from harness.llm.base import LLMClient, LLMResponse
+from harness import AgentHarness
+
+class CustomLLM(LLMClient):
+    @property
+    def model_name(self) -> str:
+        return "custom-model"
+
+    async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
+        # 自定义实现
+        ...
+
+agent = AgentHarness(llm_client=CustomLLM())
+```
+
+### 自定义记忆后端
+
+```python
+# 使用向量检索
+agent = AgentHarness(vector_store=True)
+
+# 自定义记忆目录
+agent = AgentHarness(memory_dir="/data/harness/memory")
+```
+
+### 自定义工具
+
+```python
+@agent.tool(description="自定义功能")
+def my_tool(param: str) -> str:
+    return f"处理: {param}"
+```
+
+## 待实现功能
+
+### P3 - 工具输出卸载
+
+当工具输出占用过多上下文空间时，自动卸载到外部存储，仅在需要时加载。
+
+### P3 - 步骤预算
+
+在执行前预估成本，并在每步检查预算余额，接近超限时发出警告。
+
+## 与行业标准对比
+
+详细对比见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
+
+| 组件 | Harness SDK | Claude Code | LangGraph |
+|------|-------------|-------------|-----------|
+| Orchestration Loop | ✅ | ✅ | ✅ |
+| Tools | ✅ 8 内置 + MCP | ✅ 6 类 | ✅ |
+| Memory | ✅ 四层 + 向量 + MEMORY.md | ✅ 四层 + MEMORY.md | ✅ 向量 |
+| Context Management | ✅ 动态组装 | ✅ 优先级栈 | ✅ |
+| Long-Horizon | ✅ Hooks + Ralph + Sub-Agent | ✅ Ralph + 自验证 | ✅ |
+| Error Handling | ✅ 熔断 + 成本控制 | ✅ 步骤预算 | ✅ |
+| Serving Layer | ❌ SDK 不含 | ✅ CLI + Web + API | ✅ |

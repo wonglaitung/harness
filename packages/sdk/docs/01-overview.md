@@ -44,6 +44,7 @@
 │  │  │  │Trigger  │  │ Memory  │  │  Tool   │  │ Action  │  │  │ │
 │  │  │  │ Manager │  │ System  │  │ System  │  │ Handler │  │  │ │
 │  │  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘  │  │ │
+│  │  │      ↑ (注: 当前仅 SkillTrigger)                          │  │ │
 │  │  └──────────────────────────────────────────────────────┘  │ │
 │  │                              ↓                              │ │
 │  │  ┌──────────────────────────────────────────────────────┐  │ │
@@ -172,10 +173,16 @@ class Tool:
         pass
 ```
 
-工具类型：
-- **内置工具**: File, Shell, Web, Search
-- **自定义工具**: 用户注册的 Python 函数
-- **MCP 工具**: 通过 Model Context Protocol 连接
+### 工具类型
+
+| 类型 | 工具 | 权限级别 |
+|------|------|----------|
+| **文件操作** | Read, Write, Edit | READ / WRITE |
+| **搜索** | Glob, Grep | READ |
+| **执行** | Bash | EXECUTE |
+| **网络** | WebSearch, WebFetch | NETWORK |
+| **MCP 工具** | 通过 MCP 服务器动态加载 | 按配置 |
+| **自定义工具** | 用户注册的 Python 函数 | 用户指定 |
 
 ### Memory System（记忆系统）
 
@@ -228,32 +235,36 @@ You are a code reviewer. Your task is to:
 
 让代理能够自主运行：
 
-| 触发类型 | 说明 | 示例 |
-|----------|------|------|
-| UserMessage | 用户消息触发 | 用户发送消息 |
-| Cron | 定时触发 | 每天 9:00 生成报告 |
-| Webhook | 外部事件触发 | GitHub PR 事件 |
-| Heartbeat | 周期性心跳 | 每 5 分钟检查状态 |
-| FileWatch | 文件变化触发 | 配置文件更新 |
+> **注意**: 完整的触发器系统是计划功能，当前版本仅实现了 `SkillTrigger`（技能触发器）。CronTrigger、WebhookTrigger 等高级触发器将在后续版本中实现。
+
+| 触发类型 | 说明 | 示例 | 实现状态 |
+|----------|------|------|----------|
+| UserMessage | 用户消息触发 | 用户发送消息 | ✅ 已实现 |
+| Cron | 定时触发 | 每天 9:00 生成报告 | ⚠️ 计划功能 |
+| Webhook | 外部事件触发 | GitHub PR 事件 | ⚠️ 计划功能 |
+| Heartbeat | 周期性心跳 | 每 5 分钟检查状态 | ⚠️ 计划功能 |
+| FileWatch | 文件变化触发 | 配置文件更新 | ⚠️ 计划功能 |
+| SkillTrigger | 技能触发 | 根据技能条件触发 | ✅ 已实现 |
 
 ## Production Harness 组件实现状态
 
-基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 11 个核心组件。
+基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 12 个核心组件。
 
 ### 实现状态总览
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测 |
-| Tools | ✅ | 文件操作、搜索、Bash、Web、MCP |
+| Tools | ✅ | 8 内置 (Read/Write/Edit/Glob/Grep/Bash/WebSearch/WebFetch) + MCP |
+| Triggers | ⚠️ | 仅 SkillTrigger 实现，Cron/Webhook 等为计划功能 |
 | Filesystem | ✅ | 通过工具实现，支持权限检查 |
 | Bash & Code Execution | ✅ | 沙箱执行、命令黑名单、超时控制 |
 | Sandbox | ✅ | LightweightSandbox + SandboxExecutor |
-| Memory | ✅ | 向量检索、MEMORY.md 标准、动态系统提示 |
-| Context Management | ✅ | ContextBuilder 处理组装 |
-| Context Rot Defense | ✅ | 渐进式技能加载、上下文压缩 |
-| Long-Horizon Execution | ✅ | Lifecycle Hooks、Ralph Loop、自验证钩子、Sub-Agent |
-| Error Handling | ✅ | 熔断器、成本控制、卡住检测 |
+| Memory | ✅ | 四层记忆 + 向量检索 + MEMORY.md + 动态系统提示 |
+| Context Management | ✅ | ContextBuilder + SystemPromptBuilder 动态组装 |
+| Context Rot Defense | ✅ | 渐进式技能加载 + 上下文压缩 |
+| Long-Horizon Execution | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
+| Error Handling | ✅ | 熔断器 + 成本控制 + 卡住检测 |
 | Serving Layer | ❌ | SDK 不包含（client 层职责） |
 
 详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
@@ -262,15 +273,15 @@ You are a code reviewer. Your task is to:
 
 | # | 功能 | 状态 | 说明 |
 |---|------|------|------|
-| 1 | **Lifecycle Hooks** | ✅ | 8 个钩子点，支持拦截、修改、注入 |
-| 2 | **Ralph Loop** | ✅ | 长任务循环，防止上下文焦虑 |
+| 1 | **Lifecycle Hooks** | ✅ | 7 个钩子点 (ON_LOOP_START/BEFORE_LLM_CALL/AFTER_LLM_CALL/BEFORE_TOOL_EXECUTE/AFTER_TOOL_EXECUTE/ON_ERROR/ON_EXIT_ATTEMPT) |
+| 2 | **Ralph Loop** | ✅ | 长任务循环，自动摘要 + 压缩，防止上下文焦虑 |
 | 3 | **工具输出卸载** | ⚠️ | P3 待实现 |
 | 4 | **渐进式技能加载** | ✅ | 三级加载：Frontmatter → Full → Reference |
 | 5 | **自验证钩子** | ✅ | write-code → run-tests → fix-errors 循环 |
-| 6 | **Sub-Agent 管理** | ✅ | 创建子代理处理子任务 |
-| 7 | **MEMORY.md 标准** | ✅ | 持久记忆文件格式 |
-| 8 | **向量检索** | ✅ | 语义搜索历史对话、技能、文档 |
-| 9 | **动态系统提示组装** | ✅ | 多源组装、AGENTS.md 支持 |
+| 6 | **Sub-Agent 管理** | ✅ | 创建子代理处理子任务，支持并行执行 |
+| 7 | **MEMORY.md 标准** | ✅ | 持久记忆文件格式，4 种记忆类型 (user/feedback/project/reference) |
+| 8 | **向量检索** | ✅ | VectorMemoryStore 语义搜索 |
+| 9 | **动态系统提示组装** | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
 | 10 | **步骤预算** | ⚠️ | P3 待实现 |
 
 ## 数据流
