@@ -180,7 +180,7 @@ class HookContext:
 
 ### 注册钩子
 
-钩子通过继承 `LifecycleHook` 类并实现 `hook_points` 和 `execute` 方法来创建，然后通过 `agent._loop.add_hook()` 注册。
+钩子通过继承 `LifecycleHook` 类并实现 `hook_points` 和 `execute` 方法来创建，然后通过 `agent.add_hook()` 注册。
 
 ```python
 from harness import AgentHarness
@@ -207,22 +207,22 @@ class MyPermissionHook(LifecycleHook):
         dangerous_patterns = ["rm -rf", "sudo", "chmod 777"]
         return any(pattern in command for pattern in dangerous_patterns)
 
-# 注册钩子到 Agent
+# 注册钩子到 Agent（使用公开 API）
 agent = AgentHarness()
 permission_hook = MyPermissionHook()
-agent._loop.add_hook(permission_hook)
+agent.add_hook(permission_hook)
 
 # 或者使用内置钩子
 from harness.core.hooks import LoggingHook, AbortOnDangerousToolHook, MaxToolCallsHook
 
 # 添加日志钩子（记录所有钩子事件）
-agent._loop.add_hook(LoggingHook())
+agent.add_hook(LoggingHook())
 
 # 添加危险工具拦截钩子
-agent._loop.add_hook(AbortOnDangerousToolHook())
+agent.add_hook(AbortOnDangerousToolHook())
 
 # 添加最大工具调用限制钩子
-agent._loop.add_hook(MaxToolCallsHook(tool_name="bash", max_calls=10))
+agent.add_hook(MaxToolCallsHook(tool_name="bash", max_calls=10))
 ```
 
 ### 钩子执行顺序
@@ -274,7 +274,7 @@ class PreventEarlyExitHook(LifecycleHook):
 
 # 注册钩子
 agent = AgentHarness()
-agent._loop.add_hook(PreventEarlyExitHook())
+agent.add_hook(PreventEarlyExitHook())
 ```
 
 ## Stuck Detection（卡住检测）
@@ -312,7 +312,7 @@ ralph_hook = RalphLoopHook(config)
 
 # 注册到 Agent
 agent = AgentHarness()
-agent._loop.add_hook(ralph_hook)
+agent.add_hook(ralph_hook)
 
 # 执行长任务 - Ralph Loop 会自动处理继续执行
 result = await agent.run("重构整个认证模块，添加 OAuth2 支持")
@@ -365,7 +365,7 @@ from harness.core.ralph_loop import RalphLoopHook
 
 # 简单使用：添加默认 Ralph Loop 钩子
 agent = AgentHarness()
-agent._loop.add_hook(RalphLoopHook())
+agent.add_hook(RalphLoopHook())
 
 # 自定义配置：设置最大循环次数和完成检测
 from harness.core.ralph_loop import RalphLoopConfig
@@ -377,7 +377,7 @@ config = RalphLoopConfig(
         for phrase in ["task complete", "all done", "finished"]
     ),
 )
-agent._loop.add_hook(RalphLoopHook(config))
+agent.add_hook(RalphLoopHook(config))
 
 # 执行长任务
 result = await agent.run("重构整个代码库，添加类型注解和测试")
@@ -396,10 +396,39 @@ from harness.core.subagent import SubAgentConfig
 class SubAgentConfig:
     name: str  # 子代理唯一名称
     task: str  # 任务描述
-    tools: list[str] | None = None  # 可用工具列表（None = 继承父代理）
+    tools: list[str] | None = None  # 可用工具列表（None = 继承父代理所有工具）
     max_iterations: int = 20  # 最大迭代次数
     inherit_context: bool = False  # 是否继承父代理上下文
     report_format: Literal["summary", "full", "structured"] = "summary"  # 结果格式
+```
+
+**工具过滤说明**：
+
+当指定 `tools` 参数时，子代理只会继承父代理中名称匹配的工具。支持常用别名：
+
+| 别名 | 实际工具名 |
+|------|-----------|
+| `read` | `read` |
+| `write` | `write_file` |
+| `edit` | `edit_file` |
+| `glob` | `glob` |
+| `grep` | `grep` |
+| `bash` | `bash` |
+
+```python
+# 子代理只继承读取类工具
+config = SubAgentConfig(
+    name="reader",
+    task="只读分析",
+    tools=["read", "glob", "grep"],  # 只允许读取操作
+)
+
+# 子代理继承所有父代理工具
+config = SubAgentConfig(
+    name="full-access",
+    task="完整访问",
+    tools=None,  # None = 继承所有
+)
 ```
 
 ### SubAgentResult
@@ -544,7 +573,7 @@ verification_hook = SelfVerificationHook(config)
 
 # 注册到 Agent
 agent = AgentHarness()
-agent._loop.add_hook(verification_hook)
+agent.add_hook(verification_hook)
 
 # 现在代码修改后会自动运行测试
 result = await agent.run("Fix the bug in src/main.py")
@@ -581,7 +610,7 @@ config = SelfVerificationConfig(
 verification = SelfVerificationHook(config)
 
 # 添加钩子
-agent._loop.add_hook(verification)
+agent.add_hook(verification)
 
 # 执行任务 - 代码修改后会自动运行测试
 result = await agent.run(

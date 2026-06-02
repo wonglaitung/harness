@@ -247,7 +247,7 @@ def tool(
 
 #### 钩子注册说明
 
-钩子通过继承 `LifecycleHook` 类并添加到 Agent Loop 来注册：
+钩子通过继承 `LifecycleHook` 类并使用 `add_hook()` 方法注册：
 
 ```python
 from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
@@ -261,8 +261,88 @@ class MyHook(LifecycleHook):
         # 钩子逻辑
         return HookResult.continue_()
 
-# 注册钩子
-agent._loop.add_hook(MyHook())
+# 注册钩子（使用公开 API）
+agent.add_hook(MyHook())
+```
+
+#### add_hook() - 注册生命周期钩子
+
+```python
+def add_hook(
+    self,
+    hook: LifecycleHook,
+    points: list[HookPoint] | None = None,
+) -> None:
+    """注册生命周期钩子
+
+    钩子允许在关键执行点注入自定义逻辑：
+    - LLM 调用前后
+    - 工具执行前后
+    - 错误发生时
+    - 循环开始/结束时
+
+    Args:
+        hook: 钩子实例（LifecycleHook 子类）
+        points: 指定钩子点（默认使用 hook.hook_points）
+    """
+```
+
+#### remove_hook() - 移除生命周期钩子
+
+```python
+def remove_hook(self, hook: LifecycleHook) -> None:
+    """移除已注册的生命周期钩子"""
+```
+
+#### create_snapshot() - 创建执行快照
+
+```python
+def create_snapshot(
+    self,
+    session_id: str | None = None,
+    iteration: int = 0,
+) -> LoopSnapshot:
+    """创建当前循环状态的快照
+
+    快照可用于保存进度并稍后恢复执行。
+
+    Args:
+        session_id: 会话 ID（None 则使用当前会话）
+        iteration: 当前迭代次数
+
+    Returns:
+        LoopSnapshot 捕获当前状态
+
+    Example:
+        snapshot = agent.create_snapshot(session_id="my-session")
+        snapshot_dict = snapshot.to_dict()  # 可序列化保存
+    """
+```
+
+#### restore_from_snapshot() - 从快照恢复执行
+
+```python
+async def restore_from_snapshot(
+    self,
+    snapshot: LoopSnapshot,
+    on_progress: ProgressCallback | None = None,
+) -> LoopResult:
+    """从快照恢复执行
+
+    允许继续之前中断的执行。
+
+    Args:
+        snapshot: 要恢复的快照
+        on_progress: 进度回调
+
+    Returns:
+        LoopResult 恢复执行的结果
+
+    Example:
+        # 从保存的快照恢复
+        snapshot = LoopSnapshot.from_dict(saved_data)
+        result = await agent.restore_from_snapshot(snapshot)
+    """
 ```
 
 #### register_tool() - 注册工具

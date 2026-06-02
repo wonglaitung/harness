@@ -162,7 +162,7 @@ class ApprovalHook(LifecycleHook):
                 return HookResult.abort("用户拒绝了操作")
         return HookResult.continue_()
 
-agent._loop.add_hook(ApprovalHook())
+agent.add_hook(ApprovalHook())
 result = await agent.run("删除临时文件")
 ```
 
@@ -188,7 +188,7 @@ class LoggingHook(LifecycleHook):
             logger.info(f"工具 {ctx.tool_name}: {len(ctx.tool_result.output)} 字符")
         return HookResult.continue_()
 
-agent._loop.add_hook(LoggingHook())
+agent.add_hook(LoggingHook())
 ```
 
 ### 阻止过早退出
@@ -214,7 +214,7 @@ class PreventEarlyExitHook(LifecycleHook):
             })
         return HookResult.continue_()
 
-agent._loop.add_hook(PreventEarlyExitHook())
+agent.add_hook(PreventEarlyExitHook())
 ```
 
 ## 自验证
