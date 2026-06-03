@@ -321,3 +321,60 @@ assert "[REDACTED]" in result
 assert result.startswith("expected_prefix")
 assert len(result) > 0
 ```
+
+---
+
+## 2026-06-03: 测试边界条件的精确性
+
+### 问题
+
+编写 `test_phase25_step_budget.py` 时，多个测试因边界条件不精确而失败：
+- `max_tool_calls_per_task=5` 但 `max_tool_calls_per_step=10`，违反 `per_task >= per_step` 约束
+- 测试假设 100% 使用率触发 CRITICAL，但实际触发 EXCEEDED（ratio >= 1.0）
+- 测试假设 90% 使用率触发 CRITICAL，但实际是 WARNING（threshold 配置为 warning=0.8, critical=0.95）
+
+### 原因
+
+1. **配置约束未遵守**：`StepBudgetConfig` 有 `max_tool_calls_per_task >= max_tool_calls_per_step` 约束
+2. **阈值理解偏差**：
+   - `warning_threshold=0.8`：80% 及以上触发 WARNING
+   - `critical_threshold=0.95`：95% 及以上触发 CRITICAL
+   - `ratio >= 1.0`：触发 EXCEEDED（超出预算）
+3. **百分比计算**：10/10 = 100%，不是 95%
+
+### 解决
+
+1. 修正配置：`max_tool_calls_per_task` 必须大于或等于 `max_tool_calls_per_step`
+2. 精确计算使用率：
+   ```python
+   # 9/10 = 90% >= 0.8 → WARNING
+   # 10/10 = 100% >= 0.95 → CRITICAL
+   # 但 ratio >= 1.0 触发 EXCEEDED
+   ```
+3. 测试使用明确的边界值：
+   ```python
+   # 测试 WARNING: 使用 80% 左右
+   for i in range(8): controller.record_tool_call(f"tool_{i}")  # 8/10 = 80%
+   
+   # 测试 CRITICAL: 使用 95% 左右（但要避免 100%）
+   for i in range(95): controller.record_tool_call(f"tool_{i}")  # 95/100 = 95%
+   ```
+
+### 教训
+
+1. **先读配置约束**：编写测试前检查 `__post_init__` 中的验证逻辑
+2. **精确计算百分比**：ratio = current / limit，1.0 意味着 100%
+3. **避免边界混淆**：`>= critical_threshold` 和 `>= 1.0` 是不同的触发条件
+4. **使用安全值**：测试 WARNING 用 80-85%，测试 CRITICAL 用 95-99%，避免 100%
+
+### 检查方法
+
+```python
+# 检查配置约束
+config = StepBudgetConfig(max_tool_calls_per_step=10, max_tool_calls_per_task=5)
+# ValueError: max_tool_calls_per_task must be >= max_tool_calls_per_step
+
+# 精确计算使用率
+ratio = current / limit
+level = EXCEEDED if ratio >= 1.0 else CRITICAL if ratio >= 0.95 else WARNING if ratio >= 0.8 else NORMAL
+```

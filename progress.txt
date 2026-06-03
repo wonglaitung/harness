@@ -400,5 +400,60 @@
 
 | 优先级 | 功能 | 状态 |
 |--------|------|------|
-| P3 | 工具输出卸载 | ⚠️ 待实现 |
-| P3 | 步骤预算 | ⚠️ 待实现 |
+| P3 | 工具输出卸载 | ✅ 完成 |
+| P3 | 步骤预算 | ✅ 完成 |
+
+## 2026-06-03
+
+### Phase 24: 工具输出卸载 (P3) ✅ 完成 (NEW)
+
+#### 实现
+- OffloadConfig: 配置（size_threshold_chars=5000, max_outputs_per_session=50, cleanup_on_session_end=False）
+- OffloadedOutput: 卸载记录（file_path, tool_name, preview, summary）
+- OutputOffloader: 输出卸载管理器
+  - should_offload(): 检测是否需要卸载
+  - offload(): 执行卸载并写入临时文件
+  - create_offloaded_result(): 创建带引用的 ToolResult
+  - load_offloaded(): 加载已卸载内容
+  - cleanup_session(): 清理会话卸载文件
+- AgentLoop 集成: 工具执行后自动检测和卸载大型输出
+
+测试状态: 19 个新增测试通过
+
+### Phase 25: 步骤预算 (P3) ✅ 完成 (NEW)
+
+#### 实现
+- StepBudgetConfig: 配置（max_iterations_per_task=50, max_tool_calls_per_step=10, max_tool_calls_per_task=200）
+- BudgetLevel: 预算状态级别（NORMAL, WARNING, CRITICAL, EXCEEDED）
+- StepUsage: 使用统计（iterations, tool_calls_total, tool_calls_this_step, by_tool）
+- StepBudgetController: 步骤预算控制器
+  - start_task()/end_task(): 任务生命周期
+  - advance_iteration(): 迭代前进和检查
+  - record_tool_call(): 记录工具调用
+  - check_before_tool_call(): 执行前检查
+  - get_usage_report(): 详细使用报告
+- AgentLoop 集成: 每次迭代和工具调用前检查预算
+
+测试状态: 28 个新增测试通过
+
+提交记录:
+- feat(sdk): Implement P3 features - Tool Output Offload and Step Budget (d74bb9b)
+
+## 当前状态总结
+
+### 已实现功能（P0/P1/P2/P3）
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+
+**所有 P0-P3 功能已完成！总计 471 个测试通过**
