@@ -378,3 +378,99 @@ config = StepBudgetConfig(max_tool_calls_per_step=10, max_tool_calls_per_task=5)
 ratio = current / limit
 level = EXCEEDED if ratio >= 1.0 else CRITICAL if ratio >= 0.95 else WARNING if ratio >= 0.8 else NORMAL
 ```
+
+---
+## 2026-06-03: Agent 任务完成后继续"自我延伸"
+
+### 问题
+
+用户请求："请列出当前目录下所有的 Python 文件，然后读取 pyproject.toml 的前 20 行。"
+
+Agent 实际行为：
+1. ✅ 正确执行了 `glob(**/*.py)` 和 `read(pyproject.toml, limit=20)`
+2. ❌ 继续执行了 6 步额外操作，最终试图修改 README.md
+
+Agent 的最终回复是："任务1：在 README.md 中添加'完整中文示例'章节"，与用户意图完全不符。
+
+### 原因
+
+1. **System Prompt 缺乏边界指导**：默认 `"你是一个有帮助的 AI 助手。"` 没有告诉 Agent：
+   - 何时应该停止
+   - 不应该做用户没要求的事
+   - 如何判断任务完成
+
+2. **循环终止条件单一**：Agent Loop 只在 LLM 返回 `END_TURN`（无 tool_calls）时停止。只要 LLM 继续调用工具，循环就不会终止。
+
+3. **没有"任务完成检测"机制**：SDK 有 `StuckDetector` 检测"卡住"，但没有机制检测"任务是否已完成用户意图"。
+
+### 业界最佳实践
+
+根据 [Waylandz ReAct Loop](https://www.waylandz.com/ai-agent-book-en/chapter-02-the-react-loop)、[Pristren Blog](https://pristren.com/blog/prompting-for-agents-guide)、[AI SDK Loop Control](https://ai-sdk.dev/docs/agents/loop-control) 等资料，Agent 应有六大终止条件：
+
+| 条件 | 说明 | 优先级 |
+|------|------|--------|
+| 用户中断 | 用户主动停止 | 最高 |
+| **Task Complete** | LLM 明确表示任务完成 | 高 |
+| Budget exhausted | Token/成本限制 | 高 (硬性保护) |
+| Timeout | 延迟限制 | 高 (硬性保护) |
+| Result converged | 连续观察相似，无新进展 | 中 |
+| Max iterations | 达到预设迭代数 | 兜底 |
+
+关键指导：
+```markdown
+## Stopping Conditions
+Stop and provide a Final Answer when:
+- You have enough information to answer the user's question accurately
+- You have completed the task the user requested
+
+Do NOT continue calling tools when:
+- You have already retrieved the information needed to answer
+- You are making the same tool call with the same parameters a second time (you are looping)
+```
+
+### 解决
+
+改进 System Prompt，添加明确的停止条件和行为边界：
+
+```python
+system_prompt: str = """你是一个有帮助的 AI 助手。
+
+## 停止条件
+
+当满足以下条件时，**立即停止并给出最终回答**：
+- 你已经获得了回答用户问题所需的全部信息
+- 用户请求的任务已经完成
+- 遇到无法解决的错误，需要用户输入
+
+## 禁止继续调用工具的情况
+
+- 你已经检索到了回答所需的信息
+- 同一个工具调用第二次失败（应向用户报告错误）
+- 你正在用相同的参数重复调用同一个工具（这表示你在循环）
+
+## 行为准则
+
+1. **只做用户明确要求的事**：不要延伸任务，不要做用户未请求的操作
+2. **任务完成即停止**：完成任务后直接回答，不要继续调用工具
+3. **避免无意义的循环**：如果连续两次观察结果相似，停止并报告当前进展
+
+示例：
+- 用户："列出 Python 文件" → 执行 glob，列出文件，停止
+- 用户："读取文件前 20 行" → 执行 read(limit=20)，展示内容，停止
+- 不要在完成后"顺便"做其他事或"改进"项目"""
+```
+
+### 教训
+
+1. **System Prompt 是行为边界的关键**：不能只说"有帮助"，必须明确何时停止、何时不该继续
+2. **参考业界最佳实践**：成熟的 Agent 框架（Claude Code、AI SDK、LangGraph）都有明确的 Stopping Conditions
+3. **"same tool call twice" 检测很重要**：这是防止循环的最常见模式
+4. **Task Complete 判断依赖 System Prompt**：SDK 层只能检测"卡住"，"任务完成"需要通过 prompt 引导 LLM 自己判断
+
+### 参考
+
+- [The Anatomy of an Agent Loop | Steve Kinsey](https://stevekinsey.com/writing/agent-loops)
+- [Chapter 2: The ReAct Loop | Waylandz](https://www.waylandz.com/ai-agent-book-en/chapter-02-the-react-loop)
+- [AI SDK Loop Control](https://ai-sdk.dev/docs/agents/loop-control)
+- [Prompting for Agents | Pristren](https://pristren.com/blog/prompting-for-agents-guide)
+- 关键文件：`packages/client/src/harness_client/controllers/chat_controller.py`
