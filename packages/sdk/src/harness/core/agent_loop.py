@@ -26,6 +26,8 @@ from harness.core.observability import (
     record_token_usage,
     traced_operation,
 )
+from harness.core.output_offload import OffloadConfig, OutputOffloader
+from harness.core.step_budget import StepBudgetConfig, StepBudgetController
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 
@@ -72,6 +74,14 @@ class LoopConfig:
     max_stuck_feedbacks: int = 2  # Maximum feedback injection attempts
     stuck_min_iterations: int = 3  # Minimum iterations before stuck detection
     stuck_consecutive_failures: int = 3  # Consecutive empty/error results to trigger
+
+    # Tool Output Offload (Phase 24)
+    offload_config: OffloadConfig | None = None  # Output offload configuration
+    enable_offload: bool = True  # Enable output offloading
+
+    # Step Budget (Phase 25)
+    step_budget_config: StepBudgetConfig | None = None  # Step budget configuration
+    enable_step_budget: bool = True  # Enable step budget control
 
 
 class AgentLoop:
@@ -123,6 +133,16 @@ class AgentLoop:
             config=cost_config,
             on_progress=None,  # Will be set in run()
         ) if self.config.enable_cost_control else None
+
+        # Initialize output offloader (Phase 24)
+        self._offloader = OutputOffloader(
+            config=self.config.offload_config or OffloadConfig(),
+        ) if self.config.enable_offload else None
+
+        # Initialize step budget controller (Phase 25)
+        self._step_budget = StepBudgetController(
+            config=self.config.step_budget_config or StepBudgetConfig(),
+        ) if self.config.enable_step_budget else None
 
         # Initialize security components (lazy import to avoid circular dependency)
         from harness.security import AuditLogger, InputValidator, ResultSanitizer
@@ -306,9 +326,32 @@ class AgentLoop:
         self._iteration = 0  # Reset for error handler context
         self._stuck_feedback_count = 0  # Reset for stuck detection
 
+        # Start step budget task
+        if self._step_budget:
+            self._step_budget.start_task()
+
         try:
             logger.info(f"Starting loop, max_iterations={self.config.max_iterations}")
             while iteration < self.config.max_iterations:
+                # Check step budget (Phase 25)
+                if self._step_budget and iteration > 0:
+                    budget_result = self._step_budget.advance_iteration()
+                    if budget_result.should_stop:
+                        self.state = LoopState.ERROR
+                        self._emit_progress(
+                            ProgressEventType.ERROR,
+                            budget_result.message,
+                            {"step_budget": self._step_budget.get_usage_report()},
+                        )
+                        return LoopResult(
+                            status=LoopState.ERROR,
+                            session=session,
+                            messages=session.messages,
+                            iterations=iteration,
+                            error=budget_result.message,
+                            token_usage=total_usage,
+                        )
+
                 # Check cost budget
                 if self._cost_controller:
                     budget_status = self._cost_controller.check(total_usage, session.id)
@@ -628,6 +671,10 @@ class AgentLoop:
                     ),
                 )
 
+                # End step budget task
+                if self._step_budget:
+                    self._step_budget.end_task()
+
                 # Reset error handler state
                 self._error_handler.reset()
 
@@ -740,6 +787,19 @@ class AgentLoop:
 
         results = []
         for tool_call in tool_calls:
+            # Check step budget before tool call (Phase 25)
+            if self._step_budget:
+                budget_result = self._step_budget.check_before_tool_call(tool_call.name)
+                if budget_result.should_stop:
+                    from harness.types import ToolResult
+                    results.append(ToolResult(
+                        tool_call_id=tool_call.id,
+                        success=False,
+                        content="",
+                        error=f"Step budget exceeded: {budget_result.message}",
+                    ))
+                    continue
+
             # Check circuit breaker
             if self._circuit_breaker and self._circuit_breaker.is_open():
                 reason = self._circuit_breaker.get_reason()
@@ -799,6 +859,23 @@ class AgentLoop:
             tool_start = time.time()
             result = await self.tools.execute(tool_call, context)
             tool_duration = (time.time() - tool_start) * 1000
+
+            # Record tool call for step budget (Phase 25)
+            if self._step_budget:
+                self._step_budget.record_tool_call(tool_call.name)
+
+            # Offload large output if needed (Phase 24)
+            if self._offloader and result.success and result.content:
+                if self._offloader.should_offload(result.content, session.id):
+                    result = self._offloader.create_offloaded_result(result, session.id)
+                    self._emit_progress(
+                        ProgressEventType.STATE_CHANGE,
+                        f"Offloaded large output from {tool_call.name}",
+                        {
+                            "offloaded": True,
+                            "original_size": result.metadata.get("original_size", 0),
+                        },
+                    )
 
             # Execute AFTER_TOOL_EXECUTE hooks
             hook_result = await self._hooks.execute_hooks(
