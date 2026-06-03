@@ -1,4 +1,4 @@
-/* Harness Client - Dark Theme (Hermes Style) */
+/* Harness Client - Dark Theme (Hermes Style) - Updated for 3-column layout */
 
 /* Global */
 QWidget {
@@ -10,6 +10,12 @@ QWidget {
 /* Main Window */
 QMainWindow {
     background-color: #1e1e1e;
+}
+
+/* Header Bar Area */
+QWidget#header_widget {
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #3e3e42;
 }
 
 /* Groups */
@@ -101,6 +107,44 @@ QListWidget::item:selected {
 
 QListWidget::item:hover {
     background-color: #2a2a2a;
+}
+
+/* Tree View (for file tree) */
+QTreeView {
+    background-color: #171717;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    color: #d4d4d4;
+}
+
+QTreeView::item {
+    padding: 4px;
+    border-bottom: 1px solid transparent;
+}
+
+QTreeView::item:selected {
+    background-color: #094771;
+    color: #ffffff;
+}
+
+QTreeView::item:hover {
+    background-color: #2a2a2a;
+}
+
+QTreeView::branch {
+    background-color: #171717;
+}
+
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:closed:has-children:has-siblings {
+    border-image: none;
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iI2Q0ZDRkNCI+PHBhdGggZD0iTTYgNGw2IDgtMTIgOHoiLz48L3N2Zz4=);
+}
+
+QTreeView::branch:open:has-children:!has-siblings,
+QTreeView::branch:open:has-children:has-siblings {
+    border-image: none;
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iI2Q0ZDRkNCI+PHBhdGggZD0iTTQgNmg4djJINHoiLz48L3N2Zz4=);
 }
 
 /* Combo box */
@@ -417,4 +461,50 @@ QMessageBox {
 
 QMessageBox QLabel {
     color: #d4d4d4;
+}
+
+/* Collapsible Section Header */
+QPushButton[collapsible="true"] {
+    background-color: #2d2d30;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    text-align: left;
+    color: #d4d4d4;
+    font-weight: bold;
+}
+
+QPushButton[collapsible="true"]:hover {
+    background-color: #3e3e42;
+}
+
+/* Right Panel Section */
+QWidget[rightPanel="true"] {
+    background-color: #171717;
+    border-left: 1px solid #3e3e42;
+}
+
+/* Sidebar Panel */
+QWidget[sidebar="true"] {
+    background-color: #171717;
+    border-right: 1px solid #3e3e42;
+}
+
+/* Nav Button in Sidebar */
+QPushButton[navButton="true"] {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 8px;
+    text-align: left;
+    color: #d4d4d4;
+    font-size: 14px;
+}
+
+QPushButton[navButton="true"]:hover {
+    background-color: #2a2a2a;
+}
+
+QPushButton[navButton="true"]:checked {
+    background-color: #094771;
 }

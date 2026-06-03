@@ -1,14 +1,14 @@
 """
-Sidebar panel with sessions, MCP servers, and skills.
+Sidebar panel with collapsible icon/text navigation - Hermes Dark Theme Style.
 """
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QAction, QFont, QFontDatabase
 from PyQt6.QtWidgets import (
     QFileDialog,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -16,13 +16,16 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 
 class SidebarPanel(QWidget):
-    """Left sidebar with session list, MCP servers, and skills."""
+    """Left sidebar with collapsible navigation mode."""
 
     # Signals
     work_dir_changed = pyqtSignal(Path)
@@ -31,90 +34,253 @@ class SidebarPanel(QWidget):
     session_delete_requested = pyqtSignal(str)
     session_switch_requested = pyqtSignal(str)
     session_new_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
+    toggle_requested = pyqtSignal()  # emitted when user wants to toggle collapsed state
+
+    # Constants for sizes
+    COLLAPSED_WIDTH = 56
+    EXPANDED_WIDTH = 220
 
     def __init__(self):
         super().__init__()
+        self._is_collapsed = False
+        self._max_width = self.EXPANDED_WIDTH
         self.work_dir = Path.cwd()
         self._setup_ui()
+        self._apply_collapsed_state()
+
+    def _get_font(self) -> QFont:
+        """Get a suitable font for the system."""
+        font = QFont()
+        font.setPointSize(10)
+        for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
+            font.setFamily(family)
+            if QFontDatabase.families().count(family) > 0 or family in QFontDatabase.families():
+                break
+        return font
 
     def _setup_ui(self):
         """Setup UI components."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        # Main layout
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(4, 4, 4, 4)
+        self._main_layout.setSpacing(4)
 
-        # Sessions group
-        sessions_group = QGroupBox("📁 会话列表")
-        sessions_layout = QVBoxLayout(sessions_group)
+        # Top: Logo/App name area
+        self._header_widget = QWidget()
+        header_layout = QHBoxLayout(self._header_widget)
+        header_layout.setContentsMargins(4, 4, 4, 4)
+
+        # Logo button (clickable to toggle)
+        self.logo_btn = QToolButton()
+        self.logo_btn.setText("A")
+        self.logo_btn.setStyleSheet("""
+            QToolButton {
+                background-color: #007acc;
+                color: white;
+                border-radius: 14px;
+                font-size: 16px;
+                font-weight: bold;
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QToolButton:hover {
+                background-color: #106ebe;
+            }
+        """)
+        self.logo_btn.clicked.connect(self._on_toggle)
+        header_layout.addWidget(self.logo_btn)
+
+        # App name label (hidden when collapsed)
+        self.app_name_label = QLabel("Harness")
+        self.app_name_label.setStyleSheet("""
+            QLabel {
+                color: #d4d4d4;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        header_layout.addWidget(self.app_name_label)
+        header_layout.addStretch()
+
+        self._main_layout.addWidget(self._header_widget)
+
+        # Separator line
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("background-color: #3e3e42; max-height: 1px;")
+        self._main_layout.addWidget(separator)
+
+        # Navigation buttons
+        self._nav_widget = QWidget()
+        nav_layout = QVBoxLayout(self._nav_widget)
+        nav_layout.setContentsMargins(0, 4, 0, 4)
+        nav_layout.setSpacing(2)
+
+        # Chat button
+        self.chat_btn = self._create_nav_button("💬", "对话")
+        self.chat_btn.setToolTip("对话")
+        self.chat_btn.clicked.connect(self._on_chat_click)
+        nav_layout.addWidget(self.chat_btn)
+
+        # Settings button
+        self.settings_btn = self._create_nav_button("⚙️", "设置")
+        self.settings_btn.setToolTip("设置")
+        self.settings_btn.clicked.connect(self._on_settings_click)
+        nav_layout.addWidget(self.settings_btn)
+
+        # Separator
+        nav_separator = QFrame()
+        nav_separator.setFrameShape(QFrame.Shape.HLine)
+        nav_separator.setStyleSheet("background-color: #3e3e42; max-height: 1px;")
+        nav_layout.addWidget(nav_separator)
+
+        # New session button
+        self.new_session_btn = self._create_nav_button("➕", "新建会话")
+        self.new_session_btn.setToolTip("新建会话")
+        self.new_session_btn.clicked.connect(self._on_new_session)
+        nav_layout.addWidget(self.new_session_btn)
+
+        self._main_layout.addWidget(self._nav_widget)
+
+        # Session list section (collapsible, hidden when sidebar collapsed)
+        self._sessions_widget = QWidget()
+        sessions_layout = QVBoxLayout(self._sessions_widget)
+        sessions_layout.setContentsMargins(4, 4, 4, 4)
+        sessions_layout.setSpacing(4)
+
+        sessions_label = QLabel("会话历史")
+        sessions_label.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                font-weight: bold;
+            }
+        """)
+        sessions_layout.addWidget(sessions_label)
 
         self.session_list = QListWidget()
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.session_list.itemClicked.connect(self._on_session_clicked)
+        self.session_list.setStyleSheet("""
+            QListWidget {
+                background-color: #171717;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                color: #d4d4d4;
+                font-size: 12px;
+            }
+            QListWidget::item {
+                padding: 6px 8px;
+                border-bottom: 1px solid #2a2a2a;
+            }
+            QListWidget::item:selected {
+                background-color: #094771;
+                color: #ffffff;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2a2a;
+            }
+        """)
         sessions_layout.addWidget(self.session_list)
 
-        new_session_btn = QPushButton("➕ 新建会话")
-        new_session_btn.clicked.connect(self._on_new_session)
-        sessions_layout.addWidget(new_session_btn)
+        self._main_layout.addWidget(self._sessions_widget)
 
-        layout.addWidget(sessions_group)
+        # Stretch at bottom
+        self._main_layout.addStretch()
 
-        # MCP Servers group
-        mcp_group = QGroupBox("🔌 MCP 服务器")
-        mcp_layout = QVBoxLayout(mcp_group)
+        # Set initial size
+        self.setMinimumWidth(self.COLLAPSED_WIDTH)
+        self.setMaximumWidth(self.EXPANDED_WIDTH)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
-        self.mcp_list = QListWidget()
-        self.mcp_list.itemDoubleClicked.connect(self._on_mcp_double_click)
-        mcp_layout.addWidget(self.mcp_list)
+    def _create_nav_button(self, icon: str, text: str) -> QPushButton:
+        """Create a navigation button with icon and optional text."""
+        btn = QPushButton(f"{icon}")
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                text-align: left;
+                color: #d4d4d4;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #2a2a2a;
+            }
+            QPushButton:checked {
+                background-color: #094771;
+            }
+        """)
+        btn.setFont(self._get_font())
+        btn.setProperty("icon", icon)
+        btn.setProperty("text", text)
+        return btn
 
-        mcp_btn_layout = QHBoxLayout()
-        add_mcp_btn = QPushButton("➕ 添加")
-        add_mcp_btn.clicked.connect(self._on_add_mcp)
-        mcp_btn_layout.addWidget(add_mcp_btn)
+    def _apply_collapsed_state(self):
+        """Apply the collapsed or expanded state to the UI."""
+        if self._is_collapsed:
+            # Collapsed state: show only icons
+            self.setMaximumWidth(self.COLLAPSED_WIDTH)
+            self.app_name_label.hide()
+            self._sessions_widget.hide()
 
-        refresh_mcp_btn = QPushButton("🔄 刷新")
-        refresh_mcp_btn.clicked.connect(self._on_refresh_mcp)
-        mcp_btn_layout.addWidget(refresh_mcp_btn)
+            # Update buttons to show only icons
+            for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
+                icon = btn.property("icon")
+                btn.setText(icon)
+                btn.setToolTip(btn.property("text"))
+        else:
+            # Expanded state: show icons + text
+            self.setMaximumWidth(self.EXPANDED_WIDTH)
+            self.app_name_label.show()
+            self._sessions_widget.show()
 
-        mcp_layout.addLayout(mcp_btn_layout)
-        layout.addWidget(mcp_group)
+            # Update buttons to show icon + text
+            for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
+                icon = btn.property("icon")
+                text = btn.property("text")
+                btn.setText(f"{icon}  {text}")
+                btn.setToolTip("")  # Clear tooltip in expanded mode
 
-        # Skills group
-        skills_group = QGroupBox("⚡ 技能列表")
-        skills_layout = QVBoxLayout(skills_group)
+    def _on_toggle(self):
+        """Handle toggle between collapsed and expanded states."""
+        self._is_collapsed = not self._is_collapsed
+        self._apply_collapsed_state()
+        self.toggle_requested.emit()
 
-        self.skill_list = QListWidget()
-        self.skill_list.itemDoubleClicked.connect(self._on_skill_double_click)
-        skills_layout.addWidget(self.skill_list)
+    def toggle(self):
+        """Public method to toggle the sidebar state."""
+        self._on_toggle()
 
-        skill_btn_layout = QHBoxLayout()
-        load_skill_btn = QPushButton("📂 加载")
-        load_skill_btn.clicked.connect(self._on_load_skill)
-        skill_btn_layout.addWidget(load_skill_btn)
+    def set_collapsed(self, collapsed: bool):
+        """Set the sidebar collapsed state."""
+        if self._is_collapsed != collapsed:
+            self._is_collapsed = collapsed
+            self._apply_collapsed_state()
 
-        new_skill_btn = QPushButton("➕ 新建")
-        new_skill_btn.clicked.connect(self._on_new_skill)
-        skill_btn_layout.addWidget(new_skill_btn)
+    def is_collapsed(self) -> bool:
+        """Check if sidebar is collapsed."""
+        return self._is_collapsed
 
-        skills_layout.addLayout(skill_btn_layout)
-        layout.addWidget(skills_group)
+    def _on_chat_click(self):
+        """Handle chat button click."""
+        # If collapsed, expand to show sessions
+        if self._is_collapsed:
+            self._on_toggle()
 
-        # Work directory group
-        work_group = QGroupBox("📂 工作目录")
-        work_layout = QVBoxLayout(work_group)
+    def _on_settings_click(self):
+        """Handle settings button click."""
+        self.settings_requested.emit()
 
-        self.work_dir_label = QLabel(str(self.work_dir))
-        self.work_dir_label.setWordWrap(True)
-        self.work_dir_label.setStyleSheet("color: #808080; font-size: 11px;")
-        work_layout.addWidget(self.work_dir_label)
-
-        change_dir_btn = QPushButton("更改...")
-        change_dir_btn.clicked.connect(self._on_change_work_dir)
-        work_layout.addWidget(change_dir_btn)
-
-        layout.addWidget(work_group)
-
-        layout.addStretch()
+    def _on_new_session(self):
+        """Handle new session button click."""
+        self.session_new_requested.emit()
 
     # === Session List Management ===
 
@@ -139,10 +305,6 @@ class SidebarPanel(QWidget):
             item = QListWidgetItem(f"📄 {session.name}")
             item.setData(Qt.ItemDataRole.UserRole, session.id)
             self.session_list.addItem(item)
-
-    def _on_new_session(self):
-        """Handle new session button click."""
-        self.session_new_requested.emit()
 
     def _on_session_clicked(self, item: QListWidgetItem):
         """Handle session list item click."""
@@ -175,6 +337,16 @@ class SidebarPanel(QWidget):
             return
 
         menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #252526;
+                border: 1px solid #3e3e42;
+                color: #d4d4d4;
+            }
+            QMenu::item:selected {
+                background-color: #094771;
+            }
+        """)
 
         delete_action = QAction("🗑️ 删除会话", self)
         delete_action.triggered.connect(lambda: self._on_delete_session(session_id, text))
@@ -198,70 +370,3 @@ class SidebarPanel(QWidget):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.session_delete_requested.emit(session_id)
-
-    # === MCP Servers ===
-
-    def _on_add_mcp(self):
-        """Add MCP server dialog."""
-        from harness_client.ui.mcp_panel import MCPServerDialog
-
-        dialog = MCPServerDialog(self)
-        if dialog.exec():
-            config = dialog.get_config()
-            self.mcp_config = config
-
-    def _on_refresh_mcp(self):
-        """Refresh MCP server list."""
-        pass
-
-    def _on_mcp_double_click(self, item: QListWidgetItem):
-        """Handle MCP server double click."""
-        text = item.text()
-        parts = text.split()
-        if len(parts) >= 2:
-            server_name = parts[1]
-            self.mcp_connect_requested.emit(server_name)
-
-    def add_mcp_server(self, name: str, status: str = "未连接"):
-        """Add MCP server to list."""
-        icon = "✓" if status == "已连接" else "○"
-        self.mcp_list.addItem(f"{icon} {name} ({status})")
-
-    # === Skills ===
-
-    def _on_load_skill(self):
-        """Load skills from directory."""
-        dir_path = QFileDialog.getExistingDirectory(self, "选择技能目录")
-        if dir_path:
-            self.skill_load_requested.emit(Path(dir_path))
-
-    def _on_new_skill(self):
-        """Create new skill."""
-        from harness_client.ui.skill_dialog import SkillEditDialog
-
-        dialog = SkillEditDialog(self)
-        if dialog.exec():
-            pass
-
-    def _on_skill_double_click(self, item: QListWidgetItem):
-        """Handle skill double click."""
-        pass
-
-    def add_skill(self, name: str, status: str = "已启用"):
-        """Add skill to list."""
-        self.skill_list.addItem(f"{name} ({status})")
-
-    # === Work Directory ===
-
-    def _on_change_work_dir(self):
-        """Change work directory."""
-        dir_path = QFileDialog.getExistingDirectory(self, "选择工作目录", str(self.work_dir))
-        if dir_path:
-            self.work_dir = Path(dir_path)
-            self.work_dir_label.setText(str(self.work_dir))
-            self.work_dir_changed.emit(self.work_dir)
-
-    def update_work_dir(self, path: Path):
-        """Update work directory display."""
-        self.work_dir = path
-        self.work_dir_label.setText(str(path))

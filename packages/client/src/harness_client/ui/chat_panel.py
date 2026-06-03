@@ -171,12 +171,12 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message with dark blue bubble, right-aligned
+            # User message with blue bubble, right-aligned - matching Athlon style
             html = f"""
-            <div style="margin: 8px 0; text-align: right;">
-                <div style="display: inline-block; background-color: #0e4063;
-                            border-radius: 12px; padding: 10px 14px; max-width: 70%;
-                            color: #ffffff; font-size: 13px;">
+            <div style="margin: 12px 0; text-align: right;">
+                <div style="display: inline-block; background-color: #1e4a6d;
+                            border-radius: 16px; padding: 10px 16px; max-width: 70%;
+                            color: #ffffff; font-size: 13px; line-height: 1.5;">
                     {rendered_content}
                 </div>
             </div>
@@ -184,15 +184,16 @@ class ChatPanel(QWidget):
         else:
             # Assistant message with avatar and gray bubble, left-aligned
             html = f"""
-            <div style="margin: 8px 0;">
-                <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
-                    <div style="width: 28px; height: 28px; border-radius: 50%;
-                                background-color: #007acc; color: white; font-size: 14px;
-                                display: inline-flex; align-items: center; justify-content: center;">A</div>
-                    <div style="background-color: #2d2d30; border-radius: 12px;
-                                padding: 10px 14px; max-width: 85%;
-                                color: #d4d4d4; font-size: 13px;">
-                        <div style="margin-top: 0; color: #d4d4d4;">{rendered_content}</div>
+            <div style="margin: 12px 0;">
+                <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%;
+                                background-color: #007acc; color: white; font-size: 16px;
+                                display: inline-flex; align-items: center; justify-content: center;
+                                flex-shrink: 0;">A</div>
+                    <div style="background-color: #2d2d30; border-radius: 16px;
+                                padding: 10px 16px; max-width: 85%;
+                                color: #d4d4d4; font-size: 13px; line-height: 1.5;">
+                        <div style="color: #d4d4d4;">{rendered_content}</div>
                     </div>
                 </div>
             </div>
@@ -216,16 +217,28 @@ class ChatPanel(QWidget):
         self._append_message("user", content)
 
     def append_tool_call(self, tool_name: str, arguments: dict):
-        """Append a tool call indicator with dark theme card style."""
-        args_str = ", ".join(f"{k}={v}" for k, v in list(arguments.items())[:3])
+        """Append a tool call indicator with dark theme card style - matching Athlon Agent style."""
+        # Format arguments preview (first 3 args)
+        args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in list(arguments.items())[:3])
         if len(arguments) > 3:
-            args_str += "..."
+            args_preview += "..."
+
+        # Full arguments for expandable section
+        args_full = "<br>".join(f"<b>{k}</b>: {repr(v)}" for k, v in arguments.items())
+
         html = f"""
-        <div style="margin: 4px 0 4px 36px;">
-            <div style="background-color: #264f78; color: #58a6ff;
-                        padding: 6px 10px; border-radius: 6px; font-size: 12px;
-                        border-left: 3px solid #58a6ff;">
-                🔧 <b>{self._escape_html(tool_name)}</b>({self._escape_html(args_str)})
+        <div style="margin: 8px 0 4px 36px;">
+            <div style="background-color: #1a1a2e; color: #58a6ff;
+                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
+                        border: 1px solid #264f78;">
+                <div style="margin-bottom: 4px;">
+                    <span style="color: #808080;">Tool</span>
+                    <b style="color: #58a6ff;">'{self._escape_html(tool_name)}'</b>
+                    <span style="color: #808080;">called</span>
+                </div>
+                <div style="color: #808080; font-size: 11px; font-style: italic;">
+                    {self._escape_html(args_preview) if args_preview else 'no arguments'}
+                </div>
             </div>
         </div>
         """
@@ -233,27 +246,42 @@ class ChatPanel(QWidget):
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def append_tool_result(self, tool_name: str, result_preview: str, success: bool = True):
-        """Append a tool result indicator with dark theme styling."""
-        preview = result_preview[:100] + "..." if len(result_preview) > 100 else result_preview
+    def append_tool_result(self, tool_name: str, result: str, success: bool = True):
+        """Append a tool result indicator with expandable details - matching Athlon Agent style."""
+        preview = result[:80] + "..." if len(result) > 80 else result
 
         if success:
             bg_color = "#1a3a2a"
-            text_color = "#50c878"
-            border_color = "#50c878"
-            icon = "✅"
+            border_color = "#2ea043"
+            text_color = "#3fb950"
+            icon = "✓"
+            status_text = "succeeded"
         else:
             bg_color = "#3a1a1a"
-            text_color = "#ff6b6b"
-            border_color = "#ff6b6b"
-            icon = "❌"
+            border_color = "#da3633"
+            text_color = "#f85149"
+            icon = "✗"
+            status_text = "failed"
+
+        # Escape and prepare result for display
+        result_escaped = self._escape_html(result)
+        result_id = f"result_{id(result)}"
 
         html = f"""
-        <div style="margin: 4px 0 4px 36px;">
+        <div style="margin: 4px 0 8px 36px;">
             <div style="background-color: {bg_color}; color: {text_color};
-                        padding: 6px 10px; border-radius: 6px; font-size: 12px;
-                        border-left: 3px solid {border_color};">
-                {icon} {self._escape_html(preview)}
+                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
+                        border: 1px solid {border_color};">
+                <div style="margin-bottom: 4px;">
+                    <span style="color: {text_color};">{icon}</span>
+                    Tool <b>'{self._escape_html(tool_name)}'</b> {status_text}.
+                </div>
+                <div style="color: #808080; font-size: 11px; margin-top: 4px;
+                            padding: 6px 8px; background-color: rgba(0,0,0,0.2);
+                            border-radius: 4px; font-family: monospace;
+                            max-height: 60px; overflow: hidden;">
+                    {self._escape_html(preview)}
+                </div>
             </div>
         </div>
         """
@@ -262,12 +290,12 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def append_thinking(self, message: str):
-        """Append a thinking/progress indicator with blockquote style."""
+        """Append a thinking/progress indicator with subtle blockquote style."""
         html = f"""
         <div style="margin: 4px 0 4px 36px;">
-            <div style="background-color: #252526; color: #808080;
-                        padding: 6px 10px; border-radius: 4px; font-size: 12px;
-                        border-left: 3px solid #6e6e80; font-style: italic;">
+            <div style="background-color: #1e1e1e; color: #6e7681;
+                        padding: 6px 12px; border-radius: 4px; font-size: 12px;
+                        border-left: 2px solid #3e3e42;">
                 💭 {self._escape_html(message)}
             </div>
         </div>
@@ -288,14 +316,15 @@ class ChatPanel(QWidget):
         self._stream_start_position = self.chat_display.textCursor().position()
         # Add an empty assistant message with avatar that will be updated
         html = """
-        <div style="margin: 8px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
-                <div style="width: 28px; height: 28px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 14px;
-                            display: inline-flex; align-items: center; justify-content: center;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 12px;
-                            padding: 10px 14px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px;">
+        <div style="margin: 12px 0;">
+            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 16px;
+                            display: inline-flex; align-items: center; justify-content: center;
+                            flex-shrink: 0;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 16px;
+                            padding: 10px 16px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
                     <div id="streaming-content" style="color: #d4d4d4;">▌</div>
                 </div>
             </div>
@@ -315,14 +344,15 @@ class ChatPanel(QWidget):
         # Render the full accumulated text so far
         rendered = self._render_markdown(self._streaming_text + "▌")
         html = f"""
-        <div style="margin: 8px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
-                <div style="width: 28px; height: 28px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 14px;
-                            display: inline-flex; align-items: center; justify-content: center;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 12px;
-                            padding: 10px 14px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px;">
+        <div style="margin: 12px 0;">
+            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 16px;
+                            display: inline-flex; align-items: center; justify-content: center;
+                            flex-shrink: 0;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 16px;
+                            padding: 10px 16px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
                     <div style="color: #d4d4d4;">{rendered}</div>
                 </div>
             </div>
@@ -347,14 +377,15 @@ class ChatPanel(QWidget):
         # Render final text without cursor
         rendered = self._render_markdown(self._streaming_text)
         html = f"""
-        <div style="margin: 8px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
-                <div style="width: 28px; height: 28px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 14px;
-                            display: inline-flex; align-items: center; justify-content: center;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 12px;
-                            padding: 10px 14px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px;">
+        <div style="margin: 12px 0;">
+            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 16px;
+                            display: inline-flex; align-items: center; justify-content: center;
+                            flex-shrink: 0;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 16px;
+                            padding: 10px 16px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
                     <div style="color: #d4d4d4;">{rendered}</div>
                 </div>
             </div>
