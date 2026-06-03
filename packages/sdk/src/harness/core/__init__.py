@@ -44,6 +44,7 @@ from harness.core.observability import (
     trace_progress_event,
 )
 from harness.core.streaming import StreamingConfig, StreamingHandler, StreamingStats
+from harness.core.stuck_detector import StuckDetector, StuckDetectorConfig, StuckDetectionResult
 from harness.types import CostConfig, LoopResult
 
 __all__ = [
@@ -68,6 +69,10 @@ __all__ = [
     "StreamingHandler",
     "StreamingConfig",
     "StreamingStats",
+    # Stuck Detection
+    "StuckDetector",
+    "StuckDetectorConfig",
+    "StuckDetectionResult",
     # Hooks
     "LifecycleHook",
     "HookManager",

@@ -254,7 +254,7 @@ You are a code reviewer. Your task is to:
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
-| Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测 |
+| Orchestration Loop | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测（含语义检测） |
 | Tools | ✅ | 8 内置 (Read/Write/Edit/Glob/Grep/Bash/WebSearch/WebFetch) + MCP |
 | Triggers | ⚠️ | 仅 SkillTrigger 实现，Cron/Webhook 等为计划功能 |
 | Filesystem | ✅ | 通过工具实现，支持权限检查 |
@@ -264,7 +264,7 @@ You are a code reviewer. Your task is to:
 | Context Management | ✅ | ContextBuilder + SystemPromptBuilder 动态组装 |
 | Context Rot Defense | ✅ | 渐进式技能加载 + 上下文压缩 |
 | Long-Horizon Execution | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
-| Error Handling | ✅ | 熔断器 + 成本控制 + 卡住检测 |
+| Error Handling | ✅ | 熔断器 + 成本控制 + 卡住检测（语义相似度） |
 | Serving Layer | ❌ | SDK 不包含（client 层职责） |
 
 详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
@@ -283,6 +283,7 @@ You are a code reviewer. Your task is to:
 | 8 | **向量检索** | ✅ | VectorMemoryStore 语义搜索 |
 | 9 | **动态系统提示组装** | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
 | 10 | **步骤预算** | ✅ | StepBudgetController 迭代/工具调用限制 |
+| 11 | **语义卡住检测** | ✅ | StuckDetector 基于 embedding 检测重复输出模式 |
 
 ## 数据流
 

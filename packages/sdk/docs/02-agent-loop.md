@@ -79,13 +79,14 @@ class LoopConfig:
     
     # 卡住检测配置
     max_stuck_feedbacks: int = 2                 # 最大反馈注入尝试次数
-    stuck_min_iterations: int = 3                 # 卡住检测前的最小迭代次数
-    stuck_consecutive_failures: int = 3           # 触发卡住检测的连续失败次数
-    
+    stuck_min_iterations: int = 3                # 卡住检测前的最小迭代次数
+    stuck_consecutive_failures: int = 3          # 触发卡住检测的连续失败次数
+    stuck_detector_config: StuckDetectorConfig | None = None  # 语义检测配置
+
     # 工具输出卸载配置 (Phase 24)
     offload_config: OffloadConfig | None = None  # 输出卸载配置
     enable_offload: bool = True                  # 是否启用输出卸载
-    
+
     # 步骤预算配置 (Phase 25)
     step_budget_config: StepBudgetConfig | None = None  # 步骤预算配置
     enable_step_budget: bool = True              # 是否启用步骤预算控制
@@ -287,18 +288,81 @@ agent.add_hook(PreventEarlyExitHook())
 
 ## Stuck Detection（卡住检测）
 
-Agent Loop 内置卡住检测机制，识别以下模式：
+Agent Loop 内置卡住检测机制，采用两级检测策略：
+
+### 检测策略
+
+| 策略 | 说明 | 成本 |
+|------|------|------|
+| **空/错误检测** | 连续 N 次空结果或错误响应 | 零成本 |
+| **语义检测** | 基于 embedding 的相似度检测，捕捉重复输出模式 | 需要模型 |
+
+### 检测模式
 
 | 模式 | 检测方法 |
 |------|----------|
-| **重复输出** | 连续 N 次相同或高度相似的 LLM 输出 |
-| **循环工具调用** | 相同工具 + 相同参数被重复调用 |
-| **无进展** | 多次迭代后状态未改变 |
+| **空结果** | 连续 N 次工具返回空内容 |
+| **错误循环** | 连续 N 次工具返回错误 |
+| **语义重复** | 连续 N 轮输出高度相似（相似度 ≥ 阈值） |
+
+### 配置选项
+
+```python
+from harness.core.agent_loop import LoopConfig
+from harness.core.stuck_detector import StuckDetectorConfig
+
+# 基础配置（空/错误检测，零依赖）
+config = LoopConfig(
+    max_stuck_feedbacks=2,           # 最大反馈注入次数
+    stuck_min_iterations=3,          # 最小迭代次数后开始检测
+    stuck_consecutive_failures=3,    # 连续失败次数阈值
+)
+
+# 启用语义检测（需要安装依赖）
+config = LoopConfig(
+    stuck_detector_config=StuckDetectorConfig(
+        enable_semantic=True,            # 启用语义检测
+        similarity_threshold=0.92,       # 相似度阈值（0.0-1.0）
+        consecutive_rounds=3,            # 连续相似轮数阈值
+        window_size=6,                   # 对比窗口大小
+        min_chars=30,                    # 最小文本长度
+    ),
+)
+```
+
+### 安装依赖
+
+语义检测需要安装可选依赖：
+
+```bash
+pip install harness-ai[stuck]
+```
+
+默认使用 `bge-small-zh-v1.5` 模型（中文优化，约 100MB）。
+
+### 检测后行为
 
 检测到卡住状态后，Agent Loop 会：
-1. 在上下文中注入提醒消息
-2. 如果继续卡住，触发 `ON_ERROR` 钩子
-3. 最终中断循环
+
+1. **注入反馈消息**：提醒 Agent 尝试不同方法
+2. **清除检测状态**：避免误判
+3. **最终中断**：反馈次数耗尽后终止循环
+
+### 反馈消息示例
+
+```python
+# 第一次检测到语义重复
+"[循环检测] 检测到重复的输出模式（相似度 95%）。
+你的方法似乎在原地打转，请尝试完全不同的策略。"
+
+# 第二次检测（最后机会）
+"[循环检测 - 最后机会] 重复模式仍在继续（相似度 93%）。
+请立即承认无法继续或采用根本性不同的方法。"
+```
+
+### 自动降级
+
+如果 `sentence-transformers` 未安装，语义检测自动禁用，退回空/错误检测。不会影响 Agent 正常运行。
 
 ## Ralph Loop（长任务循环）
 

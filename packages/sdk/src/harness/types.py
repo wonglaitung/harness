@@ -29,6 +29,7 @@ class ProgressEventType(Enum):
     ITERATION = "iteration"              # 迭代计数
     ERROR = "error"                      # 错误发生
     STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压
+    STUCK_DETECTED = "stuck_detected"    # 检测到停滞状态
 
 
 @dataclass

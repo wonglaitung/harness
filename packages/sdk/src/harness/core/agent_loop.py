@@ -28,6 +28,7 @@ from harness.core.observability import (
 )
 from harness.core.output_offload import OffloadConfig, OutputOffloader
 from harness.core.step_budget import StepBudgetConfig, StepBudgetController
+from harness.core.stuck_detector import StuckDetector, StuckDetectorConfig, StuckDetectionResult
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 
@@ -74,6 +75,7 @@ class LoopConfig:
     max_stuck_feedbacks: int = 2  # Maximum feedback injection attempts
     stuck_min_iterations: int = 3  # Minimum iterations before stuck detection
     stuck_consecutive_failures: int = 3  # Consecutive empty/error results to trigger
+    stuck_detector_config: StuckDetectorConfig | None = None  # Semantic stuck detection config
 
     # Tool Output Offload (Phase 24)
     offload_config: OffloadConfig | None = None  # Output offload configuration
@@ -143,6 +145,11 @@ class AgentLoop:
         self._step_budget = StepBudgetController(
             config=self.config.step_budget_config or StepBudgetConfig(),
         ) if self.config.enable_step_budget else None
+
+        # Initialize stuck detector (semantic similarity detection)
+        self._stuck_detector = StuckDetector(
+            config=self.config.stuck_detector_config,
+        ) if self.config.stuck_detector_config else None
 
         # Initialize security components (lazy import to avoid circular dependency)
         from harness.security import AuditLogger, InputValidator, ResultSanitizer
@@ -570,11 +577,12 @@ class AgentLoop:
                     self._iteration = iteration
 
                     # Stuck detection: check if agent is making progress
-                    if self._is_stuck(session, iteration):
+                    stuck_result = await self._is_stuck(session, iteration)
+                    if stuck_result.is_stuck:
                         if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
                             self._stuck_feedback_count += 1
                             feedback = self._generate_stuck_feedback(
-                                self._stuck_feedback_count, session
+                                self._stuck_feedback_count, session, stuck_result
                             )
                             session.add_message(Message(
                                 role="user",
@@ -583,17 +591,27 @@ class AgentLoop:
                             ))
                             self._emit_progress(
                                 ProgressEventType.STATE_CHANGE,
-                                f"Stuck state detected at iteration {iteration}, injecting feedback "
-                                f"({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
-                                {"stuck_feedback_count": self._stuck_feedback_count},
+                                f"Stuck state detected at iteration {iteration} ({stuck_result.reason}), "
+                                f"injecting feedback ({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
+                                {
+                                    "stuck_feedback_count": self._stuck_feedback_count,
+                                    "stuck_reason": stuck_result.reason,
+                                    "stuck_similarity": stuck_result.similarity,
+                                },
                             )
+                            # Clear stuck detector state after feedback injection
+                            if self._stuck_detector:
+                                self._stuck_detector.clear_session(session.id)
                         else:
                             # Feedback exhausted, terminate
                             self.state = LoopState.STUCK
                             self._emit_progress(
                                 ProgressEventType.ERROR,
                                 "Agent stuck: repeated failures after feedback attempts",
-                                {"stuck_feedback_count": self._stuck_feedback_count},
+                                {
+                                    "stuck_feedback_count": self._stuck_feedback_count,
+                                    "stuck_reason": stuck_result.reason,
+                                },
                             )
                             return LoopResult(
                                 status=LoopState.STUCK,
@@ -945,55 +963,120 @@ class AgentLoop:
         """Interrupt the current loop."""
         self._interrupt_flag = True
 
-    def _is_stuck(self, session: Session, iteration: int) -> bool:
+    def _check_empty_error_stuck(self, session: Session, iteration: int) -> StuckDetectionResult | None:
         """
-        Detect if the agent is stuck in a non-progressing state.
+        Check for empty/error stuck pattern (zero-cost detection).
 
-        Checks recent tool results for patterns of empty or error responses.
-        Uses absolute count (not ratio) for predictable behavior.
-        No LLM calls — zero-cost detection.
+        This is the fast path that doesn't require embedding model.
 
         Args:
             session: Current session with message history
             iteration: Current iteration number
 
         Returns:
-            True if stuck state is detected
+            StuckDetectionResult if stuck detected, None otherwise
         """
         if iteration < self.config.stuck_min_iterations:
-            return False
+            return None
 
         recent = session.messages[-6:]  # Last 3 rounds
         tool_msgs = [m for m in recent if m.role == "tool"]
 
         if len(tool_msgs) < self.config.stuck_consecutive_failures:
-            return False
+            return None
 
         n = self.config.stuck_consecutive_failures
 
-        # Rule 1: consecutive empty results (completely empty, not just short)
+        # Rule 1: consecutive empty results
         empty_count = sum(1 for m in tool_msgs[-n:] if not m.content.strip())
         if empty_count >= n:
-            return True
+            return StuckDetectionResult(
+                is_stuck=True,
+                reason="empty",
+                details={"empty_count": empty_count},
+            )
 
         # Rule 2: consecutive error results
         error_count = sum(1 for m in tool_msgs[-n:] if m.content.startswith("Error:"))
         if error_count >= n:
-            return True
+            return StuckDetectionResult(
+                is_stuck=True,
+                reason="error",
+                details={"error_count": error_count},
+            )
 
-        return False
+        return None
 
-    def _generate_stuck_feedback(self, feedback_count: int, session: Session) -> str:
+    async def _is_stuck(self, session: Session, iteration: int) -> StuckDetectionResult:
         """
-        Generate differentiated feedback based on how many times we've injected.
+        Detect if the agent is stuck using multiple strategies.
+
+        Detection order (fast to slow):
+        1. Empty/error detection (zero-cost)
+        2. Semantic similarity detection (if enabled and model available)
+
+        Args:
+            session: Current session with message history
+            iteration: Current iteration number
+
+        Returns:
+            StuckDetectionResult with detection outcome
+        """
+        # 1. Fast path: check empty/error patterns
+        result = self._check_empty_error_stuck(session, iteration)
+        if result is not None:
+            return result
+
+        # 2. Semantic detection (if enabled)
+        if self._stuck_detector and self._stuck_detector.config.enable_semantic:
+            result = await self._stuck_detector.check(
+                session_id=session.id,
+                messages=session.messages[-6:],
+                iteration=iteration,
+            )
+            if result.is_stuck:
+                return result
+
+        return StuckDetectionResult(is_stuck=False, reason="no_stuck")
+
+    def _generate_stuck_feedback(
+        self,
+        feedback_count: int,
+        session: Session,
+        detection_result: StuckDetectionResult | None = None,
+    ) -> str:
+        """
+        Generate differentiated feedback based on detection result.
 
         Args:
             feedback_count: Which feedback attempt this is (1-based)
             session: Current session for error analysis
+            detection_result: Result from stuck detection (for semantic feedback)
 
         Returns:
             Feedback message content
         """
+        # Generate context-specific feedback
+        if detection_result and detection_result.reason == "semantic_repeat":
+            similarity = detection_result.similarity or 0.0
+            if feedback_count == 1:
+                return (
+                    f"[循环检测] 检测到重复的输出模式（相似度 {similarity:.0%}）。\n"
+                    "你的方法似乎在原地打转，请尝试完全不同的策略。\n"
+                    "建议：\n"
+                    "1. 换用其他工具或方法\n"
+                    "2. 重新审视问题的核心需求\n"
+                    "3. 如果已尝试多种方法，可以考虑承认无法解决"
+                )
+            else:
+                return (
+                    f"[循环检测 - 最后机会] 重复模式仍在继续（相似度 {similarity:.0%}）。\n"
+                    "请立即：\n"
+                    "1. 承认无法继续并说明遇到的困难，或\n"
+                    "2. 采用根本性不同的方法"
+                )
+
+        # Default feedback for empty/error detection
         if feedback_count == 1:
             return (
                 "[循环检测] 最近几步操作无进展（工具返回空结果或错误）。\n"
