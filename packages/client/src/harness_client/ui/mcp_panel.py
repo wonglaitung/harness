@@ -2,6 +2,9 @@
 MCP server configuration dialog.
 """
 
+import asyncio
+
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -10,10 +13,86 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
 )
+
+
+class TestConnectionThread(QThread):
+    """Thread for testing MCP server connection."""
+
+    success = pyqtSignal()
+    failed = pyqtSignal(str)
+
+    def __init__(self, config: dict, parent=None):
+        super().__init__(parent)
+        self.config = config
+
+    def run(self):
+        """Run the connection test in a separate thread with its own event loop."""
+        try:
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(self._test_connection())
+                if result:
+                    self.success.emit()
+                else:
+                    self.failed.emit("连接失败")
+            finally:
+                loop.close()
+        except Exception as e:
+            self.failed.emit(str(e))
+
+    async def _test_connection(self) -> bool:
+        """Test the MCP server connection."""
+        from harness import MCPServerConfig
+        from harness.mcp.client import MCPClient
+        from harness.mcp.transport import HTTPTransport, StdioTransport
+
+        config = self.config
+        server_config = MCPServerConfig(
+            name="_test_",
+            transport=config["transport"],
+            command=config.get("command"),
+            args=config.get("args", []),
+            url=config.get("url"),
+            env=config.get("env", {}),
+            headers=config.get("headers", {}),
+            timeout=config.get("timeout", 30),
+        )
+
+        # Create transport
+        if server_config.transport == "stdio":
+            if not server_config.command:
+                raise ValueError("Stdio transport requires command")
+            transport = StdioTransport(
+                command=server_config.command,
+                args=server_config.args,
+                env=server_config.env,
+            )
+        else:
+            if not server_config.url:
+                raise ValueError("HTTP transport requires URL")
+            transport = HTTPTransport(
+                url=server_config.url,
+                headers=server_config.headers,
+                timeout=server_config.timeout,
+            )
+
+        # Create client and test connection
+        client = MCPClient(transport)
+        await client.connect()
+
+        # Check if we got tools
+        if client.tools:
+            return True
+
+        await client.disconnect()
+        return True  # Still success if no tools, just no tools available
 
 
 class MCPServerDialog(QDialog):
@@ -117,10 +196,44 @@ class MCPServerDialog(QDialog):
 
     def _test_connection(self):
         """Test MCP server connection."""
-        # TODO: Implement actual connection test
-        from PyQt6.QtWidgets import QMessageBox
+        config = self.get_config()
+        if not config.get("name"):
+            QMessageBox.warning(self, "测试连接", "请先输入服务器名称")
+            return
 
-        QMessageBox.information(self, "测试连接", "连接测试功能待实现")
+        if config["transport"] == "stdio" and not config.get("command"):
+            QMessageBox.warning(self, "测试连接", "请输入命令")
+            return
+
+        if config["transport"] == "http" and not config.get("url"):
+            QMessageBox.warning(self, "测试连接", "请输入 URL")
+            return
+
+        # Disable button during test
+        self._test_btn = self.sender()
+        self._test_btn.setEnabled(False)
+        self._test_btn.setText("测试中...")
+
+        # Run test in background thread
+        self._test_thread = TestConnectionThread(config, self)
+        self._test_thread.success.connect(self._on_test_success)
+        self._test_thread.failed.connect(self._on_test_failed)
+        self._test_thread.finished.connect(self._on_test_finished)
+        self._test_thread.start()
+
+    def _on_test_success(self):
+        """Handle successful test connection."""
+        QMessageBox.information(self, "测试连接", "连接成功！")
+
+    def _on_test_failed(self, error: str):
+        """Handle failed test connection."""
+        QMessageBox.critical(self, "测试连接", f"连接失败：\n{error}")
+
+    def _on_test_finished(self):
+        """Clean up after test connection."""
+        if hasattr(self, '_test_btn') and self._test_btn:
+            self._test_btn.setEnabled(True)
+            self._test_btn.setText("测试连接")
 
     def _load_config(self, config: dict):
         """Load existing configuration."""

@@ -1,20 +1,31 @@
 """
-Main window for Harness Client.
+Main window for Harness Client - 3-column layout with header bar.
 """
 
 import logging
 import sys
 from pathlib import Path
-from typing import override
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QSplitter, QStatusBar, QWidget
+from PyQt6.QtGui import QAction, QFont, QFontDatabase
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
 from qasync import asyncSlot
 
 from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.skill_controller import SkillController
 from harness_client.ui.chat_panel import ChatPanel
+from harness_client.ui.right_panel import RightPanel
 from harness_client.ui.sidebar import SidebarPanel
 from harness_client.utils.settings import SettingsManager
 
@@ -30,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
-    """Main application window."""
+    """Main application window with 3-column layout."""
 
     def __init__(self):
         super().__init__()
@@ -54,7 +65,7 @@ class MainWindow(QMainWindow):
 
         # Initialize UI
         self._setup_menubar()
-        self._setup_toolbar()
+        self._setup_header_bar()
         self._setup_central_widget()
         self._setup_statusbar()
 
@@ -65,19 +76,46 @@ class MainWindow(QMainWindow):
 
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
+        self.sidebar.session_new_requested.connect(self._on_new_session)
+        self.sidebar.session_switch_requested.connect(self._on_session_switch)
+        self.sidebar.session_delete_requested.connect(self._on_session_delete)
+        self.sidebar.settings_requested.connect(self._on_preferences)
+        self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
+        self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
+        self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
+        self.right_panel.server_double_clicked.connect(self._on_toggle_mcp_server)
 
         # Load saved settings
         self._load_saved_settings()
+
+        # Load MCP configuration
+        self._load_mcp_config()
 
         # Initialize with a new session
         self.chat_controller.new_session()
         self._refresh_session_list()
 
-    def _setup_menubar(self):
-        """Setup menu bar."""
-        menubar = self.menuBar()
+    def _get_font(self) -> QFont:
+        """Get a suitable font for the system."""
+        font = QFont()
+        font.setPointSize(10)
+        for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
+            font.setFamily(family)
+            if QFontDatabase.families().count(family) > 0 or family in QFontDatabase.families():
+                break
+        return font
 
-        from PyQt6.QtGui import QAction
+    def _setup_menubar(self):
+        """Setup minimal menu bar."""
+        menubar = self.menuBar()
+        menubar.setStyleSheet("""
+            QMenuBar {
+                background-color: #2d2d30;
+                border-bottom: 1px solid #3e3e42;
+                color: #d4d4d4;
+                padding: 2px;
+            }
+        """)
 
         file_menu = menubar.addMenu("文件(&F)")
 
@@ -93,57 +131,147 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        settings_menu = menubar.addMenu("设置(&S)")
-
-        preferences_action = QAction("首选项(&P)...", self)
-        preferences_action.setShortcut("Ctrl+,")
-        preferences_action.triggered.connect(self._on_preferences)
-        settings_menu.addAction(preferences_action)
-
         help_menu = menubar.addMenu("帮助(&H)")
 
         about_action = QAction("关于(&A)...", self)
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
 
-    def _setup_toolbar(self):
-        """Setup toolbar."""
-        from PyQt6.QtCore import QSize
-        from PyQt6.QtGui import QAction
+    def _setup_header_bar(self):
+        """Setup header bar with logo, title, and quick actions."""
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(12, 8, 12, 8)
 
-        toolbar = self.addToolBar("Main")
-        toolbar.setIconSize(QSize(24, 24))
-        toolbar.setMovable(False)
+        header_widget.setStyleSheet("""
+            QWidget {
+                background-color: #1e1e1e;
+                border-bottom: 1px solid #3e3e42;
+            }
+        """)
 
-        new_session_action = QAction("新建会话", self)
-        new_session_action.triggered.connect(self._on_new_session)
-        toolbar.addAction(new_session_action)
+        # Logo icon
+        logo_label = QLabel("A")
+        logo_label.setStyleSheet("""
+            QLabel {
+                background-color: #007acc;
+                color: white;
+                border-radius: 12px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+            }
+        """)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(logo_label)
 
-        toolbar.addSeparator()
+        # App name and subtitle
+        title_widget = QWidget()
+        title_layout = QVBoxLayout(title_widget)
+        title_layout.setContentsMargins(8, 0, 0, 0)
+        title_layout.setSpacing(0)
 
-        settings_action = QAction("设置", self)
-        settings_action.triggered.connect(self._on_preferences)
-        toolbar.addAction(settings_action)
+        app_name = QLabel("Harness Client")
+        app_name.setStyleSheet("""
+            QLabel {
+                color: #d4d4d4;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        title_layout.addWidget(app_name)
+
+        subtitle = QLabel("AI Agent 助手")
+        subtitle.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+            }
+        """)
+        title_layout.addWidget(subtitle)
+
+        header_layout.addWidget(title_widget)
+        header_layout.addStretch()
+
+        # Quick actions toolbar
+        actions_widget = QWidget()
+        actions_layout = QHBoxLayout(actions_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
+
+        # Clear context button
+        clear_btn = QPushButton("清空上下文")
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                padding: 6px 12px;
+                color: #d4d4d4;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #2a2a2a;
+                border-color: #505050;
+            }
+        """)
+        clear_btn.clicked.connect(self._on_clear_context)
+        actions_layout.addWidget(clear_btn)
+
+        header_layout.addWidget(actions_widget)
+
+        # Add header as a widget at top (not toolbar)
+        # We'll add it to central widget layout
+
+        self.header_widget = header_widget
 
     def _setup_central_widget(self):
-        """Setup central widget with splitter layout."""
+        """Setup central widget with 3-column splitter layout."""
         central = QWidget()
-        layout = QHBoxLayout(central)
+        layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        self.sidebar = SidebarPanel()
-        self.sidebar.setMaximumWidth(280)
-        self.sidebar.work_dir_changed.connect(self._on_work_dir_changed)
-        self.sidebar.session_delete_requested.connect(self._on_session_delete)
-        self.sidebar.session_switch_requested.connect(self._on_session_switch)
-        self.sidebar.session_new_requested.connect(self._on_new_session)
+        # Add header bar at top
+        layout.addWidget(self.header_widget)
 
-        self.chat_panel = ChatPanel()
-
+        # Create 3-column splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet("""
+            QSplitter {
+                background-color: #1e1e1e;
+            }
+            QSplitter::handle {
+                background-color: #3e3e42;
+                width: 1px;
+            }
+            QSplitter::handle:hover {
+                background-color: #007acc;
+            }
+        """)
+
+        # Left sidebar (collapsible navigation)
+        self.sidebar = SidebarPanel()
         splitter.addWidget(self.sidebar)
+
+        # Center chat panel
+        self.chat_panel = ChatPanel()
         splitter.addWidget(self.chat_panel)
-        splitter.setSizes([250, 950])
+
+        # Right panel (skills, MCP, files)
+        self.right_panel = RightPanel()
+        splitter.addWidget(self.right_panel)
+
+        # Set initial sizes: sidebar (56 collapsed), chat (600), right (200)
+        splitter.setSizes([56, 600, 200])
+
+        # Set stretch factors: sidebar doesn't stretch, chat gets most space, right gets some
+        splitter.setStretchFactor(0, 0)  # Sidebar fixed width
+        splitter.setStretchFactor(1, 1)  # Chat stretches
+        splitter.setStretchFactor(2, 0)  # Right panel fixed width
 
         layout.addWidget(splitter)
         self.setCentralWidget(central)
@@ -151,6 +279,12 @@ class MainWindow(QMainWindow):
     def _setup_statusbar(self):
         """Setup status bar."""
         self.statusbar = QStatusBar()
+        self.statusbar.setStyleSheet("""
+            QStatusBar {
+                background-color: #007acc;
+                color: #ffffff;
+            }
+        """)
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("就绪")
 
@@ -199,6 +333,21 @@ class MainWindow(QMainWindow):
         self.chat_controller.delete_session(session_id)
         self._refresh_session_list()
         self.statusbar.showMessage("会话已删除", 3000)
+
+    def _on_clear_context(self):
+        """Clear the current chat context."""
+        reply = QMessageBox.question(
+            self,
+            "清空上下文",
+            "确定要清空当前对话上下文吗？\n\n此操作会清除当前会话的所有消息。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.chat_panel.clear_chat()
+            self.chat_controller.new_session()
+            self._refresh_session_list()
+            self.statusbar.showMessage("上下文已清空", 3000)
 
     # === Message Handling ===
 
@@ -360,6 +509,7 @@ class MainWindow(QMainWindow):
 
         if settings.get("work_dir"):
             self.work_dir = Path(settings["work_dir"])
+            self.right_panel.set_work_dir(self.work_dir)
 
     def _load_saved_settings(self):
         """Load and apply saved settings on startup."""
@@ -380,6 +530,7 @@ class MainWindow(QMainWindow):
 
         if settings.work_dir:
             self.work_dir = Path(settings.work_dir)
+            self.right_panel.set_work_dir(self.work_dir)
 
     def _on_about(self):
         """Show about dialog."""
@@ -393,26 +544,136 @@ class MainWindow(QMainWindow):
         )
 
     def _on_work_dir_changed(self, path: Path):
-        """Handle work directory change."""
+        """Handle work directory change from right panel."""
         self.work_dir = path
         self.chat_controller.work_dir = path
         self.statusbar.showMessage(f"工作目录已更改: {path}", 3000)
 
     def _on_mcp_changed(self):
         """Handle MCP server list change."""
-        self.sidebar.mcp_list.clear()
+        servers = []
         for server in self.mcp_controller.get_server_list():
-            status_icon = "✓" if server.status == "已连接" else "○"
-            self.sidebar.mcp_list.addItem(f"{status_icon} {server.name} ({server.status})")
+            servers.append({
+                "name": server.name,
+                "status": server.status,
+                "tools_count": getattr(server, "tools_count", 0),
+            })
+        self.right_panel.update_servers(servers)
+
+        # Sync MCP tools to chat controller
+        mcp_tools = self.mcp_controller.get_all_tools()
+        self.chat_controller.set_mcp_tools(mcp_tools)
+
+    def _on_add_mcp_server(self):
+        """Open dialog to add a new MCP server."""
+        from harness_client.ui.mcp_panel import MCPServerDialog
+
+        dialog = MCPServerDialog(self)
+        if dialog.exec():
+            config = dialog.get_config()
+            if not config.get("name"):
+                QMessageBox.warning(self, "错误", "请输入服务器名称")
+                return
+
+            # Add to controller
+            from harness import MCPServerConfig
+            server_config = MCPServerConfig(
+                name=config["name"],
+                transport=config["transport"],
+                command=config.get("command"),
+                args=config.get("args", []),
+                url=config.get("url"),
+                env=config.get("env", {}),
+                headers=config.get("headers", {}),
+                enabled=config.get("enabled", True),
+                timeout=config.get("timeout", 30),
+            )
+            self.mcp_controller.add_server_config(server_config)
+
+            # Save configuration
+            self._save_mcp_config()
+
+            # Auto-connect if enabled
+            if config.get("enabled", True):
+                self._connect_mcp_server(config["name"])
+
+    @asyncSlot(str)
+    async def _on_toggle_mcp_server(self, name: str):
+        """Handle connect/disconnect toggle for MCP server."""
+        server_info = self.mcp_controller.servers.get(name)
+        if not server_info:
+            return
+
+        if server_info.status == "已连接":
+            await self._disconnect_mcp_server(name)
+        else:
+            await self._connect_mcp_server_async(name)
+
+    async def _connect_mcp_server(self, name: str) -> bool:
+        """Connect to an MCP server."""
+        self.statusbar.showMessage(f"正在连接 {name}...")
+        success = await self.mcp_controller.connect_server(name)
+        if success:
+            self.statusbar.showMessage(f"{name} 已连接", 3000)
+            # Reset agent to pick up new tools
+            self.chat_controller.agent = None
+        else:
+            server_info = self.mcp_controller.servers.get(name)
+            error_msg = server_info.error_message if server_info else "未知错误"
+            self.statusbar.showMessage(f"连接失败: {error_msg}", 5000)
+        return success
+
+    async def _connect_mcp_server_async(self, name: str):
+        """Async wrapper for connecting MCP server."""
+        await self._connect_mcp_server(name)
+
+    async def _disconnect_mcp_server(self, name: str):
+        """Disconnect from an MCP server."""
+        self.statusbar.showMessage(f"正在断开 {name}...")
+        success = await self.mcp_controller.disconnect_server(name)
+        if success:
+            self.statusbar.showMessage(f"{name} 已断开", 3000)
+            # Reset agent to update tools
+            self.chat_controller.agent = None
+        else:
+            self.statusbar.showMessage("断开失败", 3000)
+
+    def _save_mcp_config(self):
+        """Save MCP server configuration to file."""
+        import json
+
+        from harness_client.utils.settings import get_config_dir
+
+        config_dir = get_config_dir()
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_file = config_dir / "mcp.json"
+
+        config = {"mcpServers": {}}
+        for server_config in self.mcp_controller.manager.list_server_configs():
+            config["mcpServers"][server_config.name] = server_config.to_dict()
+
+        config_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _load_mcp_config(self):
+        """Load MCP server configuration from file."""
+        from harness_client.utils.settings import get_config_dir
+
+        config_dir = get_config_dir()
+        config_file = config_dir / "mcp.json"
+
+        if config_file.exists():
+            self.mcp_controller.load_from_file(config_file)
 
     def _on_skills_changed(self):
         """Handle skill list change."""
-        self.sidebar.skill_list.clear()
+        skills = []
         for skill in self.skill_controller.get_skill_list():
-            status = "已启用" if skill.enabled else "已禁用"
-            self.sidebar.skill_list.addItem(f"{skill.name} ({status})")
+            skills.append({
+                "name": skill.name,
+                "enabled": skill.enabled,
+            })
+        self.right_panel.update_skills(skills)
 
-    @override
     def closeEvent(self, event):
         """Handle window close."""
         event.accept()

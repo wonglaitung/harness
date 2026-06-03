@@ -75,12 +75,23 @@ class ChatController:
         self.config = ChatConfig()
         self.session_manager = SessionManager()
         self._is_running = False
+        self._mcp_tools: list = []  # MCP tools from connected servers
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
         self._on_tool_call: Callable | None = None
         self._on_tool_result: Callable | None = None
         self._on_thinking: Callable | None = None
         self._on_text_chunk: Callable | None = None
+
+    def set_mcp_tools(self, tools: list):
+        """Set MCP tools from connected servers.
+
+        Args:
+            tools: List of MCP tool wrappers
+        """
+        self._mcp_tools = tools
+        # Reset agent to force re-initialization with new tools
+        self.agent = None
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -112,7 +123,11 @@ class ChatController:
         self.agent = None
 
     async def initialize(self, mcp_tools: list = None):
-        """Initialize the AgentHarness with current configuration."""
+        """Initialize the AgentHarness with current configuration.
+
+        Args:
+            mcp_tools: Optional list of MCP tools to add to the agent
+        """
         logger.info(
             f"Initializing agent with provider={self.config.provider}, model={self.config.model}"
         )
@@ -144,8 +159,15 @@ class ChatController:
             GrepTool(),
         ]
 
+        # Add MCP tools if provided
         if mcp_tools:
             tools.extend(mcp_tools)
+            logger.info(f"Added {len(mcp_tools)} MCP tools")
+
+        # Add stored MCP tools
+        if self._mcp_tools:
+            tools.extend(self._mcp_tools)
+            logger.info(f"Added {len(self._mcp_tools)} stored MCP tools")
 
         logger.info("Creating AgentHarness...")
         self.agent = AgentHarness(
