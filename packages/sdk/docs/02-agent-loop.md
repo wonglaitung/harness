@@ -81,6 +81,14 @@ class LoopConfig:
     max_stuck_feedbacks: int = 2                 # 最大反馈注入尝试次数
     stuck_min_iterations: int = 3                 # 卡住检测前的最小迭代次数
     stuck_consecutive_failures: int = 3           # 触发卡住检测的连续失败次数
+    
+    # 工具输出卸载配置 (Phase 24)
+    offload_config: OffloadConfig | None = None  # 输出卸载配置
+    enable_offload: bool = True                  # 是否启用输出卸载
+    
+    # 步骤预算配置 (Phase 25)
+    step_budget_config: StepBudgetConfig | None = None  # 步骤预算配置
+    enable_step_budget: bool = True              # 是否启用步骤预算控制
 ```
 
 ### LoopState
@@ -639,6 +647,145 @@ config = SelfVerificationConfig(
     timeout=120.0,  # 更长超时时间
 )
 ```
+
+## Tool Output Offload（工具输出卸载）
+
+当工具输出过大时（如读取大型文件、目录列表等），会导致上下文膨胀，增加成本并可能超出模型限制。Output Offload 机制自动检测大型输出并将其卸载到临时文件，上下文中只保留引用。
+
+### OffloadConfig
+
+```python
+from harness.core.output_offload import OffloadConfig
+
+@dataclass
+class OffloadConfig:
+    """Configuration for tool output offloading."""
+    size_threshold_chars: int = 5000        # 触发卸载的最小输出大小（字符数）
+    size_threshold_tokens: int = 1250       # Token 阈值（~4 chars/token）
+    max_outputs_per_session: int = 50       # 每会话最大卸载数量
+    cleanup_on_session_end: bool = False    # 会话结束时是否清理文件（默认保留）
+    preview_length: int = 200               # 上下文中保留的预览长度
+    summary_prompt: str | None = None       # 可选的摘要生成提示
+    temp_dir: Path | None = None            # 卸载文件存储目录（默认系统临时目录）
+```
+
+### OffloadedOutput
+
+```python
+from harness.core.output_offload import OffloadedOutput
+
+@dataclass
+class OffloadedOutput:
+    """Record of an offloaded tool output."""
+    file_path: Path           # 卸载文件路径
+    tool_name: str            # 产生此输出的工具名
+    tool_call_id: str         # 工具调用 ID
+    original_size: int        # 原始输出大小（字符）
+    preview: str              # 预览内容（保留在上下文中）
+    summary: str | None       # 可选摘要
+    created_at: datetime      # 创建时间
+    session_id: str           # 所属会话 ID
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+from harness.core.output_offload import OffloadConfig
+
+# 配置卸载
+config = OffloadConfig(
+    size_threshold_chars=10000,   # 超过 10KB 的输出将被卸载
+    max_outputs_per_session=20,   # 每会话最多 20 个卸载文件
+    preview_length=300,           # 保留 300 字符预览
+)
+
+agent = AgentHarness(offload_config=config)
+
+# 正常使用 - 大型输出会自动卸载
+result = await agent.run("读取并分析所有源代码文件")
+```
+
+### 卸载后的上下文引用
+
+当输出被卸载后，上下文中会包含类似以下的引用：
+
+```
+[Output from read_file (15000 chars)]
+Preview: #!/usr/bin/env python3
+"""Main module..."""
+Full output saved to: /tmp/harness_offload/session_abc123_read_file_call_456.txt
+```
+
+LLM 可以根据需要决定是否要求加载完整内容。
+
+## Step Budget（步骤预算）
+
+步骤预算控制每个任务的迭代次数和工具调用次数，防止无限循环或过度消耗资源。与 CostController（基于 Token）不同，StepBudget 基于"步骤"计数。
+
+### StepBudgetConfig
+
+```python
+from harness.core.step_budget import StepBudgetConfig
+
+@dataclass
+class StepBudgetConfig:
+    """Configuration for step-based budget control."""
+    max_iterations_per_task: int = 50    # 每任务最大迭代次数
+    max_tool_calls_per_step: int = 10    # 每步（单次 LLM 响应）最大工具调用数
+    max_tool_calls_per_task: int = 200   # 每任务最大工具调用总数
+    warning_threshold: float = 0.8       # 警告阈值（使用率）
+    critical_threshold: float = 0.95     # 临界阈值（使用率）
+    action_on_exceed: str = "stop"       # 超限动作：stop | warn | throttle
+    throttle_ratio: float = 0.5          # 节流时使用的剩余预算比例
+```
+
+### BudgetLevel
+
+```python
+from harness.core.step_budget import BudgetLevel
+
+class BudgetLevel(Enum):
+    """Budget status levels."""
+    NORMAL = "normal"       # 正常范围内
+    WARNING = "warning"     # 接近限制（>= warning_threshold）
+    CRITICAL = "critical"   # 临近限制（>= critical_threshold）
+    EXCEEDED = "exceeded"   # 超出限制（>= 1.0）
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness
+from harness.core.step_budget import StepBudgetConfig
+
+# 配置步骤预算
+budget_config = StepBudgetConfig(
+    max_iterations_per_task=30,      # 最多 30 次迭代
+    max_tool_calls_per_step=5,       # 每次 LLM 响应最多 5 个工具调用
+    max_tool_calls_per_task=100,     # 总共最多 100 次工具调用
+    action_on_exceed="stop",         # 超限时停止
+)
+
+agent = AgentHarness(step_budget_config=budget_config)
+
+# 执行任务 - 预算会在每次迭代和工具调用前检查
+result = await agent.run("分析代码库并生成报告")
+```
+
+### 预算检查时机
+
+1. **每次迭代前**：检查迭代次数是否超限
+2. **每次工具调用前**：检查工具调用次数是否超限
+3. **每步工具调用限制**：防止单次 LLM 响应触发过多工具调用
+
+### 超限动作
+
+| 动作 | 行为 |
+|------|------|
+| `stop` | 立即停止执行，返回错误 |
+| `warn` | 记录警告但继续执行 |
+| `throttle` | 启用节流模式，限制后续工具调用数量 |
 
 ## Cost Controller（成本控制）
 

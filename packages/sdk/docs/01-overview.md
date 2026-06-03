@@ -275,14 +275,14 @@ You are a code reviewer. Your task is to:
 |---|------|------|------|
 | 1 | **Lifecycle Hooks** | ✅ | 7 个钩子点 (ON_LOOP_START/BEFORE_LLM_CALL/AFTER_LLM_CALL/BEFORE_TOOL_EXECUTE/AFTER_TOOL_EXECUTE/ON_ERROR/ON_EXIT_ATTEMPT) |
 | 2 | **Ralph Loop** | ✅ | 长任务循环，自动摘要 + 压缩，防止上下文焦虑 |
-| 3 | **工具输出卸载** | ⚠️ | P3 待实现 |
+| 3 | **工具输出卸载** | ✅ | OutputOffloader 自动卸载大型工具输出到临时文件 |
 | 4 | **渐进式技能加载** | ✅ | 三级加载：Frontmatter → Full → Reference |
 | 5 | **自验证钩子** | ✅ | write-code → run-tests → fix-errors 循环 |
 | 6 | **Sub-Agent 管理** | ✅ | 创建子代理处理子任务，支持并行执行 |
 | 7 | **MEMORY.md 标准** | ✅ | 持久记忆文件格式，4 种记忆类型 (user/feedback/project/reference) |
 | 8 | **向量检索** | ✅ | VectorMemoryStore 语义搜索 |
 | 9 | **动态系统提示组装** | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
-| 10 | **步骤预算** | ⚠️ | P3 待实现 |
+| 10 | **步骤预算** | ✅ | StepBudgetController 迭代/工具调用限制 |
 
 ## 数据流
 
