@@ -105,7 +105,7 @@ class SidebarPanel(QWidget):
 
         self.work_dir_label = QLabel(str(self.work_dir))
         self.work_dir_label.setWordWrap(True)
-        self.work_dir_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.work_dir_label.setStyleSheet("color: #808080; font-size: 11px;")
         work_layout.addWidget(self.work_dir_label)
 
         change_dir_btn = QPushButton("更改...")

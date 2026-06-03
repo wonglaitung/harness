@@ -1,5 +1,5 @@
 """
-Chat panel for displaying conversation.
+Chat panel for displaying conversation - Hermes Dark Theme Style.
 """
 
 import markdown
@@ -7,6 +7,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont, QFontDatabase
 from PyQt6.QtWidgets import (
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QTextBrowser,
@@ -40,36 +41,63 @@ class ChatPanel(QWidget):
         return font
 
     def _setup_ui(self):
-        """Setup UI components."""
+        """Setup UI components with dark theme."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        # Chat display area
+        # Chat display area - dark theme
         self.chat_display = QTextBrowser()
         self.chat_display.setOpenExternalLinks(True)
         self.chat_display.setFont(self._get_font())
-        self.chat_display.setStyleSheet("""
-            QTextBrowser {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 8px;
-            }
-        """)
+        # Dark theme handled by global QSS, no inline styles needed
         self.chat_display.setPlaceholderText("开始对话...")
 
-        # Input area
-        input_layout = QHBoxLayout()
+        # Input bar container with dark background
+        input_bar = QWidget()
+        input_bar.setStyleSheet("""
+            QWidget {
+                background-color: #252526;
+                border-top: 1px solid #3e3e42;
+                border-radius: 8px;
+                padding: 6px;
+            }
+        """)
+        input_layout = QHBoxLayout(input_bar)
+        input_layout.setContentsMargins(8, 6, 8, 6)
         input_layout.setSpacing(8)
 
+        # Input field - dark theme
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("输入消息... (Enter 发送)")
         self.input_field.setFont(self._get_font())
-        self.input_field.setMinimumHeight(40)
+        self.input_field.setMinimumHeight(36)
+        self.input_field.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                border: 1px solid #3e3e42;
+                border-radius: 6px;
+                padding: 8px;
+                color: #d4d4d4;
+            }
+            QLineEdit:focus {
+                border-color: #0078d4;
+            }
+        """)
         self.input_field.returnPressed.connect(self._on_send)
 
+        # Token usage label
+        self.token_label = QLabel("0 / 200k")
+        self.token_label.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                padding: 0 4px;
+            }
+        """)
+
+        # Send button - primary blue
         self.send_btn = QPushButton("发送")
-        self.send_btn.setMinimumHeight(40)
+        self.send_btn.setMinimumHeight(36)
         self.send_btn.setMinimumWidth(80)
         self.send_btn.clicked.connect(self._on_send)
         self.send_btn.setStyleSheet("""
@@ -88,11 +116,12 @@ class ChatPanel(QWidget):
             }
         """)
 
-        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.input_field, stretch=1)
+        input_layout.addWidget(self.token_label)
         input_layout.addWidget(self.send_btn)
 
-        layout.addWidget(self.chat_display)
-        layout.addLayout(input_layout)
+        layout.addWidget(self.chat_display, stretch=1)
+        layout.addWidget(input_bar)
 
         # Welcome message
         self._append_message(
@@ -134,7 +163,7 @@ class ChatPanel(QWidget):
         return markdown.markdown(text, extensions=extensions)
 
     def _append_message(self, role: str, content: str):
-        """Append a message to the chat display."""
+        """Append a message to the chat display with dark theme styling."""
         # Render markdown for assistant messages
         if role == "assistant":
             rendered_content = self._render_markdown(content)
@@ -142,30 +171,30 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message with blue background and white text
+            # User message with dark blue bubble, right-aligned
             html = f"""
             <div style="margin: 8px 0; text-align: right;">
-                <table style="display: inline-table; background-color: #0078d4;
-                              border-radius: 12px; max-width: 70%;"
-                       cellpadding="8" cellspacing="0">
-                    <tr><td style="color: white;">
-                        <b style="color: white;">你:</b>
-                        <span style="color: white;">{rendered_content}</span>
-                    </td></tr>
-                </table>
+                <div style="display: inline-block; background-color: #0e4063;
+                            border-radius: 12px; padding: 10px 14px; max-width: 70%;
+                            color: #ffffff; font-size: 13px;">
+                    {rendered_content}
+                </div>
             </div>
             """
         else:
-            # Assistant message with light gray background
+            # Assistant message with avatar and gray bubble, left-aligned
             html = f"""
             <div style="margin: 8px 0;">
-                <table style="display: inline-table; background-color: #f5f5f5;
-                              border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
-                    <tr><td style="color: #333;">
-                        <b style="color: #333;">🤖 助手:</b><br>
-                        <div style="margin-top: 4px; color: #333;">{rendered_content}</div>
-                    </td></tr>
-                </table>
+                <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
+                    <div style="width: 28px; height: 28px; border-radius: 50%;
+                                background-color: #007acc; color: white; font-size: 14px;
+                                display: inline-flex; align-items: center; justify-content: center;">A</div>
+                    <div style="background-color: #2d2d30; border-radius: 12px;
+                                padding: 10px 14px; max-width: 85%;
+                                color: #d4d4d4; font-size: 13px;">
+                        <div style="margin-top: 0; color: #d4d4d4;">{rendered_content}</div>
+                    </div>
+                </div>
             </div>
             """
         self.chat_display.append(html)
@@ -187,15 +216,16 @@ class ChatPanel(QWidget):
         self._append_message("user", content)
 
     def append_tool_call(self, tool_name: str, arguments: dict):
-        """Append a tool call indicator."""
+        """Append a tool call indicator with dark theme card style."""
         args_str = ", ".join(f"{k}={v}" for k, v in list(arguments.items())[:3])
         if len(arguments) > 3:
             args_str += "..."
         html = f"""
-        <div style="margin: 4px 0; margin-left: 20px;">
-            <div style="display: inline-block; background-color: #e3f2fd; color: #1565c0;
-                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                🔧 调用工具: <b>{self._escape_html(tool_name)}</b>({self._escape_html(args_str)})
+        <div style="margin: 4px 0 4px 36px;">
+            <div style="background-color: #264f78; color: #58a6ff;
+                        padding: 6px 10px; border-radius: 6px; font-size: 12px;
+                        border-left: 3px solid #58a6ff;">
+                🔧 <b>{self._escape_html(tool_name)}</b>({self._escape_html(args_str)})
             </div>
         </div>
         """
@@ -204,23 +234,26 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def append_tool_result(self, tool_name: str, result_preview: str, success: bool = True):
-        """Append a tool result indicator."""
+        """Append a tool result indicator with dark theme styling."""
         preview = result_preview[:100] + "..." if len(result_preview) > 100 else result_preview
 
         if success:
-            bg_color = "#e8f5e9"
-            text_color = "#2e7d32"
+            bg_color = "#1a3a2a"
+            text_color = "#50c878"
+            border_color = "#50c878"
             icon = "✅"
         else:
-            bg_color = "#ffebee"
-            text_color = "#c62828"
+            bg_color = "#3a1a1a"
+            text_color = "#ff6b6b"
+            border_color = "#ff6b6b"
             icon = "❌"
 
         html = f"""
-        <div style="margin: 4px 0; margin-left: 20px;">
-            <div style="display: inline-block; background-color: {bg_color}; color: {text_color};
-                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                {icon} 完成: {self._escape_html(preview)}
+        <div style="margin: 4px 0 4px 36px;">
+            <div style="background-color: {bg_color}; color: {text_color};
+                        padding: 6px 10px; border-radius: 6px; font-size: 12px;
+                        border-left: 3px solid {border_color};">
+                {icon} {self._escape_html(preview)}
             </div>
         </div>
         """
@@ -229,11 +262,12 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def append_thinking(self, message: str):
-        """Append a thinking/progress indicator."""
+        """Append a thinking/progress indicator with blockquote style."""
         html = f"""
-        <div style="margin: 4px 0; margin-left: 20px;">
-            <div style="display: inline-block; background-color: #fff3e0; color: #e65100;
-                        padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+        <div style="margin: 4px 0 4px 36px;">
+            <div style="background-color: #252526; color: #808080;
+                        padding: 6px 10px; border-radius: 4px; font-size: 12px;
+                        border-left: 3px solid #6e6e80; font-style: italic;">
                 💭 {self._escape_html(message)}
             </div>
         </div>
@@ -252,13 +286,18 @@ class ChatPanel(QWidget):
         self._is_streaming = True
         # Store the initial cursor position to update in place
         self._stream_start_position = self.chat_display.textCursor().position()
-        # Add an empty assistant message that will be updated
+        # Add an empty assistant message with avatar that will be updated
         html = """
         <div style="margin: 8px 0;">
-            <div id="streaming" style="display: inline-block; background-color: #f5f5f5;
-                        color: #333; padding: 8px 12px; border-radius: 12px; max-width: 90%;">
-                <b style="color: #333;">🤖 助手:</b><br>
-                <div id="streaming-content" style="margin-top: 4px; color: #333;">▌</div>
+            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
+                <div style="width: 28px; height: 28px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 14px;
+                            display: inline-flex; align-items: center; justify-content: center;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 12px;
+                            padding: 10px 14px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px;">
+                    <div id="streaming-content" style="color: #d4d4d4;">▌</div>
+                </div>
             </div>
         </div>
         """
@@ -268,7 +307,7 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def append_streaming_chunk(self, chunk: str):
-        """Append a text chunk during streaming."""
+        """Append a text chunk during streaming with dark theme."""
         if not self._is_streaming:
             return
 
@@ -277,10 +316,15 @@ class ChatPanel(QWidget):
         rendered = self._render_markdown(self._streaming_text + "▌")
         html = f"""
         <div style="margin: 8px 0;">
-            <div style="display: inline-block; background-color: #f5f5f5; color: #333;
-                        padding: 8px 12px; border-radius: 12px; max-width: 90%;">
-                <b style="color: #333;">🤖 助手:</b><br>
-                <div style="margin-top: 4px; color: #333;">{rendered}</div>
+            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
+                <div style="width: 28px; height: 28px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 14px;
+                            display: inline-flex; align-items: center; justify-content: center;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 12px;
+                            padding: 10px 14px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px;">
+                    <div style="color: #d4d4d4;">{rendered}</div>
+                </div>
             </div>
         </div>
         """
@@ -295,7 +339,7 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def finish_streaming(self):
-        """Finish streaming and finalize the message."""
+        """Finish streaming and finalize the message with dark theme."""
         if not self._is_streaming:
             return
 
@@ -304,13 +348,16 @@ class ChatPanel(QWidget):
         rendered = self._render_markdown(self._streaming_text)
         html = f"""
         <div style="margin: 8px 0;">
-            <table style="display: inline-table; background-color: #f5f5f5;
-                          border-radius: 12px; max-width: 90%;" cellpadding="8" cellspacing="0">
-                <tr><td style="color: #333;">
-                    <b style="color: #333;">🤖 助手:</b><br>
-                    <div style="margin-top: 4px; color: #333;">{rendered}</div>
-                </td></tr>
-            </table>
+            <div style="display: inline-flex; align-items: flex-start; gap: 8px;">
+                <div style="width: 28px; height: 28px; border-radius: 50%;
+                            background-color: #007acc; color: white; font-size: 14px;
+                            display: inline-flex; align-items: center; justify-content: center;">A</div>
+                <div style="background-color: #2d2d30; border-radius: 12px;
+                            padding: 10px 14px; max-width: 85%;
+                            color: #d4d4d4; font-size: 13px;">
+                    <div style="color: #d4d4d4;">{rendered}</div>
+                </div>
+            </div>
         </div>
         """
         # Replace content from the streaming start position
@@ -323,3 +370,23 @@ class ChatPanel(QWidget):
         scrollbar = self.chat_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
         self._streaming_text = ""
+
+    def set_token_usage(self, usage: dict, limit: int = 200000):
+        """Update the token usage indicator in the input bar.
+
+        Args:
+            usage: dict with 'input' and 'output' token counts
+            limit: maximum context window size (default 200k)
+        """
+        input_t = usage.get("input", 0)
+        output_t = usage.get("output", 0)
+        total = input_t + output_t
+        remaining = limit - total
+
+        def fmt(n: int) -> str:
+            """Format token count as human readable."""
+            if n >= 1000:
+                return f"{n / 1000:.1f}k"
+            return str(n)
+
+        self.token_label.setText(f"{fmt(total)} / {fmt(limit)} · 剩余 {fmt(remaining)}")

@@ -241,6 +241,8 @@ class MainWindow(QMainWindow):
         # Refresh session list (name may have changed)
         self._refresh_session_list()
 
+        # Update token usage display
+        self._update_token_display()
         self.statusbar.showMessage(f"完成 | Token: {self.chat_controller.get_token_usage()}")
         self._is_processing = False
 
@@ -279,6 +281,11 @@ class MainWindow(QMainWindow):
         self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
         self.statusbar.showMessage(f"错误: {error}")
         self._is_processing = False
+
+    def _update_token_display(self):
+        """Update token usage display in chat panel."""
+        usage = self.chat_controller.get_token_usage()
+        self.chat_panel.set_token_usage(usage)
 
     # === Progress Callbacks ===
 
