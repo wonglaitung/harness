@@ -110,6 +110,25 @@ class ObservabilityConfig:
 
 
 @dataclass
+class OffloadConfig:
+    """
+    Configuration for tool output offloading.
+
+    When tool outputs are too large, they can be offloaded to temporary files
+    to keep context windows manageable.
+
+    Attributes:
+        enabled: Whether to enable output offloading
+        size_threshold_chars: Minimum output size to trigger offload
+        preview_length: Length of preview to keep in context
+    """
+
+    enabled: bool = True
+    size_threshold_chars: int = 50000  # Offload only very large outputs (50K chars)
+    preview_length: int = 500  # Keep more context in preview
+
+
+@dataclass
 class StorageConfig:
     """
     Session storage configuration.
@@ -148,6 +167,9 @@ class HarnessConfig:
     provider: str = "auto"  # "anthropic", "openai", "auto" for auto-detect
     base_url: str | None = None  # For custom endpoints (e.g., local LLM, Azure)
 
+    # Compatibility settings
+    tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode for proxy APIs)
+
     # Context settings (new)
     context_window: int | str = "auto"  # "auto", "32k", "64k", "128k", "200k", or int
     max_tokens: int | str = "auto"  # Output tokens: "auto" or int
@@ -180,6 +202,9 @@ class HarnessConfig:
 
     # Storage settings
     storage: StorageConfig | None = None
+
+    # Offload settings
+    offload: OffloadConfig | None = None
 
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)
@@ -258,4 +283,5 @@ class HarnessConfig:
             "cost_control": self.cost_control.__dict__ if self.cost_control else None,
             "observability": self.observability.__dict__ if self.observability else None,
             "storage": self.storage.__dict__ if self.storage else None,
+            "offload": self.offload.__dict__ if self.offload else None,
         }

@@ -66,6 +66,9 @@ class AnthropicClient(LLMClient):
         """Make a call to Claude."""
         client = self._get_client()
 
+        # Convert messages if using compatibility mode
+        messages = self._convert_messages(messages)
+
         # Build request parameters
         params = {
             "model": self.config.model,
@@ -124,6 +127,9 @@ class AnthropicClient(LLMClient):
             config=streaming_config,
             on_progress=on_progress,
         )
+
+        # Convert messages if using compatibility mode
+        messages = self._convert_messages(messages)
 
         # Build request parameters
         params = {
@@ -196,3 +202,41 @@ class AnthropicClient(LLMClient):
             usage=usage,
             raw_response=response.model_dump() if hasattr(response, "model_dump") else None,
         )
+
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Convert messages for API compatibility.
+
+        Some proxy APIs don't support Anthropic's native "tool" role.
+        This method converts tool results to user messages when configured.
+
+        Args:
+            messages: Original messages
+
+        Returns:
+            Converted messages
+        """
+        # Check if compatibility mode is needed
+        if self.config.tool_result_role == "tool":
+            return messages  # Native mode, no conversion
+
+        # Compatibility mode: convert tool role to user role
+        converted = []
+        for msg in messages:
+            role = msg.get("role", "")
+
+            if role == "tool":
+                # Convert tool result to user message with clear formatting
+                tool_call_id = msg.get("metadata", {}).get("tool_call_id", "")
+                content = msg.get("content", "")
+
+                # Format as user message with tool result context
+                converted_msg = {
+                    "role": "user",
+                    "content": f"[Tool Result{f' (id: {tool_call_id})' if tool_call_id else ''}]\n{content}",
+                }
+                converted.append(converted_msg)
+            else:
+                converted.append(msg)
+
+        return converted

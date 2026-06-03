@@ -31,6 +31,7 @@ class ChatConfig:
     model: str = "claude-sonnet-4-6"
     context_window: str = "auto"
     max_iterations: int = 20
+    tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
     system_prompt: str = """你是一个有帮助的 AI 助手。
 
 ## 停止条件
@@ -147,6 +148,7 @@ class ChatController:
             base_url=self.config.base_url or None,
             context_window=self.config.context_window,
             max_iterations=self.config.max_iterations,
+            tool_result_role=self.config.tool_result_role,
             system_prompt=self.config.system_prompt,
         )
 

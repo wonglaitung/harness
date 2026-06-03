@@ -32,6 +32,7 @@ class AppSettings:
     base_url: str = ""
     model: str = "claude-sonnet-4-6"
     context_window: str = "auto"  # "auto", "32k", "64k", "128k", "200k", or number string
+    tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode for proxy APIs)
     auto_save: bool = True
     stream: bool = True
     max_iterations: int = 20
@@ -51,6 +52,7 @@ class AppSettings:
             base_url=data.get("base_url", ""),
             model=data.get("model", "claude-sonnet-4-6"),
             context_window=data.get("context_window", "auto"),
+            tool_result_role=data.get("tool_result_role", "tool"),
             auto_save=data.get("auto_save", True),
             stream=data.get("stream", True),
             max_iterations=data.get("max_iterations", 20),

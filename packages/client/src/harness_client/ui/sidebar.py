@@ -5,7 +5,7 @@ Sidebar panel with collapsible icon/text navigation - Hermes Dark Theme Style.
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QAction, QFont, QFontDatabase
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QCursor
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -15,13 +15,106 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
+
+
+class NavButton(QWidget):
+    """Clickable navigation button using QLabel (avoids QPushButton icon issues)."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, icon: str, text: str, parent=None):
+        super().__init__(parent)
+        self._icon = icon
+        self._text = text
+        self._is_hovered = False
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Setup the button UI."""
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setStyleSheet("""
+            NavButton {
+                background-color: transparent;
+                border-radius: 4px;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(8)
+
+        # Icon label
+        self._icon_label = QLabel(self._icon)
+        self._icon_label.setStyleSheet("""
+            QLabel {
+                color: #d4d4d4;
+                font-size: 16px;
+                background: transparent;
+            }
+        """)
+        font = QFont()
+        font.setPointSize(12)
+        font.setFamily("Segoe UI Emoji")
+        self._icon_label.setFont(font)
+        layout.addWidget(self._icon_label)
+
+        # Text label (hidden when collapsed)
+        self._text_label = QLabel(self._text)
+        self._text_label.setStyleSheet("""
+            QLabel {
+                color: #d4d4d4;
+                font-size: 12px;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(self._text_label)
+        layout.addStretch()
+
+        self._min_height = 32
+        self.setFixedHeight(self._min_height)
+
+    def set_collapsed(self, collapsed: bool):
+        """Set collapsed state - show only icon or icon + text."""
+        if collapsed:
+            self._text_label.hide()
+            self.setToolTip(self._text)
+        else:
+            self._text_label.show()
+            self.setToolTip("")
+
+    def mousePressEvent(self, event):
+        """Handle mouse press."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        """Handle mouse enter - show hover effect."""
+        self._is_hovered = True
+        self.setStyleSheet("""
+            NavButton {
+                background-color: #2a2a2a;
+                border-radius: 4px;
+            }
+        """)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Handle mouse leave - remove hover effect."""
+        self._is_hovered = False
+        self.setStyleSheet("""
+            NavButton {
+                background-color: transparent;
+                border-radius: 4px;
+            }
+        """)
+        super().leaveEvent(event)
 
 
 class SidebarPanel(QWidget):
@@ -121,14 +214,12 @@ class SidebarPanel(QWidget):
         nav_layout.setSpacing(2)
 
         # Chat button
-        self.chat_btn = self._create_nav_button("💬", "对话")
-        self.chat_btn.setToolTip("对话")
+        self.chat_btn = NavButton("💬", "对话")
         self.chat_btn.clicked.connect(self._on_chat_click)
         nav_layout.addWidget(self.chat_btn)
 
         # Settings button
-        self.settings_btn = self._create_nav_button("⚙", "设置")
-        self.settings_btn.setToolTip("设置")
+        self.settings_btn = NavButton("⚙", "设置")
         self.settings_btn.clicked.connect(self._on_settings_click)
         nav_layout.addWidget(self.settings_btn)
 
@@ -139,8 +230,7 @@ class SidebarPanel(QWidget):
         nav_layout.addWidget(nav_separator)
 
         # New session button
-        self.new_session_btn = self._create_nav_button("+", "新建会话")
-        self.new_session_btn.setToolTip("新建会话")
+        self.new_session_btn = NavButton("+", "新建会话")
         self.new_session_btn.clicked.connect(self._on_new_session)
         nav_layout.addWidget(self.new_session_btn)
 
@@ -186,47 +276,14 @@ class SidebarPanel(QWidget):
                 background-color: #2a2a2a;
             }
         """)
-        sessions_layout.addWidget(self.session_list)
+        sessions_layout.addWidget(self.session_list, 1)  # stretch=1 to fill space
 
-        self._main_layout.addWidget(self._sessions_widget)
-
-        # Stretch at bottom
-        self._main_layout.addStretch()
+        self._main_layout.addWidget(self._sessions_widget, 1)  # stretch=1 to fill remaining space
 
         # Set initial size
         self.setMinimumWidth(self.COLLAPSED_WIDTH)
         self.setMaximumWidth(self.EXPANDED_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-
-    def _create_nav_button(self, icon: str, text: str) -> QPushButton:
-        """Create a navigation button with icon and optional text."""
-        btn = QPushButton()
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                border-radius: 4px;
-                padding: 8px;
-                text-align: left;
-                color: #d4d4d4;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #2a2a2a;
-            }
-            QPushButton:checked {
-                background-color: #094771;
-            }
-        """)
-        # Set font that supports emoji
-        font = QFont()
-        font.setPointSize(12)
-        font.setFamily("Segoe UI Emoji")
-        btn.setFont(font)
-        btn.setProperty("icon", icon)
-        btn.setProperty("text", text)
-        btn.setText(icon)  # Initial state: show only icon
-        return btn
 
     def _apply_collapsed_state(self):
         """Apply the collapsed or expanded state to the UI."""
@@ -238,9 +295,7 @@ class SidebarPanel(QWidget):
 
             # Update buttons to show only icons
             for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
-                icon = btn.property("icon")
-                btn.setText(icon)
-                btn.setToolTip(btn.property("text"))
+                btn.set_collapsed(True)
         else:
             # Expanded state: show icons + text
             self.setMaximumWidth(self.EXPANDED_WIDTH)
@@ -249,10 +304,7 @@ class SidebarPanel(QWidget):
 
             # Update buttons to show icon + text
             for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
-                icon = btn.property("icon")
-                text = btn.property("text")
-                btn.setText(f"{icon}  {text}")
-                btn.setToolTip("")  # Clear tooltip in expanded mode
+                btn.set_collapsed(False)
 
     def _on_toggle(self):
         """Handle toggle between collapsed and expanded states."""

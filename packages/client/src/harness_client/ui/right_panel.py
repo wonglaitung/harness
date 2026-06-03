@@ -55,7 +55,7 @@ class CollapsibleSection(QWidget):
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(8, 4, 8, 8)
         self.content_layout.setSpacing(4)
-        layout.addWidget(self.content_widget)
+        layout.addWidget(self.content_widget, 1)  # stretch=1 to fill section
 
     def _toggle_collapsed(self):
         """Toggle collapsed state."""
@@ -64,9 +64,14 @@ class CollapsibleSection(QWidget):
         arrow = "▶" if self._is_collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
 
-    def add_widget(self, widget: QWidget):
-        """Add a widget to the content area."""
-        self.content_layout.addWidget(widget)
+    def add_widget(self, widget: QWidget, stretch: int = 0):
+        """Add a widget to the content area.
+
+        Args:
+            widget: Widget to add
+            stretch: Stretch factor (0 = no stretch, >0 = proportional stretch)
+        """
+        self.content_layout.addWidget(widget, stretch)
 
     def set_collapsed(self, collapsed: bool):
         """Set collapsed state."""
@@ -346,7 +351,7 @@ class FileTreeSection(CollapsibleSection):
         """)
         self.tree_view.clicked.connect(self._on_item_clicked)
         self.tree_view.expanded.connect(self._on_item_expanded)
-        self.add_widget(self.tree_view)
+        self.add_widget(self.tree_view, 1)  # stretch=1 to fill space
 
         # Change directory button
         change_btn = QPushButton("更改工作目录...")
@@ -534,10 +539,7 @@ class RightPanel(QWidget):
         self.file_section = FileTreeSection()
         self.file_section.file_clicked.connect(self.file_clicked)
         self.file_section.work_dir_changed.connect(self.work_dir_changed)
-        layout.addWidget(self.file_section)
-
-        # Stretch at bottom
-        layout.addStretch()
+        layout.addWidget(self.file_section, 1)  # stretch=1 to fill remaining space
 
         # Set collapsed state for sections (default all expanded)
         # Users can click to collapse

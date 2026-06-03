@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMConfig:
     """Base configuration for LLM clients."""
+
     model: str
     max_tokens: int = 16384  # Output tokens (reasonable for 64K context models)
     temperature: float = 1.0
@@ -32,6 +33,11 @@ class LLMConfig:
     retry_count: int = 3
     retry_delay: float = 1.0
     streaming_config: "StreamingConfig | None" = None  # Streaming with backpressure
+
+    # Compatibility settings for non-standard API endpoints
+    # Some proxy APIs don't support Anthropic's "tool" role
+    # Set to "user" to convert tool results to user messages
+    tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
 
 
 @dataclass

@@ -157,6 +157,8 @@ class AgentHarness:
                 timeout_per_tool=self.config.tool_timeout,
                 security_config=self.config.security,
                 cost_config=self._create_cost_config(),
+                offload_config=self._create_offload_config(),
+                enable_offload=self.config.offload.enabled if self.config.offload else True,
             ),
         )
 
@@ -226,6 +228,24 @@ class AgentHarness:
             warning_threshold=cost_control.warning_threshold,
         )
 
+    def _create_offload_config(self):
+        """Create offload config from HarnessConfig."""
+        from harness.core.output_offload import OffloadConfig as CoreOffloadConfig
+
+        offload = self.config.offload
+
+        if offload is None:
+            # Default: larger threshold to avoid offloading most outputs
+            return CoreOffloadConfig(
+                size_threshold_chars=50000,
+                preview_length=500,
+            )
+
+        return CoreOffloadConfig(
+            size_threshold_chars=offload.size_threshold_chars,
+            preview_length=offload.preview_length,
+        )
+
     def _create_llm_client(self) -> LLMClient:
         """Create the LLM client based on config."""
         provider = self.config.provider.lower()
@@ -238,6 +258,7 @@ class AgentHarness:
                 model=self.config.model,
                 max_tokens=max_tokens,
                 temperature=self.config.temperature,
+                tool_result_role=self.config.tool_result_role,
             )
         elif provider == "openai" or self.config.model.startswith("gpt"):
             return OpenAIClient(

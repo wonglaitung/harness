@@ -439,6 +439,7 @@ class MainWindow(QMainWindow):
         dialog.base_url_edit.setText(current.base_url)
         dialog.model_combo.setCurrentText(current.model)
         dialog.context_window_combo.setCurrentText(current.context_window)
+        dialog.tool_role_combo.setCurrentText(current.tool_result_role)
         dialog.auto_save_check.setChecked(current.auto_save)
         dialog.stream_check.setChecked(current.stream)
         dialog.max_iterations_spin.setValue(current.max_iterations)
@@ -462,6 +463,7 @@ class MainWindow(QMainWindow):
             base_url=settings.get("base_url", ""),
             model=settings.get("model", "claude-sonnet-4-6"),
             context_window=settings.get("context_window", "auto"),
+            tool_result_role=settings.get("tool_result_role", "tool"),
             auto_save=settings.get("auto_save", True),
             stream=settings.get("stream", True),
             max_iterations=settings.get("max_iterations", 20),
@@ -479,6 +481,7 @@ class MainWindow(QMainWindow):
             model=settings.get("model", "claude-sonnet-4-6"),
             context_window=settings.get("context_window", "auto"),
             max_iterations=settings.get("max_iterations", 20),
+            tool_result_role=settings.get("tool_result_role", "tool"),
         )
         self.chat_controller.configure(chat_config)
 

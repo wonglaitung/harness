@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
@@ -90,6 +91,25 @@ class SettingsDialog(QDialog):
         self.context_window_combo.lineEdit().setPlaceholderText("选择或输入上下文长度")
         api_layout.addRow("Context:", self.context_window_combo)
 
+        # Compatibility mode for proxy APIs that don't support "tool" role
+        self.tool_role_combo = QComboBox()
+        self.tool_role_combo.addItems(["tool", "user"])
+        self.tool_role_combo.setCurrentText("tool")
+        self.tool_role_combo.setToolTip(
+            "某些代理 API 不支持 Anthropic 原生的 tool role。\n"
+            "如果遇到 'invalid role: tool' 错误，请选择 'user'。"
+        )
+        api_layout.addRow("工具结果角色:", self.tool_role_combo)
+
+        # Explanation label for tool role
+        tool_role_help = QLabel(
+            "• tool: Anthropic 原生格式，模型能识别工具返回结果\n"
+            "• user: 兼容模式，将工具结果转为用户消息格式"
+        )
+        tool_role_help.setStyleSheet("color: #808080; font-size: 11px; margin-left: 20px;")
+        tool_role_help.setWordWrap(True)
+        api_layout.addRow(tool_role_help)
+
         tabs.addTab(api_tab, "API")
 
         # General tab
@@ -156,8 +176,32 @@ class SettingsDialog(QDialog):
             "base_url": self.base_url_edit.text(),
             "model": self.model_combo.currentText(),
             "context_window": self.context_window_combo.currentText(),
+            "tool_result_role": self.tool_role_combo.currentText(),
             "auto_save": self.auto_save_check.isChecked(),
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
             "work_dir": self.work_dir_edit.text(),
         }
+
+    def set_settings(self, settings: dict):
+        """Set dialog settings from saved values."""
+        if "provider" in settings:
+            self.provider_combo.setCurrentText(settings["provider"])
+        if "api_key" in settings:
+            self.api_key_edit.setText(settings["api_key"])
+        if "base_url" in settings:
+            self.base_url_edit.setText(settings["base_url"])
+        if "model" in settings:
+            self.model_combo.setCurrentText(settings["model"])
+        if "context_window" in settings:
+            self.context_window_combo.setCurrentText(settings["context_window"])
+        if "tool_result_role" in settings:
+            self.tool_role_combo.setCurrentText(settings["tool_result_role"])
+        if "auto_save" in settings:
+            self.auto_save_check.setChecked(settings["auto_save"])
+        if "stream" in settings:
+            self.stream_check.setChecked(settings["stream"])
+        if "max_iterations" in settings:
+            self.max_iterations_spin.setValue(settings["max_iterations"])
+        if "work_dir" in settings:
+            self.work_dir_edit.setText(settings["work_dir"])
