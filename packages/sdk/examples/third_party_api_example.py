@@ -31,6 +31,7 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 22: 渐进式技能加载 - 三级加载优化上下文 (P2)
     演示 23: MEMORY.md 标准 - 持久记忆文件管理 (P2)
     演示 24: 向量检索 - 语义搜索历史对话 (P2)
+    演示 25: 语义卡住检测 - 基于相似度检测重复输出 (P2)
 
 作者: Harness Team
 """
@@ -214,6 +215,14 @@ from harness import (
     VectorSearchResult,       # 搜索结果
     SimpleInMemoryVectorStore,  # 简单内存向量存储
     MockEmbeddingModel,       # Mock 嵌入模型
+)
+
+
+# 语义卡住检测 (P2)
+from harness.core import (
+    StuckDetector,           # 卡住检测器
+    StuckDetectorConfig,     # 检测配置
+    StuckDetectionResult,    # 检测结果
 )
 
 
@@ -3035,6 +3044,201 @@ async def demo_vector_search():
 
 
 # ============================================================================
+# 演示 25: 语义卡住检测 (P2)
+# ============================================================================
+
+async def demo_semantic_stuck_detection():
+    """
+    演示 25: 语义卡住检测 (P2)
+
+    功能:
+    - 创建 StuckDetector 检测重复输出模式
+    - 使用 StuckDetectorConfig 配置检测参数
+    - 支持空/错误检测和语义相似度检测
+    - 与 AgentHarness 集成使用
+
+    学习要点:
+    - 两级检测策略：空/错误检测（零成本）+ 语义检测
+    - 语义检测需要安装 sentence-transformers
+    - 检测到卡住后注入反馈消息
+    - 可配置相似度阈值和连续轮数
+    """
+    print("\n" + "=" * 70)
+    print("演示 25: 语义卡住检测 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 StuckDetector
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 StuckDetector ---")
+
+    # 基础配置（仅空/错误检测，零依赖）
+    basic_config = StuckDetectorConfig(
+        enable_semantic=False,  # 禁用语义检测
+    )
+    detector_basic = StuckDetector(config=basic_config)
+    print(f"已创建基础检测器（仅空/错误检测）")
+
+    # 完整配置（包含语义检测）
+    semantic_config = StuckDetectorConfig(
+        enable_semantic=True,          # 启用语义检测
+        similarity_threshold=0.92,     # 相似度阈值
+        consecutive_rounds=3,          # 连续相似轮数触发
+        window_size=6,                 # 对比窗口大小
+        min_chars=30,                  # 最小文本长度
+    )
+    detector_semantic = StuckDetector(config=semantic_config)
+    print(f"已创建语义检测器（需要 sentence-transformers）")
+
+    # -------------------------------------------------------------------------
+    # 2. 模拟检测场景
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 模拟检测场景 ---")
+
+    from harness.types import Message
+
+    # 模拟重复的空结果
+    empty_messages = [
+        Message(role="tool", content=""),
+        Message(role="tool", content=""),
+        Message(role="tool", content=""),
+    ]
+
+    # 模拟重复的错误
+    error_messages = [
+        Message(role="tool", content="Error: File not found"),
+        Message(role="tool", content="Error: File not found"),
+        Message(role="tool", content="Error: File not found"),
+    ]
+
+    # 模拟语义重复（需要启用语义检测）
+    semantic_repeat_messages = [
+        Message(role="tool", content="未找到相关结果，请尝试其他搜索词。"),
+        Message(role="tool", content="未找到相关的结果，建议使用其他关键词搜索。"),
+        Message(role="tool", content="没有找到相关内容，请换一个搜索词试试。"),
+    ]
+
+    print(f"模拟消息:")
+    print(f"  - 空结果: {len(empty_messages)} 条")
+    print(f"  - 错误结果: {len(error_messages)} 条")
+    print(f"  - 语义重复: {len(semantic_repeat_messages)} 条")
+
+    # -------------------------------------------------------------------------
+    # 3. 检测空结果
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 检测空结果 ---")
+
+    # 使用基础检测器检查空结果
+    result_empty = await detector_basic.check(
+        session_id="test-empty",
+        messages=empty_messages,
+        iteration=5,
+    )
+    print(f"空结果检测: is_stuck={result_empty.is_stuck}, reason={result_empty.reason}")
+
+    # -------------------------------------------------------------------------
+    # 4. 检测错误
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 检测错误 ---")
+
+    result_error = await detector_basic.check(
+        session_id="test-error",
+        messages=error_messages,
+        iteration=5,
+    )
+    print(f"错误检测: is_stuck={result_error.is_stuck}, reason={result_error.reason}")
+
+    # -------------------------------------------------------------------------
+    # 5. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 与 AgentHarness 集成 ---")
+    print("""
+    语义卡住检测与 AgentHarness 的集成方式：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  AgentHarness(config=HarnessConfig(                        │
+    │      stuck_detector_config=StuckDetectorConfig(            │
+    │          enable_semantic=True,                              │
+    │          similarity_threshold=0.92,                         │
+    │      ),                                                     │
+    │  ))                                                         │
+    │    ↓                                                        │
+    │  AgentLoop 执行工具                                         │
+    │    ↓                                                        │
+    │  检查是否卡住（两级策略）                                   │
+    │    ↓                                                        │
+    │  如果卡住 → 注入反馈消息                                    │
+    │    ↓                                                        │
+    │  继续执行或终止                                             │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 创建带卡住检测的 Agent
+    from harness.core.agent_loop import LoopConfig
+
+    loop_config = LoopConfig(
+        max_iterations=20,
+        stuck_detector_config=semantic_config,
+        max_stuck_feedbacks=2,
+    )
+
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    print(f"已创建带语义卡住检测的 Agent")
+    print(f"  - 语义检测: {semantic_config.enable_semantic}")
+    print(f"  - 相似度阈值: {semantic_config.similarity_threshold}")
+    print(f"  - 连续轮数: {semantic_config.consecutive_rounds}")
+
+    # -------------------------------------------------------------------------
+    # 6. 安装依赖说明
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 安装依赖 ---")
+    print("""
+    语义检测需要安装可选依赖：
+
+    pip install harness-ai[stuck]
+
+    这会安装：
+    - sentence-transformers: 嵌入模型库
+    - 默认模型: bge-small-zh-v1.5 (中文优化)
+
+    如果未安装依赖，语义检测自动禁用，退回空/错误检测。
+    """)
+
+    # -------------------------------------------------------------------------
+    # 7. 配置参数说明
+    # -------------------------------------------------------------------------
+    print("\n--- 7. 配置参数说明 ---")
+    print("""
+    StuckDetectorConfig 参数：
+
+    - enable_semantic:        是否启用语义检测（默认 False）
+    - similarity_threshold:   相似度阈值（0.0-1.0，默认 0.92）
+    - consecutive_rounds:     连续相似轮数触发（默认 3）
+    - window_size:            对比窗口大小（默认 6）
+    - min_chars:              最小文本长度（默认 30）
+
+    检测策略：
+
+    1. 空/错误检测（零成本）：
+       - 连续 N 次空工具结果
+       - 连续 N 次错误结果
+
+    2. 语义检测（需要模型）：
+       - 计算 embedding 相似度
+       - 连续 N 轮高相似度触发
+    """)
+
+    print("\n✅ 语义卡住检测演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -3119,6 +3323,9 @@ async def main():
 
         # 向量检索 (P2)
         await demo_vector_search()
+
+        # 语义卡住检测 (P2)
+        await demo_semantic_stuck_detection()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")
