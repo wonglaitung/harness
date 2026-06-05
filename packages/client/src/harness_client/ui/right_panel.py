@@ -7,9 +7,11 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QStandardItem, QStandardItemModel
 from PyQt6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QTreeView,
     QVBoxLayout,
     QWidget,
@@ -50,12 +52,19 @@ class CollapsibleSection(QWidget):
         self.header_btn.clicked.connect(self._toggle_collapsed)
         layout.addWidget(self.header_btn)
 
-        # Content container
+        # Content container with scrollable area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(8, 4, 8, 8)
         self.content_layout.setSpacing(4)
-        layout.addWidget(self.content_widget, 1)  # stretch=1 to fill section
+        scroll.setWidget(self.content_widget)
+        layout.addWidget(scroll)
 
     def _toggle_collapsed(self):
         """Toggle collapsed state."""
