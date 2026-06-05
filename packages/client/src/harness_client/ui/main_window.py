@@ -503,6 +503,7 @@ class MainWindow(QMainWindow):
             model=settings.model,
             context_window=settings.context_window,
             max_iterations=settings.max_iterations,
+            tool_result_role=settings.tool_result_role,
         )
         self.chat_controller.configure(chat_config)
 
