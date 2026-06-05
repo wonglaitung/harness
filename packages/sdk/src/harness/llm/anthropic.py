@@ -222,7 +222,7 @@ class AnthropicClient(LLMClient):
 
         # Compatibility mode: convert tool role to user role
         converted = []
-        for msg in messages:
+        for i, msg in enumerate(messages):
             role = msg.get("role", "")
 
             if role == "tool":
@@ -230,10 +230,24 @@ class AnthropicClient(LLMClient):
                 tool_call_id = msg.get("metadata", {}).get("tool_call_id", "")
                 content = msg.get("content", "")
 
-                # Format as user message with tool result context
+                # Find the previous assistant message to get tool name context
+                tool_context = ""
+                if i > 0 and messages[i - 1].get("role") == "assistant":
+                    prev_content = messages[i - 1].get("content", "")
+                    # Extract tool names from the previous message if available
+                    if prev_content and "tool" in prev_content.lower():
+                        tool_context = " (from your tool call)"
+
+                # Format as user message with clear tool result context
+                # The key is to make it clear this is a RESULT, not a new user request
                 converted_msg = {
                     "role": "user",
-                    "content": f"[Tool Result{f' (id: {tool_call_id})' if tool_call_id else ''}]\n{content}",
+                    "content": (
+                        f"[TOOL RESULT{f' (id: {tool_call_id})' if tool_call_id else ''}]\n"
+                        f"This is the result of your tool call{tool_context}. "
+                        f"Use this information to complete the user's original request.\n\n"
+                        f"{content}"
+                    ),
                 }
                 converted.append(converted_msg)
             else:
