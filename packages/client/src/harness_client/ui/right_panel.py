@@ -4,8 +4,8 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QStandardItem, QStandardItemModel
+from PyQt6.QtCore import QDir, Qt, pyqtSignal
+from PyQt6.QtGui import QFileSystemModel
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -302,7 +302,7 @@ class MCPServersSection(CollapsibleSection):
 
 
 class FileTreeSection(CollapsibleSection):
-    """Section displaying workspace file tree with lazy loading."""
+    """Section displaying workspace file tree using QFileSystemModel."""
 
     file_clicked = pyqtSignal(Path)
     work_dir_changed = pyqtSignal(Path)
@@ -314,6 +314,9 @@ class FileTreeSection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup file tree content."""
+        from PyQt6.QtCore import QDir
+        from PyQt6.QtGui import QFileSystemModel
+
         # Work directory name (editable)
         self.work_dir_label = QLabel(str(self._work_dir.name))
         self.work_dir_label.setStyleSheet("""
@@ -326,11 +329,19 @@ class FileTreeSection(CollapsibleSection):
         """)
         self.add_widget(self.work_dir_label)
 
-        # File tree view
+        # File tree view with QFileSystemModel
         self.tree_view = QTreeView()
-        self.tree_model = QStandardItemModel()
-        self.tree_model.setHorizontalHeaderLabels(["文件"])
-        self.tree_view.setModel(self.tree_model)
+        self.fs_model = QFileSystemModel()
+        self.fs_model.setRootPath(str(self._work_dir))
+        self.fs_model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot)
+
+        self.tree_view.setModel(self.fs_model)
+        self.tree_view.setRootIndex(self.fs_model.index(str(self._work_dir)))
+
+        # Hide size, type, date columns - only show name
+        for col in [1, 2, 3]:
+            self.tree_view.setColumnHidden(col, True)
+
         self.tree_view.setHeaderHidden(True)
         self.tree_view.setStyleSheet("""
             QTreeView {
@@ -349,8 +360,7 @@ class FileTreeSection(CollapsibleSection):
                 background-color: #2a2a2a;
             }
         """)
-        self.tree_view.clicked.connect(self._on_item_clicked)
-        self.tree_view.expanded.connect(self._on_item_expanded)
+        self.tree_view.doubleClicked.connect(self._on_item_double_clicked)
         self.add_widget(self.tree_view, 1)  # stretch=1 to fill space
 
         # Change directory button
@@ -371,118 +381,19 @@ class FileTreeSection(CollapsibleSection):
         change_btn.clicked.connect(self._on_change_dir)
         self.add_widget(change_btn)
 
-        # Initialize with current directory
-        self._load_root()
-
     def set_work_dir(self, path: Path):
         """Set the work directory."""
         self._work_dir = path
         self.work_dir_label.setText(path.name if path.name else str(path))
-        self._load_root()
+        self.fs_model.setRootPath(str(path))
+        self.tree_view.setRootIndex(self.fs_model.index(str(path)))
 
-    def _load_root(self):
-        """Load the root directory contents."""
-        self.tree_model.clear()
-        self.tree_model.setHorizontalHeaderLabels(["文件"])
-
-        if not self._work_dir.exists():
-            return
-
-        root_item = QStandardItem(f"📁 {self._work_dir.name}")
-        root_item.setData(str(self._work_dir), Qt.ItemDataRole.UserRole)
-        root_item.setSelectable(False)
-
-        # Load immediate children
-        self._load_directory_contents(root_item, self._work_dir)
-        self.tree_model.appendRow(root_item)
-
-        # Expand root by default
-        self.tree_view.expand(root_item.index())
-
-    def _load_directory_contents(self, parent_item: QStandardItem, directory: Path):
-        """Load directory contents into the tree item (non-recursive for lazy loading)."""
-        try:
-            entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
-        except PermissionError:
-            error_item = QStandardItem("⚠️ 权限不足")
-            error_item.setForeground(Qt.GlobalColor.red)
-            parent_item.appendRow(error_item)
-            return
-
-        for entry in entries[:50]:  # Limit to 50 entries for performance
-            if entry.is_dir():
-                # Folder - add placeholder for lazy loading
-                folder_item = QStandardItem(f"📁 {entry.name}")
-                folder_item.setData(str(entry), Qt.ItemDataRole.UserRole)
-                # Add placeholder child to indicate expandable
-                placeholder = QStandardItem("...")
-                placeholder.setData("__placeholder__", Qt.ItemDataRole.UserRole)
-                folder_item.appendRow(placeholder)
-                parent_item.appendRow(folder_item)
-            else:
-                # File
-                icon = self._get_file_icon(entry)
-                file_item = QStandardItem(f"{icon} {entry.name}")
-                file_item.setData(str(entry), Qt.ItemDataRole.UserRole)
-                parent_item.appendRow(file_item)
-
-    def _get_file_icon(self, path: Path) -> str:
-        """Get an icon character for a file based on its extension."""
-        ext = path.suffix.lower()
-        icon_map = {
-            ".py": "🐍",
-            ".js": "📜",
-            ".ts": "📜",
-            ".json": "📋",
-            ".yaml": "📋",
-            ".yml": "📋",
-            ".md": "📝",
-            ".txt": "📄",
-            ".html": "🌐",
-            ".css": "🎨",
-            ".sql": "🗃️",
-            ".csv": "📊",
-            ".xlsx": "📊",
-            ".pdf": "📕",
-            ".png": "🖼️",
-            ".jpg": "🖼️",
-            ".gif": "🖼️",
-            ".zip": "📦",
-            ".tar": "📦",
-            ".gz": "📦",
-        }
-        return icon_map.get(ext, "📄")
-
-    def _on_item_clicked(self, index):
-        """Handle item click."""
-        item = self.tree_model.itemFromIndex(index)
-        if item:
-            data = item.data(Qt.ItemDataRole.UserRole)
-            if data and data != "__placeholder__":
-                path = Path(data)
-                if path.is_file():
-                    self.file_clicked.emit(path)
-
-    def _on_item_expanded(self, index):
-        """Handle item expansion - lazy load children."""
-        item = self.tree_model.itemFromIndex(index)
-        if not item:
-            return
-
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not data or data == "__placeholder__":
-            return
-
-        path = Path(data)
-        if not path.is_dir():
-            return
-
-        # Check if we have a placeholder child (first child)
-        first_child = item.child(0)
-        if first_child and first_child.data(Qt.ItemDataRole.UserRole) == "__placeholder__":
-            # Remove placeholder and load actual contents
-            item.removeRow(0)
-            self._load_directory_contents(item, path)
+    def _on_item_double_clicked(self, index):
+        """Handle item double-click - open file."""
+        path_str = self.fs_model.filePath(index)
+        path = Path(path_str)
+        if path.is_file():
+            self.file_clicked.emit(path)
 
     def _on_change_dir(self):
         """Handle change directory button click."""
@@ -497,7 +408,9 @@ class FileTreeSection(CollapsibleSection):
 
     def refresh(self):
         """Refresh the file tree."""
-        self._load_root()
+        self.fs_model.setRootPath("")  # Force refresh
+        self.fs_model.setRootPath(str(self._work_dir))
+        self.tree_view.setRootIndex(self.fs_model.index(str(self._work_dir)))
 
 
 class RightPanel(QWidget):

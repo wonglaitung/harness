@@ -3,8 +3,8 @@ Chat panel for displaying conversation - Hermes Dark Theme Style.
 """
 
 import markdown
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont, QFontDatabase
+from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -26,7 +26,6 @@ class ChatPanel(QWidget):
         super().__init__()
         self._streaming_text = ""  # Buffer for streaming text
         self._is_streaming = False
-        self._stream_message_start = 0  # Cursor position where streaming message starts
         self._setup_ui()
 
     def _get_font(self) -> QFont:
@@ -162,6 +161,15 @@ class ChatPanel(QWidget):
         ]
         return markdown.markdown(text, extensions=extensions)
 
+    def _escape_html(self, text: str) -> str:
+        """Escape HTML characters."""
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _scroll_to_bottom(self):
+        """Scroll chat display to bottom."""
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
     def _append_message(self, role: str, content: str):
         """Append a message to the chat display with dark theme styling."""
         # Render markdown for assistant messages
@@ -205,14 +213,7 @@ class ChatPanel(QWidget):
             </div>
             """
         self.chat_display.append(html)
-
-        # Scroll to bottom
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML characters."""
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        self._scroll_to_bottom()
 
     def append_assistant_message(self, content: str):
         """Append an assistant message."""
@@ -228,9 +229,6 @@ class ChatPanel(QWidget):
         args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in list(arguments.items())[:3])
         if len(arguments) > 3:
             args_preview += "..."
-
-        # Full arguments for expandable section
-        args_full = "<br>".join(f"<b>{k}</b>: {repr(v)}" for k, v in arguments.items())
 
         html = f"""
         <div style="margin: 8px 0 4px 36px;">
@@ -249,8 +247,7 @@ class ChatPanel(QWidget):
         </div>
         """
         self.chat_display.append(html)
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        self._scroll_to_bottom()
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
         """Append a tool result indicator with expandable details - matching Athlon Agent style."""
@@ -268,10 +265,6 @@ class ChatPanel(QWidget):
             text_color = "#f85149"
             icon = "✗"
             status_text = "failed"
-
-        # Escape and prepare result for display
-        result_escaped = self._escape_html(result)
-        result_id = f"result_{id(result)}"
 
         html = f"""
         <div style="margin: 4px 0 8px 36px;">
@@ -292,8 +285,7 @@ class ChatPanel(QWidget):
         </div>
         """
         self.chat_display.append(html)
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        self._scroll_to_bottom()
 
     def append_thinking(self, message: str):
         """Append a thinking/progress indicator with subtle blockquote style."""
@@ -307,8 +299,7 @@ class ChatPanel(QWidget):
         </div>
         """
         self.chat_display.append(html)
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        self._scroll_to_bottom()
 
     def clear_chat(self):
         """Clear the chat display."""
@@ -318,94 +309,45 @@ class ChatPanel(QWidget):
         """Start streaming mode for assistant response."""
         self._streaming_text = ""
         self._is_streaming = True
-        # Store the initial cursor position to update in place
-        self._stream_start_position = self.chat_display.textCursor().position()
-        # Add an empty assistant message with avatar that will be updated
-        html = """
-        <div style="margin: 12px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 16px;
-                            display: inline-flex; align-items: center; justify-content: center;
-                            flex-shrink: 0;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 16px;
-                            padding: 10px 16px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
-                    <div id="streaming-content" style="color: #d4d4d4;">▌</div>
-                </div>
-            </div>
-        </div>
-        """
-        self.chat_display.append(html)
-        self._stream_message_start = self.chat_display.textCursor().position()
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # Add placeholder with cursor
+        self._append_message("assistant", "▌")
+        # Store position for updates
+        self._stream_cursor = self.chat_display.textCursor()
+        self._stream_cursor.movePosition(QTextCursor.MoveOperation.End)
 
     def append_streaming_chunk(self, chunk: str):
-        """Append a text chunk during streaming with dark theme."""
+        """Append a text chunk during streaming."""
         if not self._is_streaming:
             return
 
         self._streaming_text += chunk
-        # Render the full accumulated text so far
+        # Update the last message in place
         rendered = self._render_markdown(self._streaming_text + "▌")
-        html = f"""
-        <div style="margin: 12px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 16px;
-                            display: inline-flex; align-items: center; justify-content: center;
-                            flex-shrink: 0;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 16px;
-                            padding: 10px 16px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
-                    <div style="color: #d4d4d4;">{rendered}</div>
-                </div>
-            </div>
-        </div>
-        """
-        # Replace content from the streaming start position
-        cursor = self.chat_display.textCursor()
-        cursor.setPosition(self._stream_message_start)
-        cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertHtml(html)
 
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # Move cursor to end and select last line, then replace
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.insertHtml(rendered)
+        self._scroll_to_bottom()
 
     def finish_streaming(self):
-        """Finish streaming and finalize the message with dark theme."""
+        """Finish streaming and finalize the message."""
         if not self._is_streaming:
             return
 
         self._is_streaming = False
         # Render final text without cursor
         rendered = self._render_markdown(self._streaming_text)
-        html = f"""
-        <div style="margin: 12px 0;">
-            <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%;
-                            background-color: #007acc; color: white; font-size: 16px;
-                            display: inline-flex; align-items: center; justify-content: center;
-                            flex-shrink: 0;">A</div>
-                <div style="background-color: #2d2d30; border-radius: 16px;
-                            padding: 10px 16px; max-width: 85%;
-                            color: #d4d4d4; font-size: 13px; line-height: 1.5;">
-                    <div style="color: #d4d4d4;">{rendered}</div>
-                </div>
-            </div>
-        </div>
-        """
-        # Replace content from the streaming start position
-        cursor = self.chat_display.textCursor()
-        cursor.setPosition(self._stream_message_start)
-        cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertHtml(html)
 
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # Replace last block with final content
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.insertHtml(rendered)
+        self._scroll_to_bottom()
         self._streaming_text = ""
 
     def set_token_usage(self, usage: dict, limit: int = 200000):
