@@ -129,7 +129,6 @@ class SidebarPanel(QWidget):
     session_switch_requested = pyqtSignal(str)
     session_new_requested = pyqtSignal()
     settings_requested = pyqtSignal()
-    toggle_requested = pyqtSignal()  # emitted when user wants to toggle collapsed state
 
     # Constants for sizes
     COLLAPSED_WIDTH = 56
@@ -257,17 +256,10 @@ class SidebarPanel(QWidget):
             for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
                 btn.set_collapsed(False)
 
-    def _on_toggle(self):
-        """Handle toggle between collapsed and expanded states."""
-        self._is_collapsed = not self._is_collapsed
-        self._apply_collapsed_state()
-        self.toggle_requested.emit()
-
     def toggle(self):
-        """Public method to toggle the sidebar state."""
+        """Public method to toggle the sidebar collapsed/expanded state."""
         self._is_collapsed = not self._is_collapsed
         self._apply_collapsed_state()
-        self.toggle_requested.emit()
 
     def set_collapsed(self, collapsed: bool):
         """Set the sidebar collapsed state."""
