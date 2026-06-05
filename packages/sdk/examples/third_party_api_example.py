@@ -345,12 +345,11 @@ async def demo_file_tools():
     )
 
     # 让 Agent 使用工具完成任务
-    print("\n用户: 请列出当前目录下所有的 Python 文件，然后读取 pyproject.toml 的前 20 行。")
+    print("\n用户: 请列出当前目录下所有的 Python 文件名称，然后读取 pyproject.toml 的前 20 行。")
     print("-" * 70)
 
     result = await agent.run(
-        "请使用 glob 工具列出当前目录下所有的 Python 文件（*.py），"
-        "然后读取 pyproject.toml 文件的前 20 行内容。",
+        "请列出当前目录下所有的 Python 文件名称，然后读取 pyproject.toml 的前 20 行。",
         verbose=True,  # 显示执行过程
     )
 

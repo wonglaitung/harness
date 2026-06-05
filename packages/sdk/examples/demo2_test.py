@@ -27,7 +27,7 @@ from harness.types import ProgressEvent, ProgressEventType
 # 配置 - 使用第三方 OpenAI 兼容 API
 BASE_URL = "http://47.115.141.152:8080/v2/coding"
 API_KEY = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
-MODEL = "glm-5.1"
+MODEL = "glm-5"
 
 
 def on_progress(event: ProgressEvent):
