@@ -108,10 +108,14 @@ class Message:
 
     def to_api_format(self) -> dict[str, Any]:
         """Convert to API format for LLM call."""
-        return {
+        result = {
             "role": self.role,
             "content": self.content,
         }
+        # Include metadata for tool messages (needed for compatibility mode)
+        if self.role == "tool" and self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
 
 @dataclass
@@ -155,6 +159,7 @@ class ToolResult:
     success: bool
     content: str
     error: str | None = None
+    tool_name: str | None = None  # Tool name for compatibility mode formatting
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_api_format(self) -> dict[str, Any]:

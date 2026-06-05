@@ -474,3 +474,192 @@ system_prompt: str = """你是一个有帮助的 AI 助手。
 - [AI SDK Loop Control](https://ai-sdk.dev/docs/agents/loop-control)
 - [Prompting for Agents | Pristren](https://pristren.com/blog/prompting-for-agents-guide)
 - 关键文件：`packages/client/src/harness_client/controllers/chat_controller.py`
+
+---
+
+## 2026-06-05: 不查 API 文档凭假设修改导致错误
+
+### 问题
+
+修复"代理 API 不支持 tool role"问题时，凭假设修改了代码：
+
+1. 假设 Anthropic API 有 `role: "tool"` 这个角色
+2. 假设兼容模式就是简单地把 `role: "tool"` 改成 `role: "user"` 加点文本前缀
+3. 没有查阅官方 API 文档确认正确的消息格式
+
+导致：
+- 第一次修改：格式不完整，模型无法正确理解工具结果
+- 第二次修改：仍然错误，添加了不必要的复杂逻辑
+- 第三次查阅文档后才发现：Anthropic API 根本没有 `role: "tool"`
+
+### 正确的 API 规范
+
+查阅 [Anthropic Tool Use 文档](https://docs.anthropic.com/en/docs/build-with-claude/tool-use) 和搜索结果后发现：
+
+> **Tool results are user messages: There is no tool role. Tool output is sent as a user message containing tool_result blocks.**
+
+正确格式：
+```python
+# ❌ 错误：没有 role: "tool"
+{"role": "tool", "content": "file contents"}
+
+# ✅ 正确：工具结果是 user 角色，内容是 tool_result block
+{
+    "role": "user",
+    "content": [
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_123",
+            "content": "file contents"
+        }
+    ]
+}
+```
+
+### 原因
+
+1. **惰性思维**：凭经验和直觉假设，而不是验证
+2. **跳过文档**：查文档需要额外步骤，容易被跳过
+3. **惯性思维**：OpenAI API 有 `role: "tool"`，假设 Anthropic 也有
+
+### 解决
+
+正确实现 `_convert_messages`：
+
+```python
+def _convert_messages(self, messages):
+    converted = []
+    for msg in messages:
+        if msg.get("role") == "tool":
+            # Anthropic API: tool results are user messages with tool_result blocks
+            tool_result_block = {
+                "type": "tool_result",
+                "tool_use_id": msg.get("metadata", {}).get("tool_call_id", ""),
+                "content": msg.get("content", ""),
+            }
+            converted.append({
+                "role": "user",
+                "content": [tool_result_block],
+            })
+        else:
+            converted.append(msg)
+    return converted
+```
+
+### 教训
+
+1. **修改 API 相关代码前必须查文档**：不能凭假设，不能凭经验
+2. **不同 API 有不同规范**：OpenAI 有 `role: "tool"`，Anthropic 没有
+3. **文档查询是开发的一部分**：不是可选项，是必须步骤
+4. **用官方来源验证**：Context7、官方文档、API Reference
+
+### 防止措施
+
+**必须查阅文档的场景**（强制）：
+- 修改 API 调用格式
+- 添加新的 API 参数
+- 实现新的消息类型
+- 处理 API 响应格式
+- 错误处理逻辑
+
+**查阅文档的优先级**：
+1. 官方 API Reference（最权威）
+2. 官方 SDK 文档
+3. Context7 文档索引
+4. GitHub 官方示例代码
+
+### 检查方法
+
+```bash
+# 使用 Context7 查询 API 文档
+# 在 Claude Code 中：直接询问关于 API 的问题
+
+# 确认消息格式
+# 问："Anthropic API tool_result 消息格式是什么？"
+```
+
+---
+
+## 2026-06-05: Agent 循环检测与熔断器增强
+
+### 问题
+
+模型在完成任务后没有正确停止，继续调用工具直到触发熔断器：
+- 同一个工具连续调用 5 次触发熔断器
+- 使用的是第三方模型（`xopglm5`），通过 OpenAI 兼容 API 调用
+- 系统提示中已有停止条件，但模型未遵守
+
+### 业界最佳实践研究
+
+研究 LangChain、LangGraph、OpenAI、Anthropic 等领先项目的实现：
+
+| 机制 | LangChain | LangGraph | Harness 改进前 | Harness 改进后 |
+|------|-----------|-----------|---------------|---------------|
+| 迭代上限 | ✅ max_iterations=15 | ✅ recursion_limit=25 | ✅ max_iterations=100 | ✅ 不变 |
+| 循环检测 | ⚠️ 需手动实现 | ⚠️ 需手动实现 | ✅ same_tool_threshold=5 | ✅ **增强检测** |
+| 主动退出 | ❌ | ✅ remaining_steps | ❌ | ✅ **已添加** |
+| tool:args 检测 | ✅ LoopDetector | ⚠️ | ❌ | ✅ **已添加** |
+
+### 解决方案
+
+**Phase 1 - 快速修复**：
+1. 提高熔断器阈值：`same_tool_threshold: 5 → 8`（临时缓解）
+2. 优化系统提示：使停止条件更明确
+
+**Phase 2 - 根本解决**：
+
+1. **增强熔断器检测**（参考 LangChain LoopDetector）：
+```python
+# 新增：检测 tool:args 组合调用次数
+self._tool_args_counter: Counter[str] = Counter()
+
+# 当同一工具+参数组合调用超过阈值时触发
+if count >= self.config.same_args_threshold:
+    self._open_reason = f"Tool '{tool_name}' with same arguments called {count} times"
+```
+
+2. **添加 remaining_steps 主动退出**（参考 LangGraph）：
+```python
+# 接近迭代上限时注入提示，让模型优雅收尾
+remaining_steps = self.config.max_iterations - iteration
+if remaining_steps <= 2 and iteration > 0:
+    session.add_message(Message(
+        role="user",
+        content=f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。请立即总结并给出最终回答。",
+        metadata={"type": "remaining_steps_hint", "injected": True},
+    ))
+```
+
+### Bitter Lesson：序列检测的教训
+
+**最初设计**：添加了工具序列模式检测，检测 `read -> glob -> read -> glob` 这样的交替模式。
+
+**问题**：并行工具调用导致误报。当模型在**单次响应**中调用多个工具时：
+```
+Iteration 1: LLM 返回 [read(file1), read(file2)]  # 并行调用
+```
+熔断器错误地检测到 `read -> read` 序列重复，触发熔断。
+
+**根本原因**：并行工具调用是**同一批次**的，不应该被视为"循环"。
+
+**解决**：禁用序列检测（`sequence_window=0`），只保留更可靠的 `tool:args` 检测。
+
+**教训**：
+1. **简单规则 > 复杂启发式**（Bitter Lesson）
+2. **并行调用会干扰序列检测**：单次响应中的多工具调用会产生误导性的序列
+3. **先理解再设计**：设计检测逻辑前，要理解 LLM 的工具调用模式（并行 vs 串行）
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/sdk/src/harness/core/circuit_breaker.py` | 增强 tool:args 检测，禁用序列检测 |
+| `packages/sdk/src/harness/core/agent_loop.py` | 添加 remaining_steps 主动退出 |
+| `packages/client/src/harness_client/controllers/chat_controller.py` | 优化系统提示 |
+
+### 参考
+
+- [LangChain Agent Executor 源码](https://sj-langchain.readthedocs.io/en/latest/_modules/langchain/agents/agent.html)
+- [LangGraph GraphRecursionError 处理](https://docs.langchain.com/oss/python/langgraph/graph-api)
+- [Why Your LangChain Agent Keeps Calling the Same Tool](https://dev.to/gabrielanhaia/why-your-langchain-agent-keeps-calling-the-same-tool-in-a-loop-and-how-to-stop-it-57gk)
+- [LangGraph Best Practices](https://www.swarnendu.de/blog/langgraph-best-practices)

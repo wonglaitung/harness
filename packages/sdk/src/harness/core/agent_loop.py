@@ -66,10 +66,10 @@ class LoopConfig:
     retry_on_error: int = 3
     enable_progress: bool = True  # Enable progress events
     enable_circuit_breaker: bool = True  # Enable circuit breaker
-    same_tool_threshold: int = 5  # Circuit breaker threshold
     enable_cost_control: bool = True  # Enable cost control
     cost_config: CostConfig | None = None  # Cost control configuration
     security_config: SecurityConfig | None = None  # Security configuration
+    working_directory: str | None = None  # Working directory for tool execution
 
     # Stuck Detection
     max_stuck_feedbacks: int = 2  # Maximum feedback injection attempts
@@ -120,11 +120,7 @@ class AgentLoop:
         self._stuck_feedback_count = 0  # Track stuck feedback injections
 
         # Initialize circuit breaker
-        self._circuit_breaker = CircuitBreaker(
-            CircuitBreakerConfig(
-                same_tool_threshold=self.config.same_tool_threshold,
-            )
-        ) if self.config.enable_circuit_breaker else None
+        self._circuit_breaker = CircuitBreaker() if self.config.enable_circuit_breaker else None
 
         # Initialize error handler
         self._error_handler = ErrorHandler(max_retries=self.config.retry_on_error)
@@ -534,12 +530,14 @@ class AgentLoop:
                 total_usage.input_tokens += response.usage.input_tokens
                 total_usage.output_tokens += response.usage.output_tokens
 
-                # Add assistant message
-                assistant_msg = Message(
-                    role="assistant",
-                    content=response.content,
-                )
-                session.add_message(assistant_msg)
+                # Add assistant message (skip if content is empty and has tool calls)
+                # Empty assistant messages can confuse models in compatibility mode
+                if response.content or not response.is_tool_use:
+                    assistant_msg = Message(
+                        role="assistant",
+                        content=response.content,
+                    )
+                    session.add_message(assistant_msg)
 
                 # Check if we need tools
                 if response.is_tool_use:
@@ -568,6 +566,7 @@ class AgentLoop:
                             content=content,
                             metadata={
                                 "tool_call_id": result.tool_call_id,
+                                "tool_name": result.tool_name,
                                 "is_error": not result.success,
                             },
                         )
@@ -799,8 +798,8 @@ class AgentLoop:
 
         context = ToolContext(
             session_id=session.id,
-            working_directory=Path(os.getcwd()),
-            permissions=PermissionSet.sandbox(os.getcwd()),
+            working_directory=Path(self.config.working_directory or os.getcwd()),
+            permissions=PermissionSet.sandbox(self.config.working_directory or os.getcwd()),
         )
 
         results = []
@@ -815,6 +814,7 @@ class AgentLoop:
                         success=False,
                         content="",
                         error=f"Step budget exceeded: {budget_result.message}",
+                        tool_name=tool_call.name,
                     ))
                     continue
 
@@ -833,6 +833,7 @@ class AgentLoop:
                     success=False,
                     content="",
                     error=f"Circuit breaker open: {reason}",
+                    tool_name=tool_call.name,
                 ))
                 continue
 
@@ -869,6 +870,7 @@ class AgentLoop:
                     success=False,
                     content="",
                     error=hook_result.metadata.get("reason", "Aborted by hook"),
+                    tool_name=tool_call.name,
                 ))
                 continue
             if hook_result.action == HookAction.MODIFY_ARGS:

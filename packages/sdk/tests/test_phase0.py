@@ -121,46 +121,50 @@ class TestContextBudget:
 
 
 class TestCircuitBreaker:
-    """Tests for CircuitBreaker."""
+    """Tests for CircuitBreaker (simplified version following Bitter Lesson)."""
 
-    def test_same_tool_threshold_opens_circuit(self):
-        """Test that repeated same tool calls open circuit."""
-        cb = CircuitBreaker(CircuitBreakerConfig(same_tool_threshold=5))
+    def test_same_args_pattern_opens_circuit(self):
+        """Test that same tool + args pattern opens circuit.
 
-        # Call same tool 5 times
-        for _ in range(5):
-            cb.record_call("read", {"path": "test.txt"})
+        This is the core detection mechanism - simple and effective.
+        """
+        cb = CircuitBreaker(CircuitBreakerConfig(same_args_threshold=3))
+
+        # Call same tool with same args 3 times
+        args = {"path": "test.txt"}
+        for _ in range(3):
+            cb.record_call("read", args)
 
         assert cb.is_open() is True
         assert "read" in cb.get_reason()
 
-    def test_different_tools_dont_open_circuit(self):
-        """Test that different tools don't trigger circuit."""
+    def test_different_args_dont_open_circuit(self):
+        """Test that different tools or different args don't trigger circuit.
+
+        Trust the model - only block obvious repetition.
+        """
         cb = CircuitBreaker()
 
-        # Call different tools
+        # Call same tool with different args (should NOT trigger)
+        for i in range(10):
+            cb.record_call("read", {"path": f"file_{i}.txt"})
+
+        assert cb.is_open() is False
+
+        # Call different tools (should NOT trigger)
+        cb.reset()
         for i in range(10):
             cb.record_call(f"tool_{i}", {})
 
         assert cb.is_open() is False
 
-    def test_same_args_pattern_opens_circuit(self):
-        """Test that same tool + args pattern opens circuit."""
-        cb = CircuitBreaker(CircuitBreakerConfig(same_args_threshold=3))
-
-        args = {"path": "same.txt"}
-        for _ in range(3):
-            cb.record_call("read", args)
-
-        assert cb.is_open() is True
-
     def test_reset_closes_circuit(self):
         """Test that reset closes the circuit."""
-        cb = CircuitBreaker()
+        cb = CircuitBreaker(CircuitBreakerConfig(same_args_threshold=2))
 
         # Open the circuit
-        for _ in range(5):
-            cb.record_call("read", {})
+        for _ in range(2):
+            cb.record_call("read", {"path": "same.txt"})
 
         assert cb.is_open() is True
 
@@ -178,6 +182,27 @@ class TestCircuitBreaker:
             cb.record_error()
 
         assert cb.is_open() is True
+
+    def test_recovery_after_timeout(self):
+        """Test that circuit recovers after timeout."""
+        import time
+
+        cb = CircuitBreaker(CircuitBreakerConfig(
+            same_args_threshold=3,
+            recovery_timeout_seconds=0.1  # Very short for testing
+        ))
+
+        # Open the circuit (call 3 times to reach threshold)
+        for _ in range(3):
+            cb.record_call("read", {"path": "same.txt"})
+
+        assert cb.is_open() is True
+
+        # Wait for recovery timeout
+        time.sleep(0.15)
+
+        # Circuit should now be in half-open state (allows limited calls)
+        assert cb.is_open() is False  # Allows one test call in half-open
 
 
 class TestErrorHandler:

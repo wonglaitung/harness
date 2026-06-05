@@ -438,13 +438,17 @@ class HarnessConfig:
 
 ### tool_result_role 兼容模式
 
-某些代理 API（如 OpenAI 格式的 proxy）不支持 Anthropic 原生的 `tool` 角色。使用 `tool_result_role="user"` 可将工具结果转换为 user message：
+Anthropic API 要求工具结果以特定格式发送：`role: "user"` + `tool_result` blocks。SDK 内部使用 `role: "tool"` 作为抽象，在发送到 API 前自动转换。
+
+某些代理 API（如 OpenAI 格式的 proxy）不支持 `tool_result` blocks。使用 `tool_result_role="user"` 可将工具结果转换为普通用户消息。
+
+#### 配置示例
 
 ```python
-# 原生 Anthropic API（默认）
+# 原生 Anthropic API（默认）- 使用 tool_result blocks
 config = HarnessConfig(tool_result_role="tool")
 
-# 兼容模式 - 适用于不支持 tool role 的 proxy API
+# 兼容模式 - 适用于不支持 tool_result blocks 的 proxy API
 config = HarnessConfig(
     tool_result_role="user",
     base_url="https://your-proxy-api.com/v1",
@@ -453,11 +457,37 @@ config = HarnessConfig(
 agent = AgentHarness(config=config)
 ```
 
-转换后的消息格式：
+#### 消息格式对比
+
+**原生模式 (`tool_result_role="tool"`)**：
+```python
+{
+    "role": "user",
+    "content": [
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_123",
+            "content": "文件内容..."
+        }
+    ]
+}
 ```
-[Tool Result (id: call_abc123)]
-<工具输出内容>
+
+**兼容模式 (`tool_result_role="user"`)**：
+```python
+{
+    "role": "user",
+    "content": "[TOOL RESULT - read_file]\nTool call ID: toolu_123...\nStatus: SUCCESS\n\n文件内容..."
+}
 ```
+
+兼容模式会包含工具名称和调用 ID，帮助模型识别这是哪个工具的返回结果。
+
+#### 注意事项
+
+- OpenAI provider 不需要此设置（直接使用 `role: "tool"`）
+- 仅 Anthropic provider 需要配置此项
+- 如果代理 API 支持 `tool_result` blocks，优先使用原生模式 (`tool_result_role="tool"`)
 
 ### 模型预设
 

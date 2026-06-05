@@ -23,7 +23,7 @@ while not finished:
 |------|----------|------|
 | **最大步数** | `max_iterations` (默认 100) | 限制循环次数 |
 | **工具超时** | `timeout_per_tool` (默认 30.0s) | 每个工具调用的超时时间 |
-| **熔断器** | `enable_circuit_breaker` (默认 True) | 连续失败时中断循环 |
+| **熔断器** | `enable_circuit_breaker` (默认 True) | 相同工具+参数重复 3 次时中断 |
 | **卡住检测** | `max_stuck_feedbacks` (默认 2) | 检测重复输出或无进展状态 |
 | **成本控制** | `enable_cost_control` (默认 True) | 累计成本超限时中断 |
 | **并行工具** | `enable_parallel_tools` (默认 True) | 启用并行工具调用 |
@@ -72,11 +72,11 @@ class LoopConfig:
     retry_on_error: int = 3                      # 错误重试次数
     enable_progress: bool = True                 # 是否启用进度事件
     enable_circuit_breaker: bool = True          # 是否启用熔断器
-    same_tool_threshold: int = 5                 # 熔断器阈值（相同工具连续调用次数）
     enable_cost_control: bool = True             # 是否启用成本控制
     cost_config: CostConfig | None = None        # 成本控制配置
     security_config: SecurityConfig | None = None # 安全配置
-    
+    working_directory: str | None = None         # 工具执行的工作目录
+
     # 卡住检测配置
     max_stuck_feedbacks: int = 2                 # 最大反馈注入尝试次数
     stuck_min_iterations: int = 3                # 卡住检测前的最小迭代次数
@@ -936,11 +936,39 @@ result = await agent_loop.run(messages, stream=True)
 
 ### 熔断器
 
+熔断器用于检测和防止无限循环，遵循 **Bitter Lesson** 原则：简单规则优于复杂启发式。
+
+**检测机制**：
+- 只检测"相同工具 + 相同参数"重复调用
+- 默认阈值：`same_args_threshold = 3`（调用 3 次触发熔断）
+- 不检测复杂的序列模式（避免误报）
+
 ```python
-# 熔断器在连续失败时中断循环
-# 默认：连续 5 次失败触发熔断
-# 可通过 HarnessConfig 配置
+from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+
+# 默认配置
+cb = CircuitBreaker()
+
+# 自定义阈值
+cb = CircuitBreaker(CircuitBreakerConfig(
+    same_args_threshold=3,      # 相同工具+参数重复次数
+    error_threshold=5,          # 错误次数阈值
+    error_window_seconds=60,    # 错误统计窗口
+    recovery_timeout_seconds=30, # 恢复超时
+))
+
+# 记录调用
+cb.record_call("read", {"path": "test.txt"})
+
+# 检查状态
+if cb.is_open():
+    print(f"熔断器已打开: {cb.get_reason()}")
 ```
+
+**设计原则**：
+1. **简单规则**：只检测明显的重复行为
+2. **信任模型**：通过 system prompt 指导模型何时停止
+3. **避免误报**：不干预并行工具调用等正常行为
 
 ## 完整流程图
 
