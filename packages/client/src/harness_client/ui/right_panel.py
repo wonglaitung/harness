@@ -345,7 +345,7 @@ class FileTreeSection(CollapsibleSection):
         self.tree_view.setHeaderHidden(True)
         self.tree_view.setStyleSheet("""
             QTreeView {
-                background-color: #171717;
+                background-color: #252526;
                 border: 1px solid #3e3e42;
                 border-radius: 4px;
                 color: #d4d4d4;
@@ -357,7 +357,18 @@ class FileTreeSection(CollapsibleSection):
                 background-color: #094771;
             }
             QTreeView::item:hover {
-                background-color: #2a2a2a;
+                background-color: #3e3e42;
+            }
+            QTreeView::branch {
+                background-color: #252526;
+            }
+            QTreeView::branch:has-children:!has-siblings:closed,
+            QTreeView::branch:closed:has-children:has-siblings {
+                background-color: #252526;
+            }
+            QTreeView::branch:open:has-children:!has-siblings,
+            QTreeView::branch:open:has-children:has-siblings {
+                background-color: #252526;
             }
         """)
         self.tree_view.doubleClicked.connect(self._on_item_double_clicked)
