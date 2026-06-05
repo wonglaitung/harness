@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
+        self.sidebar.toggled.connect(self._on_sidebar_toggled)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -297,14 +298,15 @@ class MainWindow(QMainWindow):
     def _on_sidebar_toggle(self):
         """Toggle sidebar collapsed/expanded state."""
         self.sidebar.toggle()
-        # Update button text and dynamic width
-        if self.sidebar.is_collapsed():
+
+    def _on_sidebar_toggled(self, collapsed: bool):
+        """Update sidebar button text and width after toggle."""
+        if collapsed:
             self.sidebar_btn.setText("☰")
             self.sidebar_btn.setToolTip("展开侧栏")
         else:
             self.sidebar_btn.setText("✕")
             self.sidebar_btn.setToolTip("折叠侧栏")
-        # Dynamic width based on text
         fm = QFontMetrics(self.sidebar_btn.font())
         text_width = fm.horizontalAdvance(self.sidebar_btn.text())
         self.sidebar_btn.setFixedSize(max(28, text_width + 16), 28)
