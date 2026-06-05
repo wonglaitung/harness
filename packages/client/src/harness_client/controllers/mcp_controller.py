@@ -167,8 +167,12 @@ class MCPController:
         Returns:
             Number of servers loaded
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
-            self.manager.load_from_file(str(path))
+            count = self.manager.load_from_file(str(path))
+            logger.info(f"MCPManager loaded {count} servers")
 
             # Update local tracking
             for config in self.manager.list_server_configs():
@@ -181,9 +185,10 @@ class MCPController:
 
             if self._on_change:
                 self._on_change()
-            return len(self.servers)
+            return count
 
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error loading MCP config: {e}")
             return 0
 
     def save_to_file(self, path: Path):

@@ -603,7 +603,100 @@ grep -r "self\._\w+\." src/ | cut -d: -f2 | sort | uniq > use.txt
 diff init.txt use.txt  # 找出未调用的变量
 ```
 
-### 11. 避免硬编码路径（2026-02-15新增）
+### 11. API 消息结构固定要求（2026-06-06新增）
+
+**核心原则**：LLM API 消息结构有固定格式要求，不能凭假设修改。
+
+> 来源：lessons.md "2026-06-06: 用户消息在第二次 LLM 调用时丢失"
+
+#### OpenAI API 消息结构
+
+```
+system (可选，仅第一位)
+→ user
+→ assistant (可能包含 tool_calls)
+→ tool (必须有 tool_call_id)
+→ user
+→ assistant
+→ ...
+```
+
+```python
+# ✅ 正确的 OpenAI 消息序列
+messages = [
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "List files"},
+    {"role": "assistant", "content": "", "tool_calls": [...]},
+    {"role": "tool", "tool_call_id": "call_123", "content": "file1.py"},
+    {"role": "assistant", "content": "Found 1 file."},
+]
+```
+
+#### Anthropic API 消息结构
+
+**关键区别**：Anthropic 没有 `role: "tool"`！
+
+```
+system (单独参数，不在 messages 中)
+→ user
+→ assistant (可能包含 tool_use blocks)
+→ user (包含 tool_result blocks)  ← 注意：是 user 角色！
+→ assistant
+→ ...
+```
+
+```python
+# ✅ 正确的 Anthropic 消息序列
+messages = [
+    {"role": "user", "content": "List files"},
+    {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_123", ...}]},
+    {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "toolu_123", "content": "file1.py"}
+    ]},
+    {"role": "assistant", "content": "Found 1 file."},
+]
+```
+
+#### 常见错误
+
+```python
+# ❌ 错误：凭假设认为 Anthropic 有 role: "tool"
+messages = [
+    {"role": "user", "content": "List files"},
+    {"role": "assistant", ...},
+    {"role": "tool", "content": "file1.py"},  # Anthropic 不支持！
+]
+
+# ❌ 错误：消息未持久化，第二次迭代丢失
+# 第一次：临时添加 user message 到 context
+# 第二次：session.messages 中没有 user message → 丢失！
+
+# ✅ 正确：消息持久化到 session
+session.add_message(Message(role="user", content=prompt))
+context = context_builder.build(session)  # 从 session 读取
+```
+
+#### Session 作为单一数据源
+
+```
+用户输入 → session.add_message() → 持久化
+                                ↓
+ContextBuilder.build(session) → 只读，不修改 session
+                                ↓
+LLM 调用 → 响应 → session.add_message() → 持久化
+```
+
+**验证方法**：
+- 多轮迭代后，检查 user message 是否仍在 session 中
+- 不同 API 的消息格式是否正确转换？
+- 是否查阅了官方 API 文档确认格式？
+
+**必须测试的场景**：
+1. 第二轮迭代时，用户消息是否存在？
+2. 工具调用后，消息序列是否正确？
+3. 滑动窗口裁剪后，关键消息是否保留？
+
+### 12. 避免硬编码路径（2026-02-15新增）
 - **十二要素应用原则**：配置应该外化，不应硬编码
 - **跨环境兼容性**：代码应能在不同环境中运行，不依赖特定路径
 - **使用相对路径**：基于脚本所在目录构建路径，而非绝对路径
@@ -656,7 +749,7 @@ cd "$SCRIPT_DIR"
 - 项目可以轻松部署到不同位置
 - 路径配置清晰，易于维护和修改
 
-### 14. qasync 与 QThread 不兼容（2026-05-31新增）
+### 15. qasync 与 QThread 不兼容（2026-05-31新增）
 
 **核心原则**：使用 qasync 时，所有异步操作必须在主线程的 `QEventLoop` 中运行，不能在 QThread 中创建新的 event loop。
 
@@ -718,7 +811,7 @@ grep -r "asyncio.new_event_loop" src/
 - 使用 `@asyncClose` 装饰器处理异步关闭事件
 - 支持多环境配置（开发、测试、生产）
 
-### 12. HTTP API超时处理（2026-02-24新增）
+### 13. HTTP API超时处理（2026-02-24新增）
 - 调用任何HTTP API时必须设置合理的超时时间
 - 使用超时装饰器或内置超时参数防止请求无限等待
 - 实现备用方案，当API调用超时时使用缓存数据或默认值
@@ -789,7 +882,7 @@ def fetch_data_from_api():
 - 备用方案在超时情况下正常工作
 - 跨平台兼容性测试通过
 
-### 13. 持续验证
+### 16. 持续验证
 每次修改后立即验证，避免累积错误
 
 ---

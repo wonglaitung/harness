@@ -7,12 +7,15 @@ Implements JSON-RPC 2.0 protocol for MCP server communication.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from harness.mcp.transport import MCPTransport
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -92,6 +95,7 @@ class MCPClient:
 
         # Send initialize request
         try:
+            logger.info(f"Sending initialize request to MCP server...")
             response = await self._request(
                 "initialize",
                 {
@@ -107,6 +111,7 @@ class MCPClient:
                 },
                 timeout=10.0,
             )
+            logger.info(f"Initialize response received: {response}")
 
             # Parse server info
             server_info = response.get("serverInfo", {})
@@ -128,6 +133,12 @@ class MCPClient:
 
         except Exception as e:
             # Clean up on failure
+            logger.error(f"Failed to connect to MCP server: {e}")
+            # Check stderr for more info
+            if hasattr(self.transport, 'check_stderr'):
+                stderr = await self.transport.check_stderr()
+                if stderr:
+                    logger.error(f"MCP server stderr: {stderr}")
             if self._message_task:
                 self._message_task.cancel()
             await self.transport.disconnect()

@@ -577,9 +577,11 @@ class MainWindow(QMainWindow):
             # Save configuration
             self._save_mcp_config()
 
-            # Auto-connect if enabled
+            # Auto-connect if enabled - use asyncSlot for proper async handling
             if config.get("enabled", True):
-                self._connect_mcp_server(config["name"])
+                # Schedule the connection after dialog closes
+                import asyncio
+                asyncio.ensure_future(self._connect_mcp_server(config["name"]))
 
     @asyncSlot(str)
     async def _on_toggle_mcp_server(self, name: str):
@@ -640,13 +642,37 @@ class MainWindow(QMainWindow):
 
     def _load_mcp_config(self):
         """Load MCP server configuration from file."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         from harness_client.utils.settings import get_config_dir
 
         config_dir = get_config_dir()
         config_file = config_dir / "mcp.json"
 
+        logger.info(f"Loading MCP config from: {config_file}")
+        logger.info(f"Config file exists: {config_file.exists()}")
+
         if config_file.exists():
             self.mcp_controller.load_from_file(config_file)
+            logger.info(f"Loaded {len(self.mcp_controller.servers)} MCP servers")
+
+            # Auto-connect enabled servers after UI is ready
+            # Use QTimer to ensure event loop is running
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._auto_connect_mcp_servers)
+
+    def _auto_connect_mcp_servers(self):
+        """Auto-connect to enabled MCP servers."""
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+
+        for name, info in self.mcp_controller.servers.items():
+            config = self.mcp_controller.manager.get_server_config(name)
+            if config and config.enabled:
+                logger.info(f"Auto-connecting to MCP server: {name}")
+                asyncio.ensure_future(self._connect_mcp_server(name))
 
     def _on_skills_changed(self):
         """Handle skill list change."""

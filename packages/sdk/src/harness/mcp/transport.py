@@ -103,6 +103,10 @@ class StdioTransport(MCPTransport):
             # This ensures child processes can be terminated together
             os.setsid()
 
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Starting MCP server: {self.command} {' '.join(self.args)}")
+
         try:
             self._process = await asyncio.create_subprocess_exec(
                 self.command,
@@ -113,9 +117,11 @@ class StdioTransport(MCPTransport):
                 env=full_env,
                 preexec_fn=preexec_fn if os.name != "nt" else None,
             )
+            logger.info(f"MCP server started with PID: {self._process.pid}")
             self._connected = True
         except Exception as e:
             self._connected = False
+            logger.error(f"Failed to start MCP server: {e}")
             raise RuntimeError(f"Failed to start MCP server: {e}") from e
 
     async def disconnect(self) -> None:

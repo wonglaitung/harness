@@ -428,7 +428,10 @@ class AgentLoop:
                     "Building context",
                     {"state": LoopState.BUILDING_CONTEXT.value},
                 )
-                context = self.context.build(session, prompt if iteration == 0 else None)
+                # Add user message to session on first iteration (fixes USER message loss)
+                if iteration == 0 and prompt:
+                    session.add_message(Message(role="user", content=prompt))
+                context = self.context.build(session)
                 context_duration = (time.time() - context_build_start) * 1000
 
                 # Call LLM

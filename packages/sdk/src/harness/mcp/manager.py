@@ -137,6 +137,23 @@ class MCPManager:
                 self._load_config_file(expanded_path)
                 return
 
+    def load_from_file(self, path: str | Path) -> int:
+        """
+        Load MCP configuration from a specific file.
+
+        Args:
+            path: Config file path (JSON or YAML)
+
+        Returns:
+            Number of servers loaded
+        """
+        config_path = Path(path)
+        if not config_path.exists():
+            return 0
+
+        self._load_config_file(config_path)
+        return len(self._configs)
+
     def _load_config_file(self, path: Path) -> None:
         """
         Load MCP configuration from file.
@@ -146,8 +163,13 @@ class MCPManager:
         Args:
             path: Config file path
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             content = path.read_text()
+            logger.info(f"Loading MCP config from: {path}")
+            logger.debug(f"Config content: {content[:500]}...")
 
             if path.suffix == ".json":
                 config_data = json.loads(content)
@@ -158,6 +180,7 @@ class MCPManager:
                     config_data = yaml.safe_load(content)
                 except ImportError:
                     # Skip YAML if not installed
+                    logger.warning("YAML not installed, skipping YAML config")
                     return
             else:
                 # Try JSON first, then YAML
@@ -169,15 +192,20 @@ class MCPManager:
 
                         config_data = yaml.safe_load(content)
                     except ImportError:
+                        logger.warning("YAML not installed, skipping YAML config")
                         return
 
             # Parse mcpServers format (Claude Code compatible)
             servers = config_data.get("mcpServers", {})
+            logger.info(f"Found {len(servers)} server(s) in config: {list(servers.keys())}")
+
             for name, server_config in servers.items():
                 self.add_server(MCPServerConfig.from_dict(name, server_config))
+                logger.info(f"Added server: {name}")
 
-        except Exception:
-            # Silently ignore config errors
+        except Exception as e:
+            # Log config errors instead of silently ignoring
+            logger.error(f"Error loading MCP config from {path}: {e}")
             pass
 
     def add_server(self, config: MCPServerConfig) -> None:

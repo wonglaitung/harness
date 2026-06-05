@@ -3,6 +3,7 @@ QApplication configuration and startup.
 """
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -12,6 +13,12 @@ from PyQt6.QtGui import QFont, QFontDatabase
 from PyQt6.QtWidgets import QApplication
 
 from harness_client.ui.main_window import MainWindow
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 
 def get_system_font() -> QFont:

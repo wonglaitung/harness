@@ -147,6 +147,83 @@ class LoopResult:
         return self.status == LoopState.COMPLETED
 ```
 
+## 消息处理流程
+
+Agent Loop 在处理用户消息时遵循"Session 作为单一数据源"原则，确保消息在多轮迭代中不丢失。
+
+### 核心原则
+
+1. **Session 是单一数据源**：所有消息都存储在 `session.messages` 中
+2. **消息持久化**：用户消息在第一次迭代时被持久化到 session
+3. **ContextBuilder 只读取**：上下文构建器从 session 读取消息，不修改 session
+
+### 消息流
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        First Iteration                            │
+│                                                                   │
+│  用户输入 → session.add_message(Message(role="user", content))   │
+│                          ↓                                        │
+│           ContextBuilder.build(session) ← 从 session 读取         │
+│                          ↓                                        │
+│                    LLM 调用                                       │
+│                          ↓                                        │
+│           session.add_message(Message(role="assistant"))         │
+│           session.add_message(Message(role="tool"))              │
+├──────────────────────────────────────────────────────────────────┤
+│                      Second Iteration                             │
+│                                                                   │
+│           ContextBuilder.build(session)                           │
+│                          ↓                                        │
+│           messages = [user, assistant, tool, tool]  ← 完整上下文  │
+│                          ↓                                        │
+│                    LLM 调用                                       │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 代码实现
+
+```python
+# agent_loop.py 核心逻辑
+while iteration < self.config.max_iterations:
+    # 第一次迭代时持久化用户消息
+    if iteration == 0 and prompt:
+        session.add_message(Message(role="user", content=prompt))
+    
+    # 从 session 构建上下文（包含所有历史消息）
+    context = self.context.build(session)
+    
+    # 调用 LLM
+    response = await self.llm.call(
+        messages=context.messages,
+        tools=tools,
+        system=context.system_prompt,
+    )
+    
+    # 添加 assistant 消息
+    if response.content:
+        session.add_message(Message(role="assistant", content=response.content))
+    
+    # 执行工具并添加 tool 消息
+    if response.is_tool_use:
+        tool_results = await self._execute_tools(response.tool_calls, session)
+        for result in tool_results:
+            session.add_message(Message(
+                role="tool",
+                content=result.content,
+                metadata={"tool_call_id": result.tool_call_id, ...}
+            ))
+    
+    iteration += 1
+```
+
+### 注意事项
+
+- **不要临时添加消息**：所有消息都应该通过 `session.add_message()` 持久化
+- **ContextBuilder 不修改 session**：上下文构建器只负责读取和窗口裁剪
+- **工具结果也持久化**：tool message 同样存储在 session 中
+
 ## Lifecycle Hooks
 
 Agent Loop 在关键执行点触发生命周期钩子，允许外部代码拦截、修改或注入行为。
