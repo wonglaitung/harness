@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase, QFontMetrics
+from PyQt6.QtGui import QAction, QFont, QFontDatabase
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -83,7 +83,6 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
-        self.sidebar.toggled.connect(self._on_sidebar_toggled)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -184,25 +183,6 @@ class MainWindow(QMainWindow):
             }
         """)
         header_layout.addWidget(app_name)
-        # Toggle sidebar button
-        self.sidebar_btn = QPushButton("☰")
-        self.sidebar_btn.setToolTip("折叠侧栏")
-        self.sidebar_btn.setFixedSize(28, 28)
-        self.sidebar_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                border-radius: 4px;
-                padding: 0;
-                color: #d4d4d4;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #2a2a2a;
-            }
-        """)
-        self.sidebar_btn.clicked.connect(self._on_sidebar_toggle)
-        header_layout.addWidget(self.sidebar_btn)
 
         header_layout.addStretch()
 
@@ -264,8 +244,8 @@ class MainWindow(QMainWindow):
         self.right_panel = RightPanel()
         splitter.addWidget(self.right_panel)
 
-        # Set initial sizes: sidebar (56 collapsed), chat (600), right (200)
-        splitter.setSizes([56, 600, 200])
+        # Set initial sizes: sidebar (160), chat (640), right (200)
+        splitter.setSizes([160, 640, 200])
 
         # Set stretch factors: sidebar doesn't stretch, chat gets most space, right gets some
         splitter.setStretchFactor(0, 0)  # Sidebar fixed width
@@ -294,22 +274,6 @@ class MainWindow(QMainWindow):
         current = self.chat_controller.get_current_session()
         history = self.chat_controller.session_manager.get_history_list()
         self.sidebar.update_sessions(current, history)
-
-    def _on_sidebar_toggle(self):
-        """Toggle sidebar collapsed/expanded state."""
-        self.sidebar.toggle()
-
-    def _on_sidebar_toggled(self, collapsed: bool):
-        """Update sidebar button text and width after toggle."""
-        if collapsed:
-            self.sidebar_btn.setText("☰")
-            self.sidebar_btn.setToolTip("展开侧栏")
-        else:
-            self.sidebar_btn.setText("✕")
-            self.sidebar_btn.setToolTip("折叠侧栏")
-        fm = QFontMetrics(self.sidebar_btn.font())
-        text_width = fm.horizontalAdvance(self.sidebar_btn.text())
-        self.sidebar_btn.setFixedSize(max(28, text_width + 16), 28)
 
     def _on_new_session(self):
         """Create a new session."""

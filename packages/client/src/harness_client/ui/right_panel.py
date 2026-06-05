@@ -5,15 +5,42 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 from pathlib import Path
 
 from PyQt6.QtCore import QDir, Qt, pyqtSignal
-from PyQt6.QtGui import QFileSystemModel
+from PyQt6.QtGui import QFileSystemModel, QIcon
 from PyQt6.QtWidgets import (
+    QApplication,
+    QFileIconProvider,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QTreeView,
     QVBoxLayout,
     QWidget,
 )
+
+
+class CustomFileIconProvider(QFileIconProvider):
+    """Custom icon provider that uses Qt built-in icons for files and folders."""
+
+    def __init__(self):
+        super().__init__()
+        style = QApplication.style()
+        self._folder_icon = style.standardIcon(QStyle.StandardPixmap.SP_DirIcon)
+        self._folder_open_icon = style.standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+        self._file_icon = style.standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+
+    def icon(self, info):
+        """Return appropriate icon based on file type.
+
+        Args:
+            info: QFileInfo object
+
+        Returns:
+            QIcon for the file/folder
+        """
+        if info.isDir():
+            return self._folder_icon
+        return self._file_icon
 
 
 class CollapsibleSection(QWidget):
@@ -315,7 +342,6 @@ class FileTreeSection(CollapsibleSection):
     def _setup_content(self):
         """Setup file tree content."""
         from PyQt6.QtCore import QDir
-        from PyQt6.QtGui import QFileSystemModel
 
         # Work directory name (editable)
         self.work_dir_label = QLabel(str(self._work_dir.name))
@@ -332,6 +358,7 @@ class FileTreeSection(CollapsibleSection):
         # File tree view with QFileSystemModel
         self.tree_view = QTreeView()
         self.fs_model = QFileSystemModel()
+        self.fs_model.setIconProvider(CustomFileIconProvider())
         self.fs_model.setRootPath(str(self._work_dir))
         self.fs_model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot)
 
