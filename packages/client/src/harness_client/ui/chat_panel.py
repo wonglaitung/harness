@@ -171,15 +171,21 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message with blue bubble, right-aligned - matching Athlon style
+            # User message - right aligned with table for QTextBrowser compatibility
+            # QTextBrowser doesn't support inline-block, so we use table layout
             html = f"""
-            <div style="margin: 12px 0; text-align: right;">
-                <div style="display: inline-block; background-color: #1e4a6d;
-                            border-radius: 16px; padding: 10px 16px; max-width: 70%;
-                            color: #ffffff; font-size: 13px; line-height: 1.5;">
-                    {rendered_content}
-                </div>
-            </div>
+            <table width="100%" style="margin: 8px 0;">
+                <tr>
+                    <td width="25%"></td>
+                    <td width="75%" align="right">
+                        <span style="background-color: #1e4a6d; color: #ffffff;
+                                     font-size: 13px; padding: 8px 12px;
+                                     border-radius: 12px;">
+                            {rendered_content}
+                        </span>
+                    </td>
+                </tr>
+            </table>
             """
         else:
             # Assistant message with avatar and gray bubble, left-aligned
