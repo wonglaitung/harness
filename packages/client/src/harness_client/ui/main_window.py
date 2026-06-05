@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
-        self.sidebar.toggle_requested.connect(self._on_sidebar_toggled)
+        self.sidebar.toggle_requested.connect(self._on_sidebar_toggle)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
