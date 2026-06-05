@@ -54,6 +54,7 @@ class ToolExecutor:
                 success=False,
                 content="",
                 error=f"Unknown tool: {tool_call.name}",
+                tool_name=tool_call.name,
             )
 
         # Validate arguments
@@ -64,6 +65,7 @@ class ToolExecutor:
                 success=False,
                 content="",
                 error=f"Invalid arguments: {error}",
+                tool_name=tool_call.name,
             )
 
         # Execute with timeout
@@ -72,8 +74,9 @@ class ToolExecutor:
                 tool.execute(tool_call.arguments, context),
                 timeout=self.config.timeout,
             )
-            # Ensure the tool_call_id is set
+            # Ensure the tool_call_id and tool_name are set
             result.tool_call_id = tool_call.id
+            result.tool_name = tool_call.name
             return result
 
         except TimeoutError:
@@ -82,6 +85,7 @@ class ToolExecutor:
                 success=False,
                 content="",
                 error=f"Tool execution timed out after {self.config.timeout}s",
+                tool_name=tool_call.name,
             )
 
         except Exception as e:
@@ -90,6 +94,7 @@ class ToolExecutor:
                 success=False,
                 content="",
                 error=f"Tool execution failed: {str(e)}",
+                tool_name=tool_call.name,
             )
 
     async def execute_batch(
@@ -137,6 +142,7 @@ class ToolExecutor:
                     success=False,
                     content="",
                     error=f"Execution failed: {str(result)}",
+                    tool_name=tool_calls[i].name,
                 ))
             else:
                 processed.append(result)

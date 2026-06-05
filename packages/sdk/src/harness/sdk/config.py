@@ -189,7 +189,7 @@ class HarnessConfig:
     tool_timeout: float = 30.0
 
     # Optional settings
-    system_prompt: str = ""
+    system_prompt: str = ""  # If empty, no system prompt is sent (uses model's default behavior)
     extra_config: dict[str, Any] = field(default_factory=dict)
 
     # Security settings

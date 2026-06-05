@@ -74,6 +74,9 @@ class MainWindow(QMainWindow):
         self._is_processing = False
         self.settings_manager = SettingsManager()
 
+        # Update chat controller work dir
+        self.chat_controller.work_dir = self.work_dir
+
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
         self.sidebar.session_new_requested.connect(self._on_new_session)
@@ -503,6 +506,7 @@ class MainWindow(QMainWindow):
             model=settings.model,
             context_window=settings.context_window,
             max_iterations=settings.max_iterations,
+            temperature=settings.temperature,
             tool_result_role=settings.tool_result_role,
         )
         self.chat_controller.configure(chat_config)

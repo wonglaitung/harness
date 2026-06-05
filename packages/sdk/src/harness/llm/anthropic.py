@@ -246,15 +246,30 @@ class AnthropicClient(LLMClient):
                     }
                 else:
                     # Compatibility mode for proxy APIs: plain text user message
-                    converted_msg = {
-                        "role": "user",
-                        "content": (
-                            f"[TOOL RESULT]\n"
-                            f"This is the result of your tool call. "
-                            f"Use this information to complete the user's original request.\n\n"
-                            f"{content}"
-                        ),
-                    }
+                    # Include tool name and ID to help model understand context
+                    tool_name = msg.get("metadata", {}).get("tool_name", "unknown_tool")
+                    tool_id_short = tool_call_id[:8] if tool_call_id else "unknown"
+
+                    if is_error:
+                        converted_msg = {
+                            "role": "user",
+                            "content": (
+                                f"[TOOL RESULT - {tool_name}]\n"
+                                f"Tool call ID: {tool_id_short}...\n"
+                                f"Status: ERROR\n\n"
+                                f"{content}"
+                            ),
+                        }
+                    else:
+                        converted_msg = {
+                            "role": "user",
+                            "content": (
+                                f"[TOOL RESULT - {tool_name}]\n"
+                                f"Tool call ID: {tool_id_short}...\n"
+                                f"Status: SUCCESS\n\n"
+                                f"{content}"
+                            ),
+                        }
                 converted.append(converted_msg)
             else:
                 converted.append(msg)

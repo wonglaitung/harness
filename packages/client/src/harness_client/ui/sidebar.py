@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QToolButton,
@@ -136,7 +137,7 @@ class SidebarPanel(QWidget):
 
     def __init__(self):
         super().__init__()
-        self._is_collapsed = False
+        self._is_collapsed = True  # Default to collapsed - show only icons on startup
         self._max_width = self.EXPANDED_WIDTH
         self.work_dir = Path.cwd()
         self._setup_ui()
@@ -166,10 +167,9 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(0)
 
         # Logo button (clickable to toggle)
-        self.logo_btn = QToolButton()
-        self.logo_btn.setText("A")
+        self.logo_btn = QPushButton("A")
         self.logo_btn.setStyleSheet("""
-            QToolButton {
+            QPushButton {
                 background-color: #007acc;
                 color: white;
                 border: none;
@@ -180,11 +180,13 @@ class SidebarPanel(QWidget):
                 max-width: 20px;
                 min-height: 20px;
                 max-height: 20px;
+                padding: 0;
             }
-            QToolButton:hover {
+            QPushButton:hover {
                 background-color: #106ebe;
             }
         """)
+        self.logo_btn.setFixedSize(20, 20)
         self.logo_btn.clicked.connect(self._on_toggle)
         header_layout.addWidget(self.logo_btn, 0, Qt.AlignmentFlag.AlignCenter)
 

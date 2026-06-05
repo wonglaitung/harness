@@ -31,32 +31,36 @@ class ChatConfig:
     model: str = "claude-sonnet-4-6"
     context_window: str = "auto"
     max_iterations: int = 20
+    temperature: float = 0.3  # Lower = more deterministic
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
     system_prompt: str = """你是一个有帮助的 AI 助手。
 
-## 停止条件
+## 核心规则
 
-当满足以下条件时，**立即停止并给出最终回答**：
-- 你已经获得了回答用户问题所需的全部信息
-- 用户请求的任务已经完成
-- 遇到无法解决的错误，需要用户输入
+**一次完成任务**：只做用户明确要求的事，完成后立即给出最终回答。不要延伸任务，不要做额外操作。
 
-## 禁止继续调用工具的情况
+## 必须立即停止并回答的情况
 
-- 你已经检索到了回答所需的信息
-- 同一个工具调用第二次失败（应向用户报告错误）
-- 你正在用相同的参数重复调用同一个工具（这表示你在循环）
+当满足以下任一条件时，**立即停止调用工具，直接回答用户**：
 
-## 行为准则
+1. **信息已足够**：你已经有了回答用户问题所需的全部信息
+2. **任务已完成**：用户请求的操作已经执行完毕
+3. **工具失败两次**：同一个工具调用失败两次，停止并报告错误
+4. **收到停止信号**：收到系统提示要求你立即回答
 
-1. **只做用户明确要求的事**：不要延伸任务，不要做用户未请求的操作
-2. **任务完成即停止**：完成任务后直接回答，不要继续调用工具
-3. **避免无意义的循环**：如果连续两次观察结果相似，停止并报告当前进展
+## 禁止的行为
 
-示例：
-- 用户："列出 Python 文件" → 执行 glob，列出文件，停止
-- 用户："读取文件前 20 行" → 执行 read(limit=20)，展示内容，停止
-- 不要在完成后"顺便"做其他事或"改进"项目"""
+- ❌ 任务完成后"顺便"做其他事
+- ❌ 获取信息后"继续探索"
+- ❌ 用相同参数重复调用同一个工具
+- ❌ 在已经有足够信息时继续调用工具
+
+## 正确示例
+
+- 用户："列出 Python 文件" → 执行 glob，列出文件，**立即回答**
+- 用户："读取 main.py 前 20 行" → 执行 read(limit=20)，展示内容，**立即回答**
+- 用户："项目结构是什么？" → 获取结构后，**立即回答**，不要继续读取更多文件
+"""
 
 
 class ChatController:
@@ -148,11 +152,13 @@ class ChatController:
             base_url=self.config.base_url or None,
             context_window=self.config.context_window,
             max_iterations=self.config.max_iterations,
+            temperature=self.config.temperature,
             tool_result_role=self.config.tool_result_role,
             system_prompt=self.config.system_prompt,
+            sandbox_workspace=str(self.work_dir),
         )
 
-        logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}")
+        logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}, temperature={sdk_config.temperature}")
 
         tools = [
             ReadTool(),

@@ -44,6 +44,26 @@ class TestMessage:
         assert api["role"] == "user"
         assert api["content"] == "test"
 
+    def test_tool_message_includes_metadata(self):
+        """Test that tool messages include metadata in API format."""
+        msg = Message(
+            role="tool",
+            content="file contents",
+            metadata={"tool_call_id": "toolu_123", "tool_name": "read_file"},
+        )
+        api = msg.to_api_format()
+        assert api["role"] == "tool"
+        assert api["content"] == "file contents"
+        assert "metadata" in api
+        assert api["metadata"]["tool_call_id"] == "toolu_123"
+        assert api["metadata"]["tool_name"] == "read_file"
+
+    def test_user_message_excludes_metadata(self):
+        """Test that non-tool messages don't include metadata."""
+        msg = Message(role="user", content="test", metadata={"extra": "data"})
+        api = msg.to_api_format()
+        assert "metadata" not in api
+
 
 class TestSession:
     """Tests for Session class."""
@@ -114,6 +134,16 @@ class TestToolResult:
         )
         assert not result.success
         assert result.error == "File not found"
+
+    def test_tool_result_with_name(self):
+        """Test tool result with tool name."""
+        result = ToolResult(
+            tool_call_id="call_123",
+            success=True,
+            content="file contents",
+            tool_name="read_file",
+        )
+        assert result.tool_name == "read_file"
 
 
 class TestLLMResponse:

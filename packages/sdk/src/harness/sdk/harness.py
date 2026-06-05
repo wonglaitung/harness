@@ -159,6 +159,7 @@ class AgentHarness:
                 cost_config=self._create_cost_config(),
                 offload_config=self._create_offload_config(),
                 enable_offload=self.config.offload.enabled if self.config.offload else True,
+                working_directory=self.config.sandbox_workspace,
             ),
         )
 

@@ -4,6 +4,7 @@ Settings dialog for API configuration and preferences.
 
 from pathlib import Path
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSlider,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -134,6 +136,19 @@ class SettingsDialog(QDialog):
         self.max_iterations_spin.setValue(20)
         general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
 
+        # Temperature slider (0.0 - 1.0)
+        self.temperature_label = QLabel("Temperature: 0.3")
+        self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
+        self.temperature_slider.setRange(0, 100)  # 0-100 maps to 0.0-1.0
+        self.temperature_slider.setValue(30)  # Default 0.3 for stability
+        self.temperature_slider.valueChanged.connect(self._on_temperature_changed)
+        temp_layout = QVBoxLayout()
+        temp_layout.addWidget(self.temperature_slider)
+        temp_help = QLabel("低值(0.1-0.3)更稳定，高值(0.7-1.0)更有创造性")
+        temp_help.setStyleSheet("color: #808080; font-size: 11px;")
+        temp_layout.addWidget(temp_help)
+        general_layout.addRow(self.temperature_label, temp_layout)
+
         tabs.addTab(general_tab, "常规")
 
         # Directories tab
@@ -181,6 +196,11 @@ class SettingsDialog(QDialog):
         self.tool_role_combo.setVisible(is_anthropic)
         self.tool_role_help.setVisible(is_anthropic)
 
+    def _on_temperature_changed(self, value: int):
+        """Update temperature label when slider changes."""
+        temp = value / 100.0
+        self.temperature_label.setText(f"Temperature: {temp:.1f}")
+
     def get_settings(self) -> dict:
         """Get current settings."""
         provider = self.provider_combo.currentText()
@@ -191,6 +211,8 @@ class SettingsDialog(QDialog):
         if provider == "openai":
             tool_result_role = "tool"
 
+        temperature = self.temperature_slider.value() / 100.0
+
         return {
             "provider": provider,
             "api_key": self.api_key_edit.text(),
@@ -198,6 +220,7 @@ class SettingsDialog(QDialog):
             "model": self.model_combo.currentText(),
             "context_window": self.context_window_combo.currentText(),
             "tool_result_role": tool_result_role,
+            "temperature": temperature,
             "auto_save": self.auto_save_check.isChecked(),
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
@@ -218,6 +241,9 @@ class SettingsDialog(QDialog):
             self.context_window_combo.setCurrentText(settings["context_window"])
         if "tool_result_role" in settings:
             self.tool_role_combo.setCurrentText(settings["tool_result_role"])
+        if "temperature" in settings:
+            temp_value = int(settings["temperature"] * 100)
+            self.temperature_slider.setValue(temp_value)
         if "auto_save" in settings:
             self.auto_save_check.setChecked(settings["auto_save"])
         if "stream" in settings:

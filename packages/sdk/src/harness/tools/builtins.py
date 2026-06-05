@@ -3,6 +3,7 @@ Built-in tools for file operations, search, and shell commands.
 """
 
 import asyncio
+import logging
 import re
 from collections.abc import Generator
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 
 from harness.tools.base import Tool, ToolContext
 from harness.types import ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 class ReadTool(Tool):
@@ -307,9 +310,12 @@ class GlobTool(Tool):
         if not base.is_absolute():
             base = context.working_directory / base
 
+        logger.debug(f"GlobTool: pattern={pattern}, base={base}, working_dir={context.working_directory}")
+
         try:
             # Find matches
             matches = list(base.glob(pattern))
+            logger.debug(f"GlobTool: found {len(matches)} matches")
 
             # Format results
             if matches:
