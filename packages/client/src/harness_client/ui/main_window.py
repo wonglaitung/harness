@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
         """Setup slim header bar with logo and quick actions (~36px)."""
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(8, 4, 8, 4)
+        header_layout.setContentsMargins(8, 2, 8, 2)
 
         header_widget.setStyleSheet("""
             QWidget {
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #3e3e42;
             }
         """)
-        header_widget.setMaximumHeight(40)
+        header_widget.setMaximumHeight(36)
 
         # Logo icon
         logo_label = QLabel("A")
