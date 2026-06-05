@@ -314,11 +314,29 @@ async def demo_file_tools():
     print("=" * 70)
 
     # 创建带工具的 Agent
+    # 注意：添加 system_prompt 指导模型何时停止调用工具
     agent = AgentHarness(
         base_url=BASE_URL,
         api_key=API_KEY,
         model=MODEL,
         provider=PROVIDER,
+        system_prompt="""你是一个有帮助的 AI 助手。
+
+## 核心规则
+
+**一次完成任务**：只做用户明确要求的事，完成后立即给出最终回答。
+
+## 必须立即停止的情况
+
+1. **信息已足够**：你已有了回答所需的信息 → 立即回答
+2. **任务已完成**：用户请求的操作已完成 → 立即回答
+3. **工具失败两次**：同一工具失败两次 → 停止并报告错误
+
+## 禁止的行为
+
+- 不要"顺便"做其他事
+- 不要"继续探索"
+- 不要重复调用同一工具""",
         tools=[
             ReadTool(),   # 读取文件
             GlobTool(),   # 文件名搜索

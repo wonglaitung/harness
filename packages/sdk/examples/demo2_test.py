@@ -44,7 +44,7 @@ async def test_demo():
 
     # 问题 - 需要查找信息
     #question = "这个 harness-sdk 项目使用的包名是什么？请查看 pyproject.toml 文件"
-    question = "请列出当前目录下所有的 Python 文件，然后读取 pyproject.toml 的前 20 行。"
+    question = "请列出当前目录下所有的 Python 文件名称，然后读取 pyproject.toml 的前 20 行。"
 
     print("=" * 60)
     print(f"问题: {question}")
