@@ -157,46 +157,8 @@ class SidebarPanel(QWidget):
         """Setup UI components."""
         # Main layout
         self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(4, 2, 4, 4)
+        self._main_layout.setContentsMargins(4, 4, 4, 4)
         self._main_layout.setSpacing(4)
-
-        # Top: Logo only (compact)
-        self._header_widget = QWidget()
-        header_layout = QHBoxLayout(self._header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
-
-        # Logo button (clickable to toggle)
-        self.logo_btn = QPushButton("A")
-        self.logo_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #007acc;
-                color: white;
-                border: none;
-                border-radius: 10px;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 20px;
-                max-width: 20px;
-                min-height: 20px;
-                max-height: 20px;
-                padding: 0;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-        """)
-        self.logo_btn.setFixedSize(20, 20)
-        self.logo_btn.clicked.connect(self._on_toggle)
-        header_layout.addWidget(self.logo_btn, 0, Qt.AlignmentFlag.AlignCenter)
-
-        self._main_layout.addWidget(self._header_widget, 0)
-
-        # Separator line
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setStyleSheet("background-color: #3e3e42; max-height: 1px;")
-        self._main_layout.addWidget(separator)
 
         # Navigation buttons
         self._nav_widget = QWidget()

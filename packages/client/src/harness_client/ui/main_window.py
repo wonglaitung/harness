@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
+        self.sidebar.toggle_requested.connect(self._on_sidebar_toggled)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -183,6 +184,26 @@ class MainWindow(QMainWindow):
             }
         """)
         header_layout.addWidget(app_name)
+        # Toggle sidebar button
+        sidebar_btn = QPushButton("☰")
+        sidebar_btn.setToolTip("切换侧栏")
+        sidebar_btn.setFixedSize(28, 28)
+        sidebar_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 0;
+                color: #d4d4d4;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #2a2a2a;
+            }
+        """)
+        sidebar_btn.clicked.connect(self._on_sidebar_toggle)
+        header_layout.addWidget(sidebar_btn)
+
         header_layout.addStretch()
 
         # Clear context button
@@ -273,6 +294,10 @@ class MainWindow(QMainWindow):
         current = self.chat_controller.get_current_session()
         history = self.chat_controller.session_manager.get_history_list()
         self.sidebar.update_sessions(current, history)
+
+    def _on_sidebar_toggle(self):
+        """Toggle sidebar collapsed/expanded state."""
+        self.sidebar.toggle()
 
     def _on_new_session(self):
         """Create a new session."""
