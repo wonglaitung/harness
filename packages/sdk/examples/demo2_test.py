@@ -22,10 +22,11 @@ if sdk_path not in sys.path:
     sys.path.insert(0, sdk_path)
 
 from harness import AgentHarness, ReadTool, GlobTool
+from harness.sdk.config import HarnessConfig, StepBudgetConfig
 from harness.types import ProgressEvent, ProgressEventType
 
 # 配置 - 使用第三方 OpenAI 兼容 API
-BASE_URL = "http://47.115.141.152:8080/v2/coding"
+BASE_URL = "https://qianfan.baidubce.com/v2/coding"
 API_KEY = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
 MODEL = "glm-5"
 
@@ -41,21 +42,35 @@ def on_progress(event: ProgressEvent):
         tool_name = event.data.get("tool", "unknown")
         success = event.data.get("success", False)
         content_preview = event.data.get("content", "")[:100]
+        error = event.data.get("error", "")
         print(f"  📥 工具结果: {tool_name} (success={success})")
-        print(f"     内容预览: {content_preview}...")
+        if error:
+            print(f"     ❌ 错误: {error}")
+        else:
+            print(f"     内容预览: {content_preview}...")
 
 
 async def test_demo():
     """测试模型是否能正确停止"""
 
-    # 创建 Agent
-    agent = AgentHarness(
+    # 创建 Agent（启用 step_budget 限制工具调用次数）
+    config = HarnessConfig(
         base_url=BASE_URL,
         api_key=API_KEY,
         model=MODEL,
         provider="openai",
+        max_iterations=3,  # 简单任务：2-3 次迭代足够
+        step_budget=StepBudgetConfig(
+            max_iterations_per_task=3,
+            max_tool_calls_per_step=2,  # 单次 LLM 响应最多 2 个工具调用（严格限制）
+            max_tool_calls_per_task=5,  # 整个任务最多 5 个工具调用
+            action_on_exceed="stop",
+        ),
+    )
+    print(f"DEBUG: step_budget config = {config.step_budget}")
+    agent = AgentHarness(
+        config=config,
         tools=[ReadTool(), GlobTool()],
-        max_iterations=10,
     )
 
     # 问题 - 需要查找信息

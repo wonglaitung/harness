@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from harness.core.step_budget import StepBudgetConfig
 from harness.model_presets import get_default_output_tokens, get_model_preset, parse_context_window
 
 
@@ -185,7 +186,7 @@ class HarnessConfig:
     enable_network: bool = False
 
     # Loop settings
-    max_iterations: int = 100
+    max_iterations: int = 10  # 业界标准默认值（OpenAI Agents SDK: 10, LangChain: 10-15）
     tool_timeout: float = 30.0
 
     # Optional settings
@@ -206,6 +207,9 @@ class HarnessConfig:
 
     # Offload settings
     offload: OffloadConfig | None = None
+
+    # Step budget settings (限制迭代和工具调用次数)
+    step_budget: StepBudgetConfig | None = None
 
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)

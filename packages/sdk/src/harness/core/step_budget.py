@@ -244,6 +244,7 @@ class StepBudgetController:
             BudgetCheckResult with projection based on current usage
         """
         if not self._task_active:
+            logger.warning("Step budget: check_before_tool_call called without active task")
             return BudgetCheckResult(
                 level=BudgetLevel.NORMAL,
                 is_within_budget=True,
@@ -254,8 +255,11 @@ class StepBudgetController:
         projected_total = self._usage.tool_calls_total + 1
         projected_step = self._usage.tool_calls_this_step + 1
 
+        logger.info(f"Step budget check: tool={tool_name}, projected_step={projected_step}/{self.config.max_tool_calls_per_step}, projected_total={projected_total}/{self.config.max_tool_calls_per_task}")
+
         # Check step limit first (more restrictive)
         if projected_step > self.config.max_tool_calls_per_step:
+            logger.warning(f"Step budget exceeded: {projected_step}/{self.config.max_tool_calls_per_step}")
             return BudgetCheckResult(
                 level=BudgetLevel.EXCEEDED,
                 is_within_budget=False,

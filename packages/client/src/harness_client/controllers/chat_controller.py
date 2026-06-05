@@ -30,7 +30,7 @@ class ChatConfig:
     base_url: str = ""
     model: str = "claude-sonnet-4-6"
     context_window: str = "auto"
-    max_iterations: int = 20
+    max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
     temperature: float = 0.3  # Lower = more deterministic
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
     system_prompt: str = """你是一个有帮助的 AI 助手。

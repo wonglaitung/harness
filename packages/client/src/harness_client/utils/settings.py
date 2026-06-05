@@ -36,7 +36,7 @@ class AppSettings:
     temperature: float = 0.3  # Lower = more deterministic, range 0.0-1.0
     auto_save: bool = True
     stream: bool = True
-    max_iterations: int = 20
+    max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
     work_dir: str = ""
     remember_dir: bool = True
 
@@ -57,7 +57,7 @@ class AppSettings:
             temperature=data.get("temperature", 0.3),
             auto_save=data.get("auto_save", True),
             stream=data.get("stream", True),
-            max_iterations=data.get("max_iterations", 20),
+            max_iterations=data.get("max_iterations", 10),
             work_dir=data.get("work_dir", ""),
             remember_dir=data.get("remember_dir", True),
         )

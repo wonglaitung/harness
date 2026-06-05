@@ -59,8 +59,33 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LoopConfig:
-    """Configuration for agent loop."""
-    max_iterations: int = 100
+    """Configuration for agent loop.
+
+    Attributes:
+        max_iterations: Maximum number of iterations (LLM calls).
+            - Simple tasks (read files, answer questions): 2-3
+            - Medium tasks (code analysis, multi-step reasoning): 5-7
+            - Complex tasks (code generation, research): 10-15
+            Default is 10 (industry standard: OpenAI Agents SDK, LangChain).
+        timeout_per_tool: Timeout in seconds for each tool execution.
+        enable_parallel_tools: Whether to execute tools in parallel when possible.
+        retry_on_error: Number of retries on LLM API errors.
+        enable_progress: Whether to emit progress events.
+        enable_circuit_breaker: Whether to enable circuit breaker for tool failures.
+        enable_cost_control: Whether to enable token/cost tracking.
+        cost_config: Cost control configuration.
+        security_config: Security configuration.
+        working_directory: Working directory for tool execution.
+        max_stuck_feedbacks: Maximum stuck feedback injection attempts.
+        stuck_min_iterations: Minimum iterations before stuck detection.
+        stuck_consecutive_failures: Consecutive failures to trigger stuck detection.
+        stuck_detector_config: Semantic stuck detection configuration.
+        offload_config: Output offload configuration for large tool results.
+        enable_offload: Whether to enable output offloading.
+        step_budget_config: Step budget configuration for fine-grained control.
+        enable_step_budget: Whether to enable step budget control.
+    """
+    max_iterations: int = 10  # Industry standard (OpenAI Agents SDK: 10, LangChain: 10-15)
     timeout_per_tool: float = 30.0
     enable_parallel_tools: bool = True
     retry_on_error: int = 3
@@ -807,6 +832,7 @@ class AgentLoop:
             # Check step budget before tool call (Phase 25)
             if self._step_budget:
                 budget_result = self._step_budget.check_before_tool_call(tool_call.name)
+                logger.debug(f"Step budget check: {budget_result}")
                 if budget_result.should_stop:
                     from harness.types import ToolResult
                     results.append(ToolResult(
@@ -816,7 +842,7 @@ class AgentLoop:
                         error=f"Step budget exceeded: {budget_result.message}",
                         tool_name=tool_call.name,
                     ))
-                    continue
+                    break  # 停止执行后续工具，而不是跳过当前工具
 
             # Check circuit breaker
             if self._circuit_breaker and self._circuit_breaker.is_open():

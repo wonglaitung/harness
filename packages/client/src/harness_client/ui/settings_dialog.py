@@ -133,7 +133,7 @@ class SettingsDialog(QDialog):
 
         self.max_iterations_spin = QSpinBox()
         self.max_iterations_spin.setRange(1, 100)
-        self.max_iterations_spin.setValue(20)
+        self.max_iterations_spin.setValue(10)  # 业界标准默认值（与 SDK 一致）
         general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
 
         # Temperature slider (0.0 - 1.0)

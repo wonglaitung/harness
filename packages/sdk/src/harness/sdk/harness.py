@@ -160,6 +160,7 @@ class AgentHarness:
                 offload_config=self._create_offload_config(),
                 enable_offload=self.config.offload.enabled if self.config.offload else True,
                 working_directory=self.config.sandbox_workspace,
+                step_budget_config=self.config.step_budget,  # 传递 step_budget 配置
             ),
         )
 

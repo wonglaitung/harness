@@ -21,11 +21,12 @@ while not finished:
 
 | 机制 | 配置字段 | 说明 |
 |------|----------|------|
-| **最大步数** | `max_iterations` (默认 100) | 限制循环次数 |
+| **最大步数** | `max_iterations` (默认 10) | 限制循环次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15） |
 | **工具超时** | `timeout_per_tool` (默认 30.0s) | 每个工具调用的超时时间 |
 | **熔断器** | `enable_circuit_breaker` (默认 True) | 相同工具+参数重复 3 次时中断 |
 | **卡住检测** | `max_stuck_feedbacks` (默认 2) | 检测重复输出或无进展状态 |
 | **成本控制** | `enable_cost_control` (默认 True) | 累计成本超限时中断 |
+| **步骤预算** | `step_budget_config` | 限制单次 LLM 响应的工具调用数和任务总调用数 |
 | **并行工具** | `enable_parallel_tools` (默认 True) | 启用并行工具调用 |
 | **错误重试** | `retry_on_error` (默认 3) | API 错误自动重试次数 |
 
@@ -65,8 +66,16 @@ from harness.core.agent_loop import LoopConfig
 
 @dataclass
 class LoopConfig:
-    """Configuration for agent loop."""
-    max_iterations: int = 100                    # 最大迭代次数
+    """Configuration for agent loop.
+
+    Attributes:
+        max_iterations: Maximum number of iterations (LLM calls).
+            - Simple tasks (read files, answer questions): 2-3
+            - Medium tasks (code analysis, multi-step reasoning): 5-7
+            - Complex tasks (code generation, research): 10-15
+            Default is 10 (industry standard: OpenAI Agents SDK, LangChain).
+    """
+    max_iterations: int = 10         # 业界标准（OpenAI Agents SDK: 10, LangChain: 10-15）
     timeout_per_tool: float = 30.0               # 每个工具调用的超时时间（秒）
     enable_parallel_tools: bool = True           # 是否启用并行工具调用
     retry_on_error: int = 3                      # 错误重试次数

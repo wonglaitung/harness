@@ -411,12 +411,15 @@ class HarnessConfig:
     tool_result_role: str = "tool"   # 工具结果角色："tool" (原生) 或 "user" (兼容模式)
 
     # Agent Loop 配置
-    max_iterations: int = 50
+    max_iterations: int = 10         # 最大迭代次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15）
     max_input_tokens: int = 100000
 
     # 成本控制
     max_cost_per_run: float = 10.0   # USD
     max_tokens_per_run: int = 1000000
+
+    # 步骤预算控制（限制迭代和工具调用次数）
+    step_budget: StepBudgetConfig | None = None
 
     # 记忆配置
     memory_dir: str = ".harness/memory"
@@ -435,6 +438,45 @@ class HarnessConfig:
     # 模型预设
     model_presets: dict[str, dict] = field(default_factory=dict)
 ```
+
+### step_budget 步骤预算控制
+
+使用 `StepBudgetConfig` 限制单次任务的迭代次数和工具调用次数，防止模型过度探索。
+
+```python
+from harness.sdk.config import HarnessConfig, StepBudgetConfig
+
+config = HarnessConfig(
+    max_iterations=3,  # 最大迭代次数
+    step_budget=StepBudgetConfig(
+        max_iterations_per_task=3,     # 任务最大迭代次数
+        max_tool_calls_per_step=5,     # 单次 LLM 响应最大工具调用数
+        max_tool_calls_per_task=10,    # 任务最大工具调用总数
+        action_on_exceed="stop",        # 超限时的动作："stop" | "warn" | "throttle"
+    ),
+)
+
+agent = AgentHarness(config=config, tools=[...])
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `max_iterations_per_task` | int | 50 | 任务最大迭代次数 |
+| `max_tool_calls_per_step` | int | 10 | 单次 LLM 响应最大工具调用数 |
+| `max_tool_calls_per_task` | int | 200 | 任务最大工具调用总数 |
+| `warning_threshold` | float | 0.8 | 触发警告的阈值比例 |
+| `critical_threshold` | float | 0.95 | 触发严重警告的阈值比例 |
+| `action_on_exceed` | str | "stop" | 超限时的动作："stop", "warn", "throttle" |
+
+#### 推荐值
+
+| 任务类型 | max_iterations | max_tool_calls_per_step | max_tool_calls_per_task |
+|---------|----------------|------------------------|------------------------|
+| 简单任务（读文件、回答问题） | 2-3 | 2-3 | 5 |
+| 中等任务（代码分析、多步推理） | 5-7 | 5 | 10-15 |
+| 复杂任务（代码生成、研究） | 10-15 | 10 | 50-100 |
 
 ### tool_result_role 兼容模式
 
