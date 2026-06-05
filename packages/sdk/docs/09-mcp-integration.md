@@ -4,6 +4,20 @@
 
 MCP (Model Context Protocol) 允许 Harness 连接外部工具服务器，扩展 Agent 的能力边界。通过 MCP，Agent 可以使用 GitHub、Slack、数据库等第三方服务提供的工具。
 
+## 安装依赖
+
+使用 MCP 功能需要安装 `mcp` 包：
+
+```bash
+# 作为 SDK 依赖自动安装
+uv sync --all-packages
+
+# 或手动安装
+pip install mcp>=1.0.0
+```
+
+SDK 的 `pyproject.toml` 已包含 `mcp>=1.0.0` 依赖。
+
 ## 架构
 
 ```
@@ -146,13 +160,33 @@ MCP 服务器连接后，自动发现其提供的工具并注册到 ToolExecutor
 5. LLM 可调用 MCP 工具
 ```
 
-### MCPTool 包装器
+### MCPToolWrapper 包装器
 
-MCP 工具被包装为标准 `Tool` 接口，与内置工具统一调度：
+MCP 工具通过 `MCPToolWrapper` 包装为标准 Tool 接口，与内置工具统一调度：
 
 ```python
-# MCP 工具与内置工具使用方式完全相同
-# LLM 看到的是统一的工具列表
+class MCPToolWrapper:
+    """将 MCP 工具包装为 Harness Tool"""
+    
+    @property
+    def name(self) -> str:
+        """工具名称，格式: mcp_{server}_{tool}"""
+    
+    @property
+    def input_schema(self) -> dict:
+        """工具输入 Schema (JSON Schema 格式)"""
+    
+    def validate_arguments(self, arguments: dict) -> tuple[bool, str | None]:
+        """验证参数，返回 (是否有效, 错误信息)"""
+    
+    async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+        """执行 MCP 工具调用"""
+```
+
+MCP 工具与内置工具使用方式完全相同，LLM 看到的是统一的工具列表：
+
+```python
+# MCP 工具自动注册，无需额外配置
 result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
 # LLM 可能调用: grep (内置) + mcp_github_create_issue (MCP)
 ```

@@ -115,6 +115,7 @@ packages/sdk/src/harness/
 │   └── config.py           # HarnessConfig - 配置类
 ├── core/
 │   ├── agent_loop.py       # ReAct 执行循环
+│   ├── step_budget.py      # 步骤预算控制
 │   ├── cost_controller.py  # 成本控制
 │   └── streaming.py        # 流式背压控制
 ├── llm/
@@ -125,13 +126,11 @@ packages/sdk/src/harness/
 │   ├── base.py             # Tool 抽象类
 │   ├── builtins.py         # 内置工具
 │   └── executor.py         # 工具执行器
-├── skills/
-│   ├── base.py             # Skill 基类
-│   ├── registry.py         # 技能注册
-│   └── injector.py         # System prompt 注入
 ├── mcp/
 │   ├── manager.py          # MCP 服务器管理
-│   └── transport.py        # Stdio/HTTP 传输
+│   ├── client.py           # MCP 客户端
+│   ├── transport.py        # Stdio/HTTP 传输
+│   └── tool_wrapper.py     # MCP 工具包装器
 └── security/
     ├── sandbox.py          # 沙箱执行
     └── validation.py       # 输入验证
@@ -191,6 +190,8 @@ SidebarPanel.update_sessions() (纯渲染)
 - **精准修改**：只碰必须碰的，不重构没坏的东西
 - **需求分析优先**：编码前深入理解需求，不假设、不猜测；**API 和框架代码必须查阅官方文档**
 - **API/框架文档必须查阅**：修改 API 调用、框架组件、库的使用方式前必须查阅官方文档，不能凭经验假设
+- **消息结构固定**：LLM API 消息有固定格式要求，Session 是单一数据源，用户消息必须持久化到 session
+- **测试多轮迭代**：任何涉及消息处理的代码，都要测试第二轮迭代是否正常
 
 ---
 
@@ -221,13 +222,31 @@ class MyTool(Tool):
     @property
     def description(self) -> str: ...
     @property
-    def input_schema(self) -> dict: ...
+    def input_schema(self) -> dict: ...  # JSON Schema 格式
     async def execute(self, args, ctx) -> ToolResult: ...
+
+    # 可选：参数验证（默认使用 jsonschema）
+    def validate_arguments(self, args) -> tuple[bool, str | None]:
+        ...
 
 # 方式 2：装饰器
 @agent.tool(description="计算两个数的和")
 def add(a: int, b: int) -> int:
     return a + b
+```
+
+### MCP 工具包装器
+
+MCP 工具通过 `MCPToolWrapper` 包装为 Harness Tool 接口：
+
+```python
+class MCPToolWrapper:
+    @property
+    def name(self) -> str:         # 格式: mcp_{server}_{tool}
+    @property
+    def input_schema(self) -> dict # JSON Schema
+    def validate_arguments(self, args) -> tuple[bool, str | None]
+    async def execute(self, args, ctx) -> ToolResult
 ```
 
 ### 第三方 OpenAI 格式 API
@@ -281,4 +300,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-05-31.
+Today's date is 2026-06-06.

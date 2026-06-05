@@ -663,3 +663,173 @@ Iteration 1: LLM 返回 [read(file1), read(file2)]  # 并行调用
 - [LangGraph GraphRecursionError 处理](https://docs.langchain.com/oss/python/langgraph/graph-api)
 - [Why Your LangChain Agent Keeps Calling the Same Tool](https://dev.to/gabrielanhaia/why-your-langchain-agent-keeps-calling-the-same-tool-in-a-loop-and-how-to-stop-it-57gk)
 - [LangGraph Best Practices](https://www.swarnendu.de/blog/langgraph-best-practices)
+
+---
+
+## 2026-06-06: 用户消息在第二次 LLM 调用时丢失
+
+### 问题
+
+用户发送消息后，日志显示：
+
+**第一次 LLM 调用**（正确）：
+```python
+messages = [
+    {"role": "system", "content": "..."},
+    {"role": "user", "content": "请列出当前目录下所有的 Python 文件..."}
+]
+```
+
+**第二次 LLM 调用**（错误 - USER 消息丢失）：
+```python
+messages = [
+    {"role": "system", "content": "..."},
+    {"role": "tool", "content": "No files found", ...},
+    {"role": "tool", "content": "[project]...", ...}
+]
+```
+
+用户消息 (USER message) 在后续迭代中丢失，导致 LLM 不知道原始任务是什么。
+
+### 原因
+
+**代码设计缺陷**：
+
+```python
+# agent_loop.py:431 (原始代码)
+context = self.context.build(session, prompt if iteration == 0 else None)
+
+# context_builder.py:240-241
+if new_prompt:
+    windowed_messages.append(Message(role="user", content=new_prompt))
+```
+
+问题分析：
+1. `new_prompt` 参数只在 `iteration == 0` 时传入
+2. 用户消息被**临时添加**到 `windowed_messages`，没有**持久化**到 `session.messages`
+3. 第二次迭代时，`session.messages` 中没有用户消息，`new_prompt` 为 `None`，导致丢失
+
+**根本问题**：违反了"Session 作为单一数据源"原则。消息应该持久化在 session 中，而不是临时添加。
+
+### 解决
+
+在第一次迭代时，将用户消息持久化到 session：
+
+```python
+# agent_loop.py:431-434 (修复后)
+# Add user message to session on first iteration (fixes USER message loss)
+if iteration == 0 and prompt:
+    session.add_message(Message(role="user", content=prompt))
+context = self.context.build(session)  # 不再需要 new_prompt 参数
+```
+
+### 教训
+
+1. **Session 是单一数据源**：所有消息都应该存储在 `session.messages` 中
+2. **不要临时添加消息**：消息要么持久化到 session，要么不添加
+3. **数据流要清晰**：
+   ```
+   用户输入 → session.add_message() → 持久化
+                                   ↓
+   ContextBuilder.build(session) → 从 session 读取
+   ```
+4. **测试多轮迭代**：需要测试验证多轮迭代后消息完整性
+
+### 检查方法
+
+```python
+# 验证消息完整性
+for i, msg in enumerate(session.messages):
+    print(f"[{i}] {msg.role}: {msg.content[:50]}...")
+
+# 验证 context 构建结果
+context = builder.build(session)
+user_msgs = [m for m in context.messages if m['role'] == 'user']
+assert len(user_msgs) > 0, "USER message should not be lost"
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/sdk/src/harness/core/agent_loop.py` | 在第一次迭代时将用户消息添加到 session |
+| `packages/sdk/src/harness/memory/context_builder.py` | 不需要修改，`new_prompt` 参数保留为可选功能 |
+
+---
+
+## 2026-06-06: MCPToolWrapper 缺少 Tool 接口必需属性
+
+### 问题
+
+运行 MCP 工具时报错：
+
+```python
+AttributeError: 'MCPToolWrapper' object has no attribute 'input_schema'
+AttributeError: 'MCPToolWrapper' object has no attribute 'validate_arguments'
+```
+
+### 原因
+
+`MCPToolWrapper` 类设计时只考虑了 MCP 协议需要的属性，没有完整实现 Harness `Tool` 接口：
+
+1. `_input_schema` 私有属性存在，但没有公开的 `input_schema` property
+2. `validate_arguments` 方法完全缺失
+3. 没有参考 `Tool` 基类的接口规范
+
+### 解决
+
+为 `MCPToolWrapper` 添加缺失的属性和方法：
+
+```python
+class MCPToolWrapper:
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        """Tool input schema (JSON Schema format)."""
+        return self._input_schema
+
+    def validate_arguments(
+        self,
+        arguments: Dict[str, Any],
+    ) -> tuple[bool, str | None]:
+        """Validate tool arguments using JSON Schema."""
+        try:
+            import jsonschema
+            jsonschema.validate(arguments, self._input_schema)
+            return True, None
+        except ImportError:
+            # Fall back to basic validation
+            for field_name in self._required:
+                if field_name not in arguments:
+                    return False, f"Missing required field: {field_name}"
+            return True, None
+        except jsonschema.ValidationError as e:
+            return False, str(e.message)
+        except jsonschema.SchemaError as e:
+            return False, f"Invalid schema: {e.message}"
+```
+
+### 教训
+
+1. **包装器类要完整实现接口**：如果类要被当作 Tool 使用，必须实现 Tool 接口的所有方法和属性
+2. **参考基类设计**：设计包装器时，要检查目标接口的完整定义
+3. **添加新功能要测试端到端流程**：只测试了 MCP 连接，没测试实际工具调用
+4. **私有属性要有公开访问器**：如果外部代码需要访问属性，要提供 property
+
+### 检查方法
+
+```python
+# 检查类是否实现了接口的所有属性
+from harness.tools.base import Tool
+required_attrs = ['name', 'description', 'input_schema', 'execute', 'validate_arguments']
+
+wrapper = MCPToolWrapper(...)
+missing = [attr for attr in required_attrs if not hasattr(wrapper, attr)]
+assert not missing, f"Missing attributes: {missing}"
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/sdk/src/harness/mcp/tool_wrapper.py` | 添加 `input_schema` 属性和 `validate_arguments` 方法 |
+| `packages/sdk/pyproject.toml` | 添加 `mcp>=1.0.0` 依赖 |

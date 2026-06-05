@@ -87,6 +87,43 @@ class MCPToolWrapper:
         """Required parameters."""
         return self._required
 
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        """Tool input schema (JSON Schema format)."""
+        return self._input_schema
+
+    def validate_arguments(
+        self,
+        arguments: Dict[str, Any],
+    ) -> tuple[bool, str | None]:
+        """
+        Validate tool arguments using JSON Schema.
+
+        Args:
+            arguments: Arguments to validate
+
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        try:
+            import jsonschema
+
+            jsonschema.validate(arguments, self._input_schema)
+            return True, None
+
+        except ImportError:
+            # Fall back to basic validation
+            for field_name in self._required:
+                if field_name not in arguments:
+                    return False, f"Missing required field: {field_name}"
+            return True, None
+
+        except jsonschema.ValidationError as e:
+            return False, str(e.message)
+
+        except jsonschema.SchemaError as e:
+            return False, f"Invalid schema: {e.message}"
+
     async def execute(
         self,
         arguments: Dict[str, Any],
