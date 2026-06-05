@@ -92,23 +92,28 @@ class SettingsDialog(QDialog):
         api_layout.addRow("Context:", self.context_window_combo)
 
         # Compatibility mode for proxy APIs that don't support "tool" role
+        # Only relevant for Anthropic provider
         self.tool_role_combo = QComboBox()
         self.tool_role_combo.addItems(["tool", "user"])
         self.tool_role_combo.setCurrentText("tool")
         self.tool_role_combo.setToolTip(
-            "某些代理 API 不支持 Anthropic 原生的 tool role。\n"
+            "某些 Anthropic 代理 API 不支持原生的 tool role。\n"
             "如果遇到 'invalid role: tool' 错误，请选择 'user'。"
         )
-        api_layout.addRow("工具结果角色:", self.tool_role_combo)
+        self.tool_role_label = QLabel("工具结果角色:")
+        self.tool_role_row = api_layout.addRow(self.tool_role_label, self.tool_role_combo)
 
         # Explanation label for tool role
-        tool_role_help = QLabel(
-            "• tool: Anthropic 原生格式，模型能识别工具返回结果\n"
-            "• user: 兼容模式，将工具结果转为用户消息格式"
+        self.tool_role_help = QLabel(
+            "• tool: Anthropic 原生格式\n"
+            "• user: 兼容模式（代理 API 不支持 tool role 时使用）"
         )
-        tool_role_help.setStyleSheet("color: #808080; font-size: 11px; margin-left: 20px;")
-        tool_role_help.setWordWrap(True)
-        api_layout.addRow(tool_role_help)
+        self.tool_role_help.setStyleSheet("color: #808080; font-size: 11px; margin-left: 20px;")
+        self.tool_role_help.setWordWrap(True)
+        self.tool_role_help_row = api_layout.addRow(self.tool_role_help)
+
+        # Connect provider change to update tool role visibility
+        self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
 
         tabs.addTab(api_tab, "API")
 
@@ -168,15 +173,31 @@ class SettingsDialog(QDialog):
         if dir_path:
             self.work_dir_edit.setText(dir_path)
 
+    def _on_provider_changed(self, provider: str):
+        """Update UI based on provider selection."""
+        # Tool result role only relevant for Anthropic provider
+        is_anthropic = provider == "anthropic"
+        self.tool_role_label.setVisible(is_anthropic)
+        self.tool_role_combo.setVisible(is_anthropic)
+        self.tool_role_help.setVisible(is_anthropic)
+
     def get_settings(self) -> dict:
         """Get current settings."""
+        provider = self.provider_combo.currentText()
+
+        # Tool result role only applies to Anthropic provider
+        # For OpenAI, always use native "tool" role
+        tool_result_role = self.tool_role_combo.currentText()
+        if provider == "openai":
+            tool_result_role = "tool"
+
         return {
-            "provider": self.provider_combo.currentText(),
+            "provider": provider,
             "api_key": self.api_key_edit.text(),
             "base_url": self.base_url_edit.text(),
             "model": self.model_combo.currentText(),
             "context_window": self.context_window_combo.currentText(),
-            "tool_result_role": self.tool_role_combo.currentText(),
+            "tool_result_role": tool_result_role,
             "auto_save": self.auto_save_check.isChecked(),
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
@@ -205,3 +226,6 @@ class SettingsDialog(QDialog):
             self.max_iterations_spin.setValue(settings["max_iterations"])
         if "work_dir" in settings:
             self.work_dir_edit.setText(settings["work_dir"])
+
+        # Update UI visibility based on provider
+        self._on_provider_changed(self.provider_combo.currentText())
