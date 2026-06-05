@@ -156,13 +156,14 @@ class SidebarPanel(QWidget):
         """Setup UI components."""
         # Main layout
         self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(4, 4, 4, 4)
+        self._main_layout.setContentsMargins(4, 2, 4, 4)
         self._main_layout.setSpacing(4)
 
-        # Top: Logo/App name area (compact)
+        # Top: Logo only (compact)
         self._header_widget = QWidget()
         header_layout = QHBoxLayout(self._header_widget)
-        header_layout.setContentsMargins(4, 2, 4, 2)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
 
         # Logo button (clickable to toggle)
         self.logo_btn = QToolButton()
@@ -171,23 +172,23 @@ class SidebarPanel(QWidget):
             QToolButton {
                 background-color: #007acc;
                 color: white;
-                border-radius: 12px;
-                font-size: 14px;
+                border: none;
+                border-radius: 10px;
+                font-size: 13px;
                 font-weight: bold;
-                min-width: 24px;
-                max-width: 24px;
-                min-height: 24px;
-                max-height: 24px;
+                min-width: 20px;
+                max-width: 20px;
+                min-height: 20px;
+                max-height: 20px;
             }
             QToolButton:hover {
                 background-color: #106ebe;
             }
         """)
         self.logo_btn.clicked.connect(self._on_toggle)
-        header_layout.addWidget(self.logo_btn)
-        header_layout.addStretch()
+        header_layout.addWidget(self.logo_btn, 0, Qt.AlignmentFlag.AlignCenter)
 
-        self._main_layout.addWidget(self._header_widget)
+        self._main_layout.addWidget(self._header_widget, 0)
 
         # Separator line
         separator = QFrame()
