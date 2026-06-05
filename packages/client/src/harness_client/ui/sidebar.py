@@ -185,18 +185,6 @@ class SidebarPanel(QWidget):
         """)
         self.logo_btn.clicked.connect(self._on_toggle)
         header_layout.addWidget(self.logo_btn)
-
-        # App name label (hidden when collapsed)
-        self.app_name_label = QLabel("Harness")
-        self.app_name_label.setStyleSheet("""
-            QLabel {
-                color: #d4d4d4;
-                font-size: 12px;
-                font-weight: bold;
-                margin-left: 4px;
-            }
-        """)
-        header_layout.addWidget(self.app_name_label)
         header_layout.addStretch()
 
         self._main_layout.addWidget(self._header_widget)
@@ -290,7 +278,6 @@ class SidebarPanel(QWidget):
         if self._is_collapsed:
             # Collapsed state: show only icons
             self.setMaximumWidth(self.COLLAPSED_WIDTH)
-            self.app_name_label.hide()
             self._sessions_widget.hide()
 
             # Update buttons to show only icons
@@ -299,7 +286,6 @@ class SidebarPanel(QWidget):
         else:
             # Expanded state: show icons + text
             self.setMaximumWidth(self.EXPANDED_WIDTH)
-            self.app_name_label.show()
             self._sessions_widget.show()
 
             # Update buttons to show icon + text

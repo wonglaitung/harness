@@ -518,7 +518,7 @@ class MainWindow(QMainWindow):
             "Harness Client v0.1.0\n\n"
             "Windows 桌面客户端\n"
             "基于 Harness AI Agent SDK\n\n"
-            "© 2024 Harness Team",
+            "© 2026 Harness Team",
         )
 
     def _on_work_dir_changed(self, path: Path):
