@@ -265,7 +265,9 @@ class SidebarPanel(QWidget):
 
     def toggle(self):
         """Public method to toggle the sidebar state."""
-        self._on_toggle()
+        self._is_collapsed = not self._is_collapsed
+        self._apply_collapsed_state()
+        self.toggle_requested.emit()
 
     def set_collapsed(self, collapsed: bool):
         """Set the sidebar collapsed state."""
