@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QFontMetrics
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -184,10 +184,10 @@ class MainWindow(QMainWindow):
         """)
         header_layout.addWidget(app_name)
         # Toggle sidebar button
-        sidebar_btn = QPushButton("☰")
-        sidebar_btn.setToolTip("切换侧栏")
-        sidebar_btn.setFixedSize(28, 28)
-        sidebar_btn.setStyleSheet("""
+        self.sidebar_btn = QPushButton("☰")
+        self.sidebar_btn.setToolTip("折叠侧栏")
+        self.sidebar_btn.setFixedSize(28, 28)
+        self.sidebar_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
                 border: none;
@@ -200,8 +200,8 @@ class MainWindow(QMainWindow):
                 background-color: #2a2a2a;
             }
         """)
-        sidebar_btn.clicked.connect(self._on_sidebar_toggle)
-        header_layout.addWidget(sidebar_btn)
+        self.sidebar_btn.clicked.connect(self._on_sidebar_toggle)
+        header_layout.addWidget(self.sidebar_btn)
 
         header_layout.addStretch()
 
@@ -297,6 +297,17 @@ class MainWindow(QMainWindow):
     def _on_sidebar_toggle(self):
         """Toggle sidebar collapsed/expanded state."""
         self.sidebar.toggle()
+        # Update button text and dynamic width
+        if self.sidebar.is_collapsed():
+            self.sidebar_btn.setText("☰")
+            self.sidebar_btn.setToolTip("展开侧栏")
+        else:
+            self.sidebar_btn.setText("✕")
+            self.sidebar_btn.setToolTip("折叠侧栏")
+        # Dynamic width based on text
+        fm = QFontMetrics(self.sidebar_btn.font())
+        text_width = fm.horizontalAdvance(self.sidebar_btn.text())
+        self.sidebar_btn.setFixedSize(max(28, text_width + 16), 28)
 
     def _on_new_session(self):
         """Create a new session."""
