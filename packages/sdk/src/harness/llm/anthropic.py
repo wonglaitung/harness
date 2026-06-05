@@ -205,50 +205,56 @@ class AnthropicClient(LLMClient):
 
     def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
-        Convert messages for API compatibility.
+        Convert messages to Anthropic API format.
 
-        Some proxy APIs don't support Anthropic's native "tool" role.
-        This method converts tool results to user messages when configured.
+        Anthropic API expects tool results as:
+        - role: "user"
+        - content: [{"type": "tool_result", "tool_use_id": "...", "content": "..."}]
+
+        Our SDK internally uses role: "tool" which needs to be converted.
+        For proxy APIs that don't support tool_result blocks, use compatibility mode.
 
         Args:
             messages: Original messages
 
         Returns:
-            Converted messages
+            Converted messages in Anthropic API format
         """
-        # Check if compatibility mode is needed
-        if self.config.tool_result_role == "tool":
-            return messages  # Native mode, no conversion
-
-        # Compatibility mode: convert tool role to user role
         converted = []
-        for i, msg in enumerate(messages):
+        for msg in messages:
             role = msg.get("role", "")
 
             if role == "tool":
-                # Convert tool result to user message with clear formatting
+                # Tool results must be sent as user messages with tool_result blocks
                 tool_call_id = msg.get("metadata", {}).get("tool_call_id", "")
                 content = msg.get("content", "")
+                is_error = msg.get("metadata", {}).get("is_error", False)
 
-                # Find the previous assistant message to get tool name context
-                tool_context = ""
-                if i > 0 and messages[i - 1].get("role") == "assistant":
-                    prev_content = messages[i - 1].get("content", "")
-                    # Extract tool names from the previous message if available
-                    if prev_content and "tool" in prev_content.lower():
-                        tool_context = " (from your tool call)"
+                if self.config.tool_result_role == "tool":
+                    # Native Anthropic format: user message with tool_result block
+                    tool_result_block = {
+                        "type": "tool_result",
+                        "tool_use_id": tool_call_id,
+                        "content": content,
+                    }
+                    if is_error:
+                        tool_result_block["is_error"] = True
 
-                # Format as user message with clear tool result context
-                # The key is to make it clear this is a RESULT, not a new user request
-                converted_msg = {
-                    "role": "user",
-                    "content": (
-                        f"[TOOL RESULT{f' (id: {tool_call_id})' if tool_call_id else ''}]\n"
-                        f"This is the result of your tool call{tool_context}. "
-                        f"Use this information to complete the user's original request.\n\n"
-                        f"{content}"
-                    ),
-                }
+                    converted_msg = {
+                        "role": "user",
+                        "content": [tool_result_block],
+                    }
+                else:
+                    # Compatibility mode for proxy APIs: plain text user message
+                    converted_msg = {
+                        "role": "user",
+                        "content": (
+                            f"[TOOL RESULT]\n"
+                            f"This is the result of your tool call. "
+                            f"Use this information to complete the user's original request.\n\n"
+                            f"{content}"
+                        ),
+                    }
                 converted.append(converted_msg)
             else:
                 converted.append(msg)
