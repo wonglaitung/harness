@@ -279,23 +279,17 @@ class SidebarPanel(QWidget):
     def _apply_collapsed_state(self):
         """Apply the collapsed or expanded state to the UI."""
         if self._is_collapsed:
-            # Collapsed state: show only icons, fix height to compact size
+            # Collapsed state: show only icons
             self.setMaximumWidth(self.COLLAPSED_WIDTH)
             self._sessions_widget.hide()
-            self.setSizePolicy(
-                QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred
-            )
 
             # Update buttons to show only icons
             for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
                 btn.set_collapsed(True)
         else:
-            # Expanded state: show icons + text, fill available height
+            # Expanded state: show icons + text
             self.setMaximumWidth(self.EXPANDED_WIDTH)
             self._sessions_widget.show()
-            self.setSizePolicy(
-                QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
-            )
 
             # Update buttons to show icon + text
             for btn in [self.chat_btn, self.settings_btn, self.new_session_btn]:
