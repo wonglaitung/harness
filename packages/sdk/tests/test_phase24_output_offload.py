@@ -245,8 +245,15 @@ class TestOutputOffloaderIntegration:
             config = OffloadConfig(temp_dir=Path(tmpdir))
             offloader = OutputOffloader(config)
 
+            # When custom temp_dir is provided, use it directly
             assert offloader._temp_dir.exists()
-            assert offloader._temp_dir.name == "harness_offload"
+            assert offloader._temp_dir == Path(tmpdir)
+
+    def test_default_temp_directory(self):
+        """Test default temp directory is .harness/offload in cwd."""
+        offloader = OutputOffloader()
+        assert offloader._temp_dir == Path.cwd() / ".harness" / "offload"
+        assert offloader._temp_dir.exists()
 
     def test_custom_temp_dir(self):
         """Test custom temp directory."""

@@ -34,15 +34,16 @@ class OffloadConfig:
         cleanup_on_session_end: Auto-cleanup when session ends
         preview_length: Length of preview to keep in context
         summary_prompt: Prompt for generating summaries (optional)
-        temp_dir: Directory for offloaded files (default: system temp)
+        temp_dir: Directory for offloaded files (default: .harness/offload in cwd)
     """
+
     size_threshold_chars: int = 5000
     size_threshold_tokens: int = 1250  # ~5000 / 4
     max_outputs_per_session: int = 50
     cleanup_on_session_end: bool = False  # Safety: default to keep files
     preview_length: int = 200  # Preview chars to keep in context
     summary_prompt: str | None = None  # Optional LLM-based summarization
-    temp_dir: Path | None = None  # Default: system temp directory
+    temp_dir: Path | None = None  # Default: .harness/offload in current working directory
 
     def __post_init__(self):
         """Validate configuration."""
@@ -141,7 +142,9 @@ class OutputOffloader:
     def __init__(self, config: OffloadConfig | None = None):
         """Initialize the output offloader."""
         self.config = config or OffloadConfig()
-        self._temp_dir = Path(self.config.temp_dir or tempfile.gettempdir()) / "harness_offload"
+        # Default to .harness/offload in current working directory
+        # This ensures sandbox can access the files
+        self._temp_dir = Path(self.config.temp_dir or Path.cwd() / ".harness" / "offload")
         self._temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Track offloaded outputs per session

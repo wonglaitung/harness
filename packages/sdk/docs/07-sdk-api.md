@@ -407,6 +407,9 @@ class HarnessConfig:
     context_window: int = 200000     # 模型上下文窗口大小
     max_tokens: int = 4096           # 最大输出 token（0 = 自动）
 
+    # 兼容性配置
+    tool_result_role: str = "tool"   # 工具结果角色："tool" (原生) 或 "user" (兼容模式)
+
     # Agent Loop 配置
     max_iterations: int = 50
     max_input_tokens: int = 100000
@@ -431,6 +434,29 @@ class HarnessConfig:
 
     # 模型预设
     model_presets: dict[str, dict] = field(default_factory=dict)
+```
+
+### tool_result_role 兼容模式
+
+某些代理 API（如 OpenAI 格式的 proxy）不支持 Anthropic 原生的 `tool` 角色。使用 `tool_result_role="user"` 可将工具结果转换为 user message：
+
+```python
+# 原生 Anthropic API（默认）
+config = HarnessConfig(tool_result_role="tool")
+
+# 兼容模式 - 适用于不支持 tool role 的 proxy API
+config = HarnessConfig(
+    tool_result_role="user",
+    base_url="https://your-proxy-api.com/v1",
+)
+
+agent = AgentHarness(config=config)
+```
+
+转换后的消息格式：
+```
+[Tool Result (id: call_abc123)]
+<工具输出内容>
 ```
 
 ### 模型预设

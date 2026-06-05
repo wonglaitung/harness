@@ -115,7 +115,8 @@ class OffloadConfig:
     Configuration for tool output offloading.
 
     When tool outputs are too large, they can be offloaded to temporary files
-    to keep context windows manageable.
+    to keep context windows manageable. Files are stored in .harness/offload
+    within the current working directory, ensuring sandbox access.
 
     Attributes:
         enabled: Whether to enable output offloading

@@ -730,7 +730,7 @@ class OffloadConfig:
     cleanup_on_session_end: bool = False    # 会话结束时是否清理文件（默认保留）
     preview_length: int = 200               # 上下文中保留的预览长度
     summary_prompt: str | None = None       # 可选的摘要生成提示
-    temp_dir: Path | None = None            # 卸载文件存储目录（默认系统临时目录）
+    temp_dir: Path | None = None            # 卸载文件存储目录（默认 .harness/offload）
 ```
 
 ### OffloadedOutput
@@ -778,10 +778,10 @@ result = await agent.run("读取并分析所有源代码文件")
 [Output from read_file (15000 chars)]
 Preview: #!/usr/bin/env python3
 """Main module..."""
-Full output saved to: /tmp/harness_offload/session_abc123_read_file_call_456.txt
+Full output saved to: .harness/offload/session_abc123_read_file_call_456.txt
 ```
 
-LLM 可以根据需要决定是否要求加载完整内容。
+**注意**：卸载文件默认存储在当前工作目录的 `.harness/offload/` 下，确保 sandbox 可以访问。LLM 可以根据需要使用 Read 工具加载完整内容。
 
 ## Step Budget（步骤预算）
 
