@@ -134,7 +134,7 @@ Rich Sutton 指出，AI 历史上最大的突破都来自于"利用大规模计�
 - **保持简单**：提供原子工具，让模型制定计划
 - **信任模型**：新模型的能力会超出你的预期
 
-### 7. 精准修改原则
+### 8. 精准修改原则
 
 **只碰必须碰的。只清理自己造成的混乱。**
 
@@ -165,7 +165,68 @@ return ToolResult(success=True, content=content)
 
 **检验标准**：每一行修改都应该能直接追溯到用户的请求
 
-### 8. 目标驱动执行
+### 9. API/框架文档查阅原则（2026-06-05 新增）
+
+**修改 API 或框架相关代码前必须查阅官方文档，不能凭假设。**
+
+> 来源：lessons.md "2026-06-05: 不查 API 文档凭假设修改导致错误"
+
+**必须查阅文档的场景**（强制）：
+- 修改 API 调用格式
+- 添加新的 API 参数
+- 实现新的消息类型
+- 处理 API 响应格式
+- 错误处理逻辑
+- **使用框架/库的新特性**（如 QTextBrowser HTML 渲染）
+- **修改 UI 组件的渲染方式**（CSS/HTML 兼容性）
+
+**查阅文档的优先级**：
+1. 官方 API Reference（最权威）
+2. 官方 SDK 文档
+3. Context7 文档索引
+4. GitHub 官方示例代码
+
+**常见错误案例**：
+
+**案例 1：API 消息格式假设错误**
+```python
+# ❌ 错误：凭经验假设 API 有 role: "tool"（OpenAI 有，但 Anthropic 没有）
+{"role": "tool", "content": "file contents"}
+
+# ✅ 正确：查阅 Anthropic 文档发现工具结果是 user 角色 + tool_result block
+{
+    "role": "user",
+    "content": [
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_123",
+            "content": "file contents"
+        }
+    ]
+}
+```
+
+**案例 2：框架 CSS 能力假设错误**
+```html
+<!-- ❌ 错误：凭前端经验假设 QTextBrowser 支持 display: inline-block -->
+<div style="display: inline-block; text-align: right;">用户消息</div>
+
+<!-- ✅ 正确：查阅 Qt 文档发现 QTextBrowser 不支持现代 CSS，用 table 布局 -->
+<table width="100%">
+    <tr>
+        <td width="25%"></td>
+        <td width="75%" align="right">用户消息</td>
+    </tr>
+</table>
+```
+
+**检验标准**：
+- API 参数格式是否与官方文档一致？
+- 不同 API 是否有不同的规范？（OpenAI ≠ Anthropic）
+- 框架/库是否支持你使用的方式？（QTextBrowser ≠ 现代 HTML）
+- 是否使用了 Context7 或官方来源验证？
+
+### 10. 目标驱动执行
 
 **定义成功标准。循环验证直到达成。**
 
@@ -186,7 +247,7 @@ return ToolResult(success=True, content=content)
 
 **重要**：强有力的成功标准让执行能够独立循环验证。弱标准（"让它工作"）需要不断澄清。
 
-### 9. 可维护性优先
+### 11. 可维护性优先
 - 考虑长期维护和扩展性
 - 代码应该自文档化
 - 遵循项目的编码规范
