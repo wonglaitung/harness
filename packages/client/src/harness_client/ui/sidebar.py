@@ -275,7 +275,7 @@ class SidebarPanel(QWidget):
         """Handle chat button click."""
         # If collapsed, expand to show sessions
         if self._is_collapsed:
-            self._on_toggle()
+            self.toggle()
 
     def _on_settings_click(self):
         """Handle settings button click."""
