@@ -50,6 +50,7 @@ class CollapsibleSection(QWidget):
         super().__init__(parent)
         self._is_collapsed = False
         self._title = title
+        self._header_buttons: list[QPushButton] = []
         self._setup_ui()
 
     def _setup_ui(self):
@@ -58,7 +59,13 @@ class CollapsibleSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header button
+        # Header container
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+
+        # Header button (fold/unfold)
         self.header_btn = QPushButton(f"▼ {self._title}")
         self.header_btn.setStyleSheet("""
             QPushButton {
@@ -75,7 +82,16 @@ class CollapsibleSection(QWidget):
             }
         """)
         self.header_btn.clicked.connect(self._toggle_collapsed)
-        layout.addWidget(self.header_btn)
+        header_layout.addWidget(self.header_btn, 1)  # stretch=1 to take remaining space
+
+        # Container for extra header buttons (e.g., "+")
+        self.header_buttons_widget = QWidget()
+        self.header_buttons_layout = QHBoxLayout(self.header_buttons_widget)
+        self.header_buttons_layout.setContentsMargins(0, 0, 8, 0)  # right margin
+        self.header_buttons_layout.setSpacing(4)
+        header_layout.addWidget(self.header_buttons_widget)
+
+        layout.addWidget(header_widget)
 
         # Content container
         self.content_widget = QWidget()
@@ -83,6 +99,43 @@ class CollapsibleSection(QWidget):
         self.content_layout.setContentsMargins(8, 4, 8, 8)
         self.content_layout.setSpacing(4)
         layout.addWidget(self.content_widget, 1)  # stretch=1 to fill section
+
+    def add_header_button(self, text: str, callback, tooltip: str = "") -> QPushButton:
+        """Add a button to the header row.
+
+        Args:
+            text: Button text (e.g., "+")
+            callback: Function to call on click
+            tooltip: Optional tooltip text
+
+        Returns:
+            The created QPushButton
+        """
+        btn = QPushButton(text)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                min-width: 20px;
+                max-width: 20px;
+                min-height: 20px;
+                max-height: 20px;
+                color: #d4d4d4;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3e3e42;
+                border-color: #007acc;
+            }
+        """)
+        if tooltip:
+            btn.setToolTip(tooltip)
+        btn.clicked.connect(callback)
+        self.header_buttons_layout.addWidget(btn)
+        self._header_buttons.append(btn)
+        return btn
 
     def _toggle_collapsed(self):
         """Toggle collapsed state."""
@@ -116,29 +169,12 @@ class SkillsSection(CollapsibleSection):
 
     def __init__(self, parent=None):
         super().__init__("技能", parent)
+        # Add "+" button in header
+        self.add_header_button("+", self._on_add_clicked, "新建技能")
         self._setup_content()
 
     def _setup_content(self):
         """Setup skills list content."""
-        # Add skill button
-        self.add_btn = QPushButton("+ 新建技能")
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                padding: 6px 12px;
-                color: #d4d4d4;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-color: #007acc;
-            }
-        """)
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        self.add_widget(self.add_btn)
-
         # Skills list container
         self.skills_list_widget = QWidget()
         self.skills_list_layout = QVBoxLayout(self.skills_list_widget)
@@ -235,29 +271,12 @@ class MCPServersSection(CollapsibleSection):
 
     def __init__(self, parent=None):
         super().__init__("MCP 服务器", parent)
+        # Add "+" button in header
+        self.add_header_button("+", self._on_add_clicked, "添加服务器")
         self._setup_content()
 
     def _setup_content(self):
         """Setup MCP servers list content."""
-        # Add server button
-        self.add_btn = QPushButton("+ 添加服务器")
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                padding: 6px 12px;
-                color: #d4d4d4;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-color: #007acc;
-            }
-        """)
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        self.add_widget(self.add_btn)
-
         # Server list container
         self.server_list_widget = QWidget()
         self.server_list_layout = QVBoxLayout(self.server_list_widget)
