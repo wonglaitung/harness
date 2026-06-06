@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def get_harness_config_dir() -> Path:
+    """Get the harness config directory (~/.harness)."""
+    return Path.home() / ".harness"
+
+
 @dataclass
 class PermissionSet:
     """
@@ -54,11 +59,22 @@ class PermissionSet:
         Args:
             workspace: Base directory for file operations
             allow_network: Whether to allow network access
+
+        The sandbox allows access to:
+        - The workspace directory (read/write)
+        - ~/.harness/ directory (read only for skills/configs)
+        - System temp directory (read/write for temporary files)
         """
         workspace_path = Path(workspace).resolve()
+        harness_dir = get_harness_config_dir()
+
+        # Get system temp directory
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir())
+
         return cls(
-            allowed_read_paths={workspace_path},
-            allowed_write_paths={workspace_path},
+            allowed_read_paths={workspace_path, harness_dir, temp_dir},
+            allowed_write_paths={workspace_path, temp_dir},
             network_enabled=allow_network,
         )
 
