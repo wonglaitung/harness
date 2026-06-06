@@ -425,6 +425,49 @@ You are a developer. You can read, write, and execute code.
 
 ## 与其他系统的集成
 
+### 与 AgentHarness 集成
+
+AgentHarness 内置了技能系统，在运行时自动注入匹配的技能：
+
+```python
+from harness import AgentHarness
+
+# AgentHarness 自动初始化技能系统
+agent = AgentHarness(api_key="...")
+
+# 加载自定义技能目录
+from pathlib import Path
+agent.load_skills_from_dir(Path(".agent/skills"))
+
+# 查看匹配的技能
+user_input = "将 README.md 转换为 Word 文档"
+matching = agent.get_matching_skills(user_input)
+print(f"匹配的技能: {[s.name for s in matching]}")
+
+# 运行时自动注入匹配的技能
+result = await agent.run(user_input)
+```
+
+#### 技能注入流程
+
+```
+用户输入 → get_matching_skills() → 匹配技能
+    ↓
+inject_skills() → 增强的 system prompt
+    ↓
+LLM 调用（包含技能指令）
+```
+
+#### 手动控制技能激活
+
+```python
+# 强制激活特定技能（即使不匹配 triggers）
+agent.activate_skill("code-review")
+
+# 停用技能
+agent.deactivate_skill("code-review")
+```
+
 ### 与记忆系统集成
 
 - 技能内容被 VectorMemoryStore 索引，支持语义搜索

@@ -374,11 +374,92 @@ def remove_mcp_server(self, name: str) -> None:
 ### 技能方法
 
 ```python
-def load_skill(self, path: str) -> None:
-    """加载单个技能文件"""
+def load_skills_from_dir(self, directory: Path) -> int:
+    """从指定目录加载技能
 
-def add_skill_dir(self, dir_path: str) -> None:
-    """添加技能搜索目录"""
+    Args:
+        directory: 包含技能文件的目录路径
+
+    Returns:
+        加载的技能数量
+    """
+
+def activate_skill(self, skill_name: str) -> bool:
+    """激活指定技能
+
+    激活的技能会在后续的 run() 调用中被注入到 system prompt。
+
+    Args:
+        skill_name: 技能名称
+
+    Returns:
+        True 如果激活成功，False 如果技能不存在
+    """
+
+def deactivate_skill(self, skill_name: str) -> bool:
+    """停用指定技能
+
+    Args:
+        skill_name: 技能名称
+
+    Returns:
+        True 如果停用成功，False 如果技能未激活
+    """
+
+def get_matching_skills(self, user_input: str) -> list:
+    """获取匹配用户输入的技能
+
+    根据技能定义的 triggers（keywords/patterns）匹配用户输入。
+
+    Args:
+        user_input: 用户输入文本
+
+    Returns:
+        匹配的技能列表
+    """
+```
+
+#### 技能自动注入
+
+`AgentHarness.run()` 会自动将匹配的技能注入到 system prompt：
+
+```python
+from harness import AgentHarness
+
+agent = AgentHarness(api_key="...")
+
+# 技能自动匹配和注入
+# 如果用户输入匹配某个技能的 triggers，该技能内容会被注入到 system prompt
+result = await agent.run("将 README.md 转换为 Word 文档")
+
+# 手动激活技能（即使不匹配 triggers 也会注入）
+agent.activate_skill("code-review")
+result = await agent.run("检查这段代码")
+```
+
+#### 完整示例
+
+```python
+from pathlib import Path
+from harness import AgentHarness
+
+agent = AgentHarness(api_key="...")
+
+# 加载自定义技能目录
+agent.load_skills_from_dir(Path(".harness/skills"))
+
+# 查看匹配的技能
+matching = agent.get_matching_skills("review this code")
+print(f"匹配的技能: {[s.name for s in matching]}")
+
+# 手动激活技能
+agent.activate_skill("security-audit")
+
+# 运行（技能会自动注入）
+result = await agent.run("检查安全问题")
+
+# 停用技能
+agent.deactivate_skill("security-audit")
 ```
 
 ### 配置方法
