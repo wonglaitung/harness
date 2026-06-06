@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -173,6 +174,21 @@ class MCPServerDialog(QDialog):
 
         layout.addLayout(common_layout)
 
+        # Config save location info
+        self.save_location_label = QLabel()
+        self.save_location_label.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
+        self._update_save_location()
+        layout.addWidget(self.save_location_label)
+
+        # Connect name change to update save location
+        self.name_edit.textChanged.connect(self._update_save_location)
+
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -187,6 +203,18 @@ class MCPServerDialog(QDialog):
 
         # Initial state
         self._on_transport_changed("stdio")
+
+    def _update_save_location(self):
+        """Update the save location label."""
+        from pathlib import Path
+        from harness_client.utils.settings import get_config_dir
+
+        config_dir = get_config_dir()
+        name = self.name_edit.text().strip()
+        if name:
+            self.save_location_label.setText(f"保存位置: {config_dir / 'mcp.json'} → mcpServers.{name}")
+        else:
+            self.save_location_label.setText(f"保存位置: {config_dir / 'mcp.json'}")
 
     def _on_transport_changed(self, transport: str):
         """Handle transport type change."""

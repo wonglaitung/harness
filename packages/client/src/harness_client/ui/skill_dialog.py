@@ -96,6 +96,22 @@ class SkillEditDialog(QDialog):
         self.enabled_check.setChecked(True)
         layout.addWidget(self.enabled_check)
 
+        # Preset save location info
+        self.save_location_label = QLabel()
+        self.save_location_label.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
+        self.save_location_label.setWordWrap(True)
+        layout.addWidget(self.save_location_label)
+        self._update_save_location()
+
+        # Connect name change to update save location
+        self.name_edit.textChanged.connect(self._update_save_location)
+
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
@@ -129,6 +145,15 @@ class SkillEditDialog(QDialog):
 
         except Exception as e:
             print(f"Error loading skill: {e}")
+
+    def _update_save_location(self):
+        """Update the save location label."""
+        name = self.name_edit.text().strip()
+        if name:
+            save_path = Path(".agent/skills") / f"{name}.md"
+            self.save_location_label.setText(f"保存位置: {save_path}")
+        else:
+            self.save_location_label.setText("保存位置: .agent/skills/{技能名称}.md")
 
     def get_skill_data(self) -> dict:
         """Get skill data from form."""
