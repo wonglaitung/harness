@@ -27,6 +27,7 @@ from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
 from harness.core.hooks import HookPoint, LifecycleHook
+from harness.skills import SkillInjector, SkillLoader, SkillRegistry
 from harness.types import (
     CostConfig,
     LoopResult,
@@ -164,6 +165,12 @@ class AgentHarness:
             ),
         )
 
+        # Initialize skill system
+        self._skill_registry = SkillRegistry()
+        self._skill_loader = SkillLoader(self._skill_registry)
+        self._skill_injector = SkillInjector(self._skill_registry)
+        self._load_skills()
+
     def _create_session_store(self):
         """Create session store based on storage config."""
         storage_config = self.config.storage
@@ -276,6 +283,58 @@ class AgentHarness:
                 "Use 'anthropic', 'openai', or provide a custom llm_client."
             )
 
+    def _load_skills(self) -> None:
+        """Load skills from default directories."""
+        self._skill_loader.load_defaults()
+
+    def load_skills_from_dir(self, directory: Path) -> int:
+        """
+        Load skills from a specific directory.
+
+        Args:
+            directory: Path to directory containing skill files
+
+        Returns:
+            Number of skills loaded
+        """
+        return self._skill_loader.load_from_dir(directory)
+
+    def activate_skill(self, skill_name: str) -> bool:
+        """
+        Activate a skill by name.
+
+        Args:
+            skill_name: Name of the skill to activate
+
+        Returns:
+            True if activated successfully
+        """
+        return self._skill_registry.activate(skill_name)
+
+    def deactivate_skill(self, skill_name: str) -> bool:
+        """
+        Deactivate a skill by name.
+
+        Args:
+            skill_name: Name of the skill to deactivate
+
+        Returns:
+            True if deactivated successfully
+        """
+        return self._skill_registry.deactivate(skill_name)
+
+    def get_matching_skills(self, user_input: str) -> list:
+        """
+        Get skills that match the user input.
+
+        Args:
+            user_input: User's input text
+
+        Returns:
+            List of matching skills
+        """
+        return self._skill_registry.find_matching_skills(user_input)
+
     async def run(
         self,
         prompt: str,
@@ -301,6 +360,22 @@ class AgentHarness:
         progress_callback = on_progress
         if progress_callback is None and verbose:
             progress_callback = create_progress_handler("emoji")
+
+        # Inject matching skills into system prompt
+        enhanced_system_prompt = self._skill_injector.inject_skills(
+            self.config.system_prompt,
+            prompt,
+        )
+
+        # Update context builder with enhanced system prompt
+        context_window = self.config.get_context_window()
+        self._context_builder = ContextBuilder(
+            config=ContextConfig(
+                max_tokens=context_window,
+                system_prompt=enhanced_system_prompt,
+                window_size=self.config.session_window,
+            )
+        )
 
         # Get or create session
         session = self._session_manager.get_or_create(session_id)

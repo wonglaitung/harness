@@ -1,7 +1,26 @@
 ---
 name: md-to-word
 description: "Convert Markdown files to Word documents (.docx) while preserving full formatting including headings, paragraphs, lists, code blocks, quotes, horizontal rules, and tables. Supports batch conversion and recursive directory processing."
+version: "1.0.0"
 license: MIT
+triggers:
+  keywords:
+    - markdown
+    - word
+    - docx
+    - convert
+    - 转换
+    - 格式
+    - 生成
+    - 导出
+  patterns:
+    - "\\.md.*word"
+    - "markdown.*docx"
+    - "\\.md.*\\.docx"
+    - ".*转.*word"
+    - ".*转.*docx"
+    - ".*convert.*markdown"
+    - ".*convert.*word"
 ---
 
 # MD to Word Converter

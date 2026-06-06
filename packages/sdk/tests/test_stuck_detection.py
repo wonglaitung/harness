@@ -26,24 +26,31 @@ def _make_loop(config: LoopConfig | None = None) -> AgentLoop:
 class TestIsStuck:
     """Tests for AgentLoop._is_stuck detection."""
 
-    def test_early_iterations_not_stuck(self):
+    @pytest.mark.asyncio
+    async def test_early_iterations_not_stuck(self):
         """Iterations below stuck_min_iterations should not trigger."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3))
         session = Session(id="test")
 
-        assert loop._is_stuck(session, iteration=0) is False
-        assert loop._is_stuck(session, iteration=2) is False
+        result = await loop._is_stuck(session, iteration=0)
+        assert result.is_stuck is False
 
-    def test_no_tool_messages_not_stuck(self):
+        result = await loop._is_stuck(session, iteration=2)
+        assert result.is_stuck is False
+
+    @pytest.mark.asyncio
+    async def test_no_tool_messages_not_stuck(self):
         """Sessions with no tool messages should not trigger."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3))
         session = Session(id="test")
         session.add_message(Message(role="user", content="Hello"))
         session.add_message(Message(role="assistant", content="Hi there!"))
 
-        assert loop._is_stuck(session, iteration=5) is False
+        result = await loop._is_stuck(session, iteration=5)
+        assert result.is_stuck is False
 
-    def test_too_few_tool_messages_not_stuck(self):
+    @pytest.mark.asyncio
+    async def test_too_few_tool_messages_not_stuck(self):
         """Fewer tool messages than stuck_consecutive_failures should not trigger."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -51,9 +58,11 @@ class TestIsStuck:
         session.add_message(Message(role="tool", content=""))
         session.add_message(Message(role="tool", content=""))
 
-        assert loop._is_stuck(session, iteration=4) is False
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is False
 
-    def test_detects_empty_tool_results(self):
+    @pytest.mark.asyncio
+    async def test_detects_empty_tool_results(self):
         """Consecutive empty tool results should trigger stuck detection."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -62,9 +71,12 @@ class TestIsStuck:
         for i in range(3):
             session.add_message(Message(role="tool", content=""))
 
-        assert loop._is_stuck(session, iteration=4) is True
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is True
+        assert result.reason == "empty"
 
-    def test_detects_error_tool_results(self):
+    @pytest.mark.asyncio
+    async def test_detects_error_tool_results(self):
         """Consecutive error tool results should trigger stuck detection."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -73,9 +85,12 @@ class TestIsStuck:
         for i in range(3):
             session.add_message(Message(role="tool", content="Error: file not found"))
 
-        assert loop._is_stuck(session, iteration=4) is True
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is True
+        assert result.reason == "error"
 
-    def test_short_but_nonempty_not_stuck(self):
+    @pytest.mark.asyncio
+    async def test_short_but_nonempty_not_stuck(self):
         """Short but non-empty content (e.g. 'True', 'OK') should NOT trigger empty rule."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -85,9 +100,11 @@ class TestIsStuck:
         session.add_message(Message(role="tool", content="OK"))
         session.add_message(Message(role="tool", content="No results found"))
 
-        assert loop._is_stuck(session, iteration=4) is False
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is False
 
-    def test_mixed_success_and_failure_not_stuck(self):
+    @pytest.mark.asyncio
+    async def test_mixed_success_and_failure_not_stuck(self):
         """Mixed success/failure without consecutive failures should not trigger."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -97,9 +114,11 @@ class TestIsStuck:
         session.add_message(Message(role="tool", content="File contents"))
         session.add_message(Message(role="tool", content="Error: fail"))
 
-        assert loop._is_stuck(session, iteration=4) is False
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is False
 
-    def test_only_checks_last_n(self):
+    @pytest.mark.asyncio
+    async def test_only_checks_last_n(self):
         """Should only check the last N tool messages, ignoring older ones."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -112,9 +131,12 @@ class TestIsStuck:
         for i in range(3):
             session.add_message(Message(role="tool", content=""))
 
-        assert loop._is_stuck(session, iteration=10) is True
+        result = await loop._is_stuck(session, iteration=10)
+        assert result.is_stuck is True
+        assert result.reason == "empty"
 
-    def test_custom_consecutive_failures(self):
+    @pytest.mark.asyncio
+    async def test_custom_consecutive_failures(self):
         """Custom stuck_consecutive_failures should be respected."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=5))
         session = Session(id="test")
@@ -123,15 +145,19 @@ class TestIsStuck:
         for i in range(3):
             session.add_message(Message(role="tool", content="Error: fail"))
 
-        assert loop._is_stuck(session, iteration=4) is False
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is False
 
         # 5 errors triggers
         session.add_message(Message(role="tool", content="Error: fail"))
         session.add_message(Message(role="tool", content="Error: fail"))
 
-        assert loop._is_stuck(session, iteration=5) is True
+        result = await loop._is_stuck(session, iteration=5)
+        assert result.is_stuck is True
+        assert result.reason == "error"
 
-    def test_whitespace_only_counts_as_empty(self):
+    @pytest.mark.asyncio
+    async def test_whitespace_only_counts_as_empty(self):
         """Whitespace-only content should count as empty."""
         loop = _make_loop(LoopConfig(stuck_min_iterations=3, stuck_consecutive_failures=3))
         session = Session(id="test")
@@ -140,7 +166,9 @@ class TestIsStuck:
         session.add_message(Message(role="tool", content="\n\t"))
         session.add_message(Message(role="tool", content="  "))
 
-        assert loop._is_stuck(session, iteration=4) is True
+        result = await loop._is_stuck(session, iteration=4)
+        assert result.is_stuck is True
+        assert result.reason == "empty"
 
 
 class TestToolErrorEncoding:

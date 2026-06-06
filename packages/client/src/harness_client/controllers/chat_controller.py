@@ -240,6 +240,11 @@ class ChatController:
             current_session = self.session_manager.get_current()
             session_id = current_session.id if current_session else None
 
+            # Log matching skills
+            matching_skills = self.agent.get_matching_skills(message)
+            if matching_skills:
+                logger.info(f"Matching skills: {[s.name for s in matching_skills]}")
+
             logger.info("Calling agent.run()...")
             result = await self.agent.run(
                 message,
