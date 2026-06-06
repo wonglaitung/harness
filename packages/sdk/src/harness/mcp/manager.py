@@ -82,12 +82,12 @@ class MCPServerConfig:
 
 # Default MCP config search paths (in priority order)
 DEFAULT_MCP_CONFIG_PATHS = [
+    "~/.harness/mcp.json",
+    "~/.harness/mcp.yaml",
     ".agent/mcp.json",
     ".agent/mcp.yaml",
     ".mcp.json",
     ".mcp.yaml",
-    "~/.harness/mcp.json",
-    "~/.harness/mcp.yaml",
     "~/.claude/mcp.json",  # Claude Code compatibility
 ]
 
