@@ -433,6 +433,8 @@ class FileTreeSection(CollapsibleSection):
     def __init__(self, parent=None):
         super().__init__("工作区", parent)
         self._work_dir = Path.cwd()
+        # Add folder button in header for changing directory
+        self.add_header_button("📁", self._on_change_dir, "更改工作目录")
         self._setup_content()
 
     def _setup_content(self):
@@ -496,24 +498,6 @@ class FileTreeSection(CollapsibleSection):
         """)
         self.tree_view.doubleClicked.connect(self._on_item_double_clicked)
         self.add_widget(self.tree_view, 1)  # stretch=1 to fill space
-
-        # Change directory button
-        change_btn = QPushButton("更改工作目录...")
-        change_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                padding: 6px 12px;
-                color: #d4d4d4;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-            }
-        """)
-        change_btn.clicked.connect(self._on_change_dir)
-        self.add_widget(change_btn)
 
     def set_work_dir(self, path: Path):
         """Set the work directory."""
