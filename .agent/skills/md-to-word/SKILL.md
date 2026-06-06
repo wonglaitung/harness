@@ -27,7 +27,37 @@ triggers:
 
 将 Markdown 文件转换为 Word 文档，保留完整格式。
 
-## 检查操作系统
+## ⚡ 执行指令（LLM 必读）
+
+**当用户请求转换 Markdown 到 Word 时，你必须：**
+
+1. **直接运行转换脚本**，脚本已存在于技能目录中：
+   ```
+   python .agent/skills/md-to-word/scripts/md_to_word.py <input.md> [--output <output.docx>]
+   ```
+
+2. **示例命令**：
+   ```
+   # 转换单个文件
+   python .agent/skills/md-to-word/scripts/md_to_word.py README.md
+   
+   # 指定输出路径
+   python .agent/skills/md-to-word/scripts/md_to_word.py README.md --output report.docx
+   ```
+
+3. **依赖检查**：如果脚本运行失败提示缺少 python-docx，先安装依赖：
+   ```
+   pip install python-docx
+   ```
+
+**⚠️ 重要提示**：
+- 不要尝试创建新脚本，脚本已经存在
+- 不要尝试写入临时文件
+- 直接使用 bash 工具运行上述命令
+
+---
+
+## 功能说明
 
 在使用本技能前，请确认您的操作系统类型：
 
