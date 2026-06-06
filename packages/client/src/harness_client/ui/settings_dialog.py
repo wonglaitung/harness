@@ -172,6 +172,18 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(tabs)
 
+        # Config save location info
+        self.save_location_label = QLabel()
+        self.save_location_label.setStyleSheet("""
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
+        self._update_save_location()
+        layout.addWidget(self.save_location_label)
+
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -187,6 +199,13 @@ class SettingsDialog(QDialog):
         dir_path = QFileDialog.getExistingDirectory(self, "选择工作目录", self.work_dir_edit.text())
         if dir_path:
             self.work_dir_edit.setText(dir_path)
+
+    def _update_save_location(self):
+        """Update the save location label."""
+        from harness_client.utils.settings import get_config_dir
+
+        config_dir = get_config_dir()
+        self.save_location_label.setText(f"保存位置: {config_dir / 'settings.json'}")
 
     def _on_provider_changed(self, provider: str):
         """Update UI based on provider selection."""
