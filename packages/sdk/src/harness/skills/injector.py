@@ -6,12 +6,15 @@ Injects active and matching skills into the LLM's system prompt.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from harness.skills.base import Skill
     from harness.skills.registry import SkillRegistry
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,7 +85,10 @@ class SkillInjector:
         all_skills = all_skills[: self.config.max_skills_per_prompt]
 
         if not all_skills:
+            logger.debug(f"No skills matched for input: {user_input[:50]}...")
             return system_prompt
+
+        logger.info(f"Injecting {len(all_skills)} skills: {[s.name for s in all_skills]}")
 
         # Build skill prompts
         skill_prompts = []

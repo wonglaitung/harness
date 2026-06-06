@@ -7,12 +7,15 @@ Handles discovery and loading of skill files from various locations.
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from harness.skills.base import Skill
     from harness.skills.registry import SkillRegistry
+
+logger = logging.getLogger(__name__)
 
 
 # Default skill search paths (in priority order)
@@ -57,6 +60,10 @@ class SkillLoader:
             if directory.exists():
                 skills_loaded = self.load_from_dir(directory)
                 count += skills_loaded
+                logger.info(f"Loaded {skills_loaded} skills from {directory}")
+            else:
+                logger.debug(f"Skill directory not found: {directory}")
+        logger.info(f"Total skills loaded: {count}")
         return count
 
     def load_from_path(self, path: str | Path) -> bool:
