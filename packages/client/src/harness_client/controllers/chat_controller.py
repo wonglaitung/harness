@@ -14,7 +14,7 @@ from harness import (
     ProgressEvent,
     ProgressEventType,
 )
-from harness.tools.builtins import GlobTool, GrepTool, ReadTool, WriteTool
+from harness.tools.builtins import BashTool, GlobTool, GrepTool, ReadTool, WriteTool
 
 from harness_client.controllers.session_manager import SessionManager
 
@@ -165,6 +165,7 @@ class ChatController:
             WriteTool(),
             GlobTool(),
             GrepTool(),
+            BashTool(),
         ]
 
         # Add MCP tools if provided
