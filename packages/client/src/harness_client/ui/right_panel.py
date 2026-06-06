@@ -112,6 +112,7 @@ class SkillsSection(CollapsibleSection):
     """Section displaying loaded skills."""
 
     skill_double_clicked = pyqtSignal(str)  # skill name
+    add_skill_requested = pyqtSignal()  # request to add new skill
 
     def __init__(self, parent=None):
         super().__init__("技能", parent)
@@ -119,17 +120,49 @@ class SkillsSection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup skills list content."""
-        # Skills list
-        self.skills_list = QLabel("暂无已加载的技能")
-        self.skills_list.setStyleSheet("""
+        # Add skill button
+        self.add_btn = QPushButton("+ 新建技能")
+        self.add_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                padding: 6px 12px;
+                color: #d4d4d4;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #3e3e42;
+                border-color: #007acc;
+            }
+        """)
+        self.add_btn.clicked.connect(self._on_add_clicked)
+        self.add_widget(self.add_btn)
+
+        # Skills list container
+        self.skills_list_widget = QWidget()
+        self.skills_list_layout = QVBoxLayout(self.skills_list_widget)
+        self.skills_list_layout.setContentsMargins(0, 4, 0, 0)
+        self.skills_list_layout.setSpacing(4)
+        self.add_widget(self.skills_list_widget)
+
+        # Placeholder label
+        self.placeholder_label = QLabel("暂无已加载的技能")
+        self.placeholder_label.setStyleSheet("""
             QLabel {
                 color: #808080;
                 font-size: 12px;
                 padding: 4px;
             }
         """)
-        self.skills_list.setWordWrap(True)
-        self.add_widget(self.skills_list)
+        self.skills_list_layout.addWidget(self.placeholder_label)
+
+        # Store skill item widgets
+        self._skill_items: dict[str, QWidget] = {}
+
+    def _on_add_clicked(self):
+        """Handle add skill button click."""
+        self.add_skill_requested.emit()
 
     def update_skills(self, skills: list):
         """Update the skills list display.
@@ -137,16 +170,60 @@ class SkillsSection(CollapsibleSection):
         Args:
             skills: List of dicts with 'name' and 'enabled' keys
         """
+        # Clear existing items
+        for item in self._skill_items.values():
+            item.deleteLater()
+        self._skill_items.clear()
+
         if not skills:
-            self.skills_list.setText("暂无已加载的技能")
+            self.placeholder_label.setVisible(True)
             return
 
-        # Build skills display
-        lines = []
+        self.placeholder_label.setVisible(False)
+
         for skill in skills:
-            status = "✓" if skill.get("enabled", True) else "○"
-            lines.append(f"{status} {skill.get('name', 'Unknown')}")
-        self.skills_list.setText("\n".join(lines))
+            name = skill.get("name", "Unknown")
+            enabled = skill.get("enabled", True)
+
+            # Create skill item widget
+            item_widget = self._create_skill_item(name, enabled)
+            self.skills_list_layout.addWidget(item_widget)
+            self._skill_items[name] = item_widget
+
+    def _create_skill_item(self, name: str, enabled: bool) -> QWidget:
+        """Create a skill item widget."""
+        widget = QWidget()
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: #252526;
+                border-radius: 4px;
+            }
+        """)
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(8)
+
+        # Status indicator
+        indicator_color = "#50c878" if enabled else "#808080"
+        indicator = QLabel("●")
+        indicator.setStyleSheet(f"color: {indicator_color}; font-size: 12px;")
+        layout.addWidget(indicator)
+
+        # Skill name
+        name_label = QLabel(name)
+        name_label.setStyleSheet("color: #d4d4d4; font-size: 12px;")
+        layout.addWidget(name_label)
+
+        layout.addStretch()
+
+        # Double-click to edit
+        widget.mouseDoubleClickEvent = lambda event, n=name: self._on_double_click(n)
+
+        return widget
+
+    def _on_double_click(self, name: str):
+        """Handle double-click on skill item."""
+        self.skill_double_clicked.emit(name)
 
 
 class MCPServersSection(CollapsibleSection):
@@ -456,6 +533,7 @@ class RightPanel(QWidget):
 
     # Signals
     skill_double_clicked = pyqtSignal(str)
+    add_skill_requested = pyqtSignal()
     server_double_clicked = pyqtSignal(str)
     add_mcp_server_requested = pyqtSignal()
     toggle_mcp_server_requested = pyqtSignal(str)
@@ -477,6 +555,7 @@ class RightPanel(QWidget):
         # Skills section
         self.skills_section = SkillsSection()
         self.skills_section.skill_double_clicked.connect(self.skill_double_clicked)
+        self.skills_section.add_skill_requested.connect(self.add_skill_requested)
         layout.addWidget(self.skills_section)
 
         # MCP servers section

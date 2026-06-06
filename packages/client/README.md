@@ -159,13 +159,33 @@ export ANTHROPIC_API_KEY="your-api-key"
 
 ### MCP 服务器
 
-添加 MCP 服务器扩展 Agent 能力：
+MCP (Model Context Protocol) 服务器可扩展 Agent 能力，提供外部工具访问。
 
-1. 侧边栏点击 **MCP 服务器 → 添加**
-2. 选择传输方式并填写配置
+#### 添加服务器
+
+1. 右侧面板 **MCP 服务器 → + 添加服务器**
+2. 填写配置：
+   - 名称：服务器标识
+   - 传输方式：`stdio` 或 `sse`
+   - 命令/URL：启动命令或服务器地址
+   - 参数：命令行参数（逗号分隔）
+   - 环境变量：可选的环境变量
 3. 确定保存
 
-**示例 - filesystem MCP**:
+#### 连接/断开服务器
+
+- 点击服务器项的 **连接** 或 **断开** 按钮
+- 双击服务器项快速切换连接状态
+
+#### 配置存储位置
+
+- Windows: `%LOCALAPPDATA%\HarnessClient\mcp.json`
+- macOS: `~/Library/Application Support/HarnessClient/mcp.json`
+- Linux: `~/.config/HarnessClient/mcp.json`
+
+#### 示例配置
+
+**filesystem MCP（本地文件访问）**:
 
 | 字段 | 值 |
 |------|---|
@@ -174,28 +194,87 @@ export ANTHROPIC_API_KEY="your-api-key"
 | 命令 | `npx` |
 | 参数 | `-y, @anthropic/mcp-server-filesystem, /path/to/dir` |
 
+**GitHub MCP**:
+
+| 字段 | 值 |
+|------|---|
+| 名称 | `github` |
+| 传输方式 | `stdio` |
+| 命令 | `npx` |
+| 参数 | `-y, @anthropic/mcp-server-github` |
+| 环境变量 | `GITHUB_TOKEN=ghp_xxxx` |
+
+**SSE 远程服务器**:
+
+| 字段 | 值 |
+|------|---|
+| 名称 | `remote-api` |
+| 传输方式 | `sse` |
+| URL | `http://localhost:8080/sse` |
+
 ### 技能系统
 
-加载自定义技能文件：
+技能是可复用的提示词模板，当用户输入匹配触发条件时自动激活。
 
-1. 侧边栏点击 **技能列表 → 加载**
-2. 选择包含 `.md` 技能文件的目录
+#### 技能目录
 
-**技能文件格式**:
+客户端自动扫描以下目录（按优先级排序）：
+
+| 目录 | 优先级 | 说明 |
+|------|--------|------|
+| `./.agent/skills/` | 最高 | 项目级（UI 创建默认保存位置） |
+| `./skills/` | 高 | 项目级（备选） |
+| `~/.harness/skills/` | 中 | 用户级（所有项目共享） |
+| `~/.harness/shared-skills/` | 低 | 共享技能 |
+
+#### 创建技能
+
+**方式一：界面创建**
+
+1. 右侧面板 **技能 → + 新建技能**
+2. 填写名称、描述、触发条件、内容
+3. 保存到 `.agent/skills/` 目录
+
+**方式二：手动创建文件**
+
+在技能目录下创建 `.md` 文件：
 
 ```markdown
 ---
 name: code-review
 version: 1.0.0
+author: Your Name
 description: 代码审查技能
 triggers:
   keywords:
     - review
     - 审查
+    - 检查代码
+  patterns:
+    - "review\\s+\\w+"
 ---
 
-你是一个专业的代码审查专家...
+# Code Review Skill
+
+你是一个专业的代码审查专家。
+
+## 检查步骤
+
+1. **代码风格**: 检查命名规范、缩进、注释
+2. **逻辑正确性**: 检查边界条件、错误处理
+3. **性能**: 识别潜在的性能问题
 ```
+
+#### 编辑技能
+
+双击技能列表中的技能项，打开编辑对话框修改。
+
+#### 触发机制
+
+- **关键词匹配**：用户输入包含任一关键词（不区分大小写）
+- **正则匹配**：用户输入匹配任一正则表达式
+
+匹配的技能内容会自动注入到 system prompt 中。
 
 ---
 

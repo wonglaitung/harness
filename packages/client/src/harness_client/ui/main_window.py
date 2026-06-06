@@ -9,6 +9,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont, QFontDatabase
 from PyQt6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -87,12 +88,17 @@ class MainWindow(QMainWindow):
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
         self.right_panel.server_double_clicked.connect(self._on_toggle_mcp_server)
+        self.right_panel.add_skill_requested.connect(self._on_add_skill)
+        self.right_panel.skill_double_clicked.connect(self._on_edit_skill)
 
         # Load saved settings
         self._load_saved_settings()
 
         # Load MCP configuration
         self._load_mcp_config()
+
+        # Load skills from default directories
+        self.skill_controller.load_defaults()
 
         # Initialize with a new session
         self.chat_controller.new_session()
@@ -683,6 +689,35 @@ class MainWindow(QMainWindow):
                 "enabled": skill.enabled,
             })
         self.right_panel.update_skills(skills)
+
+    def _on_add_skill(self):
+        """Handle add skill button click."""
+        from harness_client.ui.skill_dialog import SkillEditDialog
+        from pathlib import Path
+
+        dialog = SkillEditDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Save to default skill directory
+            skill_dir = Path(".agent/skills")
+            skill_dir.mkdir(parents=True, exist_ok=True)
+
+            data = dialog.get_skill_data()
+            if data["name"]:
+                skill_path = skill_dir / f"{data['name']}.md"
+                if dialog.save_to_file(skill_path):
+                    self.skill_controller.load_from_file(skill_path)
+
+    def _on_edit_skill(self, skill_name: str):
+        """Handle double-click on skill item to edit."""
+        from harness_client.ui.skill_dialog import SkillEditDialog
+
+        skill_info = self.skill_controller.get_skill(skill_name)
+        if skill_info and skill_info.source_path:
+            skill_path = Path(skill_info.source_path)
+            dialog = SkillEditDialog(self, skill_path)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                if dialog.save_to_file(skill_path):
+                    self.skill_controller.load_from_file(skill_path)
 
     def closeEvent(self, event):
         """Handle window close."""
