@@ -3,24 +3,58 @@ Settings manager for persisting user configuration.
 """
 
 import json
+import logging
 import platform
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 
 def get_config_dir() -> Path:
-    """Get platform-specific config directory."""
+    """Get unified config directory (~/.harness)."""
+    return Path.home() / ".harness"
+
+
+def get_old_config_dir() -> Path:
+    """Get legacy platform-specific config directory for migration."""
     system = platform.system()
     if system == "Windows":
-        # Use AppData/Local on Windows
         base = Path.home() / "AppData" / "Local"
     elif system == "Darwin":
-        # Use ~/Library/Application Support on macOS
         base = Path.home() / "Library" / "Application Support"
     else:
-        # Use XDG config on Linux
         base = Path.home() / ".config"
     return base / "HarnessClient"
+
+
+def migrate_old_config() -> None:
+    """Migrate configuration from old location to new ~/.harness directory."""
+    old_dir = get_old_config_dir()
+    new_dir = get_config_dir()
+
+    if not old_dir.exists():
+        return
+
+    # Create new directory if needed
+    new_dir.mkdir(parents=True, exist_ok=True)
+
+    # Migrate settings.json
+    old_settings = old_dir / "settings.json"
+    new_settings = new_dir / "settings.json"
+    if old_settings.exists() and not new_settings.exists():
+        logger.info(f"Migrating settings from {old_settings} to {new_settings}")
+        shutil.copy2(old_settings, new_settings)
+
+    # Migrate mcp.json
+    old_mcp = old_dir / "mcp.json"
+    new_mcp = new_dir / "mcp.json"
+    if old_mcp.exists() and not new_mcp.exists():
+        logger.info(f"Migrating MCP config from {old_mcp} to {new_mcp}")
+        shutil.copy2(old_mcp, new_mcp)
+
+    logger.info(f"Configuration migrated to {new_dir}")
 
 
 @dataclass
@@ -67,6 +101,9 @@ class SettingsManager:
     """Manages persistent application settings."""
 
     def __init__(self):
+        # Migrate old config before initializing
+        migrate_old_config()
+
         self.config_dir = get_config_dir()
         self.config_file = self.config_dir / "settings.json"
         self._settings: AppSettings | None = None
@@ -75,6 +112,9 @@ class SettingsManager:
         """Load settings from disk."""
         if self._settings is not None:
             return self._settings
+
+        # Ensure directory exists
+        self.config_dir.mkdir(parents=True, exist_ok=True)
 
         if self.config_file.exists():
             try:

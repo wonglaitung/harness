@@ -696,12 +696,13 @@ class MainWindow(QMainWindow):
     def _on_add_skill(self):
         """Handle add skill button click."""
         from harness_client.ui.skill_dialog import SkillEditDialog
+        from harness_client.utils.settings import get_config_dir
         from pathlib import Path
 
         dialog = SkillEditDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Save to default skill directory
-            skill_dir = Path(".agent/skills")
+            # Save to global skill directory (~/.harness/skills/)
+            skill_dir = get_config_dir() / "skills"
             skill_dir.mkdir(parents=True, exist_ok=True)
 
             data = dialog.get_skill_data()

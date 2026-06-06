@@ -148,12 +148,15 @@ class SkillEditDialog(QDialog):
 
     def _update_save_location(self):
         """Update the save location label."""
+        from harness_client.utils.settings import get_config_dir
+
+        config_dir = get_config_dir()
         name = self.name_edit.text().strip()
         if name:
-            save_path = Path(".agent/skills") / f"{name}.md"
+            save_path = config_dir / "skills" / f"{name}.md"
             self.save_location_label.setText(f"保存位置: {save_path}")
         else:
-            self.save_location_label.setText("保存位置: .agent/skills/{技能名称}.md")
+            self.save_location_label.setText(f"保存位置: {config_dir / 'skills'}/{{技能名称}}.md")
 
     def get_skill_data(self) -> dict:
         """Get skill data from form."""
