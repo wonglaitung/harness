@@ -3,7 +3,7 @@ Chat panel for displaying conversation - Hermes Dark Theme Style.
 """
 
 import markdown
-from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from harness_client.ui.skill_completer import SkillCompleter
 
 
 class ChatPanel(QWidget):
@@ -83,6 +85,11 @@ class ChatPanel(QWidget):
             }
         """)
         self.input_field.returnPressed.connect(self._on_send)
+        self.input_field.textEdited.connect(self._on_text_edited)
+
+        # Skill completer
+        self.skill_completer = SkillCompleter(self)
+        self.input_field.setCompleter(self.skill_completer)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -148,6 +155,24 @@ class ChatPanel(QWidget):
 
         # Emit signal
         self.message_sent.emit(text)
+
+    def _on_text_edited(self, text: str):
+        """Handle text editing to trigger skill completer."""
+        if self.skill_completer.should_complete(text):
+            # Set prefix for filtering (without the '/')
+            self.skill_completer.setCompletionPrefix(text)
+            # Show popup manually if needed
+            if self.skill_completer.completionCount() > 0:
+                self.skill_completer.complete()
+
+    def set_skills(self, skills: list[dict]) -> None:
+        """
+        Update the skill completer with available skills.
+
+        Args:
+            skills: List of dicts with 'name', 'description', 'enabled' keys
+        """
+        self.skill_completer.update_skills(skills)
 
     def _render_markdown(self, text: str) -> str:
         """Render markdown to HTML."""

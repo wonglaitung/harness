@@ -1,0 +1,60 @@
+"""
+Skill completer - autocomplete for skill names with '/' prefix.
+"""
+
+from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtWidgets import QCompleter
+
+
+class SkillCompleter(QCompleter):
+    """
+    Custom completer for skill names, activated by '/' prefix.
+
+    Features:
+    - Only shows completions when text starts with '/'
+    - Case-insensitive matching
+    - Shows skill names as '/skill-name'
+    """
+
+    def __init__(self, parent=None):
+        super().__init__([], parent)
+        self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.setModelSorting(QCompleter.ModelSorting.CaseInsensitivelySortedModel)
+        self.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._skills: dict[str, str] = {}  # name -> description
+
+    def update_skills(self, skills: list[dict]) -> None:
+        """
+        Update skill list for completion.
+
+        Args:
+            skills: List of dicts with 'name' and 'description' keys
+        """
+        self._skills = {s["name"]: s.get("description", "") for s in skills}
+        # Format: "/skill-name"
+        items = [f"/{name}" for name in self._skills.keys()]
+        self.setModel(QStringListModel(items))
+
+    def get_skill_description(self, name: str) -> str:
+        """
+        Get description for a skill.
+
+        Args:
+            name: Skill name (with or without '/' prefix)
+
+        Returns:
+            Skill description or empty string
+        """
+        return self._skills.get(name.lstrip("/"), "")
+
+    def should_complete(self, text: str) -> bool:
+        """
+        Check if completer should show suggestions.
+
+        Args:
+            text: Current input text
+
+        Returns:
+            True if text starts with '/' and has at least one character
+        """
+        return text.startswith("/") and len(text) >= 1

@@ -686,9 +686,12 @@ class MainWindow(QMainWindow):
         for skill in self.skill_controller.get_skill_list():
             skills.append({
                 "name": skill.name,
+                "description": skill.description,
                 "enabled": skill.enabled,
             })
         self.right_panel.update_skills(skills)
+        # Update chat panel skill completer
+        self.chat_panel.set_skills(skills)
 
     def _on_add_skill(self):
         """Handle add skill button click."""
