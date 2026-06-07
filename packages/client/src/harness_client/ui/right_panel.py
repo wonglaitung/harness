@@ -270,7 +270,7 @@ class MCPServersSection(CollapsibleSection):
     toggle_server_requested = pyqtSignal(str)  # server name to connect/disconnect
 
     def __init__(self, parent=None):
-        super().__init__("MCP 服务器", parent)
+        super().__init__("MCP", parent)
         # Add "+" button in header
         self.add_header_button("+", self._on_add_clicked, "添加服务器")
         self._setup_content()
@@ -285,7 +285,7 @@ class MCPServersSection(CollapsibleSection):
         self.add_widget(self.server_list_widget)
 
         # Placeholder label
-        self.placeholder_label = QLabel("暂无 MCP 服务器")
+        self.placeholder_label = QLabel("暂无 MCP 配置")
         self.placeholder_label.setStyleSheet("""
             QLabel {
                 color: #808080;
