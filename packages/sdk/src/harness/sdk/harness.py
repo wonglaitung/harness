@@ -374,6 +374,7 @@ class AgentHarness:
                 max_tokens=context_window,
                 system_prompt=enhanced_system_prompt,
                 window_size=self.config.session_window,
+                memory_md_path=self.config.memory_md_path,
             )
         )
 

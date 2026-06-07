@@ -575,4 +575,46 @@ async def save_skill_experience(ctx: HookContext):
     
     return ctx
 ```
+
+## 全局记忆配置
+
+Harness SDK 支持配置全局记忆文件路径，让 Agent 自动加载全局 MEMORY.md 文件。
+
+### 配置方式
+
+```python
+from harness import AgentHarness, HarnessConfig
+from pathlib import Path
+
+# 方式 1：通过 HarnessConfig 配置
+config = HarnessConfig(
+    model="claude-sonnet-4-6",
+    memory_md_path=Path.home() / ".harness" / "MEMORY.md",  # 全局记忆文件路径
+)
+agent = AgentHarness(config=config)
+
+# 方式 2：通过 ContextBuilder 添加自定义记忆源
+from harness.memory.system_prompt import SystemPromptSource
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+agent._context_builder.add_prompt_source(SystemPromptSource(
+    name="GlobalMemory",
+    priority=40,
+    file_path=Path.home() / ".harness" / "MEMORY.md",
+))
+```
+
+### 配置项说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `memory_md_path` | `Path \| None` | `None` | 全局 MEMORY.md 文件路径，设置后自动加载到上下文 |
+
+### 使用场景
+
+- **用户偏好存储**：保存用户常用的编码风格、语言偏好等
+- **跨项目知识共享**：在多个项目间共享通用的技术决策和模式
+- **客户端集成**：桌面客户端可通过 UI 管理全局记忆
+
+```
 ```

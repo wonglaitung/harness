@@ -532,9 +532,12 @@ class FileTreeSection(CollapsibleSection):
 
 
 class RightPanel(QWidget):
-    """Right panel with collapsible sections for skills, MCP, and files."""
+    """Right panel with collapsible sections for memory, skills, MCP, and files."""
 
     # Signals
+    memory_add_requested = pyqtSignal(str)  # category name
+    memory_edit_requested = pyqtSignal(str, int)  # category, index
+    memory_remove_requested = pyqtSignal(str, int)  # category, index
     skill_double_clicked = pyqtSignal(str)
     add_skill_requested = pyqtSignal()
     server_double_clicked = pyqtSignal(str)
@@ -554,6 +557,14 @@ class RightPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
+
+        # Memory section (first, before Skills)
+        from harness_client.ui.memory_panel import MemorySection
+        self.memory_section = MemorySection()
+        self.memory_section.add_entry_requested.connect(self.memory_add_requested)
+        self.memory_section.edit_entry_requested.connect(self.memory_edit_requested)
+        self.memory_section.remove_entry_requested.connect(self.memory_remove_requested)
+        layout.addWidget(self.memory_section)
 
         # Skills section
         self.skills_section = SkillsSection()
@@ -576,6 +587,10 @@ class RightPanel(QWidget):
 
         # Set collapsed state for sections (default all expanded)
         # Users can click to collapse
+
+    def update_memory(self, sections):
+        """Update memory display."""
+        self.memory_section.update_memory(sections)
 
     def update_skills(self, skills: list):
         """Update skills list."""

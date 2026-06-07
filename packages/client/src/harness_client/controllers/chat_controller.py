@@ -17,6 +17,7 @@ from harness import (
 from harness.tools.builtins import BashTool, GlobTool, GrepTool, ReadTool, WriteTool
 
 from harness_client.controllers.session_manager import SessionManager
+from harness_client.utils.settings import get_config_dir
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,7 @@ class ChatController:
             tool_result_role=self.config.tool_result_role,
             system_prompt=self.config.system_prompt,
             sandbox_workspace=str(self.work_dir),
+            memory_md_path=get_config_dir() / "MEMORY.md",
         )
 
         logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}, temperature={sdk_config.temperature}")

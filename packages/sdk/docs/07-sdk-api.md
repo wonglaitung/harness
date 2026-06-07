@@ -504,6 +504,7 @@ class HarnessConfig:
 
     # 记忆配置
     memory_dir: str = ".harness/memory"
+    memory_md_path: Path | None = None  # 全局 MEMORY.md 文件路径
     vector_store: bool = False
 
     # 技能配置

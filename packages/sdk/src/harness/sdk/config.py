@@ -180,6 +180,7 @@ class HarnessConfig:
     # Memory settings
     memory_dir: str = ".harness/memory"
     session_window: int = 100  # Keep more messages for larger context
+    memory_md_path: Path | None = None  # Optional path to global MEMORY.md file
 
     # Tool settings
     sandbox_workspace: str | None = None

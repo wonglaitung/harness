@@ -24,6 +24,7 @@ from qasync import asyncSlot
 
 from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
+from harness_client.controllers.memory_controller import MemoryController
 from harness_client.controllers.skill_controller import SkillController
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.right_panel import RightPanel
@@ -53,10 +54,12 @@ class MainWindow(QMainWindow):
         self.chat_controller = ChatController()
         self.mcp_controller = MCPController()
         self.skill_controller = SkillController()
+        self.memory_controller = MemoryController()
 
         # Connect controller callbacks
         self.mcp_controller.set_change_callback(self._on_mcp_changed)
         self.skill_controller.set_change_callback(self._on_skills_changed)
+        self.memory_controller.memory_changed.connect(self._on_memory_changed)
         self.chat_controller.set_tool_call_callback(self._on_tool_call)
         self.chat_controller.set_tool_result_callback(self._on_tool_result)
         self.chat_controller.set_thinking_callback(self._on_thinking)
@@ -90,6 +93,9 @@ class MainWindow(QMainWindow):
         self.right_panel.server_double_clicked.connect(self._on_toggle_mcp_server)
         self.right_panel.add_skill_requested.connect(self._on_add_skill)
         self.right_panel.skill_double_clicked.connect(self._on_edit_skill)
+        self.right_panel.memory_add_requested.connect(self._on_memory_add)
+        self.right_panel.memory_edit_requested.connect(self._on_memory_edit)
+        self.right_panel.memory_remove_requested.connect(self._on_memory_remove)
 
         # Load saved settings
         self._load_saved_settings()
@@ -99,6 +105,9 @@ class MainWindow(QMainWindow):
 
         # Load skills from default directories
         self.skill_controller.load_defaults()
+
+        # Load memory display
+        self._refresh_memory()
 
         # Initialize with a new session
         self.chat_controller.new_session()
@@ -722,6 +731,69 @@ class MainWindow(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 if dialog.save_to_file(skill_path):
                     self.skill_controller.load_from_file(skill_path)
+
+    # === Memory Management ===
+
+    def _refresh_memory(self):
+        """Refresh the memory display in right panel."""
+        sections = self.memory_controller.get_sections()
+        self.right_panel.update_memory(sections)
+
+    def _on_memory_changed(self):
+        """Handle memory change event."""
+        self._refresh_memory()
+        self.statusbar.showMessage("记忆已更新", 3000)
+
+    def _on_memory_add(self, category_name: str):
+        """Handle add memory entry request."""
+        from harness.memory.memory_file import MemoryCategory
+        from harness_client.ui.memory_panel import AddEntryDialog
+
+        # Get display name
+        category = MemoryCategory(category_name)
+        display_name = self.memory_controller.get_category_display_name(category)
+
+        dialog = AddEntryDialog(display_name, self)
+        if dialog.exec() == QMessageBox.StandardButton.Ok:
+            content = dialog.get_content()
+            if content:
+                self.memory_controller.add_entry(category, content)
+
+    def _on_memory_edit(self, category_name: str, index: int):
+        """Handle edit memory entry request."""
+        from harness.memory.memory_file import MemoryCategory
+        from harness_client.ui.memory_panel import AddEntryDialog
+
+        category = MemoryCategory(category_name)
+        entries = self.memory_controller.get_entries(category)
+
+        if 0 <= index < len(entries):
+            display_name = self.memory_controller.get_category_display_name(category)
+            dialog = AddEntryDialog(display_name, self)
+            dialog._input.setText(entries[index])
+
+            if dialog.exec() == QMessageBox.StandardButton.Ok:
+                content = dialog.get_content()
+                if content:
+                    self.memory_controller.update_entry(category, index, content)
+
+    def _on_memory_remove(self, category_name: str, index: int):
+        """Handle remove memory entry request."""
+        from harness.memory.memory_file import MemoryCategory
+
+        category = MemoryCategory(category_name)
+        entries = self.memory_controller.get_entries(category)
+
+        if 0 <= index < len(entries):
+            reply = QMessageBox.question(
+                self,
+                "删除记忆",
+                f"确定要删除此记忆条目吗？\n\n{entries[index][:50]}...",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.memory_controller.remove_entry(category, index)
 
     def closeEvent(self, event):
         """Handle window close."""

@@ -142,6 +142,7 @@ class ContextConfig:
     # Dynamic system prompt configuration
     system_prompt_config: SystemPromptConfig | None = None  # Advanced prompt assembly
     project_root: Path | None = None  # Project root for AGENTS.md/MEMORY.md discovery
+    memory_md_path: Path | None = None  # Optional path to global MEMORY.md file
 
 
 @dataclass
@@ -196,7 +197,7 @@ class ContextBuilder:
         if self.config.system_prompt_config:
             # Use provided config
             self._prompt_builder = SystemPromptBuilder(self.config.system_prompt_config)
-        elif self.config.project_root or self.config.system_prompt:
+        elif self.config.project_root or self.config.system_prompt or self.config.memory_md_path:
             # Create config from simple settings
             prompt_config = SystemPromptConfig(
                 base_prompt=self.config.system_prompt,
@@ -204,6 +205,15 @@ class ContextBuilder:
                 auto_discover=True,
             )
             self._prompt_builder = SystemPromptBuilder(prompt_config)
+
+            # Add global memory source if specified
+            if self.config.memory_md_path:
+                from harness.memory.system_prompt import SystemPromptSource
+                self._prompt_builder.add_source(SystemPromptSource(
+                    name="GlobalMemory",
+                    priority=40,
+                    file_path=self.config.memory_md_path,
+                ))
         else:
             # No dynamic prompt building
             self._prompt_builder = None
