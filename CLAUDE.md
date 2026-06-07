@@ -144,20 +144,27 @@ packages/client/src/harness_client/
 │   ├── main_window.py        # 主窗口（三栏布局）
 │   ├── chat_panel.py         # 中央对话面板
 │   ├── sidebar.py            # 左侧可折叠导航栏
-│   ├── right_panel.py        # 右侧面板（技能/MCP/文件树）
+│   ├── right_panel.py        # 右侧面板（记忆/技能/MCP/文件树）
 │   ├── settings_dialog.py    # 设置对话框
-│   └── mcp_panel.py          # MCP 配置面板
+│   ├── mcp_panel.py          # MCP 配置面板
+│   └── memory_panel.py       # 记忆管理面板
 └── controllers/              # 控制器（数据层）
     ├── chat_controller.py    # 管理 AgentHarness
     ├── session_manager.py    # 会话状态管理（单一数据源）
     ├── mcp_controller.py     # 管理 MCP 服务器
-    └── skill_controller.py   # 管理技能
+    ├── skill_controller.py   # 管理技能
+    └── memory_controller.py  # 管理全局记忆
 ```
 
 **界面布局**：三栏结构
 - **左侧栏**：可折叠导航（COLLAPSED_WIDTH=56px, EXPANDED_WIDTH=220px）
 - **中央区**：对话面板（Markdown 渲染 + 流式输出）
-- **右侧面板**：可折叠区块（技能/MCP 服务器/文件树）
+- **右侧面板**：可折叠区块（**记忆**/技能/MCP 服务器/文件树）
+
+**全局记忆**：
+- 记忆文件存储在 `~/.harness/MEMORY.md`
+- 通过 `MemoryController` 管理 CRUD 操作
+- 自动注入到 Agent 上下文中
 
 **会话管理数据流**：
 ```
