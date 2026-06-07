@@ -1,0 +1,419 @@
+# 04 - 配置与部署
+
+## 概述
+
+客户端使用统一的配置目录 `~/.harness` 存储所有配置文件。本章详细介绍配置管理和部署流程。
+
+## 配置目录
+
+### 目录结构
+
+```
+~/.harness/
+├── settings.json        # 应用设置（API Key、模型等）
+├── mcp.json             # MCP 服务器配置
+├── MEMORY.md            # 全局记忆文件
+├── skills/              # 全局技能目录
+│   ├── code-review/
+│   │   └── skill.md
+│   └── md-to-word/
+│       ├── skill.md
+│       └── scripts/
+│           └── md_to_word.py
+└── audit/               # 审计日志（可选）
+    └── 2026-06-07.log
+```
+
+### 配置文件说明
+
+| 文件 | 格式 | 说明 | 管理 UI |
+|------|------|------|---------|
+| `settings.json` | JSON | 应用设置 | SettingsDialog |
+| `mcp.json` | JSON | MCP 服务器列表 | RightPanel MCP Section |
+| `MEMORY.md` | Markdown | 全局记忆 | RightPanel Memory Section |
+| `skills/*.md` | Markdown | 技能定义 | RightPanel Skills Section |
+
+## settings.json
+
+### 配置项
+
+```json
+{
+  "provider": "anthropic",
+  "api_key": "sk-ant-...",
+  "base_url": "",
+  "model": "claude-sonnet-4-6",
+  "context_window": "auto",
+  "max_iterations": 10,
+  "temperature": 0.3,
+  "tool_result_role": "tool",
+  "system_prompt": "你是一个有帮助的 AI 助手...",
+  "stream_enabled": true
+}
+```
+
+### 配置项说明
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `provider` | string | `"anthropic"` | LLM 提供商 |
+| `api_key` | string | `""` | API 密钥 |
+| `base_url` | string | `""` | 自定义 API 端点 |
+| `model` | string | `"claude-sonnet-4-6"` | 模型名称 |
+| `context_window` | string | `"auto"` | 上下文窗口大小 |
+| `max_iterations` | int | `10` | 最大迭代次数 |
+| `temperature` | float | `0.3` | 温度参数 |
+| `tool_result_role` | string | `"tool"` | 工具结果角色 |
+| `system_prompt` | string | `""` | 系统提示 |
+| `stream_enabled` | bool | `true` | 是否启用流式输出 |
+
+### 使用第三方 API
+
+```json
+{
+  "provider": "openai",
+  "api_key": "your-api-key",
+  "base_url": "https://api.your-provider.com/v1",
+  "model": "your-model-name"
+}
+```
+
+## mcp.json
+
+### 配置格式
+
+```json
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": "stdio",
+      "command": "mcp-filesystem",
+      "args": ["--root", "/path/to/workspace"],
+      "env": {}
+    },
+    {
+      "name": "github",
+      "transport": "stdio",
+      "command": "mcp-github",
+      "args": [],
+      "env": {
+        "GITHUB_TOKEN": "ghp_xxx"
+      }
+    },
+    {
+      "name": "brave-search",
+      "transport": "stdio",
+      "command": "mcp-brave-search",
+      "args": [],
+      "env": {
+        "BRAVE_API_KEY": "your-key"
+      }
+    }
+  ]
+}
+```
+
+### 服务器配置说明
+
+| 配置项 | 类型 | 说明 |
+|--------|------|------|
+| `name` | string | 服务器名称（唯一标识） |
+| `transport` | string | 传输方式：`"stdio"` 或 `"http"` |
+| `command` | string | 启动命令（stdio 传输） |
+| `args` | array | 命令参数 |
+| `env` | object | 环境变量 |
+
+## MEMORY.md
+
+### 文件格式
+
+```markdown
+# MEMORY.md
+
+## User Profile
+- 使用 Windows 操作系统
+- 偏好 Python 语言
+- 使用 VS Code 编辑器
+
+## Key Decisions
+- 2026-06-07: 选择 SQLite 作为会话存储
+
+## Learned Patterns
+- 用户喜欢详细的代码示例
+- 用户偏好中文回复
+
+## Project Context
+- 项目使用 Python 3.11+
+- 代码风格遵循 Black 格式化
+```
+
+### 记忆类别
+
+| 类别 | 章节标题 | 说明 |
+|------|----------|------|
+| `USER_PROFILE` | User Profile | 用户角色、偏好、技能 |
+| `KEY_DECISIONS` | Key Decisions | 重要技术决策 |
+| `LEARNED_PATTERNS` | Learned Patterns | Agent 学习到的模式 |
+| `PROJECT_CONTEXT` | Project Context | 项目特定约定 |
+
+### 自动注入
+
+MEMORY.md 内容在每次 `run()` 调用时自动注入到 system prompt。
+
+## 技能文件
+
+### 文件格式
+
+```markdown
+---
+name: code-review
+description: Review code for issues and improvements
+tools: [read, grep, glob]
+triggers:
+  keywords: [review, 检查, 审查]
+---
+
+# Code Review Skill
+
+You are an expert code reviewer. Your task is to:
+1. Read the code files carefully
+2. Identify bugs, security issues, performance problems
+3. Provide actionable suggestions
+
+## Guidelines
+- Focus on correctness first
+- Always check for security vulnerabilities
+```
+
+### 技能目录结构
+
+```
+skills/
+├── code-review/
+│   └── skill.md           # 技能定义
+└── md-to-word/
+    ├── skill.md           # 技能定义
+    └── scripts/           # 辅助脚本
+        └── md_to_word.py
+    └── requirements.txt   # 依赖（可选）
+```
+
+## 配置迁移
+
+### 旧版本迁移
+
+客户端支持从旧版本配置目录自动迁移：
+
+```python
+def migrate_old_config() -> None:
+    """从旧位置迁移配置到 ~/.harness"""
+    old_dir = get_old_config_dir()
+    new_dir = get_config_dir()
+    
+    if not old_dir.exists():
+        return
+    
+    # 迁移 settings.json
+    old_settings = old_dir / "settings.json"
+    new_settings = new_dir / "settings.json"
+    if old_settings.exists() and not new_settings.exists():
+        shutil.copy2(old_settings, new_settings)
+    
+    # 迁移其他文件...
+```
+
+### 旧配置位置
+
+| 系统 | 旧位置 |
+|------|--------|
+| Windows | `%LOCALAPPDATA%\HarnessClient` |
+| macOS | `~/Library/Application Support/HarnessClient` |
+| Linux | `~/.config/HarnessClient` |
+
+## 运行客户端
+
+### 开发模式
+
+```powershell
+# Windows
+cd packages\client
+uv run python -m harness_client
+```
+
+```bash
+# Linux/macOS
+cd packages/client
+uv run python -m harness_client
+```
+
+### 日志级别
+
+客户端默认使用 DEBUG 日志级别：
+
+```python
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stderr),
+    ],
+)
+```
+
+可在生产环境中调整：
+
+```python
+level=logging.INFO  # 生产环境推荐
+```
+
+## 打包为 EXE
+
+### PyInstaller 配置
+
+`harness-client.spec`:
+
+```python
+# -*- mode: python ; coding: utf-8 -*-
+
+block_cipher = pyi_crypto.Cipher("pyi")
+
+a = Analysis(
+    ['src/harness_client/__main__.py'],
+    pathex=['src'],
+    binaries=[],
+    datas=[
+        ('src/harness_client/resources', 'harness_client/resources'),
+    ],
+    hiddenimports=[
+        'qasync',
+        'markdown',
+        'markdown.extensions.fenced_code',
+        'markdown.extensions.codehilite',
+        'markdown.extensions.tables',
+    ],
+    hookspath=['hooks'],
+    runtime_hooks=[],
+    excludes=['tkinter'],
+    cipher=block_cipher,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='HarnessClient',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=False,  # 不显示控制台窗口
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+```
+
+### 构建命令
+
+```powershell
+cd packages\client
+uv run python build.py
+```
+
+### 输出
+
+```
+dist/
+└── HarnessClient.exe   # 可执行文件
+```
+
+## 部署注意事项
+
+### 1. Python 环境
+
+打包后的 EXE 不依赖 Python 环境，可直接运行。
+
+### 2. 配置文件
+
+首次运行时会在 `~/.harness` 创建配置目录。
+
+### 3. MCP 服务器
+
+MCP 服务器需要单独安装：
+
+```powershell
+# 安装常用 MCP 服务器
+pip install mcp-filesystem
+pip install mcp-github
+```
+
+### 4. 技能脚本
+
+技能中的 Python 脚本需要正确配置路径：
+
+```markdown
+---
+name: md-to-word
+---
+
+# MD to Word
+
+执行命令：
+```bash
+python .agent/skills/md-to-word/scripts/md_to_word.py <input.md>
+```
+
+技能脚本在项目目录 `.agent/skills/` 下。
+
+## 故障排除
+
+### 常见问题
+
+#### 1. API Key 未配置
+
+```
+未配置 API Key。请在设置中配置 API Key。
+```
+
+**解决**：打开 Settings 对话框，配置 API Key。
+
+#### 2. MCP 服务器连接失败
+
+```
+Error: 'mcp-filesystem' is not recognized as a command
+```
+
+**解决**：安装对应的 MCP 服务器包。
+
+#### 3. 流式输出卡住
+
+**原因**：可能是在非主线程执行异步操作。
+
+**解决**：确保使用 `@asyncSlot` 装饰器。
+
+#### 4. 程序崩溃无提示
+
+**原因**：在 QThread 中创建了新的 event loop。
+
+**解决**：检查异步代码，确保所有 async 操作在主线程执行。
+
+### 日志查看
+
+开发模式下日志输出到 stderr。打包后可添加日志文件：
+
+```python
+logging.basicConfig(
+    handlers=[
+        logging.FileHandler('~/.harness/client.log'),
+        logging.StreamHandler(sys.stderr),
+    ],
+)
+```
