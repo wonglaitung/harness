@@ -145,10 +145,8 @@ class SystemPromptBuilder:
 
     def add_source(self, source: SystemPromptSource) -> None:
         """Add a new source to the builder."""
-        logger.debug(f"add_source called: name={source.name}, priority={source.priority}, file_path={source.file_path}")
         self._sources.append(source)
         self._sources.sort(key=lambda s: s.priority, reverse=True)
-        logger.debug(f"After add_source, sources: {[s.name for s in self._sources]}")
 
     def remove_source(self, name: str) -> bool:
         """Remove a source by name. Returns True if found and removed."""
@@ -166,7 +164,6 @@ class SystemPromptBuilder:
             Combined system prompt string
         """
         sections = []
-        logger.debug(f"Building system prompt from {len(self._sources)} sources: {[s.name for s in self._sources]}")
 
         for source in self._sources:
             try:
@@ -174,8 +171,6 @@ class SystemPromptBuilder:
                 if content.strip():
                     sections.append(content)
                     logger.debug(f"Added system prompt section from '{source.name}': {len(content)} chars")
-                else:
-                    logger.debug(f"Skipped empty system prompt section from '{source.name}'")
             except FileNotFoundError as e:
                 logger.warning(f"System prompt source '{source.name}' not found: {e}")
                 if source.required:

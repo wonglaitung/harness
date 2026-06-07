@@ -194,11 +194,6 @@ class ContextBuilder:
 
     def _init_system_prompt_builder(self) -> None:
         """Initialize the system prompt builder based on config."""
-        logger.debug(
-            f"_init_system_prompt_builder: system_prompt_config={self.config.system_prompt_config is not None}, "
-            f"project_root={self.config.project_root}, system_prompt={bool(self.config.system_prompt)}, "
-            f"memory_md_path={self.config.memory_md_path}"
-        )
         if self.config.system_prompt_config:
             # Use provided config
             self._prompt_builder = SystemPromptBuilder(self.config.system_prompt_config)
@@ -213,15 +208,12 @@ class ContextBuilder:
 
             # Add global memory source if specified
             if self.config.memory_md_path:
-                logger.info(f"Adding GlobalMemory source: {self.config.memory_md_path}")
                 from harness.memory.system_prompt import SystemPromptSource
                 self._prompt_builder.add_source(SystemPromptSource(
                     name="GlobalMemory",
                     priority=40,
                     file_path=self.config.memory_md_path,
                 ))
-            else:
-                logger.debug("No memory_md_path specified, skipping GlobalMemory source")
         else:
             # No dynamic prompt building
             self._prompt_builder = None
