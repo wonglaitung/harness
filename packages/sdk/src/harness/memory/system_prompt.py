@@ -164,6 +164,7 @@ class SystemPromptBuilder:
             Combined system prompt string
         """
         sections = []
+        logger.debug(f"Building system prompt from {len(self._sources)} sources: {[s.name for s in self._sources]}")
 
         for source in self._sources:
             try:
@@ -171,6 +172,8 @@ class SystemPromptBuilder:
                 if content.strip():
                     sections.append(content)
                     logger.debug(f"Added system prompt section from '{source.name}': {len(content)} chars")
+                else:
+                    logger.debug(f"Skipped empty system prompt section from '{source.name}'")
             except FileNotFoundError as e:
                 logger.warning(f"System prompt source '{source.name}' not found: {e}")
                 if source.required:
