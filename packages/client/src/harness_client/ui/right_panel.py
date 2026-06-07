@@ -585,8 +585,10 @@ class RightPanel(QWidget):
         self.file_section.work_dir_changed.connect(self.work_dir_changed)
         layout.addWidget(self.file_section, 1)  # stretch=1 to fill remaining space
 
-        # Set collapsed state for sections (default all expanded)
-        # Users can click to collapse
+        # Set collapsed state for sections (memory, skills, MCP collapsed by default)
+        self.memory_section.set_collapsed(True)
+        self.skills_section.set_collapsed(True)
+        self.mcp_section.set_collapsed(True)
 
     def update_memory(self, sections):
         """Update memory display."""
