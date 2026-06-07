@@ -300,4 +300,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-06.
+Today's date is 2026-06-07.

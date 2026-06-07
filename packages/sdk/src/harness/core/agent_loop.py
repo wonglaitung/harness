@@ -431,6 +431,16 @@ class AgentLoop:
                 # Add user message to session on first iteration (fixes USER message loss)
                 if iteration == 0 and prompt:
                     session.add_message(Message(role="user", content=prompt))
+
+                # Remaining steps hint: warn model to wrap up when approaching iteration limit
+                remaining_steps = self.config.max_iterations - iteration
+                if remaining_steps <= 2 and iteration > 0:
+                    session.add_message(Message(
+                        role="user",
+                        content=f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。请立即总结当前进展并给出最终回答。",
+                        metadata={"type": "remaining_steps_hint", "injected": True},
+                    ))
+
                 context = self.context.build(session)
                 context_duration = (time.time() - context_build_start) * 1000
 
@@ -751,10 +761,19 @@ class AgentLoop:
                 ),
             )
 
+            # Try to extract a meaningful response from the session
+            # This handles cases where the loop was interrupted mid-task
+            final_response = None
+            for msg in reversed(session.messages):
+                if msg.role == "assistant" and msg.content:
+                    final_response = msg.content
+                    break
+
             return LoopResult(
                 status=LoopState.ERROR,
                 session=session,
                 messages=session.messages,
+                final_response=final_response,
                 iterations=iteration,
                 error="Max iterations reached",
                 token_usage=total_usage,

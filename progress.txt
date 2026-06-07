@@ -484,3 +484,105 @@
 - `chat_panel.py`: 工具调用卡片样式增强
 - `main.qss`: 适配新布局的全局暗色主题
 - `ui/__init__.py`: 导出 RightPanel
+
+## 2026-06-06
+
+### 技能系统集成到 AgentHarness ✅ 完成
+
+#### 实现
+- 将 SkillRegistry、SkillLoader、SkillInjector 集成到 AgentHarness
+- 在 run() 方法中自动注入匹配的技能到 system prompt
+- 添加技能管理方法：load_skills_from_dir, activate_skill, deactivate_skill, get_matching_skills
+- 为 md-to-word 技能添加触发器（关键词/模式匹配）
+- 在 ChatController 中添加匹配技能日志
+
+#### 文件更新
+- `sdk/harness.py`: 集成技能系统
+- `skills/loader.py`: 添加日志记录
+- `skills/injector.py`: 添加注入日志
+- `skills/registry.py`: 添加匹配日志
+
+提交记录:
+- fix(sdk): Integrate skill system into AgentHarness (017e465)
+- feat(skills): Add logging to skill loading and injection (ffbcd85)
+
+### 统一配置目录 ✅ 完成
+
+#### 实现
+- 将配置目录统一为 `~/.harness/`（跨平台）
+- 添加 get_old_config_dir() 用于向后兼容
+- 添加 migrate_old_config() 自动迁移旧配置
+- MCP 配置保存到 `~/.harness/mcp.json`
+- 设置保存到 `~/.harness/settings.json`
+- 技能目录优先使用 `~/.harness/skills/`
+
+#### 文件更新
+- `utils/settings.py`: 统一配置目录
+- `controllers/mcp_controller.py`: 更新 MCP 配置路径
+- `controllers/skill_controller.py`: 更新技能保存路径
+- `security/sandbox.py`: 允许访问 `~/.harness/` 和临时目录
+
+提交记录:
+- feat(config): Unify config directory to ~/.harness (ab77816)
+- fix(sandbox): Allow access to ~/.harness and temp directory (77a25f8)
+- fix(skills): Prioritize ~/.harness/skills as default skill directory (3949fa7)
+- fix(mcp): Prioritize ~/.harness/mcp.json as default config path (504112a)
+
+### 客户端功能增强 ✅ 完成
+
+#### 实现
+- 技能名称自动补全：输入 `/` 触发技能名称建议
+- 技能创建/编辑 UI 对话框
+- 在设置对话框中显示保存位置
+- 将添加按钮移到区块标题行
+- 将切换目录按钮移到标题行
+
+#### 文件更新
+- `ui/skill_completer.py`: 新增技能自动补全
+- `ui/skill_dialog.py`: 新增技能创建/编辑对话框
+- `ui/main_window.py`: UI 布局调整
+- `ui/settings_dialog.py`: 显示保存位置
+
+提交记录:
+- feat(client): Add skill name autocomplete with '/' prefix (cff07d4)
+- feat(client): Add skill creation/editing UI and improve documentation (3415e48)
+
+### Bug 修复 ✅ 完成
+
+- `fix(client)`: 添加 BashTool 到默认工具集，让技能可以执行 shell 命令
+- `fix(skill)`: 为 md-to-word 技能添加明确的 LLM 执行指令，防止模型创建新脚本
+
+提交记录:
+- fix(client): Add BashTool to default tool set (cd94565)
+- fix(skill): Add explicit LLM execution instructions to md-to-word (5dc11aa)
+
+## 当前状态总结
+
+### 已实现功能（P0/P1/P2/P3）
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+
+**所有 P0-P3 功能已完成！**
+
+### 客户端功能状态
+
+| 功能 | 状态 |
+|------|------|
+| 3-column UI layout | ✅ |
+| 技能系统 UI | ✅ |
+| MCP 服务器管理 | ✅ |
+| 工作区文件树 | ✅ |
+| 技能自动补全 | ✅ |
+| 统一配置目录 (~/.harness) | ✅ |
+| 会话管理 | ✅ |

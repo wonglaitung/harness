@@ -41,8 +41,9 @@ agent = AgentHarness(
     tools=[ReadTool()],
 )
 
-# 运行
-result = await agent.run("读取 pyproject.toml 文件")
+# 运行（异步）
+import asyncio
+result = asyncio.run(agent.run("读取 pyproject.toml 文件"))
 print(result.content)
 ```
 
@@ -67,10 +68,12 @@ uv run python -m harness_client
 ## 客户端功能
 
 - 对话界面（支持流式输出）
+- 三栏布局（可折叠侧边栏 + 右侧面板）
 - MCP 服务器管理
-- 技能系统管理
-- 工作目录选择
+- 技能系统（支持 `/` 自动补全）
+- 多会话管理
 - 多模型支持
+- 统一配置目录（`~/.harness/`）
 
 ## 开发
 

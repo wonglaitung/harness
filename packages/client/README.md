@@ -30,9 +30,10 @@ uv run harness-client
 | 💬 **对话界面** | 与 AI Agent 交互，支持 Markdown 渲染和流式输出 |
 | 📐 **三栏布局** | 可折叠左侧边栏 + 中央对话 + 右侧面板（技能/MCP/文件树） |
 | 🔌 **MCP 服务器** | 添加、配置、连接 MCP 服务器扩展能力 |
-| 📝 **技能系统** | 加载、创建、管理技能文件 |
+| 📝 **技能系统** | 加载、创建、管理技能文件，支持 `/` 自动补全 |
 | 📁 **会话管理** | 多会话支持，历史记录持久化 |
 | 🌐 **多模型支持** | 支持 Claude、OpenAI 及兼容 API |
+| 📂 **统一配置** | 所有配置集中存储在 `~/.harness/` 目录 |
 | ⚙️ **设置持久化** | 配置自动保存，重启后自动加载 |
 | 🎨 **Hermes 暗色主题** | 现代化暗色 UI 风格 |
 
@@ -129,10 +130,13 @@ uv run python -m harness_client
 5. 选择或输入模型名称
 6. 确定（自动保存）
 
-**设置存储位置**: 
-- Windows: `%LOCALAPPDATA%\HarnessClient\settings.json`
-- macOS: `~/Library/Application Support/HarnessClient/settings.json`
-- Linux: `~/.config/HarnessClient/settings.json`
+**配置存储位置**: 
+- 统一配置目录: `~/.harness/`（所有平台）
+  - 设置文件: `~/.harness/settings.json`
+  - MCP 配置: `~/.harness/mcp.json`
+  - 用户技能: `~/.harness/skills/`
+
+> **自动迁移**: 首次启动时，旧配置（`%LOCALAPPDATA%`、`~/Library`、`~/.config`）会自动迁移到 `~/.harness/`
 
 ### 环境变量配置
 
@@ -179,9 +183,9 @@ MCP (Model Context Protocol) 服务器可扩展 Agent 能力，提供外部工�
 
 #### 配置存储位置
 
-- Windows: `%LOCALAPPDATA%\HarnessClient\mcp.json`
-- macOS: `~/Library/Application Support/HarnessClient/mcp.json`
-- Linux: `~/.config/HarnessClient/mcp.json`
+- 统一配置目录: `~/.harness/mcp.json`（所有平台）
+
+> MCP 配置保存在用户目录，所有项目共享。
 
 #### 示例配置
 
@@ -222,10 +226,12 @@ MCP (Model Context Protocol) 服务器可扩展 Agent 能力，提供外部工�
 
 | 目录 | 优先级 | 说明 |
 |------|--------|------|
-| `./.agent/skills/` | 最高 | 项目级（UI 创建默认保存位置） |
-| `./skills/` | 高 | 项目级（备选） |
-| `~/.harness/skills/` | 中 | 用户级（所有项目共享） |
-| `~/.harness/shared-skills/` | 低 | 共享技能 |
+| `~/.harness/skills/` | 最高 | 用户级（所有项目共享，UI 创建默认保存位置） |
+| `~/.harness/shared-skills/` | 高 | 共享技能 |
+| `./.agent/skills/` | 中 | 项目级 |
+| `./skills/` | 低 | 项目级（备选） |
+
+> **技能自动补全**: 输入 `/` 可触发技能名称自动补全
 
 #### 创建技能
 

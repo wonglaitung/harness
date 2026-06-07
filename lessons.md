@@ -654,7 +654,7 @@ Iteration 1: LLM 返回 [read(file1), read(file2)]  # 并行调用
 | 文件 | 改动 |
 |------|------|
 | `packages/sdk/src/harness/core/circuit_breaker.py` | 增强 tool:args 检测，禁用序列检测 |
-| `packages/sdk/src/harness/core/agent_loop.py` | 添加 remaining_steps 主动退出 |
+| `packages/sdk/src/harness/core/agent_loop.py` | 添加 remaining_steps 主动退出（2026-06-07 真正实现） |
 | `packages/client/src/harness_client/controllers/chat_controller.py` | 优化系统提示 |
 
 ### 参考
@@ -833,3 +833,231 @@ assert not missing, f"Missing attributes: {missing}"
 |------|------|
 | `packages/sdk/src/harness/mcp/tool_wrapper.py` | 添加 `input_schema` 属性和 `validate_arguments` 方法 |
 | `packages/sdk/pyproject.toml` | 添加 `mcp>=1.0.0` 依赖 |
+
+---
+
+## 2026-06-06: 技能文档需要明确的 LLM 执行指令
+
+### 问题
+
+用户请求转换 Markdown 到 Word 时，模型没有运行现有的转换脚本，而是尝试创建新的脚本文件。
+
+### 原因
+
+技能文档（SKILL.md）是为人类用户编写的，缺少明确告诉 LLM 如何执行的指令。模型不知道脚本已经存在，因此尝试自己创建解决方案。
+
+### 解决
+
+在技能文档顶部添加 "⚡ 执行指令（LLM 必读）" 章节：
+
+```markdown
+## ⚡ 执行指令（LLM 必读）
+
+**当用户请求转换 Markdown 到 Word 时，你必须：**
+
+1. **直接运行转换脚本**，脚本已存在于技能目录中：
+   ```
+   python .agent/skills/md-to-word/scripts/md_to_word.py <input.md> [--output <output.docx>]
+   ```
+
+**⚠️ 重要提示**：
+- 不要尝试创建新脚本，脚本已经存在
+- 不要尝试写入临时文件
+- 直接使用 bash 工具运行上述命令
+```
+
+### 教训
+
+1. **技能文档需要面向 LLM**：技能系统是给 LLM 使用的，文档必须包含明确的执行指令
+2. **强调"已存在"**：明确告诉 LLM 脚本/工具已存在，防止模型重复创建
+3. **提供具体命令**：给出可以直接复制粘贴的命令，减少模型猜测
+4. **添加警告**：明确说明"不要做什么"（如不要创建新脚本）
+
+### 检查方法
+
+```markdown
+# 技能文档检查清单
+- [ ] 是否有明确的 "LLM 执行指令" 章节？
+- [ ] 是否提供了可直接运行的命令？
+- [ ] 是否说明了脚本/工具已存在？
+- [ ] 是否警告了不要重复创建？
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `~/.harness/skills/md-to-word/SKILL.md` | 添加 "⚡ 执行指令（LLM 必读）" 章节 |
+
+---
+
+## 2026-06-06: 客户端缺少 BashTool 导致技能无法执行
+
+### 问题
+
+用户触发 md-to-word 技能后，模型尝试执行 Python 脚本但失败，因为没有 shell 执行工具。
+
+### 原因
+
+客户端在初始化工具列表时，只注册了 ReadTool、WriteTool、EditTool、GlobTool、GrepTool，但没有注册 BashTool。
+
+### 解决
+
+在客户端默认工具集中添加 BashTool：
+
+```python
+# packages/client/src/harness_client/controllers/chat_controller.py
+from harness.tools.builtins import (
+    ReadTool,
+    WriteTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+    BashTool,  # 新增
+)
+
+def _init_tools(self) -> list[Tool]:
+    return [
+        ReadTool(),
+        WriteTool(),
+        EditTool(),
+        GlobTool(),
+        GrepTool(),
+        BashTool(),  # 新增
+    ]
+```
+
+### 教训
+
+1. **技能需要执行环境**：如果技能涉及运行脚本或命令，必须有 BashTool
+2. **工具集要与能力匹配**：如果 SDK 支持某种能力（如执行命令），客户端应该暴露这个能力
+3. **测试技能端到端流程**：不只是测试技能匹配，还要测试实际执行
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/controllers/chat_controller.py` | 添加 BashTool 到默认工具集 |
+
+---
+
+## 2026-06-06: 统一配置目录便于跨目录使用
+
+### 问题
+
+配置文件（MCP 配置、技能、设置）分散在不同位置：
+- MCP 配置在工作目录
+- 技能在技能目录
+- 设置在平台特定目录
+
+当用户切换工作目录时，MCP 服务器配置"丢失"（实际是在原目录）。
+
+### 解决
+
+统一所有配置到 `~/.harness/` 目录：
+
+```
+~/.harness/
+├── mcp.json          # MCP 服务器配置
+├── settings.json     # 客户端设置
+└── skills/           # 技能目录
+    └── md-to-word/
+        └── SKILL.md
+```
+
+### 教训
+
+1. **全局配置 vs 项目配置**：MCP 服务器、技能是"用户级"配置，应该在用户目录
+2. **预期行为**：用户期望 MCP 服务器在任何目录都可用
+3. **迁移旧配置**：提供自动迁移机制，避免用户手动迁移
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/utils/settings.py` | 统一配置目录到 `~/.harness/` |
+| `packages/sdk/src/harness/security/sandbox.py` | 允许访问 `~/.harness/` 目录 |
+
+---
+
+## 2026-06-07: 达到迭代上限时返回空回复
+
+### 问题
+
+用户执行技能后，任务成功完成（Word 文档已生成），但 UI 显示空回复。
+
+日志显示：
+```
+LLM response: content_len=0, stop_reason=StopReason.TOOL_USE, tool_calls=1
+agent.run() returned, iterations=20
+Response length: 0 chars
+Response received: EMPTY...
+```
+
+### 原因
+
+1. **模型行为**：模型在完成任务后继续尝试执行清理命令，没有给出最终文本回复
+2. **循环终止**：达到 `max_iterations=20`，循环终止
+3. **返回值缺失**：达到迭代上限时返回的 `LoopResult` 没有设置 `final_response`
+
+```python
+# agent_loop.py:754-761 (原始代码)
+return LoopResult(
+    status=LoopState.ERROR,
+    session=session,
+    messages=session.messages,
+    iterations=iteration,
+    error="Max iterations reached",  # 只设置了 error
+    token_usage=total_usage,
+    # final_response=None  ← 没有设置！
+)
+```
+
+### 解决
+
+在达到迭代上限时，从 session 中提取最后的助手消息作为回复：
+
+```python
+# 尝试从 session 中提取有意义的回复
+final_response = None
+for msg in reversed(session.messages):
+    if msg.role == "assistant" and msg.content:
+        final_response = msg.content
+        break
+
+return LoopResult(
+    status=LoopState.ERROR,
+    session=session,
+    messages=session.messages,
+    final_response=final_response,  # 新增
+    iterations=iteration,
+    error="Max iterations reached",
+    token_usage=total_usage,
+)
+```
+
+### 教训
+
+1. **边界情况要考虑返回值**：错误终止时也应尽可能提供有意义的回复
+2. **模型行为不可预测**：模型可能在完成任务后不停止，需要兜底机制
+3. **从历史消息恢复**：session 中可能包含有用的助手消息，可以提取
+
+### 可选改进
+
+在接近迭代上限时注入提醒，让模型优雅收尾：
+
+```python
+remaining_steps = self.config.max_iterations - iteration
+if remaining_steps <= 2 and iteration > 0:
+    session.add_message(Message(
+        role="user",
+        content=f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。请立即总结并给出最终回答。",
+        metadata={"type": "remaining_steps_hint", "injected": True},
+    ))
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/sdk/src/harness/core/agent_loop.py` | 达到迭代上限时提取最后的助手消息作为回复 |
