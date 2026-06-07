@@ -22,6 +22,7 @@ while not finished:
 | 机制 | 配置字段 | 说明 |
 |------|----------|------|
 | **最大步数** | `max_iterations` (默认 10) | 限制循环次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15） |
+| **迭代提醒** | 内置 | 接近迭代上限时注入提示让模型优雅收尾 |
 | **工具超时** | `timeout_per_tool` (默认 30.0s) | 每个工具调用的超时时间 |
 | **熔断器** | `enable_circuit_breaker` (默认 True) | 相同工具+参数重复 3 次时中断 |
 | **卡住检测** | `max_stuck_feedbacks` (默认 2) | 检测重复输出或无进展状态 |
@@ -29,6 +30,44 @@ while not finished:
 | **步骤预算** | `step_budget_config` | 限制单次 LLM 响应的工具调用数和任务总调用数 |
 | **并行工具** | `enable_parallel_tools` (默认 True) | 启用并行工具调用 |
 | **错误重试** | `retry_on_error` (默认 3) | API 错误自动重试次数 |
+
+#### 迭代提醒机制
+
+当接近迭代上限（剩余 2 步）时，Agent Loop 会自动注入提醒消息：
+
+```python
+# agent_loop.py 核心逻辑
+remaining_steps = self.config.max_iterations - iteration
+if remaining_steps <= 2 and iteration > 0:
+    session.add_message(Message(
+        role="user",
+        content=f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。请立即总结当前进展并给出最终回答。",
+        metadata={"type": "remaining_steps_hint", "injected": True},
+    ))
+```
+
+这使模型有机会在达到硬性限制前优雅地完成任务或给出当前进展摘要。
+
+#### 达到迭代上限时的响应恢复
+
+如果达到 `max_iterations`，Agent Loop 会尝试从 session 中提取最后的助手消息作为回复：
+
+```python
+# 从 session 中提取有意义的回复
+final_response = None
+for msg in reversed(session.messages):
+    if msg.role == "assistant" and msg.content:
+        final_response = msg.content
+        break
+
+return LoopResult(
+    status=LoopState.ERROR,
+    final_response=final_response,  # 尽可能提供回复
+    error="Max iterations reached",
+)
+```
+
+这确保即使模型没有主动给出最终回复，用户也能看到之前的助手消息。
 
 ## AgentLoop 类
 
