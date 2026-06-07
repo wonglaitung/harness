@@ -500,3 +500,73 @@ mock.expect("分析代码").respond("代码质量良好")
 result = await mock.run("分析代码")
 assert result.content == "代码质量良好"
 ```
+
+## 全局记忆
+
+### 配置全局记忆文件
+
+```python
+from harness import AgentHarness, HarnessConfig
+from pathlib import Path
+
+# 配置全局 MEMORY.md 文件路径
+config = HarnessConfig(
+    model="claude-sonnet-4-6",
+    memory_md_path=Path.home() / ".harness" / "MEMORY.md",
+)
+
+agent = AgentHarness(config=config)
+
+# Agent 会自动加载全局记忆到 system prompt
+result = await agent.run("帮我重构这段代码")
+```
+
+### 全局记忆文件格式
+
+```markdown
+# MEMORY.md
+
+## User Profile
+- 使用 Windows 操作系统
+- 偏好 Python 语言
+- 使用 VS Code 编辑器
+
+## Key Decisions
+- 2024-01-15: 选择 SQLite 作为会话存储
+
+## Learned Patterns
+- 用户喜欢详细的代码示例
+- 用户偏好中文回复
+
+## Project Context
+- 项目使用 Python 3.11+
+- 代码风格遵循 Black 格式化
+```
+
+### 即时更新特性
+
+全局记忆文件在每次 `run()` 调用时重新读取，修改后立即生效：
+
+```python
+from harness import AgentHarness
+from harness.memory.memory_file import MemoryFileManager, MemoryCategory, MemoryEntry, MemorySource
+from pathlib import Path
+
+agent = AgentHarness(
+    memory_md_path=Path.home() / ".harness" / "MEMORY.md",
+)
+
+# 第一次调用 - 加载当前记忆
+result1 = await agent.run("分析项目结构")
+
+# 更新记忆文件
+manager = MemoryFileManager(Path.home() / ".harness")
+manager.add_entry(MemoryEntry(
+    category=MemoryCategory.USER_PROFILE,
+    content="偏好简洁的代码注释",
+    source=MemorySource.USER_INPUT,
+))
+
+# 第二次调用 - 自动加载更新后的记忆
+result2 = await agent.run("添加函数注释")
+```

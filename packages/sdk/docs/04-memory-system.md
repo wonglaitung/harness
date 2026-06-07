@@ -615,6 +615,4 @@ agent._context_builder.add_prompt_source(SystemPromptSource(
 - **用户偏好存储**：保存用户常用的编码风格、语言偏好等
 - **跨项目知识共享**：在多个项目间共享通用的技术决策和模式
 - **客户端集成**：桌面客户端可通过 UI 管理全局记忆
-
-```
-```
+- **即时更新**：MEMORY.md 修改后在下一次 run() 调用时自动生效
