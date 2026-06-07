@@ -378,6 +378,9 @@ class AgentHarness:
             )
         )
 
+        # Update the loop's context builder reference
+        self._loop.context = self._context_builder
+
         # Get or create session
         session = self._session_manager.get_or_create(session_id)
 

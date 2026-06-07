@@ -145,8 +145,10 @@ class SystemPromptBuilder:
 
     def add_source(self, source: SystemPromptSource) -> None:
         """Add a new source to the builder."""
+        logger.debug(f"add_source called: name={source.name}, priority={source.priority}, file_path={source.file_path}")
         self._sources.append(source)
         self._sources.sort(key=lambda s: s.priority, reverse=True)
+        logger.debug(f"After add_source, sources: {[s.name for s in self._sources]}")
 
     def remove_source(self, name: str) -> bool:
         """Remove a source by name. Returns True if found and removed."""
