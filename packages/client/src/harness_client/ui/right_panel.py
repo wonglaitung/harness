@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QStyle,
     QTreeView,
     QVBoxLayout,
@@ -143,6 +144,11 @@ class CollapsibleSection(QWidget):
         self.content_widget.setVisible(not self._is_collapsed)
         arrow = "▶" if self._is_collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
+        # Update size policy to prevent collapsed sections from taking space
+        if self._is_collapsed:
+            self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        else:
+            self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
     def add_widget(self, widget: QWidget, stretch: int = 0):
         """Add a widget to the content area.
@@ -159,6 +165,11 @@ class CollapsibleSection(QWidget):
         self.content_widget.setVisible(not collapsed)
         arrow = "▶" if collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
+        # Update size policy to prevent collapsed sections from taking space
+        if collapsed:
+            self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        else:
+            self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
 
 class SkillsSection(CollapsibleSection):
