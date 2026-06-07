@@ -1,5 +1,5 @@
 """
-Chat panel for displaying conversation - Hermes Dark Theme Style.
+Chat panel for displaying conversation - Athlon-inspired dark theme style.
 """
 
 import markdown
@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
 
 
@@ -55,13 +56,13 @@ class ChatPanel(QWidget):
 
         # Input bar container with dark background
         input_bar = QWidget()
-        input_bar.setStyleSheet("""
-            QWidget {
-                background-color: #252526;
-                border-top: 1px solid #3e3e42;
-                border-radius: 8px;
-                padding: 6px;
-            }
+        input_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.PANEL_ALT};
+                border-top: 1px solid {theme.BORDER};
+                border-radius: 12px;
+                padding: 8px;
+            }}
         """)
         input_layout = QHBoxLayout(input_bar)
         input_layout.setContentsMargins(8, 6, 8, 6)
@@ -72,17 +73,17 @@ class ChatPanel(QWidget):
         self.input_field.setPlaceholderText("输入消息... (Enter 发送)")
         self.input_field.setFont(self._get_font())
         self.input_field.setMinimumHeight(36)
-        self.input_field.setStyleSheet("""
-            QLineEdit {
-                background-color: #1e1e1e;
-                border: 1px solid #3e3e42;
-                border-radius: 6px;
-                padding: 8px;
-                color: #d4d4d4;
-            }
-            QLineEdit:focus {
-                border-color: #0078d4;
-            }
+        self.input_field.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {theme.CHROME};
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: {theme.TEXT};
+            }}
+            QLineEdit:focus {{
+                border-color: {theme.ACCENT};
+            }}
         """)
         self.input_field.returnPressed.connect(self._on_send)
         self.input_field.textEdited.connect(self._on_text_edited)
@@ -93,12 +94,12 @@ class ChatPanel(QWidget):
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
-        self.token_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        self.token_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 11px;
                 padding: 0 4px;
-            }
+            }}
         """)
 
         # Send button - primary blue
@@ -106,20 +107,20 @@ class ChatPanel(QWidget):
         self.send_btn.setMinimumHeight(36)
         self.send_btn.setMinimumWidth(80)
         self.send_btn.clicked.connect(self._on_send)
-        self.send_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
+        self.send_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.ACCENT};
                 color: white;
                 border: none;
-                border-radius: 6px;
+                border-radius: 8px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {theme.ACCENT_HOVER};
+            }}
+            QPushButton:pressed {{
+                background-color: #1a47b8;
+            }}
         """)
 
         input_layout.addWidget(self.input_field, stretch=1)
@@ -196,7 +197,9 @@ class ChatPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def _append_message(self, role: str, content: str):
-        """Append a message to the chat display with dark theme styling."""
+        """Append a message to the chat display - Athlon-inspired bubble style."""
+        theme = get_theme()
+
         # Render markdown for assistant messages
         if role == "assistant":
             rendered_content = self._render_markdown(content)
@@ -204,16 +207,19 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message - right aligned with table for QTextBrowser compatibility
-            # QTextBrowser doesn't support inline-block, so we use table layout
+            # User message - right aligned, blue bubble
             html = f"""
             <table width="100%" style="margin: 8px 0;">
                 <tr>
                     <td width="25%"></td>
                     <td width="75%" align="right">
-                        <span style="background-color: #1e4a6d; color: #ffffff;
-                                     font-size: 13px; padding: 8px 12px;
-                                     border-radius: 12px;">
+                        <span style="background-color: {theme.USER_BUBBLE};
+                                     color: #ffffff;
+                                     font-size: 14px; padding: 10px 16px;
+                                     border-radius: 16px;
+                                     display: inline-block;
+                                     max-width: 100%;
+                                     text-align: left;">
                             {rendered_content}
                         </span>
                     </td>
@@ -224,15 +230,16 @@ class ChatPanel(QWidget):
             # Assistant message with avatar and gray bubble, left-aligned
             html = f"""
             <div style="margin: 12px 0;">
-                <div style="display: inline-flex; align-items: flex-start; gap: 10px;">
-                    <div style="width: 32px; height: 32px; border-radius: 50%;
-                                background-color: #007acc; color: white; font-size: 16px;
+                <div style="display: inline-flex; align-items: flex-start; gap: 12px;">
+                    <div style="width: 40px; height: 40px; border-radius: 20px;
+                                background-color: {theme.ACCENT}; color: white; font-size: 18px;
                                 display: inline-flex; align-items: center; justify-content: center;
-                                flex-shrink: 0;">A</div>
-                    <div style="background-color: #2d2d30; border-radius: 16px;
-                                padding: 10px 16px; max-width: 85%;
-                                color: #d4d4d4; font-size: 13px; line-height: 1.5;">
-                        <div style="color: #d4d4d4;">{rendered_content}</div>
+                                flex-shrink: 0; font-weight: bold;">A</div>
+                    <div style="background-color: {theme.ASSISTANT_BUBBLE};
+                                border-radius: 16px;
+                                padding: 12px 16px; max-width: 85%;
+                                color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
+                        <div style="color: {theme.TEXT};">{rendered_content}</div>
                     </div>
                 </div>
             </div>
@@ -249,23 +256,35 @@ class ChatPanel(QWidget):
         self._append_message("user", content)
 
     def append_tool_call(self, tool_name: str, arguments: dict):
-        """Append a tool call indicator with dark theme card style - matching Athlon Agent style."""
+        """Append a tool call indicator - Athlon-inspired purple thinking style."""
+        theme = get_theme()
+
         # Format arguments preview (first 3 args)
-        args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in list(arguments.items())[:3])
+        args_items = list(arguments.items())[:3]
+        args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in args_items)
         if len(arguments) > 3:
             args_preview += "..."
 
         html = f"""
-        <div style="margin: 8px 0 4px 36px;">
-            <div style="background-color: #1a1a2e; color: #58a6ff;
-                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
-                        border: 1px solid #264f78;">
-                <div style="margin-bottom: 4px;">
-                    <span style="color: #808080;">Tool</span>
-                    <b style="color: #58a6ff;">'{self._escape_html(tool_name)}'</b>
-                    <span style="color: #808080;">called</span>
+        <div style="margin: 8px 0 4px 40px;">
+            <div style="background-color: {theme.TOOL_THINKING_BG};
+                        border: 1px solid {theme.TOOL_THINKING_BORDER};
+                        border-radius: 16px;
+                        padding: 12px 16px;
+                        max-width: 640px;">
+                <!-- Header row -->
+                <div style="margin-bottom: 8px;">
+                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
+                    <span style="color: {theme.TOOL_THINKING_TEXT}; font-weight: bold; font-size: 13px;">
+                        '{self._escape_html(tool_name)}'
+                    </span>
+                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">called</span>
                 </div>
-                <div style="color: #808080; font-size: 11px; font-style: italic;">
+                <!-- Arguments preview -->
+                <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 11px;
+                            font-style: italic;
+                            padding: 6px 8px; background: rgba(0,0,0,0.2);
+                            border-radius: 6px;">
                     {self._escape_html(args_preview) if args_preview else 'no arguments'}
                 </div>
             </div>
@@ -275,35 +294,46 @@ class ChatPanel(QWidget):
         self._scroll_to_bottom()
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
-        """Append a tool result indicator with expandable details - matching Athlon Agent style."""
+        """Append a tool result indicator - Athlon-inspired success/failure cards."""
+        theme = get_theme()
         preview = result[:80] + "..." if len(result) > 80 else result
 
         if success:
-            bg_color = "#1a3a2a"
-            border_color = "#2ea043"
-            text_color = "#3fb950"
+            bg = theme.TOOL_SUCCESS_BG
+            border = theme.TOOL_SUCCESS_BORDER
+            text_color = theme.TOOL_SUCCESS_TEXT
             icon = "✓"
             status_text = "succeeded"
         else:
-            bg_color = "#3a1a1a"
-            border_color = "#da3633"
-            text_color = "#f85149"
+            bg = theme.TOOL_FAILURE_BG
+            border = theme.TOOL_FAILURE_BORDER
+            text_color = theme.TOOL_FAILURE_TEXT
             icon = "✗"
             status_text = "failed"
 
         html = f"""
-        <div style="margin: 4px 0 8px 36px;">
-            <div style="background-color: {bg_color}; color: {text_color};
-                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
-                        border: 1px solid {border_color};">
-                <div style="margin-bottom: 4px;">
-                    <span style="color: {text_color};">{icon}</span>
-                    Tool <b>'{self._escape_html(tool_name)}'</b> {status_text}.
+        <div style="margin: 4px 0 8px 40px;">
+            <div style="background-color: {bg};
+                        border: 1px solid {border};
+                        border-radius: 16px;
+                        padding: 12px 16px;
+                        max-width: 640px;">
+                <!-- Status header -->
+                <div style="margin-bottom: 6px;">
+                    <span style="color: {text_color}; font-size: 14px;">{icon}</span>
+                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
+                    <span style="color: {text_color}; font-weight: bold; font-size: 13px;">
+                        '{self._escape_html(tool_name)}'
+                    </span>
+                    <span style="color: {text_color}; font-size: 12px; font-weight: bold;">
+                        {status_text}
+                    </span>
                 </div>
-                <div style="color: #808080; font-size: 11px; margin-top: 4px;
-                            padding: 6px 8px; background-color: rgba(0,0,0,0.2);
-                            border-radius: 4px; font-family: monospace;
-                            max-height: 60px; overflow: hidden;">
+                <!-- Result preview -->
+                <div style="color: {theme.TEXT_SUBTLE}; font-size: 11px;
+                            padding: 6px 8px; background: rgba(0,0,0,0.2);
+                            border-radius: 6px; font-family: monospace;
+                            max-height: 80px; overflow: hidden;">
                     {self._escape_html(preview)}
                 </div>
             </div>
@@ -313,12 +343,14 @@ class ChatPanel(QWidget):
         self._scroll_to_bottom()
 
     def append_thinking(self, message: str):
-        """Append a thinking/progress indicator with subtle blockquote style."""
+        """Append a thinking/progress indicator - Athlon-inspired subtle style."""
+        theme = get_theme()
         html = f"""
-        <div style="margin: 4px 0 4px 36px;">
-            <div style="background-color: #1e1e1e; color: #6e7681;
-                        padding: 6px 12px; border-radius: 4px; font-size: 12px;
-                        border-left: 2px solid #3e3e42;">
+        <div style="margin: 4px 0 4px 40px;">
+            <div style="background-color: {theme.CHROME};
+                        color: {theme.TEXT_SUBTLE};
+                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
+                        border-left: 2px solid {theme.TOOL_THINKING_BORDER};">
                 💭 {self._escape_html(message)}
             </div>
         </div>

@@ -1,5 +1,5 @@
 """
-Sidebar panel with navigation buttons and session list - Hermes Dark Theme Style.
+Sidebar panel with navigation buttons and session list - Athlon-inspired dark theme style.
 """
 
 from pathlib import Path
@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from harness_client.themes import get_theme
 
 
 class SidebarPanel(QWidget):
@@ -53,26 +55,29 @@ class SidebarPanel(QWidget):
 
     def _create_nav_button(self, icon: str, text: str) -> QPushButton:
         """Create a navigation button with icon and text."""
+        theme = get_theme()
         btn = QPushButton(f"{icon}  {text}")
         btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        btn.setStyleSheet("""
-            QPushButton {
+        btn.setStyleSheet(f"""
+            QPushButton {{
                 background-color: transparent;
-                border-radius: 4px;
-                padding: 8px 12px;
-                color: #d4d4d4;
+                border-radius: 12px;
+                padding: 10px 16px;
+                color: {theme.TEXT};
                 font-size: 13px;
                 text-align: left;
-            }
-            QPushButton:hover {
-                background-color: #2a2a2a;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
         """)
-        btn.setFixedHeight(36)
+        btn.setFixedHeight(40)
         return btn
 
     def _setup_ui(self):
         """Setup UI components."""
+        theme = get_theme()
+
         # Main layout
         self._main_layout = QVBoxLayout(self)
         self._main_layout.setContentsMargins(8, 8, 8, 8)
@@ -96,7 +101,7 @@ class SidebarPanel(QWidget):
         # Separator
         nav_separator = QFrame()
         nav_separator.setFrameShape(QFrame.Shape.HLine)
-        nav_separator.setStyleSheet("background-color: #3e3e42; max-height: 1px;")
+        nav_separator.setStyleSheet(f"background-color: {theme.BORDER}; max-height: 1px;")
         nav_layout.addWidget(nav_separator)
 
         # New session button
@@ -108,13 +113,13 @@ class SidebarPanel(QWidget):
 
         # Session list section
         sessions_label = QLabel("会话历史")
-        sessions_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        sessions_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 11px;
                 font-weight: bold;
                 padding: 8px 0 4px 0;
-            }
+            }}
         """)
         self._main_layout.addWidget(sessions_label)
 
@@ -122,25 +127,27 @@ class SidebarPanel(QWidget):
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.session_list.itemClicked.connect(self._on_session_clicked)
-        self.session_list.setStyleSheet("""
-            QListWidget {
-                background-color: #171717;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                color: #d4d4d4;
+        self.session_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {theme.PANEL};
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                color: {theme.TEXT};
                 font-size: 12px;
-            }
-            QListWidget::item {
-                padding: 6px 8px;
-                border-bottom: 1px solid #2a2a2a;
-            }
-            QListWidget::item:selected {
-                background-color: #094771;
-                color: #ffffff;
-            }
-            QListWidget::item:hover {
-                background-color: #2a2a2a;
-            }
+            }}
+            QListWidget::item {{
+                padding: 8px 12px;
+                border-radius: 8px;
+                margin: 2px 4px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {theme.NAV_ACTIVE_BG};
+                border: 1px solid {theme.NAV_ACTIVE_BORDER};
+                color: {theme.NAV_ACTIVE_TEXT};
+            }}
+            QListWidget::item:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
         """)
         self._main_layout.addWidget(self.session_list, 1)  # stretch=1 to fill space
 
@@ -195,6 +202,7 @@ class SidebarPanel(QWidget):
 
     def _on_session_context_menu(self, position):
         """Show context menu for session list."""
+        theme = get_theme()
         item = self.session_list.itemAt(position)
         if not item:
             return
@@ -211,15 +219,21 @@ class SidebarPanel(QWidget):
             return
 
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #252526;
-                border: 1px solid #3e3e42;
-                color: #d4d4d4;
-            }
-            QMenu::item:selected {
-                background-color: #094771;
-            }
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {theme.MENU_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                color: {theme.TEXT};
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 8px 16px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
         """)
 
         delete_action = QAction("🗑️ 删除会话", self)

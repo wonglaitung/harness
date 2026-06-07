@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontDatabase
 from PyQt6.QtWidgets import QApplication
 
+from harness_client.themes import apply_theme
 from harness_client.ui.main_window import MainWindow
 
 # Configure logging
@@ -59,10 +60,8 @@ def run():
     # Set default application font (fixes QFont warnings)
     app.setFont(get_system_font())
 
-    # Load stylesheet
-    style_path = Path(__file__).parent.parent.parent / "resources" / "styles" / "main.qss"
-    if style_path.exists():
-        app.setStyleSheet(style_path.read_text(encoding="utf-8"))
+    # Apply theme stylesheet (replaces QSS file loading)
+    apply_theme(app)
 
     # Setup async event loop
     loop = qasync.QEventLoop(app)

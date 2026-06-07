@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from harness_client.themes import get_theme
+
 
 class CustomFileIconProvider(QFileIconProvider):
     """Custom icon provider that uses Qt built-in icons for files and folders."""
@@ -56,6 +58,7 @@ class CollapsibleSection(QWidget):
 
     def _setup_ui(self):
         """Setup the collapsible section UI."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -66,21 +69,22 @@ class CollapsibleSection(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
 
-        # Header button (fold/unfold)
+        # Header button (fold/unfold) - Athlon style with 16px border-radius
         self.header_btn = QPushButton(f"▼ {self._title}")
-        self.header_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d30;
+        self.header_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.CHROME};
                 border: none;
-                border-radius: 4px;
-                padding: 8px 12px;
+                border-radius: 16px;
+                padding: 10px 16px;
                 text-align: left;
-                color: #d4d4d4;
+                color: {theme.TEXT};
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-            }
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
         """)
         self.header_btn.clicked.connect(self._toggle_collapsed)
         header_layout.addWidget(self.header_btn, 1)  # stretch=1 to take remaining space
@@ -112,24 +116,25 @@ class CollapsibleSection(QWidget):
         Returns:
             The created QPushButton
         """
+        theme = get_theme()
         btn = QPushButton(text)
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                min-width: 20px;
-                max-width: 20px;
-                min-height: 20px;
-                max-height: 20px;
-                color: #d4d4d4;
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.PANEL};
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                color: {theme.TEXT};
                 font-size: 12px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-color: #007acc;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
         """)
         if tooltip:
             btn.setToolTip(tooltip)
@@ -245,26 +250,27 @@ class SkillsSection(CollapsibleSection):
 
     def _create_skill_item(self, name: str, enabled: bool) -> QWidget:
         """Create a skill item widget."""
+        theme = get_theme()
         widget = QWidget()
-        widget.setStyleSheet("""
-            QWidget {
-                background-color: #252526;
-                border-radius: 4px;
-            }
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.PANEL};
+                border-radius: 8px;
+            }}
         """)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
 
         # Status indicator
-        indicator_color = "#50c878" if enabled else "#808080"
+        indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
         indicator = QLabel("●")
         indicator.setStyleSheet(f"color: {indicator_color}; font-size: 12px;")
         layout.addWidget(indicator)
 
         # Skill name
         name_label = QLabel(name)
-        name_label.setStyleSheet("color: #d4d4d4; font-size: 12px;")
+        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: 12px;")
         layout.addWidget(name_label)
 
         layout.addStretch()
