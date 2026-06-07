@@ -214,6 +214,106 @@ async def initialize(self):
 
 ## 二、关键踩坑教训
 
+### 0. Qt 布局机制深层理解（2026-06-07）⭐ 重点
+
+#### 问题现象
+
+右侧面板折叠后，后续区块之间出现空白间隙，文件树无法紧贴 MCP 区块下方。
+
+#### 调试过程
+
+这是一个需要 4 次迭代才完全解决的问题：
+
+| 提交 | 尝试方法 | 结果 |
+|------|----------|------|
+| `581231a` | 移除 content_widget 的 stretch=1 | 失败，仍有间隙 |
+| `777ee8f` | 设置 content_widget sizePolicy=Ignored | 失败，仍有间隙 |
+| `3c68cfc` | 设置 CollapsibleSection sizePolicy=Fixed | 失败，仍有间隙 |
+| `e11cf37` | 设置 maximumHeight=header_height | ✅ 成功 |
+
+#### 根因分析
+
+Qt 的 `QVBoxLayout` 有特殊的 **最小尺寸计算逻辑**：
+
+1. **stretch ≠ sizePolicy**：
+   - `stretch` 是布局分配**剩余空间**的比例
+   - `sizePolicy` 是组件的**尺寸策略**
+   - 即使 `stretch=0`，组件仍会保持其 `sizeHint()` 或 `minimumSizeHint()`
+
+2. **setVisible(False) ≠ 零空间**：
+   - 隐藏组件（`setVisible(False)`）后，组件仍有 `minimumSizeHint()`
+   - 布局会为隐藏组件保留最小尺寸空间
+
+3. **sizePolicy.Ignored 的局限**：
+   - `Ignored` 策略让组件的 sizeHint 被**忽略**
+   - 但布局仍会考虑组件的 `minimumSizeHint()`
+   - QWidget 默认有非零的 minimumSizeHint
+
+4. **最终方案：maximumHeight 强制约束**：
+   - 设置 `maximumHeight` 是**硬约束**
+   - 布局必须遵守 maximumHeight，无法绕过
+   - 折叠时 `maximumHeight = header_height`，强制布局收紧
+
+#### 正确实现
+
+```python
+class CollapsibleSection(QWidget):
+    def _toggle_collapsed(self):
+        self._is_collapsed = not self._is_collapsed
+        self.content_widget.setVisible(not self._is_collapsed)
+        
+        if self._is_collapsed:
+            # 1. 隐藏内容区域
+            self.content_widget.setSizePolicy(
+                QSizePolicy.Policy.Ignored, 
+                QSizePolicy.Policy.Ignored
+            )
+            # 2. 强制约束整体高度（关键！）
+            self.setMaximumHeight(
+                self.header_btn.sizeHint().height() + 16  # header + padding
+            )
+        else:
+            # 恢复展开状态
+            self.content_widget.setSizePolicy(
+                QSizePolicy.Policy.Preferred, 
+                QSizePolicy.Policy.Preferred
+            )
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+```
+
+#### Qt 布局机制总结
+
+| 概念 | 说明 | 优先级 |
+|------|------|--------|
+| `minimumSizeHint()` | 组件建议最小尺寸 | 基础约束 |
+| `sizePolicy` | 尺寸策略（Fixed/Preferred/Expanding/Ignored） | 软约束 |
+| `minimumHeight/maximumHeight` | 尺寸硬约束 | **硬约束（最高）** |
+| `stretch` | 剩余空间分配比例 | 布局分配 |
+
+**关键洞察**：
+- `sizePolicy.Ignored` 只是"忽略 sizeHint"，不是"忽略所有尺寸"
+- **真正控制尺寸必须用 maximumHeight/minimumHeight 硬约束**
+- 调试布局问题时，要从"软约束"升级到"硬约束"
+
+#### 验证方法
+
+```python
+# 打印布局信息调试
+def debug_layout(widget):
+    layout = widget.layout()
+    for i in range(layout.count()):
+        item = layout.itemAt(i)
+        if item.widget():
+            w = item.widget()
+            print(f"Widget: {w.__class__.__name__}")
+            print(f"  sizeHint: {w.sizeHint()}")
+            print(f"  minimumSizeHint: {w.minimumSizeHint()}")
+            print(f"  sizePolicy: {w.sizePolicy()}")
+            print(f"  maximumHeight: {w.maximumHeight()}")
+```
+
+---
+
 ### 1. QThread + qasync 静默崩溃（2026-05-31）
 
 #### 症状
@@ -356,6 +456,108 @@ return LoopResult(
 
 ---
 
+### 6. QGridLayout 参数签名错误（2026-06-07）
+
+#### 症状
+
+`AddEntryDialog` 继承 `QMessageBox`，添加输入框时报错：
+```
+TypeError: addWidget(self, w: QWidget, stretch: int = 0, alignment: Qt.AlignmentFlag = Qt.AlignmentFlag())
+```
+
+#### 根因
+
+`QMessageBox` 的布局是 `QGridLayout`，不是 `QVBoxLayout`。
+
+```python
+# ❌ 错误：QGridLayout.addWidget(w, stretch) 签名不存在
+self.layout().addWidget(self._input, 1)
+
+# ✅ 正确：QGridLayout.addWidget(w, row, column, rowSpan, colSpan)
+layout = self.layout()
+layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
+```
+
+#### 教训
+
+1. **不同布局有不同的 addWidget 签名**：
+   - `QVBoxLayout.addWidget(w, stretch=0)`
+   - `QGridLayout.addWidget(w, row, col, rowSpan=1, colSpan=1)`
+
+2. **继承 Qt 内置控件时检查布局类型**：
+   ```python
+   layout = self.layout()
+   print(type(layout))  # 确认布局类型
+   ```
+
+3. **参考官方文档而非凭经验**：不同 Qt 版本 API 可能变化
+
+---
+
+### 7. 使用 Qt 内置组件替代自定义实现（2026-06-05）⭐ 推荐
+
+#### 背景
+
+早期实现中，为了实现特定 UI 效果，编写了大量自定义组件。
+
+#### 重构收益
+
+| 组件 | 自定义实现 | Qt 内置 | 代码减少 |
+|------|-----------|---------|----------|
+| 文件树 | `QStandardItemModel` + 手动填充 | `QFileSystemModel` | ~70% |
+| 导航按钮 | `NavButton(QWidget)` | `QToolButton` | ~90 行 |
+| 文件图标 | 手动映射扩展名 | `QFileIconProvider` | ~50% |
+
+#### 示例：文件树重构
+
+```python
+# ❌ 旧实现：手动构建模型
+class FileTreeSection(QWidget):
+    def _load_directory(self, path):
+        model = QStandardItemModel()
+        root = model.invisibleRootItem()
+        for entry in os.scandir(path):
+            item = QStandardItem(entry.name)
+            if entry.is_dir():
+                item.setIcon(self._folder_icon)
+            else:
+                item.setIcon(self._file_icon)
+            root.appendRow(item)
+        # ... 约 100 行代码
+
+# ✅ 新实现：使用 QFileSystemModel
+class FileTreeSection(QWidget):
+    def _setup_ui(self):
+        self._model = QFileSystemModel()
+        self._model.setRootPath(str(self._root_dir))
+        self._tree.setModel(self._model)
+        self._tree.setRootIndex(self._model.index(str(self._root_dir)))
+        # ~30 行代码
+```
+
+#### QFileSystemModel 优势
+
+- **自动文件系统监控**：文件变化自动更新视图
+- **系统图标支持**：无需手动映射扩展名
+- **线程安全**：后台加载不阻塞 UI
+- **性能优化**：延迟加载大目录
+
+#### 教训
+
+1. **优先使用 Qt 内置组件**：Qt 经过多年优化，内置组件通常比自定义实现更稳定
+2. **减少维护成本**：自定义代码越多，维护负担越重
+3. **功能与复杂度平衡**：如果内置组件能满足 80% 需求，不要为了剩余 20% 重新造轮子
+
+#### 检查清单
+
+在编写自定义组件前，检查：
+- [ ] Qt 是否已有类似控件？（`QToolButton`, `QTreeView`, `QListView`...）
+- [ ] Qt 是否提供对应模型？（`QFileSystemModel`, `QStringListModel`...）
+- [ ] Qt 样式表（QSS）能否实现目标效果？
+- [ ] 是否真的需要自定义，还是可以通过配置实现？
+
+---
+
 ## 三、最佳实践
 
 ### 1. 控制器模式
@@ -442,6 +644,52 @@ def _simulate_streaming(self, text: str):
 
 ---
 
+### 6. 配置迁移兼容性
+
+当配置目录变更时，提供自动迁移：
+
+```python
+def migrate_old_config() -> None:
+    """从旧位置迁移配置到 ~/.harness"""
+    old_dir = get_old_config_dir()  # 平台特定旧位置
+    new_dir = get_config_dir()      # 统一新位置
+    
+    if not old_dir.exists():
+        return
+    
+    # 迁移 settings.json
+    old_settings = old_dir / "settings.json"
+    new_settings = new_dir / "settings.json"
+    if old_settings.exists() and not new_settings.exists():
+        shutil.copy2(old_settings, new_settings)
+```
+
+**优势**：
+- 用户无感知升级
+- 避免配置丢失
+- 保持向后兼容
+
+---
+
+### 7. 默认折叠高频使用区块
+
+右侧面板的折叠状态设计：
+
+```python
+# 文件树默认展开（最常用），其他折叠
+self.memory_section.set_collapsed(True)
+self.skills_section.set_collapsed(True)
+self.mcp_section.set_collapsed(True)
+# 文件树保持展开
+```
+
+**设计考量**：
+- 减少视觉干扰
+- 突出常用功能
+- 用户可随时展开
+
+---
+
 ## 四、代码结构参考
 
 ### 客户端文件组织
@@ -502,6 +750,20 @@ packages/client/src/harness_client/
 - [ ] 是否使用 `@asyncSlot()` 而非 QThread？
 - [ ] 是否在主线程的 QEventLoop 运行？
 - [ ] 是否正确声明信号参数类型？
+
+### Qt 布局调试时
+
+- [ ] 是否理解 stretch vs sizePolicy 的区别？
+- [ ] 是否检查 minimumSizeHint()？
+- [ ] 是否需要用 maximumHeight/minimumHeight 硬约束？
+- [ ] 是否打印布局信息调试？
+
+### 使用 Qt 组件时
+
+- [ ] 是否优先使用 Qt 内置组件？
+- [ ] 是否检查布局类型（QVBoxLayout vs QGridLayout）？
+- [ ] 是否查阅官方 API 文档确认签名？
+- [ ] 是否考虑使用 QFileSystemModel 等内置模型？
 
 ---
 
