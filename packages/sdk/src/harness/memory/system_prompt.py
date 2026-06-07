@@ -39,10 +39,14 @@ class SystemPromptSource:
 
         if self.file_path is not None:
             if self.file_path.exists():
-                return self.file_path.read_text(encoding="utf-8")
-            elif self.required:
-                raise FileNotFoundError(f"Required system prompt file not found: {self.file_path}")
-            return ""
+                content = self.file_path.read_text(encoding="utf-8")
+                logger.debug(f"Loaded system prompt from '{self.name}' ({self.file_path}): {len(content)} chars")
+                return content
+            else:
+                logger.warning(f"System prompt file not found for '{self.name}': {self.file_path}")
+                if self.required:
+                    raise FileNotFoundError(f"Required system prompt file not found: {self.file_path}")
+                return ""
 
         return ""
 
