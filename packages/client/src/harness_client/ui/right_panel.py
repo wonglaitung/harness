@@ -147,8 +147,11 @@ class CollapsibleSection(QWidget):
         # Update size policy to prevent collapsed sections from taking space
         if self._is_collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+            # Also set the section itself to not expand vertically
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
     def add_widget(self, widget: QWidget, stretch: int = 0):
         """Add a widget to the content area.
@@ -168,8 +171,11 @@ class CollapsibleSection(QWidget):
         # Update size policy to prevent collapsed sections from taking space
         if collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+            # Also set the section itself to not expand vertically
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
 
 class SkillsSection(CollapsibleSection):
