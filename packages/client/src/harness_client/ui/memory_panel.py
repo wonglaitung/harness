@@ -315,7 +315,11 @@ class AddEntryDialog(QMessageBox):
             }
         """)
         self._input.setMinimumWidth(300)
-        self.layout().addWidget(self._input, 1)
+        # QMessageBox uses QGridLayout; add input below the text label
+        # The default layout has: row 0 = text, row 1 = buttons
+        # We insert our input at row 1, shifting buttons to row 2
+        layout = self.layout()
+        layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
 
     def get_content(self) -> str:
         """Get the entered content."""
