@@ -147,11 +147,11 @@ class CollapsibleSection(QWidget):
         # Update size policy to prevent collapsed sections from taking space
         if self._is_collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            # Also set the section itself to not expand vertically
-            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            # Set maximum height to force layout to shrink
+            self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
 
     def add_widget(self, widget: QWidget, stretch: int = 0):
         """Add a widget to the content area.
@@ -171,11 +171,11 @@ class CollapsibleSection(QWidget):
         # Update size policy to prevent collapsed sections from taking space
         if collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            # Also set the section itself to not expand vertically
-            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            # Set maximum height to force layout to shrink
+            self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
 
 
 class SkillsSection(CollapsibleSection):
