@@ -98,7 +98,7 @@ class CollapsibleSection(QWidget):
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(8, 4, 8, 8)
         self.content_layout.setSpacing(4)
-        layout.addWidget(self.content_widget, 1)  # stretch=1 to fill section
+        layout.addWidget(self.content_widget)  # No stretch so collapsed sections don't take space
 
     def add_header_button(self, text: str, callback, tooltip: str = "") -> QPushButton:
         """Add a button to the header row.
