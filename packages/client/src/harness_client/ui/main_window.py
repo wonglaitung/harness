@@ -387,12 +387,9 @@ class MainWindow(QMainWindow):
         """Handle response from agent."""
         logger.info(f"Response received: {response[:50] if response else 'EMPTY'}...")
 
+        # Always display full message directly (streaming causes HTML structure issues)
         if response:
-            settings = self.settings_manager.get()
-            if settings.stream and len(response) > 50:
-                self._simulate_streaming(response)
-            else:
-                self.chat_panel.append_assistant_message(response)
+            self.chat_panel.append_assistant_message(response)
         else:
             self.chat_panel.append_assistant_message("(无响应)")
 
@@ -402,42 +399,15 @@ class MainWindow(QMainWindow):
         # Update token usage display
         self._update_token_display()
         self.statusbar.showMessage(f"完成 | Token: {self.chat_controller.get_token_usage()}")
+        self.chat_panel.set_streaming_state(False)
         self._is_processing = False
-
-    def _simulate_streaming(self, text: str):
-        """Simulate streaming output for better UX."""
-        from PyQt6.QtCore import QTimer
-
-        self.chat_panel.start_streaming()
-        self._stream_buffer = text
-        self._stream_pos = 0
-        self._stream_timer = QTimer()
-        self._stream_timer.timeout.connect(self._stream_next_chunk)
-
-        chunk_size = max(1, len(text) // 100)
-        interval = max(10, 1500 // 100)
-
-        self._stream_chunk_size = chunk_size
-        self._stream_timer.start(interval)
-
-    def _stream_next_chunk(self):
-        """Stream the next chunk of text."""
-        if self._stream_pos >= len(self._stream_buffer):
-            self._stream_timer.stop()
-            self.chat_panel.finish_streaming()
-            return
-
-        end = min(self._stream_pos + self._stream_chunk_size, len(self._stream_buffer))
-        chunk = self._stream_buffer[self._stream_pos : end]
-        self._stream_pos = end
-
-        self.chat_panel.append_streaming_chunk(chunk)
 
     def _on_error(self, error: str):
         """Handle error from async operation."""
         logger.error(f"Error received: {error}")
         self.chat_panel.append_assistant_message(f"❌ 错误: {error}")
         self.statusbar.showMessage(f"错误: {error}")
+        self.chat_panel.set_streaming_state(False)
         self._is_processing = False
 
     def _update_token_display(self):

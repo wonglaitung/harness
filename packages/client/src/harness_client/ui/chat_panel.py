@@ -452,54 +452,6 @@ class ChatPanel(QWidget):
         """Clear the chat display."""
         self.chat_display.clear()
 
-    def start_streaming(self):
-        """Start streaming mode for assistant response."""
-        self._streaming_text = ""
-        self._is_streaming = True
-        # Clear chat display to prepare for streaming
-        # We'll build the message incrementally
-        # Store the position BEFORE adding the placeholder
-        cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self._stream_start_position = cursor.position()
-        # Add placeholder with cursor
-        self._append_message("assistant", "▌")
-
-    def append_streaming_chunk(self, chunk: str):
-        """Append a text chunk during streaming."""
-        if not self._is_streaming:
-            return
-
-        self._streaming_text += chunk
-        # Update the last message in place
-        rendered = self._render_markdown(self._streaming_text + "▌")
-
-        # Select from saved start position to end, then replace
-        cursor = self.chat_display.textCursor()
-        cursor.setPosition(self._stream_start_position)
-        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertHtml(rendered)
-        self._scroll_to_bottom()
-
-    def finish_streaming(self):
-        """Finish streaming and finalize the message."""
-        if not self._is_streaming:
-            return
-
-        self._is_streaming = False
-        # Render final text without cursor
-        rendered = self._render_markdown(self._streaming_text)
-
-        # Select from saved start position to end, then replace
-        cursor = self.chat_display.textCursor()
-        cursor.setPosition(self._stream_start_position)
-        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertHtml(rendered)
-        self._scroll_to_bottom()
-        self._streaming_text = ""
-
     def set_token_usage(self, usage: dict, limit: int = 200000):
         """Update the token usage indicator in the input bar.
 
