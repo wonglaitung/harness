@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-MD 转 WORD 转换器
-将 Markdown 文件转换为 Word 文档（.docx），保留格式
+MD to Word Converter
+Convert Markdown files to Word documents (.docx), preserving formatting
 
-用法：
+Usage:
     python md_to_word.py input.md
     python md_to_word.py input.md --output output.docx
-    python md_to_word.py *.md  # 批量转换
+    python md_to_word.py *.md  # Batch conversion
 """
 
 import argparse
@@ -20,13 +20,13 @@ from typing import List, Optional
 
 def parse_markdown_to_elements(md_content: str) -> List[dict]:
     """
-    将 Markdown 内容解析为结构化元素列表
+    Parse Markdown content into a structured list of elements
 
     Args:
-        md_content: Markdown 文本内容
+        md_content: Markdown text content
 
     Returns:
-        元素列表，每个元素包含类型和内容
+        List of elements, each containing type and content
     """
     elements = []
     lines = md_content.split('\n')
@@ -35,12 +35,12 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
     while i < len(lines):
         line = lines[i]
 
-        # 空行跳过
+        # Skip empty lines
         if not line.strip():
             i += 1
             continue
 
-        # 标题（# H1, ## H2, ### H3, 等）
+        # Headings (# H1, ## H2, ### H3, etc.)
         if line.startswith('#'):
             level = len(re.match(r'^#+', line).group())
             text = line[level:].strip()
@@ -52,7 +52,7 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
             i += 1
             continue
 
-        # 代码块（```）
+        # Code blocks (```)
         if line.strip().startswith('```'):
             lang = line.strip()[3:].strip() or 'text'
             code_lines = []
@@ -68,13 +68,13 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
             i += 1
             continue
 
-        # 水平线（--- 或 ***）
+        # Horizontal rules (--- or ***)
         if line.strip() in ['---', '***', '___']:
             elements.append({'type': 'hr'})
             i += 1
             continue
 
-        # 引用（>）
+        # Block quotes (>)
         if line.strip().startswith('>'):
             quote_text = line.strip()[1:].strip()
             elements.append({
@@ -84,7 +84,7 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
             i += 1
             continue
 
-        # 无序列表（- 或 *）
+        # Unordered lists (- or *)
         if re.match(r'^\s*[-*]\s+', line):
             items = []
             while i < len(lines) and re.match(r'^\s*[-*]\s+', lines[i]):
@@ -97,7 +97,7 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
             })
             continue
 
-        # 有序列表（1.、2. 等）
+        # Ordered lists (1., 2., etc.)
         if re.match(r'^\s*\d+\.\s+', line):
             items = []
             while i < len(lines) and re.match(r'^\s*\d+\.\s+', lines[i]):
@@ -110,37 +110,37 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
             })
             continue
 
-        # 表格（Markdown 表格以 | 开头）
+        # Tables (Markdown tables start with |)
         if line.strip().startswith('|') and '|' in line.strip():
-            # 解析表格
+            # Parse table
             rows = []
-            # 表头
+            # Header row
             header_row = [cell.strip() for cell in line.strip().split('|')[1:-1]]
             rows.append(header_row)
             i += 1
 
-            # 分隔行（包含 ---）
+            # Separator row (contains ---)
             if i < len(lines) and re.match(r'^\s*\|[\s\|:-]+\|\s*$', lines[i]):
                 i += 1
 
-            # 表格内容行
+            # Table content rows
             while i < len(lines) and lines[i].strip().startswith('|'):
                 cells = [cell.strip() for cell in lines[i].strip().split('|')[1:-1]]
-                if cells:  # 避免空行
+                if cells:  # Avoid empty rows
                     rows.append(cells)
                 i += 1
 
-            if len(rows) > 1:  # 至少有表头和一行内容
+            if len(rows) > 1:  # At least header and one content row
                 elements.append({
                     'type': 'table',
                     'rows': rows
                 })
             continue
 
-        # 普通段落
+        # Regular paragraphs
         paragraph_lines = []
         while i < len(lines) and lines[i].strip():
-            # 检查是否是其他特殊元素
+            # Check if it's another special element
             if (lines[i].startswith('#') or
                 lines[i].strip().startswith('```') or
                 lines[i].strip() in ['---', '***', '___'] or
@@ -154,7 +154,7 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
 
         if paragraph_lines:
             paragraph_text = ' '.join(paragraph_lines).strip()
-            # 不在解析阶段处理行内格式，保留原始文本
+            # Don't process inline formatting at parsing stage, preserve raw text
             elements.append({
                 'type': 'paragraph',
                 'text': paragraph_text
@@ -165,27 +165,27 @@ def parse_markdown_to_elements(md_content: str) -> List[dict]:
 
 def process_inline_formatting(text: str) -> list:
     """
-    处理行内格式（粗体、斜体、代码），返回 Run 对象配置列表
+    Process inline formatting (bold, italic, code), return Run object configuration list
 
     Args:
-        text: 原始文本，包含 Markdown 格式标记
+        text: Raw text containing Markdown format markers
 
     Returns:
-        Run 配置列表，每个元素包含 (text, bold, italic, code) 属性
+        List of Run configurations, each containing (text, bold, italic, code) attributes
     """
     runs = []
     remaining = text
 
-    # 正则表达式匹配各种行内格式
-    # 注意：粗体 ** 必须在斜体 * 之前匹配，避免冲突
+    # Regex patterns for various inline formats
+    # Note: Bold ** must be matched before italic * to avoid conflicts
     patterns = [
-        (r'\*\*(.+?)\*\*', {'bold': True}),      # 粗体 **text**
-        (r'\*(.+?)\*', {'italic': True}),        # 斜体 *text*
-        (r'`(.+?)`', {'code': True}),            # 行内代码 `code`
+        (r'\*\*(.+?)\*\*', {'bold': True}),      # Bold **text**
+        (r'\*(.+?)\*', {'italic': True}),        # Italic *text*
+        (r'`(.+?)`', {'code': True}),            # Inline code `code`
     ]
 
     while remaining:
-        # 找到最早匹配的格式
+        # Find the earliest matched format
         earliest_match = None
         earliest_pos = len(remaining)
         match_type = None
@@ -198,7 +198,7 @@ def process_inline_formatting(text: str) -> list:
                 match_type = style
 
         if earliest_match:
-            # 添加匹配前的普通文本
+            # Add plain text before the match
             if earliest_pos > 0:
                 runs.append({
                     'text': remaining[:earliest_pos],
@@ -207,7 +207,7 @@ def process_inline_formatting(text: str) -> list:
                     'code': False
                 })
 
-            # 添加格式化文本
+            # Add formatted text
             runs.append({
                 'text': earliest_match.group(1),
                 'bold': match_type.get('bold', False),
@@ -215,10 +215,10 @@ def process_inline_formatting(text: str) -> list:
                 'code': match_type.get('code', False)
             })
 
-            # 继续处理剩余文本
+            # Continue processing remaining text
             remaining = remaining[earliest_match.end():]
         else:
-            # 没有更多格式标记，添加剩余文本
+            # No more format markers, add remaining text
             if remaining:
                 runs.append({
                     'text': remaining,
@@ -233,12 +233,12 @@ def process_inline_formatting(text: str) -> list:
 
 def add_formatted_paragraph(doc, text: str, base_size: int = 11):
     """
-    添加带有行内格式的段落到 Word 文档
+    Add paragraph with inline formatting to Word document
 
     Args:
-        doc: Word 文档对象
-        text: 包含 Markdown 格式的文本
-        base_size: 基础字号
+        doc: Word document object
+        text: Text containing Markdown formatting
+        base_size: Base font size
     """
     from docx.shared import Pt
 
@@ -248,40 +248,40 @@ def add_formatted_paragraph(doc, text: str, base_size: int = 11):
     for run_config in runs_config:
         run = p.add_run(run_config['text'])
 
-        # 设置字体大小
+        # Set font size
         run.font.size = Pt(base_size)
 
-        # 应用格式
+        # Apply formatting
         if run_config['bold']:
             run.font.bold = True
         if run_config['italic']:
             run.font.italic = True
         if run_config['code']:
             run.font.name = 'Courier New'
-            run.font.size = Pt(base_size - 1)  # 代码字体稍小
+            run.font.size = Pt(base_size - 1)  # Code font slightly smaller
 
     return p
 
 
 def setup_logging() -> logging.Logger:
     """
-    设置日志记录器，日志文件保存在 Python 脚本所在目录
+    Set up logger, log file saved in the same directory as the Python script
 
     Returns:
-        配置好的日志记录器
+        Configured logger
     """
-    # 获取脚本所在目录
+    # Get script directory
     script_dir = Path(__file__).parent
     log_path = script_dir / 'md_to_word.log'
 
-    # 创建日志记录器
+    # Create logger
     logger = logging.getLogger('md_to_word')
     logger.setLevel(logging.DEBUG)
 
-    # 清除已有的处理器
+    # Clear existing handlers
     logger.handlers.clear()
 
-    # 文件处理器
+    # File handler
     file_handler = logging.FileHandler(log_path, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
@@ -290,63 +290,63 @@ def setup_logging() -> logging.Logger:
     )
     file_handler.setFormatter(file_formatter)
 
-    # 控制台处理器
+    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter('%(levelname)s: %(message)s')
     console_handler.setFormatter(console_formatter)
 
-    # 添加处理器
+    # Add handlers
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    logger.debug(f'日志文件: {log_path}')
+    logger.debug(f'Log file: {log_path}')
     return logger
 
 
 def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
     """
-    将 Markdown 文件转换为 Word 文档
+    Convert Markdown file to Word document
 
     Args:
-        md_path: Markdown 文件路径
-        output_path: 输出 Word 文件路径（可选，默认使用原文件名）
+        md_path: Markdown file path
+        output_path: Output Word file path (optional, defaults to original filename)
 
     Returns:
-        生成的 Word 文件路径
+        Generated Word file path
     """
     try:
         from docx import Document
         from docx.shared import Pt, RGBColor
         from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
     except ImportError:
-        print("错误：缺少 python-docx 库")
-        print("请安装：pip install python-docx")
+        print("Error: python-docx library missing")
+        print("Please install: pip install python-docx")
         sys.exit(1)
 
-    # 确定输出路径
+    # Determine output path
     md_file = Path(md_path)
     if output_path is None:
         output_path = md_file.with_suffix('.docx')
 
-    # 设置日志
+    # Set up logging
     logger = setup_logging()
-    logger.info(f'开始转换: {md_path}')
-    logger.debug(f'输出路径: {output_path}')
+    logger.info(f'Starting conversion: {md_path}')
+    logger.debug(f'Output path: {output_path}')
 
-    # 读取 Markdown 文件
-    logger.debug(f'读取文件: {md_path}')
+    # Read Markdown file
+    logger.debug(f'Reading file: {md_path}')
     with open(md_path, 'r', encoding='utf-8') as f:
         md_content = f.read()
-    logger.debug(f'文件大小: {len(md_content)} 字符')
+    logger.debug(f'File size: {len(md_content)} characters')
 
-    # 解析 Markdown
-    logger.debug('解析 Markdown 内容')
+    # Parse Markdown
+    logger.debug('Parsing Markdown content')
     elements = parse_markdown_to_elements(md_content)
-    logger.debug(f'解析完成，共 {len(elements)} 个元素')
+    logger.debug(f'Parsing complete, {len(elements)} elements found')
 
-    # 创建 Word 文档
-    logger.debug('创建 Word 文档')
+    # Create Word document
+    logger.debug('Creating Word document')
     doc = Document()
 
     # 添加元素到 Word 文档
@@ -363,20 +363,20 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
 
     for element in elements:
         if element['type'] == 'heading':
-            # 标题
-            level = min(element['level'], 3)  # Word 只支持 H1-H3
+            # Heading
+            level = min(element['level'], 3)  # Word only supports H1-H3
             heading = doc.add_heading(element['text'], level=level)
             heading.style.font.size = Pt(16 - level * 2)
             heading.style.font.bold = True
             element_counts['heading'] += 1
 
         elif element['type'] == 'paragraph':
-            # 普通段落（支持行内格式）
+            # Regular paragraph (supports inline formatting)
             add_formatted_paragraph(doc, element['text'], base_size=11)
             element_counts['paragraph'] += 1
 
         elif element['type'] == 'unordered_list':
-            # 无序列表（支持行内格式）
+            # Unordered list (supports inline formatting)
             for item in element['items']:
                 p = doc.add_paragraph(style='List Bullet')
                 runs_config = process_inline_formatting(item)
@@ -393,7 +393,7 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
             element_counts['unordered_list'] += 1
 
         elif element['type'] == 'ordered_list':
-            # 有序列表（支持行内格式）
+            # Ordered list (supports inline formatting)
             for item in element['items']:
                 p = doc.add_paragraph(style='List Number')
                 runs_config = process_inline_formatting(item)
@@ -410,9 +410,9 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
             element_counts['ordered_list'] += 1
 
         elif element['type'] == 'code':
-            # 代码块
+            # Code block
             p = doc.add_paragraph()
-            run = p.add_run(f"[代码: {element['lang']}]\n{element['content']}")
+            run = p.add_run(f"[Code: {element['lang']}]\n{element['content']}")
             run.font.name = 'Courier New'
             run.font.size = Pt(9)
             p.paragraph_format.left_indent = Pt(20)
@@ -420,13 +420,13 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
             element_counts['code'] += 1
 
         elif element['type'] == 'quote':
-            # 引用（支持行内格式）
+            # Quote (supports inline formatting)
             p = doc.add_paragraph()
             runs_config = process_inline_formatting(element['text'])
             for run_config in runs_config:
                 run = p.add_run(run_config['text'])
                 run.font.size = Pt(11)
-                run.font.italic = True  # 引用使用斜体
+                run.font.italic = True  # Quote uses italic
                 if run_config['bold']:
                     run.font.bold = True
                 if run_config['code']:
@@ -436,25 +436,25 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
             element_counts['quote'] += 1
 
         elif element['type'] == 'table':
-            # 表格
+            # Table
             rows = element['rows']
             if not rows:
                 continue
 
-            # 创建表格
+            # Create table
             num_cols = len(rows[0])
             table = doc.add_table(rows=len(rows), cols=num_cols)
             table.style = 'Table Grid'
 
-            # 填充表格内容
+            # Fill table content
             for row_idx, row_data in enumerate(rows):
                 for col_idx, cell_text in enumerate(row_data):
                     cell = table.rows[row_idx].cells[col_idx]
 
-                    # 处理行内格式
+                    # Process inline formatting
                     runs_config = process_inline_formatting(cell_text)
 
-                    # 清空默认段落并添加格式化内容
+                    # Clear default paragraph and add formatted content
                     if cell.paragraphs:
                         p = cell.paragraphs[0]
                         p.clear()
@@ -465,11 +465,11 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
                         run = p.add_run(run_config['text'])
                         run.font.size = Pt(10)
 
-                        # 表头加粗
+                        # Bold header row
                         if row_idx == 0:
                             run.font.bold = True
 
-                        # 应用行内格式
+                        # Apply inline formatting
                         if run_config['bold']:
                             run.font.bold = True
                         if run_config['italic']:
@@ -480,87 +480,87 @@ def convert_to_word(md_path: str, output_path: Optional[str] = None) -> str:
             element_counts['table'] += 1
 
         elif element['type'] == 'hr':
-            # 水平线
+            # Horizontal rule
             p = doc.add_paragraph('_' * 80)
             p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
             p.paragraph_format.space_after = Pt(12)
             element_counts['hr'] += 1
 
-    logger.debug(f'元素统计: {element_counts}')
+    logger.debug(f'Element counts: {element_counts}')
 
-    # 保存 Word 文档
-    logger.debug(f'保存 Word 文档: {output_path}')
+    # Save Word document
+    logger.debug(f'Saving Word document: {output_path}')
     doc.save(output_path)
-    logger.info(f'✓ 已转换: {md_path} -> {output_path}')
-    logger.debug('转换完成')
+    logger.info(f'✓ Converted: {md_path} -> {output_path}')
+    logger.debug('Conversion complete')
 
     return str(output_path)
 
 
 def convert_to_word_with_error_handling(md_path: str, output_path: Optional[str] = None) -> str:
     """
-    带异常处理的转换函数
+    Conversion function with exception handling
 
     Args:
-        md_path: Markdown 文件路径
-        output_path: 输出 Word 文件路径
+        md_path: Markdown file path
+        output_path: Output Word file path
 
     Returns:
-        生成的 Word 文件路径
+        Generated Word file path
 
     Raises:
-        Exception: 转换失败时抛出异常
+        Exception: Thrown when conversion fails
     """
     try:
         return convert_to_word(md_path, output_path)
     except FileNotFoundError as e:
         logger = logging.getLogger('md_to_word')
-        logger.error(f'文件未找到: {md_path} - {e}')
+        logger.error(f'File not found: {md_path} - {e}')
         raise
     except PermissionError as e:
         logger = logging.getLogger('md_to_word')
-        logger.error(f'权限错误: {md_path} - {e}')
+        logger.error(f'Permission error: {md_path} - {e}')
         raise
     except Exception as e:
         logger = logging.getLogger('md_to_word')
-        logger.error(f'转换失败: {md_path} - {type(e).__name__}: {e}', exc_info=True)
+        logger.error(f'Conversion failed: {md_path} - {type(e).__name__}: {e}', exc_info=True)
         raise
 
 
 def main():
-    """主函数"""
+    """Main function"""
     parser = argparse.ArgumentParser(
-        description='将 Markdown 文件转换为 Word 文档',
+        description='Convert Markdown files to Word documents',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
+Examples:
   python3 md_to_word.py README.md
   python3 md_to_word.py README.md --output README_word.docx
-  python3 md_to_word.py *.md              # 批量转换
-  python3 md_to_word.py docs/*.md         # 转换指定目录
+  python3 md_to_word.py *.md              # Batch conversion
+  python3 md_to_word.py docs/*.md         # Convert specified directory
         """
     )
 
     parser.add_argument(
         'input_files',
         nargs='+',
-        help='输入 Markdown 文件路径（支持通配符）'
+        help='Input Markdown file paths (supports wildcards)'
     )
 
     parser.add_argument(
         '--output', '-o',
-        help='输出 Word 文件路径（仅限单个文件时使用）'
+        help='Output Word file path (only for single file)'
     )
 
     parser.add_argument(
         '--recursive', '-r',
         action='store_true',
-        help='递归处理子目录'
+        help='Recursively process subdirectories'
     )
 
     args = parser.parse_args()
 
-    # 设置全局日志
+    # Set up global logging
     main_logger = logging.getLogger('md_to_word_main')
     main_logger.setLevel(logging.INFO)
     main_logger.handlers.clear()
@@ -571,9 +571,9 @@ def main():
     console_handler.setFormatter(console_formatter)
     main_logger.addHandler(console_handler)
 
-    main_logger.info('MD 转 WORD 转换器启动')
+    main_logger.info('MD to Word Converter started')
 
-    # 展开通配符
+    # Expand wildcards
     input_files = []
     for pattern in args.input_files:
         if '*' in pattern or '?' in pattern:
@@ -584,16 +584,16 @@ def main():
         else:
             input_files.append(Path(pattern))
 
-    # 过滤不存在的文件
+    # Filter non-existent files
     valid_files = [f for f in input_files if f.exists() and f.suffix.lower() == '.md']
 
     if not valid_files:
-        main_logger.error("错误：没有找到有效的 Markdown 文件")
+        main_logger.error("Error: No valid Markdown files found")
         sys.exit(1)
 
-    main_logger.info(f"找到 {len(valid_files)} 个 Markdown 文件")
+    main_logger.info(f"Found {len(valid_files)} Markdown file(s)")
 
-    # 转换文件
+    # Convert files
     success_count = 0
     for md_file in valid_files:
         try:
@@ -601,9 +601,9 @@ def main():
             convert_to_word(str(md_file), output_path)
             success_count += 1
         except Exception as e:
-            main_logger.error(f"✗ 转换失败: {md_file} - {e}")
+            main_logger.error(f"✗ Conversion failed: {md_file} - {e}")
 
-    main_logger.info(f"完成！成功转换 {success_count}/{len(valid_files)} 个文件")
+    main_logger.info(f"Complete! Successfully converted {success_count}/{len(valid_files)} file(s)")
 
 
 if __name__ == '__main__':
