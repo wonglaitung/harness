@@ -3,8 +3,8 @@ Chat panel for displaying conversation - Athlon-inspired dark theme style.
 """
 
 import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
+from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -17,6 +17,51 @@ from PyQt6.QtWidgets import (
 
 from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
+
+
+def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a play/arrow icon (filled triangle pointing right)."""
+    pixmap = QIcon().pixmap(QSize(size, size))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Draw filled triangle
+    pen = QPen(Qt.PenStyle.NoPen)
+    painter.setPen(pen)
+    painter.setBrush(QBrush(color))
+
+    # Triangle points: center-left, top-right, bottom-right
+    margin = 4
+    triangle = [
+        (margin + 2, size // 2),          # Left center (arrow tip)
+        (size - margin, margin + 2),       # Top right
+        (size - margin, size - margin - 2), # Bottom right
+    ]
+    from PyQt6.QtGui import QPolygonF
+    from PyQt6.QtCore import QPointF
+    polygon = QPolygonF([QPointF(x, y) for x, y in triangle])
+    painter.drawPolygon(polygon)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a stop icon (filled square)."""
+    pixmap = QIcon().pixmap(QSize(size, size))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Draw filled square
+    pen = QPen(Qt.PenStyle.NoPen)
+    painter.setPen(pen)
+    painter.setBrush(QBrush(color))
+
+    margin = 5
+    painter.drawRect(margin, margin, size - 2 * margin, size - 2 * margin)
+
+    painter.end()
+    return QIcon(pixmap)
 
 
 class ChatPanel(QWidget):
@@ -105,7 +150,9 @@ class ChatPanel(QWidget):
         """)
 
         # Stop button - icon only, hidden by default
-        self.stop_btn = QPushButton("■")  # Square stop icon
+        self.stop_btn = QPushButton()
+        self.stop_btn.setIcon(create_stop_icon(20, QColor("white")))
+        self.stop_btn.setIconSize(QSize(20, 20))
         self.stop_btn.setMinimumHeight(36)
         self.stop_btn.setMinimumWidth(36)
         self.stop_btn.setMaximumWidth(36)
@@ -114,11 +161,8 @@ class ChatPanel(QWidget):
         self.stop_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.DANGER};
-                color: white;
                 border: none;
                 border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {theme.DANGER_HOVER};
@@ -128,8 +172,10 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Send button - icon only (arrow right)
-        self.send_btn = QPushButton("▶")  # Play/arrow icon
+        # Send button - icon only (play arrow)
+        self.send_btn = QPushButton()
+        self.send_btn.setIcon(create_play_icon(20, QColor("white")))
+        self.send_btn.setIconSize(QSize(20, 20))
         self.send_btn.setMinimumHeight(36)
         self.send_btn.setMinimumWidth(36)
         self.send_btn.setMaximumWidth(36)
@@ -137,10 +183,8 @@ class ChatPanel(QWidget):
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.ACCENT};
-                color: white;
                 border: none;
                 border-radius: 8px;
-                font-size: 12px;
             }}
             QPushButton:hover {{
                 background-color: {theme.ACCENT_HOVER};
@@ -150,7 +194,6 @@ class ChatPanel(QWidget):
             }}
             QPushButton:disabled {{
                 background-color: {theme.CHROME};
-                color: {theme.TEXT_SUBTLE};
             }}
         """)
 
