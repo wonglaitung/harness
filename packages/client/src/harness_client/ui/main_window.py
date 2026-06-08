@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self.chat_controller.set_tool_call_callback(self._on_tool_call)
         self.chat_controller.set_tool_result_callback(self._on_tool_result)
         self.chat_controller.set_thinking_callback(self._on_thinking)
+        self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
 
         # Settings
         self._stream_enabled = True
@@ -428,6 +429,46 @@ class MainWindow(QMainWindow):
     def _on_thinking(self, message: str):
         """Handle thinking/progress event."""
         self.chat_panel.append_thinking(message)
+
+    def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> bool:
+        """Show confirmation dialog for dangerous operations.
+
+        Args:
+            tool_name: Name of the tool being called
+            args: Tool arguments
+
+        Returns:
+            True if user confirms, False otherwise
+        """
+        # Format arguments preview
+        args_lines = []
+        for k, v in list(args.items())[:5]:
+            val_str = repr(v)[:100]
+            args_lines.append(f"  {k}: {val_str}")
+        args_preview = "\n".join(args_lines) if args_lines else "  (无参数)"
+
+        # Build message
+        msg_text = f"""AI 请求执行可能危险的操作：
+
+工具: {tool_name}
+参数:
+{args_preview}
+
+是否允许执行？"""
+
+        # Show confirmation dialog
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle("确认执行")
+        msg.setText(msg_text)
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        msg.button(QMessageBox.StandardButton.Yes).setText("允许执行")
+        msg.button(QMessageBox.StandardButton.No).setText("拒绝")
+
+        result = msg.exec() == QMessageBox.StandardButton.Yes
+        logger.info(f"User {'confirmed' if result else 'rejected'} operation: {tool_name}")
+        return result
 
     # === Settings ===
 

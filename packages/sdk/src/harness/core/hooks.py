@@ -280,3 +280,100 @@ class MaxToolCallsHook(LifecycleHook):
                 del self._call_counts[key]
         else:
             self._call_counts.clear()
+
+
+class ConfirmationHook(LifecycleHook):
+    """
+    Hook that asks for user confirmation before dangerous operations.
+
+    This hook intercepts tool calls that may have destructive effects
+    (file modifications, command execution) and asks the user to confirm.
+
+    Example:
+        async def my_confirm(tool_name: str, args: dict) -> bool:
+            # Show dialog, return True if user confirms
+            return show_confirmation_dialog(tool_name, args)
+
+        hook = ConfirmationHook(on_confirm=my_confirm)
+        agent.add_hook(hook)
+    """
+
+    # Tools that modify files or execute commands
+    DANGEROUS_TOOLS = {
+        "write",
+        "edit",
+        "bash",
+    }
+
+    # Dangerous command patterns within bash
+    DANGEROUS_COMMANDS = {
+        "rm",
+        "sudo",
+        "chmod",
+        "chown",
+        "dd",
+        "mkfs",
+        "fdisk",
+        "git push",
+        "git reset --hard",
+        "git push --force",
+        "npm publish",
+    }
+
+    def __init__(
+        self,
+        on_confirm: "Callable[[str, dict], Coroutine[Any, Any, bool]]",
+        dangerous_tools: set[str] | None = None,
+        dangerous_commands: set[str] | None = None,
+    ):
+        """
+        Initialize the confirmation hook.
+
+        Args:
+            on_confirm: Async callback that returns True if user confirms
+            dangerous_tools: Set of tool names that require confirmation
+            dangerous_commands: Set of command patterns that require confirmation
+        """
+        self.on_confirm = on_confirm
+        self.dangerous_tools = dangerous_tools or self.DANGEROUS_TOOLS
+        self.dangerous_commands = dangerous_commands or self.DANGEROUS_COMMANDS
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        from harness.types import HookPoint
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+    async def execute(self, context: "HookContext") -> "HookResult":
+        """Check if tool requires confirmation and ask user."""
+        from harness.types import HookPoint
+
+        if not self._is_dangerous(context.tool_name, context.tool_args):
+            return HookResult.continue_()
+
+        try:
+            confirmed = await self.on_confirm(context.tool_name, context.tool_args or {})
+            if confirmed:
+                logger.info(f"User confirmed operation: {context.tool_name}")
+                return HookResult.continue_()
+            else:
+                logger.info(f"User rejected operation: {context.tool_name}")
+                return HookResult.abort("User rejected the operation")
+
+        except Exception as e:
+            logger.error(f"Confirmation callback error: {e}")
+            return HookResult.abort(f"Confirmation failed: {e}")
+
+    def _is_dangerous(self, tool_name: str, args: dict | None) -> bool:
+        """Check if the tool call is potentially dangerous."""
+        # Check if tool is in dangerous tools list
+        if tool_name in self.dangerous_tools:
+            return True
+
+        # For bash tool, check for dangerous commands
+        if tool_name == "bash" and args:
+            command = args.get("command", "")
+            for dangerous in self.dangerous_commands:
+                if dangerous in command:
+                    return True
+
+        return False

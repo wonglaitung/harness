@@ -14,6 +14,7 @@ from harness import (
     ProgressEvent,
     ProgressEventType,
 )
+from harness.core import ConfirmationHook
 from harness.tools.builtins import BashTool, GlobTool, GrepTool, ReadTool, WriteTool
 
 from harness_client.controllers.session_manager import SessionManager
@@ -73,6 +74,7 @@ class ChatController:
     - Session management via SessionManager
     - Track token usage
     - Support progress callbacks
+    - Dangerous operation confirmation
     """
 
     def __init__(self, work_dir: Path | None = None):
@@ -88,6 +90,7 @@ class ChatController:
         self._on_tool_result: Callable | None = None
         self._on_thinking: Callable | None = None
         self._on_text_chunk: Callable | None = None
+        self._confirm_callback: Callable[[str, dict], bool] | None = None
 
     def set_mcp_tools(self, tools: list):
         """Set MCP tools from connected servers.
@@ -122,6 +125,14 @@ class ChatController:
     def set_text_chunk_callback(self, callback: Callable[[str], None]):
         """Set callback for streaming text chunks."""
         self._on_text_chunk = callback
+
+    def set_confirm_callback(self, callback: Callable[[str, dict], bool]):
+        """Set callback for dangerous operation confirmation.
+
+        Args:
+            callback: Function that takes (tool_name, args) and returns True if confirmed
+        """
+        self._confirm_callback = callback
 
     def configure(self, config: ChatConfig):
         """Update chat configuration and reset agent."""
@@ -185,6 +196,16 @@ class ChatController:
             config=sdk_config,
             tools=tools,
         )
+
+        # Add confirmation hook if callback is set
+        if self._confirm_callback:
+            async def async_confirm(tool_name: str, args: dict) -> bool:
+                """Wrap sync callback for async hook."""
+                return self._confirm_callback(tool_name, args)
+
+            self.agent.add_hook(ConfirmationHook(on_confirm=async_confirm))
+            logger.info("ConfirmationHook registered")
+
         logger.info("AgentHarness created successfully")
 
     async def send_message(self, message: str) -> AsyncIterator[str]:
