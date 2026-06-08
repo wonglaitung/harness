@@ -289,6 +289,11 @@ class ConfirmationHook(LifecycleHook):
     This hook intercepts tool calls that may have destructive effects
     (file modifications, command execution) and asks the user to confirm.
 
+    Design principles (based on industry best practices):
+    1. File modifications (write/edit) always require confirmation
+    2. Bash commands only require confirmation for dangerous patterns
+    3. Read-only operations (read/glob/grep) never require confirmation
+
     Example:
         async def my_confirm(tool_name: str, args: dict) -> bool:
             # Show dialog, return True if user confirms
@@ -298,26 +303,101 @@ class ConfirmationHook(LifecycleHook):
         agent.add_hook(hook)
     """
 
-    # Tools that modify files or execute commands
+    # Tools that always require confirmation (modify files)
     DANGEROUS_TOOLS = {
         "write",
         "edit",
-        "bash",
     }
 
     # Dangerous command patterns within bash
+    # Based on: Claude Code security research, OWASP guidelines, and cross-platform considerations
     DANGEROUS_COMMANDS = {
-        "rm",
-        "sudo",
-        "chmod",
-        "chown",
-        "dd",
-        "mkfs",
-        "fdisk",
-        "git push",
-        "git reset --hard",
+        # === System-destructive commands ===
+        "rm",           # Delete files
+        "rmdir",        # Delete directories
+        "del",          # Windows delete
+        "erase",        # Windows erase
+        "format",       # Format disk (Windows)
+        "diskpart",     # Windows disk management
+        "dd",           # Disk duplicator (can wipe disks)
+        "mkfs",         # Make filesystem
+        "fdisk",        # Disk partitioning
+        "shred",        # Secure delete
+        "wipefs",       # Wipe filesystem signature
+
+        # === Privilege escalation ===
+        "sudo",         # Run as superuser (Linux/macOS)
+        "su",           # Switch user
+        "runas",        # Windows run as administrator
+        "doas",         # OpenBSD alternative to sudo
+        "pkexec",       # PolicyKit execute
+
+        # === Permission changes ===
+        "chmod",        # Change mode
+        "chown",        # Change owner
+        "chgrp",        # Change group
+        "icacls",       # Windows ACL management
+        "attrib",       # Windows file attributes
+
+        # === Git destructive operations ===
         "git push --force",
+        "git push -f",
+        "git reset --hard",
+        "git clean -fd",
+        "git checkout --",  # Discard changes
+
+        # === Package publishing ===
         "npm publish",
+        "yarn publish",
+        "pip upload",
+        "twine upload",
+        "cargo publish",
+        "gem push",
+        "mvn deploy",
+
+        # === Network/data exfiltration ===
+        "curl | bash",      # Dangerous pipe pattern
+        "curl | sh",        # Dangerous pipe pattern
+        "wget | bash",      # Dangerous pipe pattern
+        "wget | sh",        # Dangerous pipe pattern
+        "nc -l",            # Netcat listen (potential backdoor)
+        "ncat -l",          # Ncat listen
+
+        # === Process/job control ===
+        "kill",         # Terminate processes
+        "killall",      # Kill all processes by name
+        "pkill",        # Kill by pattern
+        "taskkill",     # Windows kill process
+
+        # === Environment/shell manipulation ===
+        "export",       # Set environment variable (can poison)
+        "setenv",       # Set environment
+        "source",       # Execute shell script
+        "eval",         # Evaluate expression (code execution)
+
+        # === Python dangerous patterns ===
+        "python -c",    # Execute Python code
+        "python3 -c",   # Execute Python code
+        "pip install --force",
+        "pip uninstall",
+
+        # === Node.js dangerous patterns ===
+        "node -e",      # Execute Node.js code
+        "node -p",      # Execute and print
+        "npm install -g",  # Global install
+
+        # === Database operations ===
+        "DROP TABLE",
+        "DROP DATABASE",
+        "TRUNCATE",
+        "DELETE FROM",
+
+        # === Service management ===
+        "systemctl stop",
+        "systemctl disable",
+        "systemctl restart",
+        "service stop",
+        "net stop",     # Windows service
     }
 
     def __init__(
@@ -364,14 +444,21 @@ class ConfirmationHook(LifecycleHook):
             return HookResult.abort(f"Confirmation failed: {e}")
 
     def _is_dangerous(self, tool_name: str, args: dict | None) -> bool:
-        """Check if the tool call is potentially dangerous."""
-        # Check if tool is in dangerous tools list
+        """Check if the tool call is potentially dangerous.
+
+        Rules:
+        - write/edit: Always require confirmation
+        - bash: Only if command matches dangerous patterns
+        - read/glob/grep: Never require confirmation
+        """
+        # File modification tools always require confirmation
         if tool_name in self.dangerous_tools:
             return True
 
-        # For bash tool, check for dangerous commands
+        # Bash: check command content for dangerous patterns
         if tool_name == "bash" and args:
             command = args.get("command", "")
+            # Check for dangerous command patterns
             for dangerous in self.dangerous_commands:
                 if dangerous in command:
                     return True
