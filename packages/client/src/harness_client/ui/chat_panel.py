@@ -3,8 +3,8 @@ Chat panel for displaying conversation - Athlon-inspired dark theme style.
 """
 
 import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
-from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF
+from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -21,7 +21,8 @@ from harness_client.ui.skill_completer import SkillCompleter
 
 def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
     """Create a play/arrow icon (filled triangle pointing right)."""
-    pixmap = QIcon().pixmap(QSize(size, size))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.Transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -30,16 +31,14 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     painter.setPen(pen)
     painter.setBrush(QBrush(color))
 
-    # Triangle points: center-left, top-right, bottom-right
+    # Triangle points: left center, top-right, bottom-right
     margin = 4
     triangle = [
-        (margin + 2, size // 2),          # Left center (arrow tip)
-        (size - margin, margin + 2),       # Top right
-        (size - margin, size - margin - 2), # Bottom right
+        QPointF(margin + 2, size // 2),           # Left center (arrow tip)
+        QPointF(size - margin, margin + 2),        # Top right
+        QPointF(size - margin, size - margin - 2), # Bottom right
     ]
-    from PyQt6.QtGui import QPolygonF
-    from PyQt6.QtCore import QPointF
-    polygon = QPolygonF([QPointF(x, y) for x, y in triangle])
+    polygon = QPolygonF(triangle)
     painter.drawPolygon(polygon)
 
     painter.end()
@@ -48,7 +47,8 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
 
 def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
     """Create a stop icon (filled square)."""
-    pixmap = QIcon().pixmap(QSize(size, size))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.Transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
