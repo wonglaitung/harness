@@ -47,7 +47,7 @@ class DarkTheme:
 
     # Avatar colors
     AVATAR_ASSISTANT_BG = "#3B3B3B"  # Soft gray for assistant avatar
-    AVATAR_USER_BG = "#2A4A6F"  # Soft blue for user avatar
+    AVATAR_USER_BG = "#3B3B3B"  # Soft gray for user avatar (same as assistant)
 
     # Navigation active state
     NAV_ACTIVE_BG = "#1E3A5F"
