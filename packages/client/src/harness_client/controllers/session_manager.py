@@ -17,6 +17,7 @@ class ClientSession:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     token_usage: dict = field(default_factory=lambda: {"input": 0, "output": 0})
+    trusted_commands: set[str] = field(default_factory=set)  # Command-level trust cache
 
     def add_message(self, role: str, content: str):
         """Add a message and update timestamp."""
@@ -25,6 +26,22 @@ class ClientSession:
         # Auto-name from first user message
         if self.name == "新会话" and role == "user":
             self.name = self._generate_name(content)
+
+    def trust_command(self, trust_key: str) -> None:
+        """Mark a command as trusted for this session.
+
+        Args:
+            trust_key: "write", "edit", "bash:ls", "bash:rm", etc.
+        """
+        self.trusted_commands.add(trust_key)
+
+    def is_command_trusted(self, trust_key: str) -> bool:
+        """Check if a command is trusted for this session."""
+        return trust_key in self.trusted_commands
+
+    def clear_trust(self) -> None:
+        """Clear all trusted commands."""
+        self.trusted_commands.clear()
 
     def _generate_name(self, content: str) -> str:
         """Generate session name from content."""

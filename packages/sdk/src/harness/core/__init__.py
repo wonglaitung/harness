@@ -17,6 +17,8 @@ from harness.core.error_handler import ErrorHandler, ErrorAction, ErrorContext, 
 from harness.core.hooks import (
     AbortOnDangerousToolHook,
     ConfirmationHook,
+    ConfirmationResult,
+    get_trust_key,
     HookManager,
     LifecycleHook,
     LoggingHook,
@@ -81,6 +83,8 @@ __all__ = [
     "AbortOnDangerousToolHook",
     "MaxToolCallsHook",
     "ConfirmationHook",
+    "ConfirmationResult",
+    "get_trust_key",
     # Ralph Loop
     "RalphLoopHook",
     "RalphLoopConfig",

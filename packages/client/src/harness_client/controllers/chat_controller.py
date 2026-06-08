@@ -13,8 +13,9 @@ from harness import (
     HarnessConfig,
     ProgressEvent,
     ProgressEventType,
+    ConfirmationResult,
 )
-from harness.core import ConfirmationHook
+from harness.core import ConfirmationHook, get_trust_key
 from harness.tools.builtins import BashTool, GlobTool, GrepTool, ReadTool, WriteTool
 
 from harness_client.controllers.session_manager import SessionManager
@@ -90,7 +91,7 @@ class ChatController:
         self._on_tool_result: Callable | None = None
         self._on_thinking: Callable | None = None
         self._on_text_chunk: Callable | None = None
-        self._confirm_callback: Callable[[str, dict], bool] | None = None
+        self._confirm_callback: Callable[[str, dict], ConfirmationResult] | None = None
 
     def set_mcp_tools(self, tools: list):
         """Set MCP tools from connected servers.
@@ -126,11 +127,11 @@ class ChatController:
         """Set callback for streaming text chunks."""
         self._on_text_chunk = callback
 
-    def set_confirm_callback(self, callback: Callable[[str, dict], bool]):
+    def set_confirm_callback(self, callback: Callable[[str, dict], ConfirmationResult]):
         """Set callback for dangerous operation confirmation.
 
         Args:
-            callback: Function that takes (tool_name, args) and returns True if confirmed
+            callback: Function that takes (tool_name, args) and returns ConfirmationResult
         """
         self._confirm_callback = callback
 
@@ -199,12 +200,27 @@ class ChatController:
 
         # Add confirmation hook if callback is set
         if self._confirm_callback:
-            async def async_confirm(tool_name: str, args: dict) -> bool:
+            async def async_confirm(tool_name: str, args: dict) -> ConfirmationResult:
                 """Wrap sync callback for async hook."""
                 return self._confirm_callback(tool_name, args)
 
-            self.agent.add_hook(ConfirmationHook(on_confirm=async_confirm))
-            logger.info("ConfirmationHook registered")
+            def is_trusted(trust_key: str) -> bool:
+                """Check if command is trusted for current session."""
+                session = self.session_manager.get_current()
+                return session.is_command_trusted(trust_key) if session else False
+
+            def on_trust(trust_key: str) -> None:
+                """Mark command as trusted for current session."""
+                session = self.session_manager.get_current()
+                if session:
+                    session.trust_command(trust_key)
+
+            self.agent.add_hook(ConfirmationHook(
+                on_confirm=async_confirm,
+                is_trusted=is_trusted,
+                on_trust=on_trust,
+            ))
+            logger.info("ConfirmationHook registered with session trust support")
 
         logger.info("AgentHarness created successfully")
 

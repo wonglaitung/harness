@@ -15,7 +15,8 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
 from harness.types import HookAction, HookContext, HookPoint, HookResult, Message
 
@@ -23,6 +24,57 @@ if TYPE_CHECKING:
     from harness.core.agent_loop import AgentLoop
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Confirmation Types
+# =============================================================================
+
+
+@dataclass
+class ConfirmationResult:
+    """
+    Result of user confirmation for dangerous operations.
+
+    Attributes:
+        confirmed: Whether user approved the operation
+        trust_session: Whether to trust this command for the entire session
+    """
+
+    confirmed: bool
+    trust_session: bool = False
+
+
+def get_trust_key(tool_name: str, args: dict | None) -> str:
+    """
+    Generate a trust cache key for a tool call.
+
+    The trust key is used to cache user's "allow for session" decisions.
+    For bash commands, we use the command name (first word) to allow
+    granularity like "bash:ls" vs "bash:rm".
+
+    Examples:
+        - write → "write"
+        - edit → "edit"
+        - bash with "ls -la" → "bash:ls"
+        - bash with "rm -rf /tmp" → "bash:rm"
+        - bash with "git status" → "bash:git"
+        - bash with "npm install" → "bash:npm"
+
+    Args:
+        tool_name: The name of the tool being called
+        args: The arguments passed to the tool
+
+    Returns:
+        A string key for caching trust decisions
+    """
+    if tool_name == "bash" and args:
+        command = args.get("command", "").strip()
+        if command:
+            # Extract the command name (first word)
+            cmd_name = command.split()[0]
+            return f"bash:{cmd_name}"
+    return tool_name
 
 
 class LifecycleHook(ABC):
@@ -293,13 +345,30 @@ class ConfirmationHook(LifecycleHook):
     1. File modifications (write/edit) always require confirmation
     2. Bash commands only require confirmation for dangerous patterns
     3. Read-only operations (read/glob/grep) never require confirmation
+    4. User can choose to trust a command for the entire session
+
+    Session Trust:
+    - When user selects "Allow for session", the trust key is cached
+    - Trust keys are command-level: "bash:ls", "bash:rm", "write", "edit"
+    - New sessions start with empty trust cache
 
     Example:
-        async def my_confirm(tool_name: str, args: dict) -> bool:
-            # Show dialog, return True if user confirms
-            return show_confirmation_dialog(tool_name, args)
+        async def my_confirm(tool_name: str, args: dict) -> ConfirmationResult:
+            # Show dialog with three buttons: Allow Once, Allow Session, Reject
+            confirmed, trust_session = show_confirmation_dialog(tool_name, args)
+            return ConfirmationResult(confirmed=confirmed, trust_session=trust_session)
 
-        hook = ConfirmationHook(on_confirm=my_confirm)
+        def is_trusted(trust_key: str) -> bool:
+            return trust_key in session.trusted_commands
+
+        def on_trust(trust_key: str) -> None:
+            session.trusted_commands.add(trust_key)
+
+        hook = ConfirmationHook(
+            on_confirm=my_confirm,
+            is_trusted=is_trusted,
+            on_trust=on_trust,
+        )
         agent.add_hook(hook)
     """
 
@@ -402,7 +471,9 @@ class ConfirmationHook(LifecycleHook):
 
     def __init__(
         self,
-        on_confirm: "Callable[[str, dict], Coroutine[Any, Any, bool]]",
+        on_confirm: "Callable[[str, dict], Coroutine[Any, Any, ConfirmationResult]]",
+        is_trusted: "Callable[[str], bool] | None" = None,
+        on_trust: "Callable[[str], None] | None" = None,
         dangerous_tools: set[str] | None = None,
         dangerous_commands: set[str] | None = None,
     ):
@@ -410,11 +481,15 @@ class ConfirmationHook(LifecycleHook):
         Initialize the confirmation hook.
 
         Args:
-            on_confirm: Async callback that returns True if user confirms
+            on_confirm: Async callback that returns ConfirmationResult
+            is_trusted: Optional callback to check if a trust key is already trusted
+            on_trust: Optional callback to mark a trust key as trusted for session
             dangerous_tools: Set of tool names that require confirmation
             dangerous_commands: Set of command patterns that require confirmation
         """
         self.on_confirm = on_confirm
+        self.is_trusted = is_trusted
+        self.on_trust = on_trust
         self.dangerous_tools = dangerous_tools or self.DANGEROUS_TOOLS
         self.dangerous_commands = dangerous_commands or self.DANGEROUS_COMMANDS
 
@@ -430,10 +505,23 @@ class ConfirmationHook(LifecycleHook):
         if not self._is_dangerous(context.tool_name, context.tool_args):
             return HookResult.continue_()
 
+        # Generate trust key for this operation
+        trust_key = get_trust_key(context.tool_name, context.tool_args)
+
+        # Check if already trusted for this session
+        if self.is_trusted and self.is_trusted(trust_key):
+            logger.info(f"Command {trust_key} is trusted for this session")
+            return HookResult.continue_()
+
         try:
-            confirmed = await self.on_confirm(context.tool_name, context.tool_args or {})
-            if confirmed:
+            result = await self.on_confirm(context.tool_name, context.tool_args or {})
+
+            if result.confirmed:
                 logger.info(f"User confirmed operation: {context.tool_name}")
+                # Cache trust if user selected "allow for session"
+                if result.trust_session and self.on_trust:
+                    self.on_trust(trust_key)
+                    logger.info(f"Command {trust_key} is now trusted for this session")
                 return HookResult.continue_()
             else:
                 logger.info(f"User rejected operation: {context.tool_name}")

@@ -430,7 +430,7 @@ class MainWindow(QMainWindow):
         """Handle thinking/progress event."""
         self.chat_panel.append_thinking(message)
 
-    def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> bool:
+    def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> "ConfirmationResult":
         """Show confirmation dialog for dangerous operations.
 
         Args:
@@ -438,8 +438,10 @@ class MainWindow(QMainWindow):
             args: Tool arguments
 
         Returns:
-            True if user confirms, False otherwise
+            ConfirmationResult with confirmed and trust_session fields
         """
+        from harness import ConfirmationResult
+
         # Format arguments preview
         args_lines = []
         for k, v in list(args.items())[:5]:
@@ -456,19 +458,31 @@ class MainWindow(QMainWindow):
 
 是否允许执行？"""
 
-        # Show confirmation dialog
+        # Show confirmation dialog with three buttons
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Warning)
         msg.setWindowTitle("确认执行")
         msg.setText(msg_text)
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg.setDefaultButton(QMessageBox.StandardButton.No)
-        msg.button(QMessageBox.StandardButton.Yes).setText("允许执行")
-        msg.button(QMessageBox.StandardButton.No).setText("拒绝")
 
-        result = msg.exec() == QMessageBox.StandardButton.Yes
-        logger.info(f"User {'confirmed' if result else 'rejected'} operation: {tool_name}")
-        return result
+        # Add three custom buttons
+        btn_once = msg.addButton("允许一次", QMessageBox.ButtonRole.AcceptRole)
+        btn_session = msg.addButton("允许本次会话", QMessageBox.ButtonRole.AcceptRole)
+        btn_reject = msg.addButton("拒绝", QMessageBox.ButtonRole.RejectRole)
+
+        msg.setDefaultButton(btn_once)
+        msg.exec()
+
+        clicked = msg.clickedButton()
+
+        if clicked == btn_once:
+            logger.info(f"User confirmed operation (once): {tool_name}")
+            return ConfirmationResult(confirmed=True, trust_session=False)
+        elif clicked == btn_session:
+            logger.info(f"User confirmed operation (session): {tool_name}")
+            return ConfirmationResult(confirmed=True, trust_session=True)
+        else:
+            logger.info(f"User rejected operation: {tool_name}")
+            return ConfirmationResult(confirmed=False, trust_session=False)
 
     # === Settings ===
 

@@ -25,6 +25,8 @@ from harness.core import (
     AbortOnDangerousToolHook,
     MaxToolCallsHook,
     ConfirmationHook,
+    ConfirmationResult,
+    get_trust_key,
     # Ralph Loop (P1)
     RalphLoopConfig,
     RalphLoopHook,
@@ -260,6 +262,8 @@ __all__ = [
     "AbortOnDangerousToolHook",
     "MaxToolCallsHook",
     "ConfirmationHook",
+    "ConfirmationResult",
+    "get_trust_key",
     # Dynamic System Prompt (P0)
     "SystemPromptSource",
     "SystemPromptConfig",
