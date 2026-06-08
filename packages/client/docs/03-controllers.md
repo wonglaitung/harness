@@ -165,6 +165,42 @@ def set_tool_result_callback(self, callback: Callable[[str, str, bool], None]):
 def set_thinking_callback(self, callback: Callable[[str], None]):
     """设置思考状态回调"""
     self._on_thinking = callback
+
+def set_confirm_callback(self, callback: Callable[[str, dict], ConfirmationResult]):
+    """设置危险操作确认回调
+
+    Args:
+        callback: 返回 ConfirmationResult(confirmed, trust_session)
+    """
+    self._confirm_callback = callback
+```
+
+### 危险操作确认集成
+
+ChatController 集成 ConfirmationHook 进行危险操作确认：
+
+```python
+async def initialize(self, mcp_tools: list = None):
+    # ... 创建 AgentHarness ...
+
+    if self._confirm_callback:
+        # 信任检查回调
+        def is_trusted(trust_key: str) -> bool:
+            session = self.session_manager.get_current()
+            return session.is_command_trusted(trust_key) if session else False
+
+        # 信任设置回调
+        def on_trust(trust_key: str) -> None:
+            session = self.session_manager.get_current()
+            if session:
+                session.trust_command(trust_key)
+
+        # 注册 ConfirmationHook
+        self.agent.add_hook(ConfirmationHook(
+            on_confirm=self._async_confirm,
+            is_trusted=is_trusted,
+            on_trust=on_trust,
+        ))
 ```
 
 ## SessionManager
@@ -181,13 +217,32 @@ def set_thinking_callback(self, callback: Callable[[str], None]):
 @dataclass
 class ClientSession:
     """客户端会话"""
-    
+
     id: str
     name: str = "新会话"
     messages: list = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     token_usage: dict = field(default_factory=lambda: {"input": 0, "output": 0})
+    trusted_commands: set[str] = field(default_factory=set)  # 会话级信任缓存
+```
+
+### 会话信任管理
+
+每个会话维护独立的信任缓存，用户确认一次命令后可选择信任整个会话：
+
+```python
+# 信任键格式
+# - write, edit → "write", "edit"
+# - bash 命令 → "bash:{命令名}" (如 "bash:ls", "bash:rm")
+
+session.trust_command("bash:ls")      # 信任 ls 命令
+session.trust_command("write")         # 信任 write 工具
+
+session.is_command_trusted("bash:ls")  # → True
+session.is_command_trusted("bash:rm")  # → False (需单独信任)
+
+session.clear_trust()  # 清空信任缓存
 ```
 
 ### 核心方法

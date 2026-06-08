@@ -612,17 +612,57 @@ agent = AgentHarness(
 
 | 类型 | 工具/命令 |
 |------|----------|
-| 危险工具 | `write`, `edit`, `bash` |
-| 危险命令（bash 中检测） | `rm`, `sudo`, `chmod`, `chown`, `dd`, `mkfs`, `fdisk`, `git push`, `git reset --hard` |
+| 危险工具 | `write`, `edit` |
+| 危险命令（bash 中检测） | 见下方完整列表 |
 
 只读操作（`read`, `glob`, `grep`）不需要确认。
+
+### 完整危险命令列表
+
+基于 Claude Code CVE-2025-66032 安全研究和 OWASP 指南：
+
+#### 系统破坏命令
+- `rm`, `rmdir`, `del`, `erase`, `format`, `diskpart`
+- `dd`, `mkfs`, `fdisk`, `shred`, `wipefs`
+
+#### 权限提升
+- `sudo`, `su`, `runas`, `doas`, `pkexec`
+
+#### 权限变更
+- `chmod`, `chown`, `chgrp`, `icacls`, `attrib`
+
+#### Git 危险操作
+- `git push --force`, `git push -f`, `git reset --hard`
+- `git clean -fd`, `git checkout --`
+
+#### 包发布
+- `npm publish`, `yarn publish`, `pip upload`, `twine upload`
+- `cargo publish`, `gem push`, `mvn deploy`
+
+#### 网络/数据泄露
+- `curl | bash`, `curl | sh`, `wget | bash`, `wget | sh`
+- `nc -l`, `ncat -l`
+
+#### 进程控制
+- `kill`, `killall`, `pkill`, `taskkill`
+
+#### Python/Node 执行
+- `python -c`, `python3 -c`, `pip install --force`, `pip uninstall`
+- `node -e`, `node -p`, `npm install -g`
+
+#### 数据库操作
+- `DROP TABLE`, `DROP DATABASE`, `TRUNCATE`, `DELETE FROM`
+
+#### 服务管理
+- `systemctl stop`, `systemctl disable`, `systemctl restart`
+- `service stop`, `net stop`
 
 ### 使用示例
 
 ```python
-from harness import AgentHarness, ConfirmationHook
+from harness import AgentHarness, ConfirmationHook, ConfirmationResult
 
-async def my_confirm_handler(tool_name: str, args: dict) -> bool:
+async def my_confirm_handler(tool_name: str, args: dict) -> ConfirmationResult:
     """
     用户确认回调。
 
@@ -631,19 +671,61 @@ async def my_confirm_handler(tool_name: str, args: dict) -> bool:
         args: 工具参数
 
     Returns:
-        True 表示用户确认执行，False 表示拒绝
+        ConfirmationResult 包含 confirmed 和 trust_session 字段
     """
     # 在 GUI 中弹出确认对话框
-    # 返回 True 如果用户点击"允许"，False 如果用户点击"拒绝"
-    return show_confirmation_dialog(tool_name, args)
+    # 返回 ConfirmationResult
+    confirmed, trust_session = show_confirmation_dialog(tool_name, args)
+    return ConfirmationResult(confirmed=confirmed, trust_session=trust_session)
 
 # 创建钩子并注册
 hook = ConfirmationHook(on_confirm=my_confirm_handler)
 agent = AgentHarness(...)
 agent.add_hook(hook)
+```
 
-# 现在执行 write/edit/bash 前会调用 my_confirm_handler
-result = await agent.run("删除临时文件")
+### 会话级信任
+
+用户可以选择将命令信任整个会话，避免重复确认：
+
+```python
+from harness import ConfirmationResult, get_trust_key
+
+# 信任键生成规则
+# - write, edit → "write", "edit"
+# - bash 命令 → "bash:{命令名}" (如 "bash:ls", "bash:rm")
+
+# 获取信任键
+trust_key = get_trust_key("bash", {"command": "ls -la"})  # → "bash:ls"
+```
+
+#### 信任缓存示例
+
+| 操作 | 信任键 | 说明 |
+|------|--------|------|
+| `write` 文件 | `write` | 写入文件操作 |
+| `edit` 文件 | `edit` | 编辑文件操作 |
+| `bash: ls -la` | `bash:ls` | ls 命令 |
+| `bash: rm -rf` | `bash:rm` | rm 命令（需单独信任） |
+
+#### 完整集成示例
+
+```python
+from harness import ConfirmationHook, ConfirmationResult, get_trust_key
+
+# 检查命令是否已信任
+def is_trusted(trust_key: str) -> bool:
+    return trust_key in session.trusted_commands
+
+# 标记命令为信任
+def on_trust(trust_key: str) -> None:
+    session.trusted_commands.add(trust_key)
+
+hook = ConfirmationHook(
+    on_confirm=my_confirm_handler,
+    is_trusted=is_trusted,
+    on_trust=on_trust,
+)
 ```
 
 ### 自定义危险工具列表
@@ -652,7 +734,7 @@ result = await agent.run("删除临时文件")
 # 自定义需要确认的工具
 hook = ConfirmationHook(
     on_confirm=my_confirm_handler,
-    dangerous_tools={"write", "edit", "bash", "my_custom_tool"},
+    dangerous_tools={"write", "edit", "my_custom_tool"},
     dangerous_commands={"rm", "sudo", "npm publish"},
 )
 ```
@@ -663,17 +745,31 @@ hook = ConfirmationHook(
 
 ```python
 # main_window.py
-def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> bool:
-    """Show confirmation dialog for dangerous operations."""
+def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> ConfirmationResult:
+    """Show confirmation dialog with three buttons."""
+    from harness import ConfirmationResult
     from PyQt6.QtWidgets import QMessageBox
 
     msg = QMessageBox(self)
     msg.setIcon(QMessageBox.Icon.Warning)
     msg.setWindowTitle("确认执行")
     msg.setText(f"AI 请求执行可能危险的操作：\n\n工具: {tool_name}")
-    msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
-    return msg.exec() == QMessageBox.StandardButton.Yes
+    # 三个按钮
+    btn_once = msg.addButton("允许一次", QMessageBox.ButtonRole.AcceptRole)
+    btn_session = msg.addButton("允许本次会话", QMessageBox.ButtonRole.AcceptRole)
+    btn_reject = msg.addButton("拒绝", QMessageBox.ButtonRole.RejectRole)
+
+    msg.setDefaultButton(btn_once)
+    msg.exec()
+
+    clicked = msg.clickedButton()
+    if clicked == btn_once:
+        return ConfirmationResult(confirmed=True, trust_session=False)
+    elif clicked == btn_session:
+        return ConfirmationResult(confirmed=True, trust_session=True)
+    else:
+        return ConfirmationResult(confirmed=False, trust_session=False)
 
 # chat_controller.py
 self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
@@ -682,19 +778,24 @@ self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
 ### 确认流程
 
 ```
-用户发送消息 → AI 决定调用 write/edit/bash
+用户发送消息 → AI 决定调用 write/edit/危险bash命令
     ↓
 ConfirmationHook.execute() 被触发
     ↓
-调用 on_confirm 回调
+生成信任键: get_trust_key(tool_name, args)
     ↓
-┌─────────────────┐
-│  确认对话框      │
-│  [允许] [拒绝]  │
-└─────────────────┘
-    ↓
-用户选择 → True: 继续执行工具
-         → False: HookResult.abort()，工具不执行
+检查 session.trusted_commands
+    ├── 已信任 → 直接 continue，不弹框
+    └── 未信任 → 弹出对话框
+            ↓
+    ┌─────────────────────────────┐
+    │     确认对话框               │
+    │ [允许一次] [允许本次会话] [拒绝] │
+    └─────────────────────────────┘
+            ↓
+    用户选择 → "允许一次": continue，不缓存
+             → "允许本次会话": continue + 缓存信任键
+             → "拒绝": abort，工具不执行
 ```
 
 ### 与 AbortOnDangerousToolHook 的区别

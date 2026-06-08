@@ -127,6 +127,8 @@ from harness import (
     AbortOnDangerousToolHook,
     MaxToolCallsHook,
     ConfirmationHook,
+    ConfirmationResult,
+    get_trust_key,
 
     # 动态系统提示 (P0)
     SystemPromptSource,

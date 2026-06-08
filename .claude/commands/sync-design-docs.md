@@ -52,6 +52,8 @@ tools:
 ### Phase 2: 文档定位
 
 1. **扫描现有文档**
+
+   **SDK 文档** (`packages/sdk/docs/`)：
    ```
    docs/
    ├── 01-overview.md      # 项目概述与架构
@@ -70,8 +72,20 @@ tools:
    README.md               # 用户文档
    ```
 
+   **客户端文档** (`packages/client/docs/`)：
+   ```
+   docs/
+   ├── 01-overview.md      # 客户端概述
+   ├── 02-ui-components.md # UI 组件
+   ├── 03-controllers.md   # 控制器
+   ├── 04-configuration.md # 配置
+   ├── 05-client-lessons.md # 经验教训
+   └── README.md           # 用户文档
+   ```
+
 2. **确定文档映射关系**
 
+   **SDK 文档映射**：
    | 功能类型 | 目标文档 |
    |---------|---------|
    | Agent Loop 相关 | 02-agent-loop.md |
@@ -83,6 +97,14 @@ tools:
    | 安全相关 | 08-security.md |
    | 快速开始示例 | README.md |
    | 架构概述 | 01-overview.md |
+
+   **客户端文档映射**：
+   | 功能类型 | 目标文档 |
+   |---------|---------|
+   | UI 组件 | 02-ui-components.md |
+   | 控制器逻辑 | 03-controllers.md |
+   | 配置相关 | 04-configuration.md |
+   | 经验教训 | 05-client-lessons.md |
 
 3. **生成文档更新计划**
    ```
