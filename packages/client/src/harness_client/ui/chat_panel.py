@@ -318,21 +318,25 @@ class ChatPanel(QWidget):
             """
         else:
             # Assistant message with avatar and gray bubble, left-aligned
+            # Use table layout for better QTextBrowser compatibility
             html = f"""
-            <div style="margin: 12px 0;">
-                <div style="display: inline-flex; align-items: flex-start; gap: 12px;">
-                    <div style="width: 40px; height: 40px; border-radius: 20px;
-                                background-color: {theme.ACCENT}; color: white; font-size: 18px;
-                                display: inline-flex; align-items: center; justify-content: center;
-                                flex-shrink: 0; font-weight: bold;">A</div>
-                    <div style="background-color: {theme.ASSISTANT_BUBBLE};
-                                border-radius: 16px;
-                                padding: 12px 16px; max-width: 85%;
-                                color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
-                        <div style="color: {theme.TEXT};">{rendered_content}</div>
-                    </div>
-                </div>
-            </div>
+            <table width="100%" style="margin: 12px 0; border: none; border-spacing: 0;">
+                <tr>
+                    <td width="40" valign="top" style="padding: 0;">
+                        <div style="width: 40px; height: 40px; border-radius: 20px;
+                                    background-color: {theme.ACCENT}; color: white; font-size: 18px;
+                                    text-align: center; line-height: 40px; font-weight: bold;">A</div>
+                    </td>
+                    <td valign="top" style="padding-left: 12px;">
+                        <div style="background-color: {theme.ASSISTANT_BUBBLE};
+                                    border-radius: 16px;
+                                    padding: 12px 16px; max-width: 600px;
+                                    color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
+                            {rendered_content}
+                        </div>
+                    </td>
+                </tr>
+            </table>
             """
         self.chat_display.append(html)
         self._scroll_to_bottom()
