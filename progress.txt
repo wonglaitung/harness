@@ -586,3 +586,30 @@
 | 技能自动补全 | ✅ |
 | 统一配置目录 (~/.harness) | ✅ |
 | 会话管理 | ✅ |
+
+## 2026-06-08
+
+### 客户端 UI 增强 ✅ 完成
+
+#### 停止按钮
+- 添加停止按钮（红色方块图标），仅在生成响应时显示
+- 发送按钮改为图标按钮（蓝色播放三角形），尺寸缩小为 36x36px
+- 生成响应时禁用输入框和发送按钮
+- 点击停止按钮可中断当前任务
+
+#### 技能输出英文化
+- 将 md-to-word 技能的中文输出改为英文
+
+#### Bug 修复
+- 移除流式模拟功能，解决 HTML 结构被破坏导致消息显示异常的问题
+- 使用 QPainter 绘制矢量图标，解决 Unicode 字符图标模糊问题
+- 使用 table 布局替代 flexbox，解决 QTextBrowser 不支持 CSS flexbox 导致的头像位置错误
+
+提交记录:
+- feat(client): Add stop button for interrupting agent responses (9231b16)
+- fix(skill): Convert Chinese output to English in md-to-word skill (b74dbb5)
+- fix(client): Use custom-drawn icons for send/stop buttons (50b9838)
+- fix(client): Fix icon rendering by using QPixmap instead of empty QIcon (e3c5d11)
+- fix(client): Use lowercase 'transparent' for Qt.GlobalColor enum (75b53c5)
+- fix(client): Remove streaming simulation to prevent HTML corruption (8c6059b)
+- fix(client): Use table layout for assistant message avatar (610eea5)

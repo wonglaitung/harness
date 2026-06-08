@@ -1061,3 +1061,157 @@ if remaining_steps <= 2 and iteration > 0:
 | 文件 | 改动 |
 |------|------|
 | `packages/sdk/src/harness/core/agent_loop.py` | 达到迭代上限时提取最后的助手消息作为回复 |
+
+---
+## 2026-06-08: QTextBrowser 不支持 CSS flexbox
+
+### 问题
+
+客户端聊天面板使用 `display: inline-flex` 布局助手消息头像和内容，但头像 "A" 显示在消息气泡外面，内容显示异常。
+
+### 原因
+
+QTextBrowser 基于 QTextDocument，只支持有限的 CSS 属性：
+- **不支持** `display: flex`, `display: inline-flex`, `display: grid` 等现代布局
+- **不支持** `align-items`, `justify-content`, `gap` 等 flexbox 属性
+- **支持** `display: block`, `display: inline`, `display: inline-block`（有限）
+
+根据 Qt 官方文档 [Supported HTML Subset](https://doc.qt.io/qt-6/richtext-html-subset.html)，支持的 CSS 属性只有：
+- `background-color`, `background-image`
+- `color`, `font-*`, `text-decoration`
+- `margin-*`, `padding-*`
+- `border-*`（仅用于表格）
+- `vertical-align`（仅用于表格单元格）
+- `float`（仅用于表格和图片）
+
+### 解决
+
+使用 HTML `<table>` 布局替代 flexbox：
+
+```html
+<!-- ❌ 错误：flexbox 不被支持 -->
+<div style="display: inline-flex; align-items: flex-start; gap: 12px;">
+    <div>头像</div>
+    <div>内容</div>
+</div>
+
+<!-- ✅ 正确：使用 table 布局 -->
+<table style="border: none; border-spacing: 0;">
+    <tr>
+        <td width="40" valign="top">头像</td>
+        <td valign="top" style="padding-left: 12px;">内容</td>
+    </tr>
+</table>
+```
+
+### 教训
+
+1. **QTextBrowser 不是浏览器**：它是富文本编辑器，CSS 支持非常有限
+2. **查阅 Qt 文档**：遇到 CSS 问题，先查 [Supported HTML Subset](https://doc.qt.io/qt-6/richtext-html-subset.html)
+3. **使用传统布局**：flexbox/grid 不支持，用 `<table>` + `valign` 替代
+4. **如果需要完整 CSS**：考虑使用 QWebEngineView（Chromium 内核）替代 QTextBrowser
+
+### 参考
+
+- [Supported HTML Subset | Qt 6.11.1](https://doc.qt.io/qt-6/richtext-html-subset.html)
+- [How good is the HTML and CSS support in QTextBrowser - Qt Forum](https://forum.qt.io/topic/1864/how-good-is-the-html-and-css-support-in-qtextbrowser)
+
+---
+## 2026-06-08: 流式 HTML 更新破坏结构
+
+### 问题
+
+尝试实现流式输出（逐字显示）时，助手消息的头像和内容在更新过程中丢失，最后只显示 "A"。
+
+### 原因
+
+QTextBrowser 的 `insertHtml()` 方法会替换选中范围内的所有 HTML 内容，无法保持 HTML 结构：
+
+```python
+# 问题流程
+1. start_streaming(): append 完整 HTML（包含头像 + 内容占位符）
+2. append_streaming_chunk(): select 从占位符到末尾，insertHtml 更新内容
+   → 但 insertHtml 替换了整个结构，头像被删除
+3. finish_streaming(): 再次 insertHtml
+   → 内容变成纯文本，头像丢失
+```
+
+### 解决
+
+移除流式模拟功能，直接显示完整消息：
+
+```python
+# ❌ 流式更新会破坏 HTML 结构
+self.chat_panel.start_streaming()
+for chunk in text:
+    self.chat_panel.append_streaming_chunk(chunk)
+self.chat_panel.finish_streaming()
+
+# ✅ 直接显示完整消息
+self.chat_panel.append_assistant_message(response)
+```
+
+### 教训
+
+1. **QTextBrowser 不适合流式 HTML**：HTML 结构无法在部分更新中保持
+2. **如果需要流式输出**：考虑使用 QWebEngineView 或纯文本流式（不使用 HTML）
+3. **先验证可行性**：在实现复杂功能前，先测试基础场景是否可行
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/ui/chat_panel.py` | 移除流式方法 |
+| `packages/client/src/harness_client/ui/main_window.py` | 移除流式模拟 |
+
+---
+## 2026-06-08: Unicode 字符作为图标渲染模糊
+
+### 问题
+
+使用 Unicode 字符 `▶` 和 `■` 作为按钮图标，在不同字体下渲染效果不一致，部分用户反映图标模糊。
+
+### 原因
+
+1. **字体依赖**：Unicode 字符的渲染效果取决于系统字体
+2. **缩放问题**：在高 DPI 显示器上，字符图标可能模糊
+3. **不一致性**：不同系统字体渲染同一字符效果不同
+
+### 解决
+
+使用 QPainter 绘制矢量图标：
+
+```python
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QBrush, QColor, QPolygonF
+from PyQt6.QtCore import QPointF, Qt, QSize
+
+def create_play_icon(size: int = 24, color: QColor = QColor("white")) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(color))
+    
+    # 绘制三角形
+    triangle = [
+        QPointF(6, size // 2),        # 左中心
+        QPointF(size - 4, 6),         # 右上
+        QPointF(size - 4, size - 6),  # 右下
+    ]
+    painter.drawPolygon(QPolygonF(triangle))
+    painter.end()
+    return QIcon(pixmap)
+```
+
+### 教训
+
+1. **矢量图标更可靠**：QPainter 绘制的图标在任何分辨率都清晰
+2. **避免 Unicode 字符图标**：渲染效果依赖系统字体，不可控
+3. **使用 Antialiasing**：`painter.setRenderHint(QPainter.RenderHint.Antialiasing)` 使边缘平滑
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/ui/chat_panel.py` | 使用 QPainter 绘制图标 |
