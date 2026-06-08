@@ -354,6 +354,12 @@ class AgentLoop:
         self._iteration = 0  # Reset for error handler context
         self._stuck_feedback_count = 0  # Reset for stuck detection
 
+        # Reset circuit breaker for new task
+        # Each user message is a new task, so previous stuck behavior
+        # shouldn't affect new requests
+        if self._circuit_breaker:
+            self._circuit_breaker.reset()
+
         # Start step budget task
         if self._step_budget:
             self._step_budget.start_task()
@@ -1244,6 +1250,11 @@ class AgentLoop:
         iteration = snapshot.current_iteration
         total_usage = session.token_usage
         self._iteration = iteration
+
+        # Reset circuit breaker when restoring from snapshot
+        # Resuming from a saved state is like starting a new task
+        if self._circuit_breaker:
+            self._circuit_breaker.reset()
 
         try:
             # Execute pending tool calls if any
