@@ -297,7 +297,7 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message - right aligned, blue bubble with avatar
+            # User message - right aligned, blue bubble
             html = f"""
             <table width="100%" style="margin: 8px 0; border: none; border-spacing: 0;">
                 <tr>
@@ -312,11 +312,6 @@ class ChatPanel(QWidget):
                                      text-align: left;">
                             {rendered_content}
                         </span>
-                    </td>
-                    <td width="40" valign="top" style="padding-left: 8px;">
-                        <div style="width: 40px; height: 40px; border-radius: 20px;
-                                    background-color: {theme.AVATAR_USER_BG}; color: white; font-size: 16px;
-                                    text-align: center; line-height: 40px;">您</div>
                     </td>
                 </tr>
             </table>
