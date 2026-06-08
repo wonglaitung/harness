@@ -44,6 +44,7 @@ class ChatPanel(QWidget):
 
     def _setup_ui(self):
         """Setup UI components with dark theme."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
 
@@ -366,11 +367,14 @@ class ChatPanel(QWidget):
         """Start streaming mode for assistant response."""
         self._streaming_text = ""
         self._is_streaming = True
+        # Clear chat display to prepare for streaming
+        # We'll build the message incrementally
+        # Store the position BEFORE adding the placeholder
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self._stream_start_position = cursor.position()
         # Add placeholder with cursor
         self._append_message("assistant", "▌")
-        # Store position for updates
-        self._stream_cursor = self.chat_display.textCursor()
-        self._stream_cursor.movePosition(QTextCursor.MoveOperation.End)
 
     def append_streaming_chunk(self, chunk: str):
         """Append a text chunk during streaming."""
@@ -381,10 +385,10 @@ class ChatPanel(QWidget):
         # Update the last message in place
         rendered = self._render_markdown(self._streaming_text + "▌")
 
-        # Move cursor to end and select last line, then replace
+        # Select from saved start position to end, then replace
         cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setPosition(self._stream_start_position)
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
         cursor.removeSelectedText()
         cursor.insertHtml(rendered)
         self._scroll_to_bottom()
@@ -398,10 +402,10 @@ class ChatPanel(QWidget):
         # Render final text without cursor
         rendered = self._render_markdown(self._streaming_text)
 
-        # Replace last block with final content
+        # Select from saved start position to end, then replace
         cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setPosition(self._stream_start_position)
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
         cursor.removeSelectedText()
         cursor.insertHtml(rendered)
         self._scroll_to_bottom()
