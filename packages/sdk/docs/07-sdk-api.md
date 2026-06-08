@@ -126,6 +126,7 @@ from harness import (
     LoggingHook,
     AbortOnDangerousToolHook,
     MaxToolCallsHook,
+    ConfirmationHook,
 
     # 动态系统提示 (P0)
     SystemPromptSource,

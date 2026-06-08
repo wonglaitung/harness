@@ -603,3 +603,105 @@ agent = AgentHarness(
     ),
 )
 ```
+
+## 危险操作确认（ConfirmationHook）
+
+`ConfirmationHook` 是一个生命周期钩子，在执行危险操作前请求用户确认。
+
+### 危险操作定义
+
+| 类型 | 工具/命令 |
+|------|----------|
+| 危险工具 | `write`, `edit`, `bash` |
+| 危险命令（bash 中检测） | `rm`, `sudo`, `chmod`, `chown`, `dd`, `mkfs`, `fdisk`, `git push`, `git reset --hard` |
+
+只读操作（`read`, `glob`, `grep`）不需要确认。
+
+### 使用示例
+
+```python
+from harness import AgentHarness, ConfirmationHook
+
+async def my_confirm_handler(tool_name: str, args: dict) -> bool:
+    """
+    用户确认回调。
+
+    Args:
+        tool_name: 工具名称
+        args: 工具参数
+
+    Returns:
+        True 表示用户确认执行，False 表示拒绝
+    """
+    # 在 GUI 中弹出确认对话框
+    # 返回 True 如果用户点击"允许"，False 如果用户点击"拒绝"
+    return show_confirmation_dialog(tool_name, args)
+
+# 创建钩子并注册
+hook = ConfirmationHook(on_confirm=my_confirm_handler)
+agent = AgentHarness(...)
+agent.add_hook(hook)
+
+# 现在执行 write/edit/bash 前会调用 my_confirm_handler
+result = await agent.run("删除临时文件")
+```
+
+### 自定义危险工具列表
+
+```python
+# 自定义需要确认的工具
+hook = ConfirmationHook(
+    on_confirm=my_confirm_handler,
+    dangerous_tools={"write", "edit", "bash", "my_custom_tool"},
+    dangerous_commands={"rm", "sudo", "npm publish"},
+)
+```
+
+### 与客户端集成
+
+在 Harness Client 中，确认通过 `QMessageBox` 对话框实现：
+
+```python
+# main_window.py
+def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> bool:
+    """Show confirmation dialog for dangerous operations."""
+    from PyQt6.QtWidgets import QMessageBox
+
+    msg = QMessageBox(self)
+    msg.setIcon(QMessageBox.Icon.Warning)
+    msg.setWindowTitle("确认执行")
+    msg.setText(f"AI 请求执行可能危险的操作：\n\n工具: {tool_name}")
+    msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+    return msg.exec() == QMessageBox.StandardButton.Yes
+
+# chat_controller.py
+self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
+```
+
+### 确认流程
+
+```
+用户发送消息 → AI 决定调用 write/edit/bash
+    ↓
+ConfirmationHook.execute() 被触发
+    ↓
+调用 on_confirm 回调
+    ↓
+┌─────────────────┐
+│  确认对话框      │
+│  [允许] [拒绝]  │
+└─────────────────┘
+    ↓
+用户选择 → True: 继续执行工具
+         → False: HookResult.abort()，工具不执行
+```
+
+### 与 AbortOnDangerousToolHook 的区别
+
+| 钩子 | 行为 |
+|------|------|
+| `AbortOnDangerousToolHook` | 直接阻止危险操作，不可覆盖 |
+| `ConfirmationHook` | 请求用户确认，用户可选择允许或拒绝 |
+
+推荐两者结合使用：`AbortOnDangerousToolHook` 阻止极端危险操作（如 `rm -rf /`），`ConfirmationHook` 处理一般危险操作。
