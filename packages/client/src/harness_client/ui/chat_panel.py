@@ -22,7 +22,7 @@ from harness_client.ui.skill_completer import SkillCompleter
 def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
     """Create a play/arrow icon (filled triangle pointing right)."""
     pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.Transparent)
+    pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -48,7 +48,7 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
 def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
     """Create a stop icon (filled square)."""
     pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.Transparent)
+    pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
