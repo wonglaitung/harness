@@ -504,7 +504,14 @@ class BashTool(Tool):
                 if error_output:
                     content += f"\n\nStderr:\n{error_output}"
             else:
-                content = output if output else "(no output)"
+                # Success - include output or a clear success message
+                if output.strip():
+                    content = output
+                elif error_output.strip():
+                    # Some tools output to stderr even on success
+                    content = f"(success, stderr output)\n{error_output}"
+                else:
+                    content = "(command executed successfully, no output)"
 
             return ToolResult(
                 tool_call_id="",
