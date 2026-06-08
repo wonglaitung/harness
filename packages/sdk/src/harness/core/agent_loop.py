@@ -143,6 +143,7 @@ class AgentLoop:
         self._last_event_time: float | None = None
         self._iteration = 0  # Track current iteration for error context
         self._stuck_feedback_count = 0  # Track stuck feedback injections
+        self._circuit_breaker_stop_injected = False  # Track if we've injected stop message
 
         # Initialize circuit breaker
         self._circuit_breaker = CircuitBreaker() if self.config.enable_circuit_breaker else None
@@ -353,6 +354,7 @@ class AgentLoop:
         total_usage = session.token_usage
         self._iteration = 0  # Reset for error handler context
         self._stuck_feedback_count = 0  # Reset for stuck detection
+        self._circuit_breaker_stop_injected = False  # Reset circuit breaker stop flag
 
         # Reset circuit breaker for new task
         # Each user message is a new task, so previous stuck behavior
@@ -603,8 +605,12 @@ class AgentLoop:
                     )
 
                     # Add tool results to session (encode errors in content for stuck detection)
+                    has_circuit_breaker_error = False
                     for result in tool_results:
                         content = result.content if result.success else f"Error: {result.error}"
+                        # Check if this is a circuit breaker error
+                        if result.error and "Circuit breaker" in result.error:
+                            has_circuit_breaker_error = True
                         tool_msg = Message(
                             role="tool",
                             content=content,
@@ -615,6 +621,22 @@ class AgentLoop:
                             },
                         )
                         session.add_message(tool_msg)
+
+                    # If circuit breaker is open, inject a stop message to force the model to answer
+                    if has_circuit_breaker_error and not self._circuit_breaker_stop_injected:
+                        self._circuit_breaker_stop_injected = True
+                        stop_message = Message(
+                            role="user",
+                            content="[系统强制停止] 工具调用被阻止，因为检测到重复调用相同工具。请立即停止调用工具，基于当前已有信息给出最终回答。不要再尝试调用任何工具。",
+                            metadata={"type": "circuit_breaker_stop", "injected": True},
+                        )
+                        session.add_message(stop_message)
+                        logger.info("Injected circuit breaker stop message")
+                        self._emit_progress(
+                            ProgressEventType.STATE_CHANGE,
+                            "Circuit breaker triggered, injecting stop message",
+                            {"circuit_breaker": self._circuit_breaker.stats if self._circuit_breaker else None},
+                        )
 
                     iteration += 1
                     self._iteration = iteration
@@ -1250,6 +1272,7 @@ class AgentLoop:
         iteration = snapshot.current_iteration
         total_usage = session.token_usage
         self._iteration = iteration
+        self._circuit_breaker_stop_injected = False  # Reset circuit breaker stop flag
 
         # Reset circuit breaker when restoring from snapshot
         # Resuming from a saved state is like starting a new task
