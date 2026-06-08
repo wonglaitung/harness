@@ -297,12 +297,12 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message - right aligned, blue bubble
+            # User message - right aligned, blue bubble with avatar
             html = f"""
-            <table width="100%" style="margin: 8px 0;">
+            <table width="100%" style="margin: 8px 0; border: none; border-spacing: 0;">
                 <tr>
                     <td width="25%"></td>
-                    <td width="75%" align="right">
+                    <td width="75%" valign="top" align="right" style="padding: 0;">
                         <span style="background-color: {theme.USER_BUBBLE};
                                      color: #ffffff;
                                      font-size: 14px; padding: 10px 16px;
@@ -312,6 +312,11 @@ class ChatPanel(QWidget):
                                      text-align: left;">
                             {rendered_content}
                         </span>
+                    </td>
+                    <td width="40" valign="top" style="padding-left: 8px;">
+                        <div style="width: 40px; height: 40px; border-radius: 20px;
+                                    background-color: {theme.AVATAR_USER_BG}; color: white; font-size: 16px;
+                                    text-align: center; line-height: 40px;">您</div>
                     </td>
                 </tr>
             </table>
@@ -324,7 +329,7 @@ class ChatPanel(QWidget):
                 <tr>
                     <td width="40" valign="top" style="padding: 0;">
                         <div style="width: 40px; height: 40px; border-radius: 20px;
-                                    background-color: {theme.ACCENT}; color: white; font-size: 18px;
+                                    background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 18px;
                                     text-align: center; line-height: 40px; font-weight: bold;">A</div>
                     </td>
                     <td valign="top" style="padding-left: 12px;">

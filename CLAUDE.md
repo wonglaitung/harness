@@ -71,6 +71,46 @@ class MainWindow(QMainWindow):
 
 **禁止**：不要在 `QThread` 中创建新的 event loop，这会导致程序静默崩溃。
 
+**QTextBrowser HTML/CSS 限制**：
+
+QTextBrowser 只支持有限的 CSS 属性和 HTML 标签（参考 https://doc.qt.io/qt-6/richtext-html-subset.html）：
+
+- **支持的 CSS**：`background-color`, `color`, `font-*`, `margin-*`, `padding-*`, `border-*`, `vertical-align`, `text-align`, `line-height`
+- **不支持**：`flexbox`, `grid`, `position`, `float`, `display: flex/grid`, CSS 变量
+- **布局方案**：复杂布局必须用 `<table>` + `valign="top"` 替代 flexbox
+
+```html
+<!-- 错误：flexbox 在 QTextBrowser 中不工作 -->
+<div style="display: flex; align-items: flex-start;">...</div>
+
+<!-- 正确：使用 table 布局 -->
+<table width="100%" style="border: none; border-spacing: 0;">
+    <tr>
+        <td width="40" valign="top">头像</td>
+        <td valign="top">内容</td>
+    </tr>
+</table>
+```
+
+**矢量图标绘制**：
+
+使用 `QPainter` + `QPixmap` 绘制矢量图标，避免 Unicode 字符图标模糊问题：
+
+```python
+def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)  # 注意：PyQt6 使用小写 transparent
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(color))
+    # 绘制三角形
+    triangle = [QPointF(x1, y1), QPointF(x2, y2), QPointF(x3, y3)]
+    painter.drawPolygon(QPolygonF(triangle))
+    painter.end()
+    return QIcon(pixmap)
+```
+
 ### 安装可选依赖
 
 ```bash
@@ -199,6 +239,7 @@ SidebarPanel.update_sessions() (纯渲染)
 - **API/框架文档必须查阅**：修改 API 调用、框架组件、库的使用方式前必须查阅官方文档，不能凭经验假设
 - **消息结构固定**：LLM API 消息有固定格式要求，Session 是单一数据源，用户消息必须持久化到 session
 - **测试多轮迭代**：任何涉及消息处理的代码，都要测试第二轮迭代是否正常
+- **QTextBrowser 限制**：只支持基础 CSS，复杂布局用 `<table>`，不支持 flexbox/grid
 
 ---
 
@@ -307,4 +348,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-07.
+Today's date is 2026-06-08.
