@@ -312,6 +312,18 @@ class ChatController:
         """Check if agent is processing."""
         return self._is_running
 
+    def stop(self) -> bool:
+        """Stop the current agent execution.
+
+        Returns:
+            True if stop was requested, False if not running
+        """
+        if self._is_running and self.agent:
+            self.agent.interrupt()
+            logger.info("Stop requested for current task")
+            return True
+        return False
+
     def get_token_usage(self) -> dict:
         """Get current session token usage."""
         current = self.session_manager.get_current()

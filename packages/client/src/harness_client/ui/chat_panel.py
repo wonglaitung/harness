@@ -24,6 +24,7 @@ class ChatPanel(QWidget):
 
     # Signals
     message_sent = pyqtSignal(str)
+    stop_requested = pyqtSignal()  # New signal for stop button
 
     def __init__(self):
         super().__init__()
@@ -103,10 +104,35 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Send button - primary blue
-        self.send_btn = QPushButton("发送")
+        # Stop button - icon only, hidden by default
+        self.stop_btn = QPushButton("■")  # Square stop icon
+        self.stop_btn.setMinimumHeight(36)
+        self.stop_btn.setMinimumWidth(36)
+        self.stop_btn.setMaximumWidth(36)
+        self.stop_btn.setVisible(False)  # Hidden by default
+        self.stop_btn.clicked.connect(self._on_stop)
+        self.stop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.DANGER};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.DANGER_HOVER};
+            }}
+            QPushButton:pressed {{
+                background-color: #a02015;
+            }}
+        """)
+
+        # Send button - icon only (arrow right)
+        self.send_btn = QPushButton("▶")  # Play/arrow icon
         self.send_btn.setMinimumHeight(36)
-        self.send_btn.setMinimumWidth(80)
+        self.send_btn.setMinimumWidth(36)
+        self.send_btn.setMaximumWidth(36)
         self.send_btn.clicked.connect(self._on_send)
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
@@ -114,7 +140,7 @@ class ChatPanel(QWidget):
                 color: white;
                 border: none;
                 border-radius: 8px;
-                font-weight: bold;
+                font-size: 12px;
             }}
             QPushButton:hover {{
                 background-color: {theme.ACCENT_HOVER};
@@ -122,10 +148,15 @@ class ChatPanel(QWidget):
             QPushButton:pressed {{
                 background-color: #1a47b8;
             }}
+            QPushButton:disabled {{
+                background-color: {theme.CHROME};
+                color: {theme.TEXT_SUBTLE};
+            }}
         """)
 
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.token_label)
+        input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
         layout.addWidget(self.chat_display, stretch=1)
@@ -157,6 +188,21 @@ class ChatPanel(QWidget):
 
         # Emit signal
         self.message_sent.emit(text)
+
+    def _on_stop(self):
+        """Handle stop button click."""
+        self.stop_requested.emit()
+
+    def set_streaming_state(self, is_streaming: bool):
+        """Update UI state based on streaming status.
+
+        Args:
+            is_streaming: True if agent is generating response
+        """
+        self._is_streaming = is_streaming
+        self.stop_btn.setVisible(is_streaming)
+        self.send_btn.setEnabled(not is_streaming)
+        self.input_field.setEnabled(not is_streaming)
 
     def _on_text_edited(self, text: str):
         """Handle text editing to trigger skill completer."""

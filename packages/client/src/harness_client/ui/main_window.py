@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
 
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
+        self.chat_panel.stop_requested.connect(self._on_stop_requested)
         self.sidebar.session_new_requested.connect(self._on_new_session)
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
@@ -354,6 +355,8 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("正在处理中，请稍候...", 2000)
             return
 
+        self._is_processing = True
+        self.chat_panel.set_streaming_state(True)
         self.statusbar.showMessage("正在思考...")
 
         config = self.chat_controller.config
@@ -367,6 +370,18 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.exception(f"Error in _on_message_sent: {e}")
             self._on_error(f"{type(e).__name__}: {str(e)}")
+        finally:
+            self.chat_panel.set_streaming_state(False)
+            self._is_processing = False
+
+    def _on_stop_requested(self):
+        """Handle stop button click."""
+        if self.chat_controller.stop():
+            self.statusbar.showMessage("正在停止...", 2000)
+            self.chat_panel.set_streaming_state(False)
+            self._is_processing = False
+        else:
+            self.statusbar.showMessage("没有正在进行的任务", 2000)
 
     def _on_response_received(self, response: str):
         """Handle response from agent."""
