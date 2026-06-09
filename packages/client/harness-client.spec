@@ -9,14 +9,8 @@ Output:
     dist/HarnessClient.exe
 """
 
-import os
 import sys
 from pathlib import Path
-
-# Set tiktoken cache dir before importing tiktoken
-# This ensures tiktoken finds the bundled encoding files
-tiktoken_cache_dir = Path(SPECPATH) / "resources" / "tiktoken_cache"
-os.environ["TIKTOKEN_CACHE_DIR"] = str(tiktoken_cache_dir)
 
 # Get project root
 project_root = Path(SPECPATH).parent.parent
@@ -27,9 +21,8 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
+        # Include all resources (icons, styles, templates, tiktoken_cache)
         ('resources', 'resources'),
-        # Include tiktoken encoding files
-        ('resources/tiktoken_cache', 'resources/tiktoken_cache'),
         # Include SDK source if not installed as package
         (str(sdk_src), 'harness'),
     ],
