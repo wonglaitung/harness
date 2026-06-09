@@ -174,7 +174,8 @@ class MainWindow(QMainWindow):
 
         # Logo icon (SVG)
         # Find the icon path - handle both dev and packaged environments
-        icon_path = Path(__file__).parent.parent.parent / "resources" / "icons" / "icon.svg"
+        # main_window.py is at src/harness_client/ui/, resources is at packages/client/resources/
+        icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
         if icon_path.exists():
             # Use QSvgRenderer to properly load SVG
             renderer = QSvgRenderer(str(icon_path))
