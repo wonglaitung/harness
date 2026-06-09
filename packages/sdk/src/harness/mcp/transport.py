@@ -432,7 +432,7 @@ class HTTPTransport(MCPTransport):
             except asyncio.QueueEmpty:
                 break
 
-    async def send(self, message: dict) -> None:
+    async def send(self, message: dict, _reconnect_attempt: int = 0) -> None:
         """
         Send message via HTTP POST.
 
@@ -440,6 +440,8 @@ class HTTPTransport(MCPTransport):
         - Streamable HTTP: POST to /mcp, may return SSE stream
         - HTTP+SSE: POST to /message
         - FastMCP: POST to discovered /messages/?session_id=xxx
+
+        Automatically reconnects on session expiry (404) for SSE protocols.
         """
         if self._session is None:
             raise RuntimeError("Transport not connected")
@@ -457,6 +459,16 @@ class HTTPTransport(MCPTransport):
                 json=message,
                 headers=headers,
             ) as resp:
+                if resp.status == 404 and self._protocol == self.PROTOCOL_FASTMCP_SSE:
+                    # Session expired - reconnect and retry (once)
+                    if _reconnect_attempt == 0:
+                        logger.info("FastMCP session expired, reconnecting...")
+                        await self._reconnect_fkmcp()
+                        # Retry with new session
+                        return await self.send(message, _reconnect_attempt=1)
+                    else:
+                        raise RuntimeError("Session expired after reconnect attempt")
+
                 if resp.status not in (200, 202):
                     text = await resp.text()
                     raise RuntimeError(f"Send failed: {resp.status} - {text}")
@@ -482,6 +494,38 @@ class HTTPTransport(MCPTransport):
 
         except aiohttp.ClientError as e:
             raise RuntimeError(f"HTTP error: {e}") from e
+
+    async def _reconnect_fkmcp(self) -> None:
+        """
+        Reconnect FastMCP SSE session.
+
+        Called when POST returns 404 (session expired).
+        Restarts SSE listener to get new session_id.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Cancel existing SSE task
+        if self._sse_task:
+            self._sse_task.cancel()
+            try:
+                await self._sse_task
+            except asyncio.CancelledError:
+                pass
+
+        # Reset endpoint discovery
+        self._message_endpoint = None
+        self._endpoint_ready.clear()
+
+        # Start new SSE listener
+        self._sse_task = asyncio.create_task(self._sse_loop())
+
+        # Wait for new endpoint
+        try:
+            await asyncio.wait_for(self._endpoint_ready.wait(), timeout=10.0)
+            logger.info(f"Reconnected with new endpoint: {self._message_endpoint}")
+        except asyncio.TimeoutError:
+            raise RuntimeError("Timeout waiting for SSE reconnection")
 
     def _get_send_endpoint(self) -> str:
         """Get the POST endpoint based on protocol."""
