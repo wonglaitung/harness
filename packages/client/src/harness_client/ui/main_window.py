@@ -4,11 +4,9 @@ Main window for Harness Client - 3-column layout with header bar.
 
 import logging
 import sys
-from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase, QPixmap, QPainter
-from PyQt6.QtSvg import QSvgRenderer
+from PyQt6.QtGui import QAction, QFont, QFontDatabase
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -171,63 +169,6 @@ class MainWindow(QMainWindow):
             }
         """)
         header_widget.setMaximumHeight(36)
-
-        # Logo icon (SVG)
-        # Find the icon path - handle both dev and packaged environments
-        # main_window.py is at src/harness_client/ui/, resources is at packages/client/resources/
-        icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
-        print(f"[DEBUG] __file__ = {__file__}")
-        print(f"[DEBUG] icon_path = {icon_path}")
-        print(f"[DEBUG] icon_path.absolute() = {icon_path.absolute()}")
-        print(f"[DEBUG] icon_path.exists() = {icon_path.exists()}")
-        if icon_path.exists():
-            # Use QSvgRenderer to properly load SVG
-            renderer = QSvgRenderer(str(icon_path))
-            print(f"[DEBUG] QSvgRenderer.isValid() = {renderer.isValid()}")
-            if renderer.isValid():
-                # Create pixmap and render SVG onto it
-                logo_pixmap = QPixmap(24, 24)
-                logo_pixmap.fill(Qt.GlobalColor.transparent)
-                painter = QPainter(logo_pixmap)
-                renderer.render(painter)
-                painter.end()
-                logo_label = QLabel()
-                logo_label.setPixmap(logo_pixmap)
-            else:
-                # Fallback if SVG is invalid
-                logo_label = QLabel("A")
-                logo_label.setStyleSheet("""
-                    QLabel {
-                        background-color: #007acc;
-                        color: white;
-                        border-radius: 10px;
-                        font-size: 12px;
-                        font-weight: bold;
-                        min-width: 20px;
-                        max-width: 20px;
-                        min-height: 20px;
-                        max-height: 20px;
-                    }
-                """)
-                logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        else:
-            # Fallback to text if SVG not found
-            logo_label = QLabel("A")
-            logo_label.setStyleSheet("""
-                QLabel {
-                    background-color: #007acc;
-                    color: white;
-                    border-radius: 10px;
-                    font-size: 12px;
-                    font-weight: bold;
-                    min-width: 20px;
-                    max-width: 20px;
-                    min-height: 20px;
-                    max-height: 20px;
-                }
-            """)
-            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(logo_label)
 
         # App name (single line, no subtitle)
         app_name = QLabel("Harness Client")

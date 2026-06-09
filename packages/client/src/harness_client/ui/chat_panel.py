@@ -2,6 +2,9 @@
 Chat panel for displaying conversation - Athlon-inspired dark theme style.
 """
 
+import base64
+from pathlib import Path
+
 import markdown
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF
 from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
@@ -17,6 +20,33 @@ from PyQt6.QtWidgets import (
 
 from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
+
+
+# Cache for avatar base64 data
+_ASSISTANT_AVATAR_BASE64: str | None = None
+
+
+def get_assistant_avatar_base64() -> str:
+    """Get base64-encoded SVG avatar for assistant.
+
+    Returns base64 data URI string, or empty string if SVG not found.
+    """
+    global _ASSISTANT_AVATAR_BASE64
+
+    if _ASSISTANT_AVATAR_BASE64 is not None:
+        return _ASSISTANT_AVATAR_BASE64
+
+    # Find SVG icon path
+    icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
+
+    if icon_path.exists():
+        svg_content = icon_path.read_bytes()
+        b64 = base64.b64encode(svg_content).decode("utf-8")
+        _ASSISTANT_AVATAR_BASE64 = f"data:image/svg+xml;base64,{b64}"
+    else:
+        _ASSISTANT_AVATAR_BASE64 = ""
+
+    return _ASSISTANT_AVATAR_BASE64
 
 
 def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
@@ -319,13 +349,20 @@ class ChatPanel(QWidget):
         else:
             # Assistant message with avatar and gray bubble, left-aligned
             # Use table layout for better QTextBrowser compatibility
+            avatar_base64 = get_assistant_avatar_base64()
+            if avatar_base64:
+                avatar_html = f'<img src="{avatar_base64}" width="40" height="40" style="border-radius: 20px;">'
+            else:
+                # Fallback to letter avatar
+                avatar_html = f'''<div style="width: 40px; height: 40px; border-radius: 20px;
+                            background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 18px;
+                            text-align: center; line-height: 40px; font-weight: bold;">A</div>'''
+
             html = f"""
             <table width="100%" style="margin: 12px 0; border: none; border-spacing: 0;">
                 <tr>
                     <td width="40" valign="top" style="padding: 0;">
-                        <div style="width: 40px; height: 40px; border-radius: 20px;
-                                    background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 18px;
-                                    text-align: center; line-height: 40px; font-weight: bold;">A</div>
+                        {avatar_html}
                     </td>
                     <td valign="top" style="padding-left: 12px;">
                         <div style="background-color: {theme.ASSISTANT_BUBBLE};
