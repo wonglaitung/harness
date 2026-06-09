@@ -207,17 +207,29 @@ class StdioTransport(MCPTransport):
 
 class HTTPTransport(MCPTransport):
     """
-    HTTP/SSE transport.
+    HTTP/SSE transport supporting multiple MCP protocol versions.
 
-    Communicates with MCP server via HTTP POST and Server-Sent Events.
-    Suitable for remote MCP servers.
+    Supports three transport modes:
+    1. Streamable HTTP (2025-11-25): POST to single endpoint, response may be SSE
+    2. HTTP+SSE (2024-11-05, deprecated): POST /message + GET /sse separately
+    3. FastMCP SSE: GET /sse discovers endpoint, POST to /messages/?session_id=xxx
+
+    Auto-detects protocol on connect:
+    - Try POST to /mcp first (Streamable HTTP)
+    - If 404/405, fallback to GET /sse (HTTP+SSE or FastMCP)
     """
+
+    # Protocol detection results
+    PROTOCOL_STREAMABLE_HTTP = "streamable-http"
+    PROTOCOL_HTTP_SSE = "http-sse"  # Legacy deprecated
+    PROTOCOL_FASTMCP_SSE = "fastmcp-sse"
 
     def __init__(
         self,
         url: str,
         headers: dict[str, str] | None = None,
         timeout: float = 30.0,
+        protocol: str | None = None,  # Force specific protocol
     ):
         """
         Initialize HTTP transport.
@@ -226,17 +238,23 @@ class HTTPTransport(MCPTransport):
             url: MCP server base URL
             headers: Additional HTTP headers
             timeout: Request timeout in seconds
+            protocol: Force specific protocol (auto-detect if None)
         """
-        self.url = url
+        self.url = url.rstrip("/")
         self.headers = headers or {}
         self.timeout = timeout
+        self._forced_protocol = protocol
+        self._protocol: Optional[str] = None
         self._session: Optional["aiohttp.ClientSession"] = None
         self._sse_task: Optional[asyncio.Task] = None
         self._message_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._connected = False
+        self._endpoint_ready: asyncio.Event = asyncio.Event()
+        self._message_endpoint: Optional[str] = None  # For FastMCP dynamic endpoint
+        self._session_id: Optional[str] = None  # For Streamable HTTP session
 
     async def connect(self) -> None:
-        """Create HTTP session and start SSE listener."""
+        """Create HTTP session and detect/establish connection."""
         if self._session is not None:
             return
 
@@ -252,10 +270,144 @@ class HTTPTransport(MCPTransport):
             headers=self.headers,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
-        self._connected = True
 
-        # Start SSE listener in background
-        self._sse_task = asyncio.create_task(self._sse_loop())
+        try:
+            # Detect protocol if not forced
+            if self._forced_protocol:
+                self._protocol = self._forced_protocol
+            else:
+                self._protocol = await self._detect_protocol()
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Detected MCP protocol: {self._protocol}")
+
+            # Establish connection based on protocol
+            if self._protocol == self.PROTOCOL_STREAMABLE_HTTP:
+                # Streamable HTTP: start optional GET SSE stream for server push
+                self._message_endpoint = "/mcp"
+                self._sse_task = asyncio.create_task(self._streamable_sse_loop())
+                self._endpoint_ready.set()
+                self._connected = True
+            else:
+                # HTTP+SSE or FastMCP: start SSE listener
+                self._sse_task = asyncio.create_task(self._sse_loop())
+                await asyncio.wait_for(self._endpoint_ready.wait(), timeout=10.0)
+                self._connected = True
+
+        except asyncio.TimeoutError:
+            if self._sse_task:
+                self._sse_task.cancel()
+            raise RuntimeError("Timeout waiting for SSE endpoint discovery")
+        except Exception:
+            if self._session:
+                await self._session.close()
+                self._session = None
+            raise
+
+    async def _detect_protocol(self) -> str:
+        """
+        Detect server's HTTP transport protocol.
+
+        Strategy per MCP spec:
+        1. POST initialize to /mcp with Accept: application/json, text/event-stream
+        2. If 200 OK: Streamable HTTP (new standard)
+        3. If 400/404/405: fallback to HTTP+SSE (legacy)
+
+        Returns:
+            Protocol type constant
+        """
+        import aiohttp
+        import logging
+        logger = logging.getLogger(__name__)
+
+        init_msg = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "harness", "version": "1.0"}
+            },
+            "id": 1
+        }
+
+        # Try Streamable HTTP endpoint first
+        try:
+            async with self._session.post(
+                f"{self.url}/mcp",
+                json=init_msg,
+                headers={"Accept": "application/json, text/event-stream"},
+            ) as resp:
+                if resp.status == 200:
+                    # Check response type
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        # Server returned SSE stream - need to consume it
+                        logger.info("Server supports Streamable HTTP with SSE response")
+                        # Parse initial response from SSE
+                        await self._parse_sse_response(resp)
+                        return self.PROTOCOL_STREAMABLE_HTTP
+                    else:
+                        # Plain JSON response
+                        response = await resp.json()
+                        await self._message_queue.put(response)
+                        # Extract session ID if provided
+                        self._session_id = resp.headers.get("Mcp-Session-Id")
+                        logger.info("Server supports Streamable HTTP with JSON response")
+                        return self.PROTOCOL_STREAMABLE_HTTP
+                elif resp.status in (400, 404, 405):
+                    # Server doesn't support Streamable HTTP, fallback to SSE
+                    logger.info(f"Server returned {resp.status}, falling back to SSE")
+                else:
+                    logger.warning(f"Unexpected status {resp.status} from /mcp")
+        except aiohttp.ClientError as e:
+            logger.debug(f"POST to /mcp failed: {e}")
+
+        # Fallback: GET /sse to check if it's FastMCP or legacy HTTP+SSE
+        try:
+            async with self._session.get(f"{self.url}/sse") as resp:
+                if resp.status == 200:
+                    # Read first event to determine subtype
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        # Check for FastMCP endpoint event
+                        async for line in resp.content:
+                            line = line.decode("utf-8").strip()
+                            if line.startswith("event:"):
+                                event_type = line[6:].strip()
+                                if event_type == "endpoint":
+                                    # FastMCP style
+                                    logger.info("Detected FastMCP SSE protocol")
+                                    return self.PROTOCOL_FASTMCP_SSE
+                            elif line.startswith("data:"):
+                                # Could be legacy HTTP+SSE starting with JSON-RPC
+                                logger.info("Detected legacy HTTP+SSE protocol")
+                                return self.PROTOCOL_HTTP_SSE
+                            break  # Only check first event
+        except aiohttp.ClientError as e:
+            logger.debug(f"GET /sse failed: {e}")
+
+        # Default to FastMCP SSE (most common for current servers)
+        logger.info("Defaulting to FastMCP SSE protocol")
+        return self.PROTOCOL_FASTMCP_SSE
+
+    async def _parse_sse_response(self, resp) -> None:
+        """Parse SSE stream from Streamable HTTP response."""
+        current_event = None
+        async for line in resp.content:
+            line = line.decode("utf-8").strip()
+            if line.startswith("event:"):
+                current_event = line[6:].strip()
+            elif line.startswith("data:"):
+                data = line[5:].strip()
+                try:
+                    message = json.loads(data)
+                    await self._message_queue.put(message)
+                except json.JSONDecodeError:
+                    pass
+            elif not line:
+                current_event = None
 
     async def disconnect(self) -> None:
         """Close HTTP session."""
@@ -281,22 +433,78 @@ class HTTPTransport(MCPTransport):
                 break
 
     async def send(self, message: dict) -> None:
-        """Send message via HTTP POST."""
+        """
+        Send message via HTTP POST.
+
+        Protocol-specific behavior:
+        - Streamable HTTP: POST to /mcp, may return SSE stream
+        - HTTP+SSE: POST to /message
+        - FastMCP: POST to discovered /messages/?session_id=xxx
+        """
         if self._session is None:
             raise RuntimeError("Transport not connected")
 
         import aiohttp
+        import logging
+        logger = logging.getLogger(__name__)
+
+        endpoint = self._get_send_endpoint()
+        headers = self._get_send_headers()
 
         try:
             async with self._session.post(
-                f"{self.url}/message",
+                f"{self.url}{endpoint}",
                 json=message,
+                headers=headers,
             ) as resp:
-                if resp.status != 200:
+                if resp.status not in (200, 202):
                     text = await resp.text()
                     raise RuntimeError(f"Send failed: {resp.status} - {text}")
+
+                # Streamable HTTP may return SSE stream
+                if self._protocol == self.PROTOCOL_STREAMABLE_HTTP:
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        # Parse SSE response
+                        await self._parse_sse_response(resp)
+                    elif resp.status == 200:
+                        # Plain JSON response
+                        try:
+                            response = await resp.json()
+                            await self._message_queue.put(response)
+                        except:
+                            pass  # No JSON body
+
+                    # Update session ID if provided
+                    new_session_id = resp.headers.get("Mcp-Session-Id")
+                    if new_session_id:
+                        self._session_id = new_session_id
+
         except aiohttp.ClientError as e:
             raise RuntimeError(f"HTTP error: {e}") from e
+
+    def _get_send_endpoint(self) -> str:
+        """Get the POST endpoint based on protocol."""
+        if self._protocol == self.PROTOCOL_STREAMABLE_HTTP:
+            return "/mcp"
+        elif self._protocol == self.PROTOCOL_HTTP_SSE:
+            return "/message"
+        elif self._protocol == self.PROTOCOL_FASTMCP_SSE:
+            if self._message_endpoint is None:
+                raise RuntimeError("FastMCP endpoint not discovered")
+            return self._message_endpoint
+        else:
+            return self._message_endpoint or "/message"
+
+    def _get_send_headers(self) -> dict:
+        """Get headers for POST request based on protocol."""
+        headers = {}
+        if self._protocol == self.PROTOCOL_STREAMABLE_HTTP:
+            # Accept both JSON and SSE responses
+            headers["Accept"] = "application/json, text/event-stream"
+            if self._session_id:
+                headers["Mcp-Session-Id"] = self._session_id
+        return headers
 
     async def receive(self) -> AsyncIterator[dict]:
         """Receive messages from SSE queue."""
@@ -313,28 +521,124 @@ class HTTPTransport(MCPTransport):
                 break
 
     async def _sse_loop(self) -> None:
-        """Background task to receive SSE messages."""
+        """
+        Background task to maintain SSE connection for HTTP+SSE and FastMCP.
+
+        Handles both HTTP+SSE (legacy) and FastMCP SSE:
+        - FastMCP: event: endpoint -> discover /messages/?session_id=xxx
+        - HTTP+SSE: direct JSON-RPC messages in data: lines
+        """
         if self._session is None:
             return
 
         import aiohttp
+        import logging
+        logger = logging.getLogger(__name__)
 
         try:
             async with self._session.get(f"{self.url}/sse") as resp:
                 if resp.status != 200:
+                    logger.error(f"SSE endpoint returned {resp.status}")
+                    self._endpoint_ready.set()
                     return
 
+                current_event = None
                 async for line in resp.content:
-                    if line.startswith(b"data: "):
+                    line = line.decode("utf-8").strip()
+
+                    # Parse SSE format
+                    if line.startswith("event:"):
+                        current_event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data = line[5:].strip()
+
+                        # FastMCP endpoint discovery
+                        if current_event == "endpoint" and data.startswith("/"):
+                            self._message_endpoint = data
+                            logger.info(f"Discovered MCP message endpoint: {data}")
+                            self._endpoint_ready.set()
+                            continue
+
+                        # JSON-RPC messages (HTTP+SSE or FastMCP)
                         try:
-                            message = json.loads(line[6:].decode("utf-8"))
+                            message = json.loads(data)
+                            await self._message_queue.put(message)
+                            # For HTTP+SSE, signal ready on first message
+                            if self._protocol == self.PROTOCOL_HTTP_SSE:
+                                self._endpoint_ready.set()
+                        except json.JSONDecodeError:
+                            continue
+
+                    elif not line:
+                        current_event = None
+
+        except asyncio.CancelledError:
+            pass
+        except aiohttp.ClientError as e:
+            logger.error(f"SSE connection error: {e}")
+            self._connected = False
+        finally:
+            self._endpoint_ready.set()
+
+    async def _streamable_sse_loop(self) -> None:
+        """
+        Background task for Streamable HTTP GET SSE stream.
+
+        Per MCP spec (2025-11-25):
+        - GET /mcp opens an SSE stream for server-to-client messages
+        - Server can send requests and notifications
+        - Client uses this for receiving server-initiated messages
+
+        Note: This is optional - server may not support it (returns 405).
+        POST responses still work for request/response patterns.
+        """
+        if self._session is None:
+            return
+
+        import aiohttp
+        import logging
+        logger = logging.getLogger(__name__)
+
+        headers = {"Accept": "text/event-stream"}
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+
+        try:
+            async with self._session.get(
+                f"{self.url}/mcp",
+                headers=headers,
+            ) as resp:
+                if resp.status == 405:
+                    # Server doesn't support standalone GET SSE - that's OK
+                    logger.info("Server doesn't support GET SSE stream (405)")
+                    return
+
+                if resp.status != 200:
+                    logger.warning(f"GET /mcp returned {resp.status}")
+                    return
+
+                # Parse SSE stream
+                current_event = None
+                async for line in resp.content:
+                    line = line.decode("utf-8").strip()
+
+                    if line.startswith("event:"):
+                        current_event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data = line[5:].strip()
+                        try:
+                            message = json.loads(data)
                             await self._message_queue.put(message)
                         except json.JSONDecodeError:
                             continue
+                    elif not line:
+                        current_event = None
+
         except asyncio.CancelledError:
             pass
-        except aiohttp.ClientError:
-            self._connected = False
+        except aiohttp.ClientError as e:
+            # Connection errors are expected - SSE stream may close
+            logger.debug(f"Streamable SSE stream ended: {e}")
 
     @property
     def is_connected(self) -> bool:
