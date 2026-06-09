@@ -1215,3 +1215,72 @@ def create_play_icon(size: int = 24, color: QColor = QColor("white")) -> QIcon:
 | 文件 | 改动 |
 |------|------|
 | `packages/client/src/harness_client/ui/chat_panel.py` | 使用 QPainter 绘制图标 |
+
+---
+
+## 2026-06-09: aiohttp 默认超时导致 SSE 流断开
+
+### 问题
+
+FastMCP SSE session 在约 90 秒后过期，客户端 POST 请求返回 404 "Could not find session"。
+
+服务器日志显示：
+```
+INFO: POST /messages/?session_id=xxx HTTP/1.1" 202 Accepted
+# 约 90 秒后
+WARNING: Could not find session for ID: xxx
+INFO: POST /messages/?session_id=xxx HTTP/1.1" 404 Not Found
+```
+
+### 原因分析
+
+最初怀疑是服务器端 session TTL，但 MCP SDK 的 `SseServerTransport` 源码显示 session 只在连接断开时删除，没有独立的 TTL。
+
+**真正原因**：客户端 `aiohttp.ClientTimeout(total=30)` 导致 SSE 流在无活动时超时断开：
+```python
+# 原代码
+self._session = aiohttp.ClientSession(
+    timeout=aiohttp.ClientTimeout(total=self.timeout),  # total=30 秒
+)
+```
+
+`total` 超时对 SSE 流的影响：
+- 虽然 aiohttp 在每次收到数据时重置 `total` 超时
+- 但如果连接在某个时刻断开（网络问题、代理超时等），session 会被服务器删除
+- 下次 POST 请求时 session 已不存在，返回 404
+
+### 解决
+
+为 SSE 流设置无限读取超时：
+
+```python
+self._session = aiohttp.ClientSession(
+    headers=self.headers,
+    timeout=aiohttp.ClientTimeout(
+        total=self.timeout,
+        sock_read=None,  # 无限等待 SSE 数据
+    ),
+)
+```
+
+`sock_read=None` 允许 SSE 流无限期等待服务器数据。服务器每 15 秒发送 ping，保持连接活跃。
+
+### 教训
+
+1. **SSE 是长连接**：不能使用普通 HTTP 请求的超时配置
+2. **`total` vs `sock_read`**：
+   - `total`: 整个请求的总超时
+   - `sock_read`: 每次读取的超时，对 SSE 更重要
+3. **ping 不能解决所有问题**：服务器发送 ping 保持 TCP 连接，但如果客户端超时设置错误，连接仍会断开
+4. **区分服务器端和客户端问题**：看到 session 过期，既要检查服务器端 TTL，也要检查客户端超时
+
+### 参考
+
+- [aiohttp ClientTimeout documentation](http://docs.aiohttp.org/en/stable/client_reference.html)
+- [SSE best practices](https://medium.com/@jyotsna.a.choudhary/dealing-with-long-running-tasks-in-web-apps-the-sse-approach-ba8607638335)
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/sdk/src/harness/mcp/transport.py` | 设置 `sock_read=None` 防止 SSE 流超时 |

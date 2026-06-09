@@ -613,3 +613,35 @@
 - fix(client): Use lowercase 'transparent' for Qt.GlobalColor enum (75b53c5)
 - fix(client): Remove streaming simulation to prevent HTML corruption (8c6059b)
 - fix(client): Use table layout for assistant message avatar (610eea5)
+
+## 2026-06-09
+
+### HTTP Transport 多协议支持 ✅ 完成
+
+#### 实现
+- **Streamable HTTP (2025-11-25 新标准)**：单一端点 `/mcp`，POST 发送消息，GET 可开 SSE 流接收服务器推送
+- **HTTP+SSE (2024-11-05 已弃用)**：分开的 POST `/message` 和 GET `/sse` 端点
+- **FastMCP SSE (变种)**：动态端点发现，GET `/sse` 返回 `event: endpoint` + `/messages/?session_id=xxx`
+
+#### 协议自动检测
+1. POST `initialize` 到 `/mcp`
+2. 如果 200 OK → Streamable HTTP
+3. 如果 400/404/405 → GET `/sse` 进一步检测
+4. 解析 SSE 首个事件区分 FastMCP 或 HTTP+SSE
+
+#### Session 自动重连
+FastMCP SSE session 过期后（POST 返回 404）自动重连 `/sse` 获取新 session_id 并重试请求。
+
+#### SSE 流超时修复
+设置 `sock_read=None` 防止 aiohttp 默认超时导致 SSE 流断开。
+
+#### 文件更新
+- `packages/sdk/src/harness/mcp/transport.py`: 多协议支持、自动检测、session 重连、超时修复
+- `packages/sdk/docs/09-mcp-integration.md`: 更新 HTTP Transport 文档
+
+提交记录:
+- feat(sdk): Add comprehensive HTTP transport support for MCP protocols (d2acd73)
+- fix(sdk): Add automatic session reconnect for FastMCP SSE (1595942)
+- docs(sdk): Update HTTP Transport documentation for multi-protocol support (4aca079)
+- docs(sdk): Add session auto-reconnect documentation for FastMCP SSE (f86ae81)
+- fix(sdk): Set infinite sock_read timeout for SSE streams (994510f)
