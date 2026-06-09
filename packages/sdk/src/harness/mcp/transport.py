@@ -268,7 +268,12 @@ class HTTPTransport(MCPTransport):
 
         self._session = aiohttp.ClientSession(
             headers=self.headers,
-            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            # For SSE streams, we want infinite sock_read timeout
+            # but reasonable total timeout for regular requests
+            timeout=aiohttp.ClientTimeout(
+                total=self.timeout,
+                sock_read=None,  # No timeout for SSE reads
+            ),
         )
 
         try:
