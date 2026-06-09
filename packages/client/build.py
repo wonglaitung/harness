@@ -30,9 +30,25 @@ def clean():
     print("✅ Clean complete")
 
 
+def download_tiktoken():
+    """Download tiktoken encoding files for bundling."""
+    print("Downloading tiktoken encoding files...")
+    result = subprocess.run(
+        [sys.executable, "download_tiktoken.py"],
+        cwd=Path(__file__).parent,
+    )
+    if result.returncode != 0:
+        print("⚠️ Warning: Failed to download tiktoken files")
+        return False
+    return True
+
+
 def build():
     """Build the client executable."""
     print("Building Harness Client...")
+
+    # Download tiktoken encoding files first
+    download_tiktoken()
 
     # Run PyInstaller
     result = subprocess.run(
