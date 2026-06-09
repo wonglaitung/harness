@@ -126,7 +126,26 @@ await mcp_manager.connect_server("github")
 
 ### HTTP 传输
 
-通过 HTTP/SSE 通信，适用于远程 MCP 服务器：
+通过 HTTP/SSE 通信，适用于远程 MCP 服务器。HTTPTransport 支持三种 MCP HTTP 协议，自动检测服务器类型：
+
+#### 支持的协议
+
+| 协议 | 标准 | 发送消息 | 接收消息 | 说明 |
+|------|------|----------|----------|------|
+| **Streamable HTTP** | 2025-11-25 (最新) | POST `/mcp` | POST 响应 (JSON/SSE) + GET `/mcp` SSE | 单一端点，推荐 |
+| **HTTP+SSE** | 2024-11-05 (已弃用) | POST `/message` | GET `/sse` | 分开两个端点 |
+| **FastMCP SSE** | FastMCP 变种 | POST `/messages/?session_id=xxx` | GET `/sse` | 动态 session 发现 |
+
+#### 协议自动检测
+
+HTTPTransport 在连接时自动检测服务器协议类型：
+
+1. POST `initialize` 请求到 `/mcp`
+2. 如果返回 200 OK → **Streamable HTTP**
+3. 如果返回 400/404/405 → GET `/sse` 进一步检测
+4. 解析 SSE 首个事件区分 **FastMCP** 或 **HTTP+SSE**
+
+#### 使用示例
 
 ```python
 from harness.mcp.manager import MCPManager, MCPServerConfig
@@ -134,11 +153,11 @@ from harness.mcp.manager import MCPManager, MCPServerConfig
 # 创建 MCP 管理器
 mcp_manager = MCPManager()
 
-# 添加 HTTP 服务器
+# 添加 HTTP 服务器（自动检测协议）
 config = MCPServerConfig(
     name="remote-tools",
     transport="http",
-    url="https://mcp.example.com/sse",
+    url="https://mcp.example.com",  # 基础 URL，自动检测协议
     headers={"Authorization": "Bearer your-token"},  # 可选：认证头
 )
 
@@ -146,6 +165,62 @@ mcp_manager.add_server(config)
 
 # 连接服务器
 await mcp_manager.connect_server("remote-tools")
+```
+
+#### 强制指定协议
+
+如需跳过自动检测，可强制指定协议类型：
+
+```python
+from harness.mcp.transport import HTTPTransport
+
+# 强制使用 Streamable HTTP
+transport = HTTPTransport(
+    url="https://mcp.example.com",
+    protocol="streamable-http",  # 强制协议类型
+)
+
+# 可选值:
+# - "streamable-http"  (Streamable HTTP 2025-11-25)
+# - "http-sse"         (HTTP+SSE 2024-11-05, 已弃用)
+# - "fastmcp-sse"      (FastMCP SSE)
+```
+
+#### Streamable HTTP 特性
+
+Streamable HTTP (2025-11-25) 是最新的 MCP 标准，特性包括：
+
+- **单一端点**：所有通信通过 `/mcp`
+- **POST 请求**：发送 JSON-RPC 消息
+- **灵活响应**：响应可能是 JSON 对象或 SSE 流
+- **会话管理**：支持 `Mcp-Session-Id` 头
+- **服务器推送**：GET `/mcp` 可开 SSE 流接收服务器主动消息
+
+```python
+# Streamable HTTP 配置示例
+config = MCPServerConfig(
+    name="streamable-server",
+    transport="http",
+    url="https://api.example.com/mcp",
+)
+```
+
+#### FastMCP SSE 特性
+
+FastMCP 是常用的 MCP 服务器实现，使用变种 SSE 协议：
+
+- 连接 GET `/sse` 获取动态消息端点
+- SSE 首个事件：`event: endpoint\ndata: /messages/?session_id=xxx`
+- POST 到动态端点发送消息
+- 持续监听 GET `/sse` 接收响应
+
+```python
+# FastMCP 配置示例
+config = MCPServerConfig(
+    name="fastmcp-server",
+    transport="http",
+    url="http://localhost:8500",
+)
 ```
 
 ## 工具发现与注册
