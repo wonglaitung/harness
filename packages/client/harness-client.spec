@@ -29,8 +29,13 @@ a = Analysis(
         # Core dependencies
         'qasync',
         'asyncio',
-        # PyQt6 SVG support
+        # PyQt6 core
+        'PyQt6',
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
         'PyQt6.QtSvg',
+        'PyQt6.sip',
         # SDK modules
         'harness',
         'harness.sdk',
@@ -45,12 +50,36 @@ a = Analysis(
         # LLM providers
         'anthropic',
         'openai',
+        # MCP
+        'mcp',
+        'mcp.client',
+        'mcp.server',
         # Utilities
         'pydantic',
+        'pydantic_core',
         'aiohttp',
         'tiktoken',
         'jsonschema',
         'yaml',
+        'markdown',
+        'numpy',
+        'httpx',
+        'httpcore',
+        'h11',
+        'anyio',
+        'sniffio',
+        'certifi',
+        'idna',
+        'charset_normalizer',
+        'tenacity',
+        'typing_extensions',
+        'annotated_types',
+        'distro',
+        'jiter',
+        # Encoding
+        'encodings',
+        'encodings.idna',
+        'encodings.utf_8',
     ],
     hookspath=[],
     hooksconfig={},
