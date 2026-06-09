@@ -223,6 +223,16 @@ config = MCPServerConfig(
 )
 ```
 
+#### Session 自动重连
+
+FastMCP SSE session 在约 90 秒不活动后会过期。HTTPTransport 自动处理这种情况：
+
+1. POST 请求返回 404 时检测到 session 已过期
+2. 自动重新连接 `/sse` 获取新的 `session_id`
+3. 用新端点重试失败的请求
+
+用户无需手动处理 session 过期问题，SDK 会自动重连。这是 SSE 的正常行为——SSE 协议本身没有内置的 keep-alive 机制（不像 WebSocket 的 ping/pong），服务器端 session 有 TTL 限制。
+
 ## 工具发现与注册
 
 MCP 服务器连接后，自动发现其提供的工具并注册到 ToolExecutor：
