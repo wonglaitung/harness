@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -171,22 +171,36 @@ class MainWindow(QMainWindow):
         """)
         header_widget.setMaximumHeight(36)
 
-        # Logo icon
-        logo_label = QLabel("A")
-        logo_label.setStyleSheet("""
-            QLabel {
-                background-color: #007acc;
-                color: white;
-                border-radius: 10px;
-                font-size: 12px;
-                font-weight: bold;
-                min-width: 20px;
-                max-width: 20px;
-                min-height: 20px;
-                max-height: 20px;
-            }
-        """)
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Logo icon (SVG)
+        # Find the icon path - handle both dev and packaged environments
+        icon_path = Path(__file__).parent.parent.parent / "resources" / "icons" / "icon.svg"
+        if icon_path.exists():
+            logo_pixmap = QPixmap(str(icon_path))
+            # Scale to appropriate size while keeping aspect ratio
+            logo_pixmap = logo_pixmap.scaled(
+                24, 24,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            logo_label = QLabel()
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            # Fallback to text if SVG not found
+            logo_label = QLabel("A")
+            logo_label.setStyleSheet("""
+                QLabel {
+                    background-color: #007acc;
+                    color: white;
+                    border-radius: 10px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    min-width: 20px;
+                    max-width: 20px;
+                    min-height: 20px;
+                    max-height: 20px;
+                }
+            """)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(logo_label)
 
         # App name (single line, no subtitle)

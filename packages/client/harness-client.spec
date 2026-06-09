@@ -87,5 +87,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='resources/icons/app.ico',  # Windows icon
+    # Note: PyInstaller requires .ico format for Windows EXE icon.
+    # SVG icons are used inside the app via QIcon, not for the EXE itself.
+    # icon='resources/icons/app.ico',
 )
