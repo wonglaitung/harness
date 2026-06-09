@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase, QPixmap
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QPixmap, QPainter
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -175,15 +176,34 @@ class MainWindow(QMainWindow):
         # Find the icon path - handle both dev and packaged environments
         icon_path = Path(__file__).parent.parent.parent / "resources" / "icons" / "icon.svg"
         if icon_path.exists():
-            logo_pixmap = QPixmap(str(icon_path))
-            # Scale to appropriate size while keeping aspect ratio
-            logo_pixmap = logo_pixmap.scaled(
-                24, 24,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            logo_label = QLabel()
-            logo_label.setPixmap(logo_pixmap)
+            # Use QSvgRenderer to properly load SVG
+            renderer = QSvgRenderer(str(icon_path))
+            if renderer.isValid():
+                # Create pixmap and render SVG onto it
+                logo_pixmap = QPixmap(24, 24)
+                logo_pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(logo_pixmap)
+                renderer.render(painter)
+                painter.end()
+                logo_label = QLabel()
+                logo_label.setPixmap(logo_pixmap)
+            else:
+                # Fallback if SVG is invalid
+                logo_label = QLabel("A")
+                logo_label.setStyleSheet("""
+                    QLabel {
+                        background-color: #007acc;
+                        color: white;
+                        border-radius: 10px;
+                        font-size: 12px;
+                        font-weight: bold;
+                        min-width: 20px;
+                        max-width: 20px;
+                        min-height: 20px;
+                        max-height: 20px;
+                    }
+                """)
+                logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         else:
             # Fallback to text if SVG not found
             logo_label = QLabel("A")

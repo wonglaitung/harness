@@ -29,6 +29,8 @@ a = Analysis(
         # Core dependencies
         'qasync',
         'asyncio',
+        # PyQt6 SVG support
+        'PyQt6.QtSvg',
         # SDK modules
         'harness',
         'harness.sdk',
@@ -89,5 +91,6 @@ exe = EXE(
     entitlements_file=None,
     # Note: PyInstaller requires .ico format for Windows EXE icon.
     # SVG icons are used inside the app via QIcon, not for the EXE itself.
-    # icon='resources/icons/app.ico',
+    # Use generate_ico.py to create app.ico from icon.svg
+    icon='resources/icons/app.ico',
 )
