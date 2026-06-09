@@ -4,9 +4,11 @@ Main window for Harness Client - 3-column layout with header bar.
 
 import logging
 import sys
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont, QFontDatabase
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QIcon
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -48,6 +50,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Harness Client")
         self.setMinimumSize(1200, 800)
+
+        # Set window icon from SVG
+        self._set_window_icon()
 
         # Initialize controllers
         self.chat_controller = ChatController()
@@ -113,6 +118,22 @@ class MainWindow(QMainWindow):
         # Initialize with a new session
         self.chat_controller.new_session()
         self._refresh_session_list()
+
+    def _set_window_icon(self):
+        """Set window icon from SVG file."""
+        from PyQt6.QtGui import QPixmap, QPainter
+
+        icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
+        if icon_path.exists():
+            renderer = QSvgRenderer(str(icon_path))
+            if renderer.isValid():
+                # Create pixmap at multiple sizes for better quality
+                pixmap = QPixmap(64, 64)
+                pixmap.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.end()
+                self.setWindowIcon(QIcon(pixmap))
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
