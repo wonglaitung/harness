@@ -137,7 +137,7 @@ class ChatPanel(QWidget):
             QWidget {{
                 background-color: {theme.PANEL_ALT};
                 border-top: 1px solid {theme.BORDER};
-                border-radius: 12px;
+                border-radius: {theme.RADIUS_LG};
                 padding: 8px;
             }}
         """)
@@ -154,7 +154,7 @@ class ChatPanel(QWidget):
             QLineEdit {{
                 background-color: {theme.CHROME};
                 border: 1px solid {theme.BORDER};
-                border-radius: 8px;
+                border-radius: {theme.RADIUS_MD};
                 padding: 8px 12px;
                 color: {theme.TEXT};
             }}
@@ -192,7 +192,7 @@ class ChatPanel(QWidget):
             QPushButton {{
                 background-color: {theme.DANGER};
                 border: none;
-                border-radius: 8px;
+                border-radius: {theme.RADIUS_MD};
             }}
             QPushButton:hover {{
                 background-color: {theme.DANGER_HOVER};
@@ -214,7 +214,7 @@ class ChatPanel(QWidget):
             QPushButton {{
                 background-color: {theme.ACCENT};
                 border: none;
-                border-radius: 8px;
+                border-radius: {theme.RADIUS_MD};
             }}
             QPushButton:hover {{
                 background-color: {theme.ACCENT_HOVER};

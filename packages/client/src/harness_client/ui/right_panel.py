@@ -205,13 +205,14 @@ class SkillsSection(CollapsibleSection):
         self.add_widget(self.skills_list_widget)
 
         # Placeholder label
+        theme = get_theme()
         self.placeholder_label = QLabel("暂无已加载的技能")
-        self.placeholder_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 12px;
                 padding: 4px;
-            }
+            }}
         """)
         self.skills_list_layout.addWidget(self.placeholder_label)
 
@@ -308,13 +309,14 @@ class MCPServersSection(CollapsibleSection):
         self.add_widget(self.server_list_widget)
 
         # Placeholder label
+        theme = get_theme()
         self.placeholder_label = QLabel("暂无 MCP 配置")
-        self.placeholder_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 12px;
                 padding: 4px;
-            }
+            }}
         """)
         self.server_list_layout.addWidget(self.placeholder_label)
 
@@ -354,12 +356,13 @@ class MCPServersSection(CollapsibleSection):
 
     def _create_server_item(self, name: str, status: str, tools_count: int) -> QWidget:
         """Create a server item widget."""
+        theme = get_theme()
         widget = QWidget()
-        widget.setStyleSheet("""
-            QWidget {
-                background-color: #252526;
-                border-radius: 4px;
-            }
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.PANEL};
+                border-radius: {theme.RADIUS_SM};
+            }}
         """)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -367,29 +370,29 @@ class MCPServersSection(CollapsibleSection):
 
         # Status indicator
         is_connected = status == "已连接"
-        indicator_color = "#50c878" if is_connected else "#808080"
+        indicator_color = theme.STATUS_CONNECTED if is_connected else theme.STATUS_DISCONNECTED
         indicator = QLabel("●")
         indicator.setStyleSheet(f"color: {indicator_color}; font-size: 12px;")
         layout.addWidget(indicator)
 
         # Server name
         name_label = QLabel(name)
-        name_label.setStyleSheet("color: #d4d4d4; font-size: 12px;")
+        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: 12px;")
         layout.addWidget(name_label)
 
         # Status text
         if is_connected:
             status_text = f"已连接 ({tools_count} 工具)"
-            status_color = "#50c878"
+            status_color = theme.STATUS_CONNECTED
         elif status == "连接中...":
             status_text = status
-            status_color = "#dcdcaa"
+            status_color = theme.STATUS_CONNECTING
         elif status == "错误":
             status_text = status
-            status_color = "#f14c4c"
+            status_color = theme.STATUS_ERROR
         else:
             status_text = status
-            status_color = "#808080"
+            status_color = theme.STATUS_DISCONNECTED
 
         status_label = QLabel(status_text)
         status_label.setStyleSheet(f"color: {status_color}; font-size: 11px;")
@@ -401,33 +404,33 @@ class MCPServersSection(CollapsibleSection):
         action_btn = QPushButton()
         if is_connected:
             action_btn.setText("断开")
-            action_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #5a1d1d;
+            action_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.MCP_DISCONNECT_BG};
                     border: none;
-                    border-radius: 3px;
+                    border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
-                    color: #f14c4c;
+                    color: {theme.MCP_DISCONNECT_TEXT};
                     font-size: 11px;
-                }
-                QPushButton:hover {
-                    background-color: #6a2d2d;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.MCP_DISCONNECT_BG_HOVER};
+                }}
             """)
         else:
             action_btn.setText("连接")
-            action_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #1d3a5a;
+            action_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.MCP_CONNECT_BG};
                     border: none;
-                    border-radius: 3px;
+                    border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
-                    color: #4fc1ff;
+                    color: {theme.MCP_CONNECT_TEXT};
                     font-size: 11px;
-                }
-                QPushButton:hover {
-                    background-color: #2d4a6a;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.MCP_CONNECT_BG_HOVER};
+                }}
             """)
 
         action_btn.clicked.connect(lambda checked, n=name: self._on_toggle_server(n))
@@ -463,16 +466,17 @@ class FileTreeSection(CollapsibleSection):
     def _setup_content(self):
         """Setup file tree content."""
         from PyQt6.QtCore import QDir
+        theme = get_theme()
 
         # Work directory name (editable)
         self.work_dir_label = QLabel(str(self._work_dir.name))
-        self.work_dir_label.setStyleSheet("""
-            QLabel {
-                color: #d4d4d4;
+        self.work_dir_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
                 font-size: 12px;
                 font-weight: bold;
                 padding: 4px;
-            }
+            }}
         """)
         self.add_widget(self.work_dir_label)
 
@@ -491,33 +495,33 @@ class FileTreeSection(CollapsibleSection):
             self.tree_view.setColumnHidden(col, True)
 
         self.tree_view.setHeaderHidden(True)
-        self.tree_view.setStyleSheet("""
-            QTreeView {
-                background-color: #252526;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                color: #d4d4d4;
-            }
-            QTreeView::item {
+        self.tree_view.setStyleSheet(f"""
+            QTreeView {{
+                background-color: {theme.PANEL};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+                color: {theme.TEXT};
+            }}
+            QTreeView::item {{
                 padding: 4px;
-            }
-            QTreeView::item:selected {
-                background-color: #094771;
-            }
-            QTreeView::item:hover {
-                background-color: #3e3e42;
-            }
-            QTreeView::branch {
-                background-color: #252526;
-            }
+            }}
+            QTreeView::item:selected {{
+                background-color: {theme.SELECTION_ACTIVE};
+            }}
+            QTreeView::item:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+            QTreeView::branch {{
+                background-color: {theme.PANEL};
+            }}
             QTreeView::branch:has-children:!has-siblings:closed,
             QTreeView::branch:closed:has-children:has-siblings {
-                background-color: #252526;
+                background-color: {theme.PANEL};
             }
             QTreeView::branch:open:has-children:!has-siblings,
-            QTreeView::branch:open:has-children:has-siblings {
-                background-color: #252526;
-            }
+            QTreeView::branch:open:has-children:has-siblings {{
+                background-color: {theme.PANEL};
+            }}
         """)
         self.tree_view.doubleClicked.connect(self._on_item_double_clicked)
         self.add_widget(self.tree_view, 1)  # stretch=1 to fill space

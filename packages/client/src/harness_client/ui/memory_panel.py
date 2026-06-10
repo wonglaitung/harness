@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from harness.memory.memory_file import MemoryCategory
-
+from harness_client.themes import get_theme
 from harness_client.ui.right_panel import CollapsibleSection
 
 
@@ -36,6 +36,7 @@ class CategorySection(QWidget):
 
     def _setup_ui(self):
         """Setup the category section UI."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -47,35 +48,35 @@ class CategorySection(QWidget):
         header_layout.setSpacing(4)
 
         name_label = QLabel(self._display_name)
-        name_label.setStyleSheet("""
-            QLabel {
-                color: #d4d4d4;
+        name_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
                 font-size: 12px;
                 font-weight: bold;
-            }
+            }}
         """)
         header_layout.addWidget(name_label)
 
         header_layout.addStretch()
 
         add_btn = QPushButton("+")
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2d2d2d;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.PANEL_ALT};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
                 max-height: 20px;
-                color: #d4d4d4;
+                color: {theme.TEXT};
                 font-size: 12px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-color: #007acc;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {theme.BORDER};
+                border-color: {theme.ACCENT};
+            }}
         """)
         add_btn.setToolTip("添加记忆条目")
         add_btn.clicked.connect(self._on_add_clicked)
@@ -92,12 +93,12 @@ class CategorySection(QWidget):
 
         # Placeholder label
         self.placeholder_label = QLabel("暂无记忆条目")
-        self.placeholder_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 11px;
                 padding: 4px;
-            }
+            }}
         """)
         self.entries_layout.addWidget(self.placeholder_label)
 
@@ -127,12 +128,13 @@ class CategorySection(QWidget):
 
     def _create_entry_item(self, content: str, index: int) -> QWidget:
         """Create an entry item widget."""
+        theme = get_theme()
         widget = QWidget()
-        widget.setStyleSheet("""
-            QWidget {
-                background-color: #252526;
-                border-radius: 4px;
-            }
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.PANEL};
+                border-radius: {theme.RADIUS_SM};
+            }}
         """)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(8, 4, 8, 4)
@@ -140,29 +142,29 @@ class CategorySection(QWidget):
 
         # Content label
         content_label = QLabel(content)
-        content_label.setStyleSheet("""
-            QLabel {
-                color: #d4d4d4;
+        content_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
                 font-size: 11px;
-            }
+            }}
         """)
         content_label.setWordWrap(True)
         layout.addWidget(content_label, 1)
 
         # Remove button
         remove_btn = QPushButton("×")
-        remove_btn.setStyleSheet("""
-            QPushButton {
+        remove_btn.setStyleSheet(f"""
+            QPushButton {{
                 background-color: transparent;
                 border: none;
-                color: #808080;
+                color: {theme.TEXT_SUBTLE};
                 font-size: 14px;
                 min-width: 20px;
                 max-width: 20px;
-            }
-            QPushButton:hover {
-                color: #f14c4c;
-            }
+            }}
+            QPushButton:hover {{
+                color: {theme.DANGER};
+            }}
         """)
         remove_btn.setToolTip("删除此条目")
         remove_btn.clicked.connect(lambda checked: self._on_remove_clicked(index))
@@ -203,22 +205,23 @@ class MemorySection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup the memory section content."""
+        theme = get_theme()
         # Scroll area for all categories
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("""
-            QScrollArea {
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
                 background-color: transparent;
                 border: none;
-            }
-            QScrollBar:vertical {
-                background-color: #252526;
+            }}
+            QScrollBar:vertical {{
+                background-color: {theme.PANEL};
                 width: 8px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #3e3e42;
-                border-radius: 4px;
-            }
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+            }}
         """)
         self.add_widget(scroll, 1)
 
@@ -231,12 +234,12 @@ class MemorySection(CollapsibleSection):
 
         # Info label
         info_label = QLabel("全局记忆存储在 ~/.harness/MEMORY.md")
-        info_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
+        info_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
                 font-size: 11px;
                 padding: 4px;
-            }
+            }}
         """)
         self._container_layout.addWidget(info_label)
 
@@ -299,20 +302,21 @@ class AddEntryDialog(QMessageBox):
 
     def __init__(self, category_name: str, parent=None):
         super().__init__(parent)
+        theme = get_theme()
         self.setWindowTitle(f"添加记忆 - {category_name}")
         self.setText("请输入记忆内容:")
         self.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 
         # Add input field
         self._input = QLineEdit()
-        self._input.setStyleSheet("""
-            QLineEdit {
-                background-color: #252526;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
+        self._input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {theme.PANEL};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
                 padding: 8px;
-                color: #d4d4d4;
-            }
+                color: {theme.TEXT};
+            }}
         """)
         self._input.setMinimumWidth(300)
         # QMessageBox uses QGridLayout; add input below the text label

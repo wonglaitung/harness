@@ -120,3 +120,24 @@ class DarkTheme:
 
     # Disabled state
     DISABLED_BACKGROUND = "#3F3F46"
+
+    # Shape system - corner radius values
+    # Use these constants consistently across all components
+    RADIUS_SM = "4px"  # Small elements: tags, mini buttons, inline indicators
+    RADIUS_MD = "8px"  # Standard: buttons, inputs, list items, panels
+    RADIUS_LG = "16px"  # Large: message bubbles, cards, section headers
+
+    # MCP Server item button colors
+    # Connect button (blue accent)
+    MCP_CONNECT_BG = "#1d3a5a"
+    MCP_CONNECT_BG_HOVER = "#2d4a6a"
+    MCP_CONNECT_TEXT = "#4fc1ff"
+    # Disconnect button (danger style)
+    MCP_DISCONNECT_BG = "#5a1d1d"
+    MCP_DISCONNECT_BG_HOVER = "#6a2d2d"
+    MCP_DISCONNECT_TEXT = "#f14c4c"
+    # Status indicator
+    STATUS_CONNECTED = "#50c878"
+    STATUS_CONNECTING = "#dcdcaa"
+    STATUS_ERROR = "#f14c4c"
+    STATUS_DISCONNECTED = "#808080"

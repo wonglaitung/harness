@@ -4,8 +4,8 @@ Sidebar panel with navigation buttons and session list - Athlon-inspired dark th
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QFont, QFontDatabase, QCursor
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QCursor, QIcon
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -21,6 +21,13 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.themes import get_theme
+from harness_client.ui.icons import (
+    create_chat_icon,
+    create_settings_icon,
+    create_add_icon,
+    create_session_icon,
+    create_delete_icon,
+)
 
 
 class SidebarPanel(QWidget):
@@ -53,15 +60,18 @@ class SidebarPanel(QWidget):
                 break
         return font
 
-    def _create_nav_button(self, icon: str, text: str) -> QPushButton:
+    def _create_nav_button(self, icon: QIcon | None, text: str) -> QPushButton:
         """Create a navigation button with icon and text."""
         theme = get_theme()
-        btn = QPushButton(f"{icon}  {text}")
+        btn = QPushButton(f"  {text}") if icon else QPushButton(text)
+        if icon:
+            btn.setIcon(icon)
+            btn.setIconSize(QSize(18, 18))
         btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
-                border-radius: 12px;
+                border-radius: {theme.RADIUS_MD};
                 padding: 10px 16px;
                 color: {theme.TEXT};
                 font-size: 13px;
@@ -90,11 +100,11 @@ class SidebarPanel(QWidget):
         nav_layout.setSpacing(2)
 
         # Chat button
-        self.chat_btn = self._create_nav_button("💬", "对话")
+        self.chat_btn = self._create_nav_button(create_chat_icon(18, QColor(theme.TEXT)), "对话")
         nav_layout.addWidget(self.chat_btn)
 
         # Settings button
-        self.settings_btn = self._create_nav_button("⚙", "设置")
+        self.settings_btn = self._create_nav_button(create_settings_icon(18, QColor(theme.TEXT)), "设置")
         self.settings_btn.clicked.connect(self._on_settings_click)
         nav_layout.addWidget(self.settings_btn)
 
@@ -105,7 +115,7 @@ class SidebarPanel(QWidget):
         nav_layout.addWidget(nav_separator)
 
         # New session button
-        self.new_session_btn = self._create_nav_button("➕", "新建会话")
+        self.new_session_btn = self._create_nav_button(create_add_icon(18, QColor(theme.TEXT)), "新建会话")
         self.new_session_btn.clicked.connect(self._on_new_session)
         nav_layout.addWidget(self.new_session_btn)
 
@@ -173,17 +183,19 @@ class SidebarPanel(QWidget):
             current_session: Current ClientSession object (or None)
             history_sessions: List of historical ClientSession objects
         """
+        theme = get_theme()
         self.session_list.clear()
 
-        # Current session (always first)
+        # Current session (always first) - with active indicator
         if current_session:
-            item = QListWidgetItem(f"🔵 {current_session.name}")
+            item = QListWidgetItem(f"● {current_session.name}")
             item.setData(Qt.ItemDataRole.UserRole, current_session.id)
+            item.setForeground(Qt.GlobalColor.white)  # Make current session stand out
             self.session_list.addItem(item)
 
         # Historical sessions
         for session in history_sessions:
-            item = QListWidgetItem(f"📄 {session.name}")
+            item = QListWidgetItem(f"  {session.name}")
             item.setData(Qt.ItemDataRole.UserRole, session.id)
             self.session_list.addItem(item)
 
@@ -236,7 +248,7 @@ class SidebarPanel(QWidget):
             }}
         """)
 
-        delete_action = QAction("🗑️ 删除会话", self)
+        delete_action = QAction(create_delete_icon(16, QColor(theme.TEXT_SUBTLE)), "删除会话", self)
         delete_action.triggered.connect(lambda: self._on_delete_session(session_id, text))
         menu.addAction(delete_action)
 
@@ -244,7 +256,9 @@ class SidebarPanel(QWidget):
 
     def _on_delete_session(self, session_id: str, session_name: str):
         """Handle delete session request with confirmation."""
-        display_name = session_name.replace("🔵 ", "").replace("📄 ", "")
+        # Clean display name (remove prefix indicators)
+        display_name = session_name.lstrip("● ")
+        display_name = display_name.lstrip()
         if "(" in display_name:
             display_name = display_name.split("(")[0].strip()
 
