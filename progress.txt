@@ -645,3 +645,30 @@ FastMCP SSE session 过期后（POST 返回 404）自动重连 `/sse` 获取新 
 - docs(sdk): Update HTTP Transport documentation for multi-protocol support (4aca079)
 - docs(sdk): Add session auto-reconnect documentation for FastMCP SSE (f86ae81)
 - fix(sdk): Set infinite sock_read timeout for SSE streams (994510f)
+
+#### SSE 长连接超时修复 ✅
+
+**问题**: 客户端使用 SSE MCP 服务器时出现超时断开，而 Claude Code 内部没有此问题。
+
+**根因**: 虽然之前设置了 `sock_read=None` 解决 SSE 读取超时，但 `total=30` 秒的总超时仍会限制整个 SSE 连接时长。SSE 是长连接协议，服务器可能长时间不推送事件，导致连接被错误断开。
+
+**解决方案**: 使用**双 Session 策略**：
+- `_sse_session`: `total=None, sock_read=None` - 无限超时，用于 GET `/sse` 长连接
+- `_session`: `total=timeout` - 可配置超时，用于 POST 请求
+
+**文件更新**:
+- `packages/sdk/src/harness/mcp/transport.py`: 添加 `_sse_session`，分离 SSE 长连接和普通请求的超时配置
+- `packages/sdk/docs/09-mcp-integration.md`: 添加 SSE 长连接超时处理文档
+
+#### FastMCP Session 重连修复 ✅
+
+**问题**: MCP 工具调用返回 404，显示 "FastMCP session expired"，重连后仍然失败。
+
+**根因分析**:
+1. `_reconnect_fkmcp` 方法在重连时没有检查 `_sse_session` 是否存在/有效
+2. 如果 `_sse_session` 被关闭，`_sse_loop()` 会直接 return，永远不会发现新的 endpoint
+
+**修复**:
+1. `_reconnect_fkmcp` 中添加 SSE session 检查和重建逻辑
+2. `_sse_loop` 中添加详细的日志记录，便于诊断 SSE 连接状态
+3. 正确处理 SSE ping 注释行（以 `:` 开头）

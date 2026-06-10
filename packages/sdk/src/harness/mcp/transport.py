@@ -246,6 +246,7 @@ class HTTPTransport(MCPTransport):
         self._forced_protocol = protocol
         self._protocol: Optional[str] = None
         self._session: Optional["aiohttp.ClientSession"] = None
+        self._sse_session: Optional["aiohttp.ClientSession"] = None  # Separate session for SSE streams
         self._sse_task: Optional[asyncio.Task] = None
         self._message_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._connected = False
@@ -266,13 +267,22 @@ class HTTPTransport(MCPTransport):
                 "Install with: pip install aiohttp"
             )
 
+        # Create separate session for SSE streams with unlimited total timeout
+        # SSE is a long-lived connection that shouldn't have a total time limit
+        self._sse_session = aiohttp.ClientSession(
+            headers=self.headers,
+            timeout=aiohttp.ClientTimeout(
+                total=None,      # No total timeout for SSE streams
+                sock_read=None,  # No timeout for SSE reads
+            ),
+        )
+
+        # Regular session for POST requests with configurable timeout
         self._session = aiohttp.ClientSession(
             headers=self.headers,
-            # For SSE streams, we want infinite sock_read timeout
-            # but reasonable total timeout for regular requests
             timeout=aiohttp.ClientTimeout(
                 total=self.timeout,
-                sock_read=None,  # No timeout for SSE reads
+                sock_connect=self.timeout,  # Connection timeout
             ),
         )
 
@@ -415,7 +425,7 @@ class HTTPTransport(MCPTransport):
                 current_event = None
 
     async def disconnect(self) -> None:
-        """Close HTTP session."""
+        """Close HTTP sessions."""
         self._connected = False
 
         if self._sse_task:
@@ -429,6 +439,10 @@ class HTTPTransport(MCPTransport):
         if self._session:
             await self._session.close()
             self._session = None
+
+        if self._sse_session:
+            await self._sse_session.close()
+            self._sse_session = None
 
         # Clear message queue
         while not self._message_queue.empty():
@@ -522,6 +536,21 @@ class HTTPTransport(MCPTransport):
         self._message_endpoint = None
         self._endpoint_ready.clear()
 
+        # Ensure SSE session exists
+        if self._sse_session is None or self._sse_session.closed:
+            try:
+                import aiohttp
+            except ImportError:
+                raise ImportError("aiohttp is required for HTTP transport")
+            self._sse_session = aiohttp.ClientSession(
+                headers=self.headers,
+                timeout=aiohttp.ClientTimeout(
+                    total=None,      # No total timeout for SSE streams
+                    sock_read=None,  # No timeout for SSE reads
+                ),
+            )
+            logger.info("Created new SSE session for reconnection")
+
         # Start new SSE listener
         self._sse_task = asyncio.create_task(self._sse_loop())
 
@@ -577,23 +606,34 @@ class HTTPTransport(MCPTransport):
         - FastMCP: event: endpoint -> discover /messages/?session_id=xxx
         - HTTP+SSE: direct JSON-RPC messages in data: lines
         """
-        if self._session is None:
+        if self._sse_session is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error("SSE session is None, cannot start SSE loop")
             return
 
         import aiohttp
         import logging
         logger = logging.getLogger(__name__)
 
+        logger.info(f"Starting SSE loop, connecting to {self.url}/sse")
+
         try:
-            async with self._session.get(f"{self.url}/sse") as resp:
+            async with self._sse_session.get(f"{self.url}/sse") as resp:
                 if resp.status != 200:
                     logger.error(f"SSE endpoint returned {resp.status}")
                     self._endpoint_ready.set()
                     return
 
+                logger.info(f"SSE connection established, status={resp.status}")
                 current_event = None
                 async for line in resp.content:
                     line = line.decode("utf-8").strip()
+
+                    # Log received SSE lines (including ping comments)
+                    if line.startswith(":"):
+                        logger.debug(f"SSE comment/ping received: {line}")
+                        continue  # Ignore comment lines (ping)
 
                     # Parse SSE format
                     if line.startswith("event:"):
@@ -622,11 +662,12 @@ class HTTPTransport(MCPTransport):
                         current_event = None
 
         except asyncio.CancelledError:
-            pass
+            logger.info("SSE loop cancelled")
         except aiohttp.ClientError as e:
             logger.error(f"SSE connection error: {e}")
             self._connected = False
         finally:
+            logger.info("SSE loop ended")
             self._endpoint_ready.set()
 
     async def _streamable_sse_loop(self) -> None:
@@ -641,7 +682,7 @@ class HTTPTransport(MCPTransport):
         Note: This is optional - server may not support it (returns 405).
         POST responses still work for request/response patterns.
         """
-        if self._session is None:
+        if self._sse_session is None:
             return
 
         import aiohttp
@@ -653,7 +694,7 @@ class HTTPTransport(MCPTransport):
             headers["Mcp-Session-Id"] = self._session_id
 
         try:
-            async with self._session.get(
+            async with self._sse_session.get(
                 f"{self.url}/mcp",
                 headers=headers,
             ) as resp:

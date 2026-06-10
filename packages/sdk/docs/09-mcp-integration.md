@@ -233,6 +233,37 @@ FastMCP SSE session 在约 90 秒不活动后会过期。HTTPTransport 自动处
 
 用户无需手动处理 session 过期问题，SDK 会自动重连。这是 SSE 的正常行为——SSE 协议本身没有内置的 keep-alive 机制（不像 WebSocket 的 ping/pong），服务器端 session 有 TTL 限制。
 
+#### SSE 长连接超时处理
+
+SSE (Server-Sent Events) 是一种长连接协议，服务器可以持续推送事件。HTTPTransport 使用**双 Session 策略**处理超时：
+
+1. **SSE Session**: `total=None, sock_read=None` - 无超时限制，用于 GET `/sse` 长连接
+2. **Request Session**: `total=timeout` - 可配置超时，用于 POST 请求
+
+这种设计确保：
+- SSE 长连接不会因服务器静默而被断开
+- POST 请求仍有合理的超时控制，避免无限等待
+
+#### SSE Ping 处理
+
+FastMCP 服务器会定期发送 ping 消息保持连接活跃：
+
+```
+: ping - 2026-06-10 03:13:17.168728+00:00
+```
+
+这些以 `:` 开头的行是 SSE 注释（comments），HTTPTransport 会正确忽略它们，不影响正常的消息处理。
+
+#### 重连机制增强
+
+当 FastMCP session 过期（POST 返回 404）时，HTTPTransport 会自动重连：
+
+1. 检测 SSE session 是否存在/有效，必要时重建
+2. 重新启动 SSE listener 获取新的 `session_id`
+3. 用新端点重试失败的请求
+
+重连过程中如果 SSE session 已关闭，会自动创建新的 session，确保重连成功。
+
 ## 工具发现与注册
 
 MCP 服务器连接后，自动发现其提供的工具并注册到 ToolExecutor：
