@@ -6,7 +6,7 @@ import base64
 from pathlib import Path
 
 import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -314,9 +314,16 @@ class ChatPanel(QWidget):
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def _scroll_to_bottom(self):
-        """Scroll chat display to bottom."""
+        """Scroll chat display to bottom with smooth animation."""
         scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+
+        # Use smooth scroll animation
+        self._scroll_animation = QPropertyAnimation(scrollbar, "value")
+        self._scroll_animation.setDuration(300)  # 300ms smooth scroll
+        self._scroll_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._scroll_animation.setStartValue(scrollbar.value())
+        self._scroll_animation.setEndValue(scrollbar.maximum())
+        self._scroll_animation.start()
 
     def _append_message(self, role: str, content: str):
         """Append a message to the chat display - Athlon-inspired bubble style."""
@@ -399,15 +406,19 @@ class ChatPanel(QWidget):
         if len(arguments) > 3:
             args_preview += "..."
 
+        # Add a subtle pulse indicator (animated border effect via CSS animation not supported,
+        # so we use a slightly brighter border to indicate "active" state)
         html = f"""
         <div style="margin: 8px 0 4px 40px;">
             <div style="background-color: {theme.TOOL_THINKING_BG};
-                        border: 1px solid {theme.TOOL_THINKING_BORDER};
+                        border: 2px solid {theme.TOOL_THINKING_BORDER};
                         border-radius: 16px;
                         padding: 12px 16px;
-                        max-width: 640px;">
-                <!-- Header row -->
+                        max-width: 640px;
+                        box-shadow: 0 0 8px rgba(109, 40, 217, 0.2);">
+                <!-- Header row with spinner indicator -->
                 <div style="margin-bottom: 8px;">
+                    <span style="color: {theme.TOOL_THINKING_BORDER}; font-size: 12px;">⚡</span>
                     <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
                     <span style="color: {theme.TOOL_THINKING_TEXT}; font-weight: bold; font-size: 13px;">
                         '{self._escape_html(tool_name)}'
@@ -438,23 +449,26 @@ class ChatPanel(QWidget):
             text_color = theme.TOOL_SUCCESS_TEXT
             icon = "✓"
             status_text = "succeeded"
+            glow = f"box-shadow: 0 0 8px rgba(5, 150, 105, 0.3);"
         else:
             bg = theme.TOOL_FAILURE_BG
             border = theme.TOOL_FAILURE_BORDER
             text_color = theme.TOOL_FAILURE_TEXT
             icon = "✗"
             status_text = "failed"
+            glow = f"box-shadow: 0 0 8px rgba(225, 29, 72, 0.3);"
 
         html = f"""
         <div style="margin: 4px 0 8px 40px;">
             <div style="background-color: {bg};
-                        border: 1px solid {border};
+                        border: 2px solid {border};
                         border-radius: 16px;
                         padding: 12px 16px;
-                        max-width: 640px;">
+                        max-width: 640px;
+                        {glow}">
                 <!-- Status header -->
                 <div style="margin-bottom: 6px;">
-                    <span style="color: {text_color}; font-size: 14px;">{icon}</span>
+                    <span style="color: {text_color}; font-size: 14px; font-weight: bold;">{icon}</span>
                     <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
                     <span style="color: {text_color}; font-weight: bold; font-size: 13px;">
                         '{self._escape_html(tool_name)}'

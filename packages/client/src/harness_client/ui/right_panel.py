@@ -4,11 +4,12 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, Qt, pyqtSignal
+from PyQt6.QtCore import QDir, Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFileSystemModel, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QFileIconProvider,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -49,11 +50,16 @@ class CustomFileIconProvider(QFileIconProvider):
 class CollapsibleSection(QWidget):
     """A collapsible section widget with header and content."""
 
+    # Animation duration in milliseconds
+    ANIMATION_DURATION = 200
+
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self._is_collapsed = False
         self._title = title
         self._header_buttons: list[QPushButton] = []
+        self._content_height = 0  # Store original content height
+        self._animation = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -98,8 +104,10 @@ class CollapsibleSection(QWidget):
 
         layout.addWidget(header_widget)
 
-        # Content container
+        # Content container with opacity effect for fade animation
         self.content_widget = QWidget()
+        self._opacity_effect = QGraphicsOpacityEffect(self.content_widget)
+        self.content_widget.setGraphicsEffect(self._opacity_effect)
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(8, 4, 8, 8)
         self.content_layout.setSpacing(4)
@@ -144,15 +152,38 @@ class CollapsibleSection(QWidget):
         return btn
 
     def _toggle_collapsed(self):
-        """Toggle collapsed state."""
+        """Toggle collapsed state with animation."""
+        # Store current content height before collapsing
+        if not self._is_collapsed:
+            self._content_height = self.content_widget.height()
+
         self._is_collapsed = not self._is_collapsed
-        self.content_widget.setVisible(not self._is_collapsed)
+
+        # Update arrow with animation hint
         arrow = "▶" if self._is_collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
-        # Update size policy to prevent collapsed sections from taking space
+
+        # Animate opacity
+        self._opacity_animation = QPropertyAnimation(self._opacity_effect, "opacity")
+        self._opacity_animation.setDuration(self.ANIMATION_DURATION)
+        self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        if self._is_collapsed:
+            # Fade out then hide
+            self._opacity_animation.setStartValue(1.0)
+            self._opacity_animation.setEndValue(0.0)
+            self._opacity_animation.finished.connect(lambda: self.content_widget.setVisible(False))
+        else:
+            # Show then fade in
+            self.content_widget.setVisible(True)
+            self._opacity_animation.setStartValue(0.0)
+            self._opacity_animation.setEndValue(1.0)
+
+        self._opacity_animation.start()
+
+        # Update size policy
         if self._is_collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            # Set maximum height to force layout to shrink
             self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -168,15 +199,39 @@ class CollapsibleSection(QWidget):
         self.content_layout.addWidget(widget, stretch)
 
     def set_collapsed(self, collapsed: bool):
-        """Set collapsed state."""
+        """Set collapsed state with animation."""
+        if self._is_collapsed == collapsed:
+            return
+
+        # Store current content height before collapsing
+        if not collapsed:
+            self._content_height = self.content_widget.height()
+
         self._is_collapsed = collapsed
-        self.content_widget.setVisible(not collapsed)
+
+        # Update arrow
         arrow = "▶" if collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
-        # Update size policy to prevent collapsed sections from taking space
+
+        # Animate opacity
+        self._opacity_animation = QPropertyAnimation(self._opacity_effect, "opacity")
+        self._opacity_animation.setDuration(self.ANIMATION_DURATION)
+        self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        if collapsed:
+            self._opacity_animation.setStartValue(1.0)
+            self._opacity_animation.setEndValue(0.0)
+            self._opacity_animation.finished.connect(lambda: self.content_widget.setVisible(False))
+        else:
+            self.content_widget.setVisible(True)
+            self._opacity_animation.setStartValue(0.0)
+            self._opacity_animation.setEndValue(1.0)
+
+        self._opacity_animation.start()
+
+        # Update size policy
         if collapsed:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            # Set maximum height to force layout to shrink
             self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
