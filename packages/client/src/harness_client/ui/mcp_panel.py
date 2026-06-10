@@ -99,8 +99,9 @@ class TestConnectionThread(QThread):
 class MCPServerDialog(QDialog):
     """Dialog for adding/editing MCP server configuration."""
 
-    def __init__(self, parent=None, server_config: dict = None):
+    def __init__(self, parent=None, server_config: dict = None, tools: list = None):
         super().__init__(parent)
+        self._tools = tools or []
         self.setWindowTitle("添加 MCP 服务器")
         self.setMinimumWidth(450)
         self._setup_ui()
@@ -173,6 +174,30 @@ class MCPServerDialog(QDialog):
         common_layout.addRow(self.enabled_check)
 
         layout.addLayout(common_layout)
+
+        # Tools section (only shown if tools exist)
+        self.tools_group = QGroupBox("已发现工具")
+        tools_layout = QVBoxLayout(self.tools_group)
+
+        if self._tools:
+            for tool in self._tools:
+                # tool is MCPToolWrapper object
+                desc = tool.description or ""
+                desc_preview = desc[:60] + "..." if len(desc) > 60 else desc
+                tool_label = QLabel(f"• {tool.original_name}")
+                tool_label.setStyleSheet("font-weight: bold; color: #4fc1ff;")
+                tools_layout.addWidget(tool_label)
+                if desc_preview:
+                    desc_label = QLabel(f"  {desc_preview}")
+                    desc_label.setStyleSheet("color: #808080; font-size: 11px;")
+                    desc_label.setWordWrap(True)
+                    tools_layout.addWidget(desc_label)
+        else:
+            no_tools_label = QLabel("未连接或无工具")
+            no_tools_label.setStyleSheet("color: #808080;")
+            tools_layout.addWidget(no_tools_label)
+
+        layout.addWidget(self.tools_group)
 
         # Config save location info
         self.save_location_label = QLabel()

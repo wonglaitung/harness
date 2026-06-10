@@ -798,6 +798,9 @@ class MainWindow(QMainWindow):
         if not server_config:
             return
 
+        # Get tools if connected
+        tools = self.mcp_controller.manager.get_server_tools(server_name)
+
         config_dict = {
             "name": server_config.name,
             "transport": server_config.transport,
@@ -808,7 +811,7 @@ class MainWindow(QMainWindow):
             "enabled": server_config.enabled,
         }
 
-        dialog = MCPServerDialog(self, config_dict)
+        dialog = MCPServerDialog(self, config_dict, tools=tools)
         dialog.setWindowTitle("编辑 MCP 服务器")
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_config = dialog.get_config()
