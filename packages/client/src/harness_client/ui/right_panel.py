@@ -4,7 +4,7 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import QDir, Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QByteArray
 from PyQt6.QtGui import QFileSystemModel, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -164,7 +164,7 @@ class CollapsibleSection(QWidget):
         self.header_btn.setText(f"{arrow} {self._title}")
 
         # Animate opacity
-        self._opacity_animation = QPropertyAnimation(self._opacity_effect, "opacity")
+        self._opacity_animation = QPropertyAnimation(self._opacity_effect, QByteArray(b"opacity"))
         self._opacity_animation.setDuration(self.ANIMATION_DURATION)
         self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
@@ -214,7 +214,7 @@ class CollapsibleSection(QWidget):
         self.header_btn.setText(f"{arrow} {self._title}")
 
         # Animate opacity
-        self._opacity_animation = QPropertyAnimation(self._opacity_effect, "opacity")
+        self._opacity_animation = QPropertyAnimation(self._opacity_effect, QByteArray(b"opacity"))
         self._opacity_animation.setDuration(self.ANIMATION_DURATION)
         self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 

@@ -6,7 +6,7 @@ import base64
 from pathlib import Path
 
 import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray
 from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -318,7 +318,7 @@ class ChatPanel(QWidget):
         scrollbar = self.chat_display.verticalScrollBar()
 
         # Use smooth scroll animation
-        self._scroll_animation = QPropertyAnimation(scrollbar, "value")
+        self._scroll_animation = QPropertyAnimation(scrollbar, QByteArray(b"value"))
         self._scroll_animation.setDuration(300)  # 300ms smooth scroll
         self._scroll_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._scroll_animation.setStartValue(scrollbar.value())
