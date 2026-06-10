@@ -556,6 +556,59 @@
 - fix(client): Add BashTool to default tool set (cd94565)
 - fix(skill): Add explicit LLM execution instructions to md-to-word (5dc11aa)
 
+## 2026-06-10
+
+### Chat Panel 重构 - ChatGPT 风格 ✅ 完成
+
+#### 问题背景
+对话框多次修改后出现各种问题：
+- QTextBrowser 不支持 flexbox/grid CSS
+- HTML 结构在多次修改后被破坏
+- 头像位置错误（inline 布局失败）
+- 流式输出破坏 HTML 结构
+
+#### 解决方案：重新设计并完全重写
+
+**设计原则**：
+1. **不使用 flexbox/grid**：只用 `display: block` + 简单 `margin/padding`
+2. **头像单独一行**：不再尝试 inline 布局
+3. **用颜色区分角色**：不依赖复杂边框样式
+4. **Markdown 优先**：内容全用 Markdown 渲染
+
+**具体布局**：
+```
+用户消息：
+┌─────────────────────────────────────┐
+│ [蓝色背景区域]                       │
+│ 用户输入的文本（Markdown 渲染）      │
+└─────────────────────────────────────┘
+
+助手消息：
+┌─────────────────────────────────────┐
+│ [头像]                               │  <- 单独 block
+├─────────────────────────────────────┤
+│ [灰色背景区域]                       │
+│ 助手回复（Markdown 渲染）            │
+└─────────────────────────────────────┘
+
+工具调用：
+┌─────────────────────────────────────┐
+│ ⚡ Tool 'xxx' called/succeeded       │  <- 简单 left-border 卡片
+│ 参数预览 / 结果预览                  │
+└─────────────────────────────────────┘
+```
+
+**颜色优化**：
+- `USER_BUBBLE`: `#2B5B8A` (中等蓝，在深色背景上可读)
+- `ASSISTANT_BUBBLE`: `#2F2F2F` (略浅于背景的灰色)
+- `AVATAR_ASSISTANT_BG`: `#4B5563` (头像灰色)
+
+#### 文件更新
+- `packages/client/src/harness_client/ui/chat_panel.py`: 完全重写
+- `packages/client/src/harness_client/themes/dark.py`: 优化气泡颜色
+
+---
+
 ## 当前状态总结
 
 ### 已实现功能（P0/P1/P2/P3）

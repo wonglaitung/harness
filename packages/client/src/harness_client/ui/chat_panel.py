@@ -1,5 +1,11 @@
 """
-Chat panel for displaying conversation - Athlon-inspired dark theme style.
+Chat panel for displaying conversation - Simplified ChatGPT-style design.
+
+Design principles:
+- No flexbox/grid CSS (QTextBrowser doesn't support it)
+- Avatar on separate line
+- Color-based role distinction
+- Markdown-first content rendering
 """
 
 import base64
@@ -20,7 +26,6 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.ui.interactive import GlowButton
-
 from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
 
@@ -30,16 +35,12 @@ _ASSISTANT_AVATAR_BASE64: str | None = None
 
 
 def get_assistant_avatar_base64() -> str:
-    """Get base64-encoded SVG avatar for assistant.
-
-    Returns base64 data URI string, or empty string if SVG not found.
-    """
+    """Get base64-encoded SVG avatar for assistant."""
     global _ASSISTANT_AVATAR_BASE64
 
     if _ASSISTANT_AVATAR_BASE64 is not None:
         return _ASSISTANT_AVATAR_BASE64
 
-    # Find SVG icon path
     icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
 
     if icon_path.exists():
@@ -59,17 +60,15 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Draw filled triangle
     pen = QPen(Qt.PenStyle.NoPen)
     painter.setPen(pen)
     painter.setBrush(QBrush(color))
 
-    # Triangle points: left center, top-right, bottom-right
     margin = 4
     triangle = [
-        QPointF(margin + 2, size // 2),           # Left center (arrow tip)
-        QPointF(size - margin, margin + 2),        # Top right
-        QPointF(size - margin, size - margin - 2), # Bottom right
+        QPointF(margin + 2, size // 2),
+        QPointF(size - margin, margin + 2),
+        QPointF(size - margin, size - margin - 2),
     ]
     polygon = QPolygonF(triangle)
     painter.drawPolygon(polygon)
@@ -85,7 +84,6 @@ def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Draw filled square
     pen = QPen(Qt.PenStyle.NoPen)
     painter.setPen(pen)
     painter.setBrush(QBrush(color))
@@ -100,13 +98,12 @@ def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
 class ChatPanel(QWidget):
     """Panel for displaying chat messages and input."""
 
-    # Signals
     message_sent = pyqtSignal(str)
-    stop_requested = pyqtSignal()  # New signal for stop button
+    stop_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        self._streaming_text = ""  # Buffer for streaming text
+        self._streaming_text = ""
         self._is_streaming = False
         self._setup_ui()
 
@@ -114,7 +111,6 @@ class ChatPanel(QWidget):
         """Get a suitable font for the system."""
         font = QFont()
         font.setPointSize(10)
-        # Try common fonts in order
         for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
             font.setFamily(family)
             if QFontDatabase.families().count(family) > 0 or family in QFontDatabase.families():
@@ -127,14 +123,13 @@ class ChatPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        # Chat display area - dark theme
+        # Chat display area
         self.chat_display = QTextBrowser()
         self.chat_display.setOpenExternalLinks(True)
         self.chat_display.setFont(self._get_font())
-        # Dark theme handled by global QSS, no inline styles needed
-        self.chat_display.setPlaceholderText("开始对话...")
+        self.chat_display.setPlaceholderText("Start a conversation...")
 
-        # Input bar container with dark background
+        # Input bar container
         input_bar = QWidget()
         input_bar.setStyleSheet(f"""
             QWidget {{
@@ -148,9 +143,9 @@ class ChatPanel(QWidget):
         input_layout.setContentsMargins(8, 6, 8, 6)
         input_layout.setSpacing(8)
 
-        # Input field - dark theme
+        # Input field
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("输入消息... (Enter 发送)")
+        self.input_field.setPlaceholderText("Type a message... (Enter to send)")
         self.input_field.setFont(self._get_font())
         self.input_field.setMinimumHeight(36)
         self.input_field.setStyleSheet(f"""
@@ -182,14 +177,14 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Stop button - icon only, hidden by default, with danger glow
+        # Stop button
         self.stop_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
         self.stop_btn.setIcon(create_stop_icon(20, QColor("white")))
         self.stop_btn.setIconSize(QSize(20, 20))
         self.stop_btn.setMinimumHeight(36)
         self.stop_btn.setMinimumWidth(36)
         self.stop_btn.setMaximumWidth(36)
-        self.stop_btn.setVisible(False)  # Hidden by default
+        self.stop_btn.setVisible(False)
         self.stop_btn.clicked.connect(self._on_stop)
         self.stop_btn.setStyleSheet(f"""
             QPushButton {{
@@ -205,7 +200,7 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Send button - icon only (play arrow) with accent glow
+        # Send button
         self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
         self.send_btn.setIcon(create_play_icon(20, QColor("white")))
         self.send_btn.setIconSize(QSize(20, 20))
@@ -241,13 +236,13 @@ class ChatPanel(QWidget):
         # Welcome message
         self._append_message(
             "assistant",
-            "你好！我是基于 Harness SDK 的 AI 助手。\n\n"
-            "我可以帮助你：\n"
-            "- 读取和分析文件\n"
-            "- 执行命令\n"
-            "- 搜索网络\n"
-            "- 管理项目\n\n"
-            "请配置左侧的 MCP 服务器和技能以解锁更多功能。",
+            "Hello! I'm an AI assistant powered by Harness SDK.\n\n"
+            "I can help you:\n"
+            "- Read and analyze files\n"
+            "- Execute commands\n"
+            "- Search the web\n"
+            "- Manage projects\n\n"
+            "Configure MCP servers and skills in the left panel to unlock more features.",
         )
 
     def _on_send(self):
@@ -256,13 +251,8 @@ class ChatPanel(QWidget):
         if not text:
             return
 
-        # Display user message
         self._append_message("user", text)
-
-        # Clear input
         self.input_field.clear()
-
-        # Emit signal
         self.message_sent.emit(text)
 
     def _on_stop(self):
@@ -270,11 +260,7 @@ class ChatPanel(QWidget):
         self.stop_requested.emit()
 
     def set_streaming_state(self, is_streaming: bool):
-        """Update UI state based on streaming status.
-
-        Args:
-            is_streaming: True if agent is generating response
-        """
+        """Update UI state based on streaming status."""
         self._is_streaming = is_streaming
         self.stop_btn.setVisible(is_streaming)
         self.send_btn.setEnabled(not is_streaming)
@@ -283,24 +269,16 @@ class ChatPanel(QWidget):
     def _on_text_edited(self, text: str):
         """Handle text editing to trigger skill completer."""
         if self.skill_completer.should_complete(text):
-            # Set prefix for filtering (without the '/')
             self.skill_completer.setCompletionPrefix(text)
-            # Show popup manually if needed
             if self.skill_completer.completionCount() > 0:
                 self.skill_completer.complete()
 
     def set_skills(self, skills: list[dict]) -> None:
-        """
-        Update the skill completer with available skills.
-
-        Args:
-            skills: List of dicts with 'name', 'description', 'enabled' keys
-        """
+        """Update the skill completer with available skills."""
         self.skill_completer.update_skills(skills)
 
     def _render_markdown(self, text: str) -> str:
         """Render markdown to HTML."""
-        # Configure markdown extensions
         extensions = [
             "fenced_code",
             "codehilite",
@@ -318,17 +296,22 @@ class ChatPanel(QWidget):
         """Scroll chat display to bottom with smooth animation."""
         scrollbar = self.chat_display.verticalScrollBar()
 
-        # Use smooth scroll animation
         self._scroll_animation = QPropertyAnimation(scrollbar, QByteArray(b"value"))
-        self._scroll_animation.setDuration(300)  # 300ms smooth scroll
+        self._scroll_animation.setDuration(300)
         self._scroll_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._scroll_animation.setStartValue(scrollbar.value())
         self._scroll_animation.setEndValue(scrollbar.maximum())
         self._scroll_animation.start()
 
     def _append_message(self, role: str, content: str):
-        """Append a message to the chat display - Athlon-inspired bubble style."""
-        # 确保角色值有效（防御性编程）
+        """
+        Append a message to the chat display - ChatGPT-style simple layout.
+
+        Layout:
+        - User: Blue background block, no avatar
+        - Assistant: Avatar image + gray background block
+        - Both: Full-width blocks, simple margins
+        """
         if role not in ["user", "assistant"]:
             import logging
             logger = logging.getLogger(__name__)
@@ -337,62 +320,44 @@ class ChatPanel(QWidget):
 
         theme = get_theme()
 
-        # Render markdown for assistant messages
+        # Render markdown for assistant, escape for user
         if role == "assistant":
             rendered_content = self._render_markdown(content)
         else:
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message - right aligned, blue bubble
-            # Use simple div layout for better text selection and responsive width
+            # User message: simple blue block, right-aligned text
             html = f"""
-            <div style="margin: 8px 0; text-align: right;">
-                <div style="display: inline-block;
-                            text-align: left;
-                            max-width: 85%;
-                            background-color: {theme.USER_BUBBLE};
-                            color: #ffffff;
-                            font-size: 14px;
-                            padding: 10px 16px;
-                            border-radius: 16px;
-                            -webkit-user-select: text;
-                            user-select: text;
-                            cursor: text;">
-                    {rendered_content}
-                </div>
-            </div>
-            """
+<div style="margin: 12px 0; text-align: right;">
+    <div style="display: inline-block; text-align: left; max-width: 85%;
+                background-color: {theme.USER_BUBBLE}; color: #ffffff;
+                padding: 12px 16px; border-radius: 16px;
+                -webkit-user-select: text; user-select: text;">
+        {rendered_content}
+    </div>
+</div>
+"""
         else:
-            # Assistant message with avatar and gray bubble, left-aligned
+            # Assistant message: avatar on separate line + content block
             avatar_base64 = get_assistant_avatar_base64()
-            avatar_width = 40
-            avatar_indent = avatar_width + 12  # 52px indent for content
+            avatar_size = 32
 
             if avatar_base64:
-                avatar_html = f'<img src="{avatar_base64}" width="{avatar_width}" height="{avatar_width}" style="border-radius: 20px;">'
+                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 16px; vertical-align: middle;">'
             else:
-                # Fallback to letter avatar
-                avatar_html = f'''<div style="width: {avatar_width}px; height: {avatar_width}px; border-radius: 20px;
-                            background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 18px;
-                            text-align: center; line-height: {avatar_width}px; font-weight: bold;">A</div>'''
+                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 16px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 14px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
 
+            # Simple block layout: avatar line, then content
             html = f"""
-            <div style="margin: 12px 0;">
-                <div style="display: inline-block; vertical-align: top;">
-                    {avatar_html}
-                </div>
-                <div style="display: inline-block; vertical-align: top;
-                            margin-left: 12px; max-width: calc(100% - {avatar_indent}px);">
-                    <div style="background-color: {theme.ASSISTANT_BUBBLE};
-                                border-radius: 16px;
-                                padding: 12px 16px;
-                                color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
-                        {rendered_content}
-                    </div>
-                </div>
-            </div>
-            """
+<div style="margin: 16px 0;">
+    <div style="margin-bottom: 8px;">{avatar_html}</div>
+    <div style="background-color: {theme.ASSISTANT_BUBBLE}; border-radius: 16px;
+                padding: 12px 16px; color: {theme.TEXT}; line-height: 1.6;">
+        {rendered_content}
+    </div>
+</div>
+"""
         self.chat_display.append(html)
         self._scroll_to_bottom()
 
@@ -405,48 +370,44 @@ class ChatPanel(QWidget):
         self._append_message("user", content)
 
     def append_tool_call(self, tool_name: str, arguments: dict):
-        """Append a tool call indicator - Athlon-inspired purple thinking style."""
+        """
+        Append a tool call indicator - simplified card style.
+
+        Simple block with purple left border, no complex layout.
+        """
         theme = get_theme()
 
-        # Format arguments preview (first 3 args)
+        # Format arguments preview
         args_items = list(arguments.items())[:3]
         args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in args_items)
         if len(arguments) > 3:
             args_preview += "..."
 
-        # Indent aligns with avatar + 12px spacing (52px total)
         html = f"""
-        <div style="margin: 8px 0 4px 52px;">
-            <div style="background-color: {theme.TOOL_THINKING_BG};
-                        border: 2px solid {theme.TOOL_THINKING_BORDER};
-                        border-radius: 16px;
-                        padding: 12px 16px;
-                        max-width: calc(100% - 52px);
-                        box-shadow: 0 0 8px rgba(109, 40, 217, 0.2);">
-                <!-- Header row with spinner indicator -->
-                <div style="margin-bottom: 8px;">
-                    <span style="color: {theme.TOOL_THINKING_BORDER}; font-size: 12px;">⚡</span>
-                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
-                    <span style="color: {theme.TOOL_THINKING_TEXT}; font-weight: bold; font-size: 13px;">
-                        '{self._escape_html(tool_name)}'
-                    </span>
-                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">called</span>
-                </div>
-                <!-- Arguments preview -->
-                <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 11px;
-                            font-style: italic;
-                            padding: 6px 8px; background: rgba(0,0,0,0.2);
-                            border-radius: 6px;">
-                    {self._escape_html(args_preview) if args_preview else 'no arguments'}
-                </div>
-            </div>
-        </div>
-        """
+<div style="margin: 12px 0; padding: 10px 14px;
+            background-color: {theme.TOOL_THINKING_BG};
+            border-left: 3px solid {theme.TOOL_THINKING_BORDER};
+            border-radius: 8px;">
+    <div style="color: {theme.TEXT_SUBTLE}; font-size: 12px; margin-bottom: 4px;">
+        <span style="color: {theme.TOOL_THINKING_BORDER};">⚡</span>
+        Tool <b style="color: {theme.TOOL_THINKING_TEXT};">{self._escape_html(tool_name)}</b> called
+    </div>
+    <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 11px;
+                font-style: italic; padding: 6px 8px;
+                background: rgba(0,0,0,0.2); border-radius: 4px;">
+        {self._escape_html(args_preview) if args_preview else 'no arguments'}
+    </div>
+</div>
+"""
         self.chat_display.append(html)
         self._scroll_to_bottom()
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
-        """Append a tool result indicator - Athlon-inspired success/failure cards."""
+        """
+        Append a tool result indicator - simplified card style.
+
+        Simple block with green/red left border.
+        """
         theme = get_theme()
         preview = result[:80] + "..." if len(result) > 80 else result
 
@@ -456,63 +417,50 @@ class ChatPanel(QWidget):
             text_color = theme.TOOL_SUCCESS_TEXT
             icon = "✓"
             status_text = "succeeded"
-            glow = f"box-shadow: 0 0 8px rgba(5, 150, 105, 0.3);"
         else:
             bg = theme.TOOL_FAILURE_BG
             border = theme.TOOL_FAILURE_BORDER
             text_color = theme.TOOL_FAILURE_TEXT
             icon = "✗"
             status_text = "failed"
-            glow = f"box-shadow: 0 0 8px rgba(225, 29, 72, 0.3);"
 
-        # Indent aligns with avatar + 12px spacing (52px total)
         html = f"""
-        <div style="margin: 4px 0 8px 52px;">
-            <div style="background-color: {bg};
-                        border: 2px solid {border};
-                        border-radius: 16px;
-                        padding: 12px 16px;
-                        max-width: calc(100% - 52px);
-                        {glow}">
-                <!-- Status header -->
-                <div style="margin-bottom: 6px;">
-                    <span style="color: {text_color}; font-size: 14px; font-weight: bold;">{icon}</span>
-                    <span style="color: {theme.TEXT_SUBTLE}; font-size: 12px;">Tool</span>
-                    <span style="color: {text_color}; font-weight: bold; font-size: 13px;">
-                        '{self._escape_html(tool_name)}'
-                    </span>
-                    <span style="color: {text_color}; font-size: 12px; font-weight: bold;">
-                        {status_text}
-                    </span>
-                </div>
-                <!-- Result preview -->
-                <div style="color: {theme.TEXT_SUBTLE}; font-size: 11px;
-                            padding: 6px 8px; background: rgba(0,0,0,0.2);
-                            border-radius: 6px; font-family: monospace;
-                            max-height: 80px; overflow: hidden;">
-                    {self._escape_html(preview)}
-                </div>
-            </div>
-        </div>
-        """
+<div style="margin: 8px 0; padding: 10px 14px;
+            background-color: {bg};
+            border-left: 3px solid {border};
+            border-radius: 8px;">
+    <div style="color: {theme.TEXT_SUBTLE}; font-size: 12px; margin-bottom: 4px;">
+        <span style="color: {text_color}; font-weight: bold;">{icon}</span>
+        Tool <b style="color: {text_color};">{self._escape_html(tool_name)}</b> {status_text}
+    </div>
+    <div style="color: {theme.TEXT_SUBTLE}; font-size: 11px;
+                padding: 6px 8px; background: rgba(0,0,0,0.2);
+                border-radius: 4px; font-family: monospace;
+                max-height: 80px; overflow: hidden;">
+        {self._escape_html(preview)}
+    </div>
+</div>
+"""
         self.chat_display.append(html)
         self._scroll_to_bottom()
 
     def append_thinking(self, message: str):
-        """Append a thinking/progress indicator - Athlon-inspired subtle style."""
-        theme = get_theme()
-        # Indent aligns with avatar + 12px spacing (52px total)
-        html = f"""
-        <div style="margin: 4px 0 4px 52px;">
-            <div style="background-color: {theme.CHROME};
-                        color: {theme.TEXT_SUBTLE};
-                        padding: 8px 12px; border-radius: 8px; font-size: 12px;
-                        border-left: 2px solid {theme.TOOL_THINKING_BORDER};
-                        max-width: calc(100% - 52px);">
-                💭 {self._escape_html(message)}
-            </div>
-        </div>
         """
+        Append a thinking/progress indicator - simplified style.
+
+        Simple gray block with subtle indicator.
+        """
+        theme = get_theme()
+
+        html = f"""
+<div style="margin: 8px 0; padding: 8px 14px;
+            background-color: {theme.CHROME};
+            border-left: 2px solid {theme.TOOL_THINKING_BORDER};
+            border-radius: 8px;
+            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
+    💭 {self._escape_html(message)}
+</div>
+"""
         self.chat_display.append(html)
         self._scroll_to_bottom()
 
@@ -521,21 +469,15 @@ class ChatPanel(QWidget):
         self.chat_display.clear()
 
     def set_token_usage(self, usage: dict, limit: int = 200000):
-        """Update the token usage indicator in the input bar.
-
-        Args:
-            usage: dict with 'input' and 'output' token counts
-            limit: maximum context window size (default 200k)
-        """
+        """Update the token usage indicator in the input bar."""
         input_t = usage.get("input", 0)
         output_t = usage.get("output", 0)
         total = input_t + output_t
         remaining = limit - total
 
         def fmt(n: int) -> str:
-            """Format token count as human readable."""
             if n >= 1000:
                 return f"{n / 1000:.1f}k"
             return str(n)
 
-        self.token_label.setText(f"{fmt(total)} / {fmt(limit)} · 剩余 {fmt(remaining)}")
+        self.token_label.setText(f"{fmt(total)} / {fmt(limit)} · {fmt(remaining)} left")

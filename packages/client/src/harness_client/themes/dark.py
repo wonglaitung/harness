@@ -40,13 +40,15 @@ class DarkTheme:
     DANGER_HOVER = "#BE123C"
     WARNING = "#FBBF24"
 
-    # Message bubble colors
-    USER_BUBBLE = "#1E3A5F"
-    USER_BUBBLE_OPACITY = 0.86
-    ASSISTANT_BUBBLE = "#262628"
+    # Message bubble colors - ChatGPT style
+    # User: deep blue that's readable on dark background
+    USER_BUBBLE = "#2B5B8A"  # Medium blue, readable
+    USER_BUBBLE_OPACITY = 1.0
+    # Assistant: subtle gray, no border
+    ASSISTANT_BUBBLE = "#2F2F2F"  # Slightly lighter than background
 
     # Avatar colors
-    AVATAR_ASSISTANT_BG = "#3B3B3B"  # Soft gray for assistant avatar
+    AVATAR_ASSISTANT_BG = "#4B5563"  # Gray for assistant avatar
 
     # Navigation active state
     NAV_ACTIVE_BG = "#1E3A5F"
