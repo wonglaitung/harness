@@ -4,6 +4,60 @@
 
 ---
 
+## 2026-06-10: SSE 长连接超时导致 MCP session 过期
+
+### 问题
+
+客户端使用 FastMCP SSE MCP 服务器时，每次调用工具都返回 404 "session expired"，即使重连后仍然失败。服务器每 15 秒发送 ping，但客户端仍出现超时。
+
+### 原因
+
+1. **对 aiohttp 超时参数理解不准确**：
+   - `sock_read=None` 只控制**单次读取**超时
+   - `total=30秒` 控制**整个请求**的总时间（累积计时）
+   - 即使每次读取都成功（收到 ping），`total` 仍会触发超时
+
+2. **单一 session 管理不合理**：
+   - SSE 长连接和普通 POST 请求共用同一个 session
+   - SSE 需要无限超时，POST 需要有限超时，两者冲突
+
+3. **重连逻辑不完整**：
+   - `_reconnect_fkmcp` 没有检查 SSE session 是否已关闭
+   - 如果 session 已关闭，新的 SSE loop 会直接返回
+
+### 解决
+
+使用**双 Session 策略**：
+
+```python
+# SSE 长连接 session：无限超时
+self._sse_session = aiohttp.ClientSession(
+    timeout=aiohttp.ClientTimeout(total=None, sock_read=None),
+)
+
+# 普通 POST request session：可配置超时
+self._session = aiohttp.ClientSession(
+    timeout=aiohttp.ClientTimeout(total=self.timeout, sock_connect=self.timeout),
+)
+```
+
+并在重连时检查并重建 SSE session。
+
+### 教训
+
+1. **查阅官方文档**：修改网络超时代码时，必须查阅官方文档理解各参数的精确含义，不能凭经验假设
+2. **区分连接类型**：短连接（REST API）和长连接（SSE、WebSocket）需要不同的超时策略
+3. **添加长时间测试**：对于长连接场景，测试必须运行超过默认超时时间
+4. **添加集成测试**：单元测试无法覆盖真实服务器行为，需要添加集成测试连接真实 MCP 服务器
+5. **修复后检查相关场景**：修复一个问题后，立即检查相关场景是否也有类似问题
+
+### 参考
+
+- aiohttp 超时文档：https://docs.aiohttp.org/en/stable/client_quickstart.html#timeouts
+- SSE 规范：https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events
+
+---
+
 ## 2026-05-31: QThread + qasync 不兼容导致程序崩溃
 
 ### 问题
