@@ -607,16 +607,11 @@ class HTTPTransport(MCPTransport):
         - HTTP+SSE: direct JSON-RPC messages in data: lines
         """
         if self._sse_session is None:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error("SSE session is None, cannot start SSE loop")
             return
 
         import aiohttp
         import logging
         logger = logging.getLogger(__name__)
-
-        logger.info(f"Starting SSE loop, connecting to {self.url}/sse")
 
         try:
             async with self._sse_session.get(f"{self.url}/sse") as resp:
@@ -625,15 +620,13 @@ class HTTPTransport(MCPTransport):
                     self._endpoint_ready.set()
                     return
 
-                logger.info(f"SSE connection established, status={resp.status}")
                 current_event = None
                 async for line in resp.content:
                     line = line.decode("utf-8").strip()
 
-                    # Log received SSE lines (including ping comments)
+                    # Skip SSE comment lines (ping)
                     if line.startswith(":"):
-                        logger.debug(f"SSE comment/ping received: {line}")
-                        continue  # Ignore comment lines (ping)
+                        continue
 
                     # Parse SSE format
                     if line.startswith("event:"):
@@ -662,12 +655,11 @@ class HTTPTransport(MCPTransport):
                         current_event = None
 
         except asyncio.CancelledError:
-            logger.info("SSE loop cancelled")
+            pass
         except aiohttp.ClientError as e:
             logger.error(f"SSE connection error: {e}")
             self._connected = False
         finally:
-            logger.info("SSE loop ended")
             self._endpoint_ready.set()
 
     async def _streamable_sse_loop(self) -> None:
