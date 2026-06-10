@@ -3,6 +3,7 @@ Chat panel for displaying conversation - Athlon-inspired dark theme style.
 """
 
 import base64
+import logging
 from pathlib import Path
 
 import markdown
@@ -327,6 +328,13 @@ class ChatPanel(QWidget):
 
     def _append_message(self, role: str, content: str):
         """Append a message to the chat display - Athlon-inspired bubble style."""
+        # 确保角色值有效（防御性编程）
+        if role not in ["user", "assistant"]:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Invalid role '{role}', defaulting to 'assistant'")
+            role = "assistant"
+
         theme = get_theme()
 
         # Render markdown for assistant messages

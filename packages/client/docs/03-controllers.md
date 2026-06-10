@@ -506,7 +506,17 @@ if self._on_tool_call:
     self._on_tool_call(tool_name, arguments)
 ```
 
-### 3. 信号机制
+### 3. UI 过渡效果
+
+客户端 UI 侧会对展示层做轻量动画增强，但不把动画逻辑下沉到控制器：
+
+- ChatPanel 负责流式消息追加后的平滑滚动
+- Tool call / result 的状态样式仍由 UI 渲染层控制
+- RightPanel 的折叠/展开过渡也保留在 UI 层
+
+控制器继续只负责数据与回调，不承担渲染细节。
+
+### 4. 信号机制
 
 使用 PyQt 信号进行组件间通信：
 

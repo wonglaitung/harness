@@ -108,7 +108,8 @@ Client = PyQt6 UI + Harness SDK + Controllers
 | **MainWindow** | `ui/main_window.py` | 主窗口，协调所有组件 |
 | **SidebarPanel** | `ui/sidebar.py` | 左侧导航栏，会话列表 |
 | **ChatPanel** | `ui/chat_panel.py` | 中央对话面板 |
-| **RightPanel** | `ui/right_panel.py` | 右侧面板（记忆/技能/MCP/文件树） |
+| **RightPanel** | `ui/right_panel.py` | 右侧面板（记忆/技能/MCP/文件树，可折叠并支持淡入淡出过渡） |
+
 | **SettingsDialog** | `ui/settings_dialog.py` | 设置对话框 |
 | **ChatController** | `controllers/chat_controller.py` | 管理 AgentHarness 和对话 |
 | **SessionManager** | `controllers/session_manager.py` | 会话状态管理（单一数据源） |

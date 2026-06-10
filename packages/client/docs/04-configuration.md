@@ -67,6 +67,7 @@
 | `system_prompt` | string | `""` | 系统提示 |
 | `stream_enabled` | bool | `true` | 是否启用流式输出 |
 
+
 ### 使用第三方 API
 
 ```json
