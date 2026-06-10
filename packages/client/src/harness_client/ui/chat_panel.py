@@ -1,11 +1,11 @@
 """
-Chat panel for displaying conversation - Simplified ChatGPT-style design.
+Chat panel for displaying conversation - Clean, minimal design.
 
 Design principles:
 - No flexbox/grid CSS (QTextBrowser doesn't support it)
-- Avatar on separate line
-- Color-based role distinction
-- Markdown-first content rendering
+- Visual hierarchy: messages prominent, tool activity secondary
+- Icon glyphs instead of emoji for consistent rendering
+- Chinese UI text matching the app locale
 """
 
 import base64
@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray
 from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -121,39 +121,46 @@ class ChatPanel(QWidget):
         """Setup UI components with dark theme."""
         theme = get_theme()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # Chat display area
         self.chat_display = QTextBrowser()
         self.chat_display.setOpenExternalLinks(True)
         self.chat_display.setFont(self._get_font())
-        self.chat_display.setPlaceholderText("Start a conversation...")
+        self.chat_display.setPlaceholderText("输入消息开始对话...")
+        self.chat_display.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: {theme.PANEL};
+                border: none;
+                color: {theme.TEXT};
+                padding: 16px 20px;
+            }}
+        """)
 
-        # Input bar container
+        # --- Input bar ---
         input_bar = QWidget()
         input_bar.setStyleSheet(f"""
             QWidget {{
-                background-color: {theme.PANEL_ALT};
+                background-color: {theme.PANEL};
                 border-top: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_LG};
-                padding: 8px;
             }}
         """)
         input_layout = QHBoxLayout(input_bar)
-        input_layout.setContentsMargins(8, 6, 8, 6)
-        input_layout.setSpacing(8)
+        input_layout.setContentsMargins(16, 12, 16, 12)
+        input_layout.setSpacing(10)
 
         # Input field
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Type a message... (Enter to send)")
+        self.input_field.setPlaceholderText("输入消息…  (Enter 发送)")
         self.input_field.setFont(self._get_font())
-        self.input_field.setMinimumHeight(36)
+        self.input_field.setMinimumHeight(40)
         self.input_field.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {theme.CHROME};
+                background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_MD};
-                padding: 8px 12px;
+                border-radius: 20px;
+                padding: 0 16px;
                 color: {theme.TEXT};
             }}
             QLineEdit:focus {{
@@ -173,24 +180,25 @@ class ChatPanel(QWidget):
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: 11px;
-                padding: 0 4px;
+                padding: 0px;
             }}
         """)
 
         # Stop button
         self.stop_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
-        self.stop_btn.setIcon(create_stop_icon(20, QColor("white")))
-        self.stop_btn.setIconSize(QSize(20, 20))
-        self.stop_btn.setMinimumHeight(36)
-        self.stop_btn.setMinimumWidth(36)
-        self.stop_btn.setMaximumWidth(36)
+        self.stop_btn.setIcon(create_stop_icon(18, QColor("white")))
+        self.stop_btn.setIconSize(QSize(18, 18))
+        self.stop_btn.setMinimumHeight(38)
+        self.stop_btn.setMinimumWidth(38)
+        self.stop_btn.setMaximumWidth(38)
         self.stop_btn.setVisible(False)
+        self.stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.stop_btn.clicked.connect(self._on_stop)
         self.stop_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.DANGER};
                 border: none;
-                border-radius: {theme.RADIUS_MD};
+                border-radius: 19px;
             }}
             QPushButton:hover {{
                 background-color: {theme.DANGER_HOVER};
@@ -198,21 +206,25 @@ class ChatPanel(QWidget):
             QPushButton:pressed {{
                 background-color: #a02015;
             }}
+            QPushButton:disabled {{
+                background-color: {theme.CHROME};
+            }}
         """)
 
         # Send button
         self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
-        self.send_btn.setIcon(create_play_icon(20, QColor("white")))
-        self.send_btn.setIconSize(QSize(20, 20))
-        self.send_btn.setMinimumHeight(36)
-        self.send_btn.setMinimumWidth(36)
-        self.send_btn.setMaximumWidth(36)
+        self.send_btn.setIcon(create_play_icon(18, QColor("white")))
+        self.send_btn.setIconSize(QSize(18, 18))
+        self.send_btn.setMinimumHeight(38)
+        self.send_btn.setMinimumWidth(38)
+        self.send_btn.setMaximumWidth(38)
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.clicked.connect(self._on_send)
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.ACCENT};
                 border: none;
-                border-radius: {theme.RADIUS_MD};
+                border-radius: 19px;
             }}
             QPushButton:hover {{
                 background-color: {theme.ACCENT_HOVER};
@@ -233,16 +245,10 @@ class ChatPanel(QWidget):
         layout.addWidget(self.chat_display, stretch=1)
         layout.addWidget(input_bar)
 
-        # Welcome message
+        # Welcome message (Chinese)
         self._append_message(
             "assistant",
-            "Hello! I'm an AI assistant powered by Harness SDK.\n\n"
-            "I can help you:\n"
-            "- Read and analyze files\n"
-            "- Execute commands\n"
-            "- Search the web\n"
-            "- Manage projects\n\n"
-            "Configure MCP servers and skills in the left panel to unlock more features.",
+            "你好！我是你的 AI 助手，很高兴为你服务。有什么我可以帮助你的吗？",
         )
 
     def _on_send(self):
@@ -305,12 +311,11 @@ class ChatPanel(QWidget):
 
     def _append_message(self, role: str, content: str):
         """
-        Append a message to the chat display - ChatGPT-style simple layout.
+        Append a message to the chat display - clean, minimal layout.
 
         Layout:
-        - User: Blue background block, no avatar
-        - Assistant: Avatar image + gray background block
-        - Both: Full-width blocks, simple margins
+        - User: blue background block, right-aligned text, no avatar
+        - Assistant: avatar + content block, left-aligned
         """
         if role not in ["user", "assistant"]:
             import logging
@@ -327,35 +332,42 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message: simple blue block, right-aligned text
+            # User message: blue block, right-aligned, no avatar
             html = f"""
-<div style="margin: 12px 0; text-align: right;">
-    <div style="display: inline-block; text-align: left; max-width: 85%;
+<div style="margin: 12px 20px;">
+    <div style="display: inline-block; text-align: left; max-width: 80%;
                 background-color: {theme.USER_BUBBLE}; color: #ffffff;
-                padding: 12px 16px; border-radius: 16px;
-                -webkit-user-select: text; user-select: text;">
+                padding: 10px 16px; border-radius: 16px;
+                -webkit-user-select: text; user-select: text;
+                font-size: 14px; line-height: 1.6;">
         {rendered_content}
     </div>
 </div>
 """
         else:
-            # Assistant message: avatar on separate line + content block
+            # Assistant message: avatar + content block
             avatar_base64 = get_assistant_avatar_base64()
-            avatar_size = 32
+            avatar_size = 30
 
             if avatar_base64:
-                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 16px; vertical-align: middle;">'
+                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 8px; vertical-align: top;">'
             else:
-                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 16px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 14px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
+                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 8px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 13px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
 
-            # Simple block layout: avatar line, then content
             html = f"""
-<div style="margin: 16px 0;">
-    <div style="margin-bottom: 8px;">{avatar_html}</div>
-    <div style="background-color: {theme.ASSISTANT_BUBBLE}; border-radius: 16px;
-                padding: 12px 16px; color: {theme.TEXT}; line-height: 1.6;">
-        {rendered_content}
-    </div>
+<div style="margin: 16px 20px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="{avatar_size + 8}" valign="top">{avatar_html}</td>
+            <td valign="top">
+                <div style="background-color: {theme.ASSISTANT_BUBBLE}; border-radius: 16px;
+                            padding: 10px 16px; color: {theme.TEXT}; line-height: 1.6;
+                            font-size: 14px;">
+                    {rendered_content}
+                </div>
+            </td>
+        </tr>
+    </table>
 </div>
 """
         self.chat_display.append(html)
@@ -371,9 +383,10 @@ class ChatPanel(QWidget):
 
     def append_tool_call(self, tool_name: str, arguments: dict):
         """
-        Append a tool call indicator - simplified card style.
+        Append a tool call indicator - subtle thin style.
 
-        Simple block with purple left border, no complex layout.
+        Small, no background, thin left border to avoid competing with messages.
+        Uses colored dot instead of emoji.
         """
         theme = get_theme()
 
@@ -384,17 +397,16 @@ class ChatPanel(QWidget):
             args_preview += "..."
 
         html = f"""
-<div style="margin: 12px 0; padding: 10px 14px;
+<div style="margin: 6px 20px; padding: 6px 12px;
             background-color: {theme.TOOL_THINKING_BG};
-            border-left: 3px solid {theme.TOOL_THINKING_BORDER};
-            border-radius: 8px;">
-    <div style="color: {theme.TEXT_SUBTLE}; font-size: 12px; margin-bottom: 4px;">
-        <span style="color: {theme.TOOL_THINKING_BORDER};">⚡</span>
-        Tool <b style="color: {theme.TOOL_THINKING_TEXT};">{self._escape_html(tool_name)}</b> called
-    </div>
-    <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 11px;
-                font-style: italic; padding: 6px 8px;
-                background: rgba(0,0,0,0.2); border-radius: 4px;">
+            border-left: 2px solid {theme.TOOL_THINKING_BORDER};
+            border-radius: 4px;
+            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
+    <span style="color: {theme.TOOL_THINKING_BORDER};">&#9670; </span>
+    <b style="color: {theme.TOOL_THINKING_TEXT}; font-size: 11px;">{self._escape_html(tool_name)}</b>
+    <span style="color: {theme.TEXT_SUBTLE};"> called</span>
+    <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 10px;
+                font-style: italic; padding-top: 2px;">
         {self._escape_html(args_preview) if args_preview else 'no arguments'}
     </div>
 </div>
@@ -404,39 +416,36 @@ class ChatPanel(QWidget):
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
         """
-        Append a tool result indicator - simplified card style.
+        Append a tool result indicator - subtle thin style.
 
-        Simple block with green/red left border.
+        Uses a colored dot glyph instead of emoji. Thin block to avoid
+        competing with actual messages.
         """
         theme = get_theme()
         preview = result[:80] + "..." if len(result) > 80 else result
 
         if success:
-            bg = theme.TOOL_SUCCESS_BG
             border = theme.TOOL_SUCCESS_BORDER
-            text_color = theme.TOOL_SUCCESS_TEXT
-            icon = "✓"
+            icon = "&#10004;"  # ✓
             status_text = "succeeded"
         else:
-            bg = theme.TOOL_FAILURE_BG
             border = theme.TOOL_FAILURE_BORDER
-            text_color = theme.TOOL_FAILURE_TEXT
-            icon = "✗"
+            icon = "&#10008;"  # ✗
             status_text = "failed"
 
         html = f"""
-<div style="margin: 8px 0; padding: 10px 14px;
-            background-color: {bg};
-            border-left: 3px solid {border};
-            border-radius: 8px;">
-    <div style="color: {theme.TEXT_SUBTLE}; font-size: 12px; margin-bottom: 4px;">
-        <span style="color: {text_color}; font-weight: bold;">{icon}</span>
-        Tool <b style="color: {text_color};">{self._escape_html(tool_name)}</b> {status_text}
-    </div>
-    <div style="color: {theme.TEXT_SUBTLE}; font-size: 11px;
-                padding: 6px 8px; background: rgba(0,0,0,0.2);
-                border-radius: 4px; font-family: monospace;
-                max-height: 80px; overflow: hidden;">
+<div style="margin: 6px 20px; padding: 6px 12px;
+            background-color: {'transparent' if success else theme.TOOL_FAILURE_BG};
+            border-left: 2px solid {border};
+            border-radius: 4px;
+            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
+    <span style="color: {border};">{icon}</span>
+    <b style="color: {border}; font-size: 11px;">{self._escape_html(tool_name)}</b>
+    <span style="color: {theme.TEXT_SUBTLE};"> {status_text}</span>
+    <div style="color: {theme.TEXT_SUBTLE}; font-size: 10px;
+                padding-top: 2px;
+                font-family: monospace;
+                max-height: 60px; overflow: hidden;">
         {self._escape_html(preview)}
     </div>
 </div>
@@ -446,19 +455,17 @@ class ChatPanel(QWidget):
 
     def append_thinking(self, message: str):
         """
-        Append a thinking/progress indicator - simplified style.
+        Append a thinking/progress indicator - minimal thin style.
 
-        Simple gray block with subtle indicator.
+        Thin, no background, uses a dot glyph instead of emoji.
         """
         theme = get_theme()
 
         html = f"""
-<div style="margin: 8px 0; padding: 8px 14px;
-            background-color: {theme.CHROME};
-            border-left: 2px solid {theme.TOOL_THINKING_BORDER};
-            border-radius: 8px;
-            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
-    💭 {self._escape_html(message)}
+<div style="margin: 6px 20px; padding: 6px 12px;
+            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
+    <span style="color: {theme.TOOL_THINKING_BORDER};">&#8226;</span>
+    {self._escape_html(message)}
 </div>
 """
         self.chat_display.append(html)
@@ -473,11 +480,11 @@ class ChatPanel(QWidget):
         input_t = usage.get("input", 0)
         output_t = usage.get("output", 0)
         total = input_t + output_t
-        remaining = limit - total
 
         def fmt(n: int) -> str:
             if n >= 1000:
                 return f"{n / 1000:.1f}k"
             return str(n)
 
-        self.token_label.setText(f"{fmt(total)} / {fmt(limit)} · {fmt(remaining)} left")
+        # Clean format: "4.3k / 200k"
+        self.token_label.setText(f"{fmt(total)} / {fmt(limit)}")
