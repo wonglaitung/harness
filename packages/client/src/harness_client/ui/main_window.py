@@ -96,7 +96,7 @@ class MainWindow(QMainWindow):
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
-        self.right_panel.server_double_clicked.connect(self._on_toggle_mcp_server)
+        self.right_panel.server_double_clicked.connect(self._on_edit_mcp_server)
         self.right_panel.add_skill_requested.connect(self._on_add_skill)
         self.right_panel.skill_double_clicked.connect(self._on_edit_skill)
         self.right_panel.memory_add_requested.connect(self._on_memory_add)
@@ -731,6 +731,17 @@ class MainWindow(QMainWindow):
                 logger.info(f"Auto-connecting to MCP server: {name}")
                 asyncio.ensure_future(self._connect_mcp_server(name))
 
+    def _refresh_mcp_list(self):
+        """Refresh the MCP server list in right panel."""
+        servers = []
+        for info in self.mcp_controller.get_server_list():
+            servers.append({
+                "name": info.name,
+                "status": info.status,
+                "tools_count": info.tools_count,
+            })
+        self.right_panel.update_servers(servers)
+
     def _on_skills_changed(self):
         """Handle skill list change."""
         skills = []
@@ -773,6 +784,38 @@ class MainWindow(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 if dialog.save_to_file(skill_path):
                     self.skill_controller.load_from_file(skill_path)
+
+    def _on_edit_mcp_server(self, server_name: str):
+        """Handle double-click on MCP server item to edit."""
+        from harness_client.ui.mcp_panel import MCPServerDialog
+
+        server_info = self.mcp_controller.servers.get(server_name)
+        if not server_info:
+            return
+
+        # Get current config from manager
+        server_config = self.mcp_controller.manager.get_server_config(server_name)
+        if not server_config:
+            return
+
+        config_dict = {
+            "name": server_config.name,
+            "transport": server_config.transport,
+            "command": server_config.command,
+            "args": server_config.args,
+            "url": server_config.url,
+            "timeout": server_config.timeout,
+            "enabled": server_config.enabled,
+        }
+
+        dialog = MCPServerDialog(self, config_dict)
+        dialog.setWindowTitle("编辑 MCP 服务器")
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_config = dialog.get_config()
+            # Update configuration
+            self.mcp_controller.update_server_config(server_name, new_config)
+            self._save_mcp_config()
+            self._refresh_mcp_list()
 
     # === Memory Management ===
 

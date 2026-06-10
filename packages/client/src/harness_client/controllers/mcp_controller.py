@@ -138,6 +138,53 @@ class MCPController:
             self._on_change()
         return True
 
+    def update_server_config(self, old_name: str, new_config: dict) -> bool:
+        """
+        Update an MCP server configuration.
+
+        Args:
+            old_name: Current server name
+            new_config: New configuration dict
+
+        Returns:
+            True if updated successfully
+        """
+        if old_name not in self.servers:
+            return False
+
+        # Remove old config from manager
+        # Note: manager doesn't have remove method, so we'll just add the new one
+        # and update our tracking
+
+        # Create new config
+        from harness import MCPServerConfig
+        config = MCPServerConfig(
+            name=new_config.get("name", old_name),
+            transport=new_config.get("transport", "stdio"),
+            command=new_config.get("command"),
+            args=new_config.get("args", []),
+            url=new_config.get("url"),
+            timeout=new_config.get("timeout", 30),
+        )
+
+        # If name changed, remove old entry
+        if old_name != config.name:
+            del self.servers[old_name]
+
+        # Add/update in manager
+        self.manager.add_server(config)
+
+        # Update local tracking
+        self.servers[config.name] = MCPServerInfo(
+            name=config.name,
+            transport=config.transport,
+            status="未连接",
+        )
+
+        if self._on_change:
+            self._on_change()
+        return True
+
     def get_all_tools(self) -> list:
         """
         Get all tools from connected servers.
