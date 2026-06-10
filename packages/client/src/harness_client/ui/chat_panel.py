@@ -345,55 +345,53 @@ class ChatPanel(QWidget):
 
         if role == "user":
             # User message - right aligned, blue bubble
-            # Use div (block element) for proper text selection in QTextBrowser
+            # Use simple div layout for better text selection and responsive width
             html = f"""
-            <table width="100%" style="margin: 8px 0; border: none; border-spacing: 0;">
-                <tr>
-                    <td width="25%"></td>
-                    <td width="75%" valign="top" align="right" style="padding: 0;">
-                        <div style="background-color: {theme.USER_BUBBLE};
-                                    color: #ffffff;
-                                    font-size: 14px; padding: 10px 16px;
-                                    border-radius: 16px;
-                                    max-width: 600px;
-                                    text-align: left;
-                                    -webkit-user-select: text;
-                                    user-select: text;  /* Enable text selection */
-                                    cursor: text;">
-                            {rendered_content}
-                        </div>
-                    </td>
-                </tr>
-            </table>
+            <div style="margin: 8px 0; text-align: right;">
+                <div style="display: inline-block;
+                            text-align: left;
+                            max-width: 85%;
+                            background-color: {theme.USER_BUBBLE};
+                            color: #ffffff;
+                            font-size: 14px;
+                            padding: 10px 16px;
+                            border-radius: 16px;
+                            -webkit-user-select: text;
+                            user-select: text;
+                            cursor: text;">
+                    {rendered_content}
+                </div>
+            </div>
             """
         else:
             # Assistant message with avatar and gray bubble, left-aligned
-            # Use table layout for better QTextBrowser compatibility
             avatar_base64 = get_assistant_avatar_base64()
+            avatar_width = 40
+            avatar_indent = avatar_width + 12  # 52px indent for content
+
             if avatar_base64:
-                avatar_html = f'<img src="{avatar_base64}" width="40" height="40" style="border-radius: 20px;">'
+                avatar_html = f'<img src="{avatar_base64}" width="{avatar_width}" height="{avatar_width}" style="border-radius: 20px;">'
             else:
                 # Fallback to letter avatar
-                avatar_html = f'''<div style="width: 40px; height: 40px; border-radius: 20px;
+                avatar_html = f'''<div style="width: {avatar_width}px; height: {avatar_width}px; border-radius: 20px;
                             background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 18px;
-                            text-align: center; line-height: 40px; font-weight: bold;">A</div>'''
+                            text-align: center; line-height: {avatar_width}px; font-weight: bold;">A</div>'''
 
             html = f"""
-            <table width="100%" style="margin: 12px 0; border: none; border-spacing: 0;">
-                <tr>
-                    <td width="40" valign="top" style="padding: 0;">
-                        {avatar_html}
-                    </td>
-                    <td valign="top" style="padding-left: 12px;">
-                        <div style="background-color: {theme.ASSISTANT_BUBBLE};
-                                    border-radius: 16px;
-                                    padding: 12px 16px; max-width: 600px;
-                                    color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
-                            {rendered_content}
-                        </div>
-                    </td>
-                </tr>
-            </table>
+            <div style="margin: 12px 0;">
+                <div style="display: inline-block; vertical-align: top;">
+                    {avatar_html}
+                </div>
+                <div style="display: inline-block; vertical-align: top;
+                            margin-left: 12px; max-width: calc(100% - {avatar_indent}px);">
+                    <div style="background-color: {theme.ASSISTANT_BUBBLE};
+                                border-radius: 16px;
+                                padding: 12px 16px;
+                                color: {theme.TEXT}; font-size: 14px; line-height: 1.5;">
+                        {rendered_content}
+                    </div>
+                </div>
+            </div>
             """
         self.chat_display.append(html)
         self._scroll_to_bottom()
@@ -416,15 +414,14 @@ class ChatPanel(QWidget):
         if len(arguments) > 3:
             args_preview += "..."
 
-        # Add a subtle pulse indicator (animated border effect via CSS animation not supported,
-        # so we use a slightly brighter border to indicate "active" state)
+        # Indent aligns with avatar + 12px spacing (52px total)
         html = f"""
-        <div style="margin: 8px 0 4px 40px;">
+        <div style="margin: 8px 0 4px 52px;">
             <div style="background-color: {theme.TOOL_THINKING_BG};
                         border: 2px solid {theme.TOOL_THINKING_BORDER};
                         border-radius: 16px;
                         padding: 12px 16px;
-                        max-width: 640px;
+                        max-width: calc(100% - 52px);
                         box-shadow: 0 0 8px rgba(109, 40, 217, 0.2);">
                 <!-- Header row with spinner indicator -->
                 <div style="margin-bottom: 8px;">
@@ -468,13 +465,14 @@ class ChatPanel(QWidget):
             status_text = "failed"
             glow = f"box-shadow: 0 0 8px rgba(225, 29, 72, 0.3);"
 
+        # Indent aligns with avatar + 12px spacing (52px total)
         html = f"""
-        <div style="margin: 4px 0 8px 40px;">
+        <div style="margin: 4px 0 8px 52px;">
             <div style="background-color: {bg};
                         border: 2px solid {border};
                         border-radius: 16px;
                         padding: 12px 16px;
-                        max-width: 640px;
+                        max-width: calc(100% - 52px);
                         {glow}">
                 <!-- Status header -->
                 <div style="margin-bottom: 6px;">
@@ -503,12 +501,14 @@ class ChatPanel(QWidget):
     def append_thinking(self, message: str):
         """Append a thinking/progress indicator - Athlon-inspired subtle style."""
         theme = get_theme()
+        # Indent aligns with avatar + 12px spacing (52px total)
         html = f"""
-        <div style="margin: 4px 0 4px 40px;">
+        <div style="margin: 4px 0 4px 52px;">
             <div style="background-color: {theme.CHROME};
                         color: {theme.TEXT_SUBTLE};
                         padding: 8px 12px; border-radius: 8px; font-size: 12px;
-                        border-left: 2px solid {theme.TOOL_THINKING_BORDER};">
+                        border-left: 2px solid {theme.TOOL_THINKING_BORDER};
+                        max-width: calc(100% - 52px);">
                 💭 {self._escape_html(message)}
             </div>
         </div>
