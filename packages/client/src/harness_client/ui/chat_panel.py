@@ -351,15 +351,17 @@ class ChatPanel(QWidget):
                 <tr>
                     <td width="25%"></td>
                     <td width="75%" valign="top" align="right" style="padding: 0;">
-                        <span style="background-color: {theme.USER_BUBBLE};
+                        <div style="background-color: {theme.USER_BUBBLE};
                                     color: #ffffff;
                                     font-size: 14px; padding: 10px 16px;
                                     border-radius: 16px;
-                                    display: inline-block;
-                                    max-width: 100%;
-                                    text-align: left;">
+                                    max-width: 600px;
+                                    text-align: left;
+                                    -webkit-user-select: text;
+                                    user-select: text;  /* Enable text selection */
+                                    cursor: text;">
                             {rendered_content}
-                        </span>
+                        </div>
                     </td>
                 </tr>
             </table>
