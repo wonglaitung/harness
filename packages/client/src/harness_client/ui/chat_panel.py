@@ -334,7 +334,7 @@ class ChatPanel(QWidget):
                 <tr>
                     <td width="25%"></td>
                     <td width="75%" valign="top" align="right" style="padding: 0;">
-                        <div style="background-color: {theme.USER_BUBBLE};
+                        <span style="background-color: {theme.USER_BUBBLE};
                                     color: #ffffff;
                                     font-size: 14px; padding: 10px 16px;
                                     border-radius: 16px;
@@ -342,7 +342,7 @@ class ChatPanel(QWidget):
                                     max-width: 100%;
                                     text-align: left;">
                             {rendered_content}
-                        </div>
+                        </span>
                     </td>
                 </tr>
             </table>
