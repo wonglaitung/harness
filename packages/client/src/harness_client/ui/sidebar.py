@@ -5,7 +5,7 @@ Sidebar panel with navigation buttons and session list - Athlon-inspired dark th
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QAction, QFont, QFontDatabase, QCursor, QIcon
+from PyQt6.QtGui import QAction, QColor, QFont, QFontDatabase, QCursor, QIcon
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
