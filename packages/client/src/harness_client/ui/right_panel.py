@@ -368,11 +368,22 @@ class MCPServersSection(CollapsibleSection):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
 
-        # Status indicator
+        # Status indicator with animation
+        from harness_client.ui.interactive import StatusDot
+
         is_connected = status == "已连接"
-        indicator_color = theme.STATUS_CONNECTED if is_connected else theme.STATUS_DISCONNECTED
-        indicator = QLabel("●")
-        indicator.setStyleSheet(f"color: {indicator_color}; font-size: 12px;")
+        is_connecting = status == "连接中..."
+        is_error = status == "错误"
+
+        indicator = StatusDot(size=10, parent=self)
+        if is_connected:
+            indicator.setStatus("connected")
+        elif is_connecting:
+            indicator.setStatus("connecting")
+        elif is_error:
+            indicator.setStatus("error")
+        else:
+            indicator.setStatus("disconnected")
         layout.addWidget(indicator)
 
         # Server name
@@ -384,10 +395,10 @@ class MCPServersSection(CollapsibleSection):
         if is_connected:
             status_text = f"已连接 ({tools_count} 工具)"
             status_color = theme.STATUS_CONNECTED
-        elif status == "连接中...":
+        elif is_connecting:
             status_text = status
             status_color = theme.STATUS_CONNECTING
-        elif status == "错误":
+        elif is_error:
             status_text = status
             status_color = theme.STATUS_ERROR
         else:
@@ -400,9 +411,12 @@ class MCPServersSection(CollapsibleSection):
 
         layout.addStretch()
 
-        # Connect/Disconnect button
-        action_btn = QPushButton()
+        # Connect/Disconnect button with glow effect
+        from harness_client.ui.interactive import GlowButton
+        from PyQt6.QtGui import QColor
+
         if is_connected:
+            action_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
             action_btn.setText("断开")
             action_btn.setStyleSheet(f"""
                 QPushButton {{
@@ -418,6 +432,7 @@ class MCPServersSection(CollapsibleSection):
                 }}
             """)
         else:
+            action_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
             action_btn.setText("连接")
             action_btn.setStyleSheet(f"""
                 QPushButton {{

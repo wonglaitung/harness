@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from harness_client.ui.interactive import GlowButton
+
 from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
 
@@ -179,8 +181,8 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Stop button - icon only, hidden by default
-        self.stop_btn = QPushButton()
+        # Stop button - icon only, hidden by default, with danger glow
+        self.stop_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
         self.stop_btn.setIcon(create_stop_icon(20, QColor("white")))
         self.stop_btn.setIconSize(QSize(20, 20))
         self.stop_btn.setMinimumHeight(36)
@@ -202,8 +204,8 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Send button - icon only (play arrow)
-        self.send_btn = QPushButton()
+        # Send button - icon only (play arrow) with accent glow
+        self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
         self.send_btn.setIcon(create_play_icon(20, QColor("white")))
         self.send_btn.setIconSize(QSize(20, 20))
         self.send_btn.setMinimumHeight(36)
