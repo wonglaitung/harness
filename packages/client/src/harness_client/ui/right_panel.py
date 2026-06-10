@@ -515,9 +515,9 @@ class FileTreeSection(CollapsibleSection):
                 background-color: {theme.PANEL};
             }}
             QTreeView::branch:has-children:!has-siblings:closed,
-            QTreeView::branch:closed:has-children:has-siblings {
+            QTreeView::branch:closed:has-children:has-siblings {{
                 background-color: {theme.PANEL};
-            }
+            }}
             QTreeView::branch:open:has-children:!has-siblings,
             QTreeView::branch:open:has-children:has-siblings {{
                 background-color: {theme.PANEL};
