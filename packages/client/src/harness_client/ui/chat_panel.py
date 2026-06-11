@@ -890,10 +890,15 @@ class ChatPanel(QWidget):
             count = self.skill_completer.completionCount()
             logger.debug(f"[SkillCompleter] completionCount={count}")
             if count > 0:
-                # Position popup at cursor
+                # Position popup at cursor - convert to global coordinates
                 cursor_rect = self.input_field.cursorRect()
-                self.skill_completer.complete(cursor_rect)
-                logger.debug(f"[SkillCompleter] popup shown at rect={cursor_rect}")
+                # Map the bottom-left corner to global coordinates
+                bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
+                # Create a new rect at the global position
+                from PyQt6.QtCore import QRect
+                global_rect = QRect(bottom_left.x(), bottom_left.y(), cursor_rect.width(), cursor_rect.height())
+                self.skill_completer.complete(global_rect)
+                logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
             else:
                 logger.debug("[SkillCompleter] no matches, not showing popup")
         else:
@@ -913,8 +918,11 @@ class ChatPanel(QWidget):
             logger.debug(f"[SkillCompleter] completionCount={count}")
             if count > 0:
                 cursor_rect = self.input_field.cursorRect()
-                self.skill_completer.complete(cursor_rect)
-                logger.debug(f"[SkillCompleter] popup shown at rect={cursor_rect}")
+                bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
+                from PyQt6.QtCore import QRect
+                global_rect = QRect(bottom_left.x(), bottom_left.y(), cursor_rect.width(), cursor_rect.height())
+                self.skill_completer.complete(global_rect)
+                logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
             else:
                 self.skill_completer.popup().hide()
                 logger.debug("[SkillCompleter] no matches, hiding popup")
