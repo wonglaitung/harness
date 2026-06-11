@@ -890,18 +890,10 @@ class ChatPanel(QWidget):
             count = self.skill_completer.completionCount()
             logger.debug(f"[SkillCompleter] completionCount={count}")
             if count > 0:
-                # Position popup at cursor - convert to global coordinates
-                cursor_rect = self.input_field.cursorRect()
-                # Map the bottom-left corner to global coordinates
-                bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
-                # Use input field width for popup width, not cursor width
-                from PyQt6.QtCore import QRect
-                popup_width = self.input_field.width()
-                global_rect = QRect(bottom_left.x(), bottom_left.y(), popup_width, cursor_rect.height())
-                self.skill_completer.complete(global_rect)
+                # Just call complete() without rect - it will position at widget bottom
+                self.skill_completer.complete()
                 popup = self.skill_completer.popup()
-                logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
-                logger.debug(f"[SkillCompleter] popup.isVisible={popup.isVisible()}, size={popup.size()}, pos={popup.pos()}")
+                logger.debug(f"[SkillCompleter] popup.isVisible={popup.isVisible()}, size={popup.size()}, pos={popup.pos()}, geometry={popup.geometry()}")
             else:
                 logger.debug("[SkillCompleter] no matches, not showing popup")
         else:
@@ -920,13 +912,8 @@ class ChatPanel(QWidget):
             count = self.skill_completer.completionCount()
             logger.debug(f"[SkillCompleter] completionCount={count}")
             if count > 0:
-                cursor_rect = self.input_field.cursorRect()
-                bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
-                from PyQt6.QtCore import QRect
-                popup_width = self.input_field.width()
-                global_rect = QRect(bottom_left.x(), bottom_left.y(), popup_width, cursor_rect.height())
-                self.skill_completer.complete(global_rect)
-                logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
+                self.skill_completer.complete()
+                logger.debug(f"[SkillCompleter] popup updated")
             else:
                 self.skill_completer.popup().hide()
                 logger.debug("[SkillCompleter] no matches, hiding popup")
