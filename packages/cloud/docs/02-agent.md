@@ -1,0 +1,469 @@
+# 02 - Agent 胶水层
+
+## 概述
+
+Agent 是运行在每个 Docker 沙箱容器内的 FastAPI 服务，负责连接 WebSocket 与 Harness SDK。
+
+## 目录结构
+
+```
+src/harness_cloud/agent/
+├── __init__.py
+├── main.py           # FastAPI 入口
+├── sdk_bridge.py     # SDK 集成层
+├── session_sync.py   # 会话状态同步
+└── config.py         # Agent 配置
+```
+
+## SDKBridge - 核心组件
+
+### 类定义
+
+```python
+from harness import AgentHarness, HarnessConfig, ProgressEvent, ProgressEventType
+from harness.tools.builtins import ReadTool, WriteTool, GlobTool, GrepTool, BashTool
+
+
+class SDKBridge:
+    """
+    连接 WebSocket 与 Harness SDK
+    
+    核心职责：
+    1. 接收 WebSocket 消息
+    2. 转换为 SDK 调用参数
+    3. 执行 SDK 并捕获 ProgressEvent
+    4. 将事件转换为 WebSocket 消息返回
+    """
+    
+    def __init__(self, workspace: str = "/workspace"):
+        self.workspace = Path(workspace)
+        self.agent: AgentHarness | None = None
+        self._interrupt_flag = False
+        self._current_session_id: str | None = None
+```
+
+### 创建 Agent
+
+```python
+def _create_agent(self, request: RunRequest) -> AgentHarness:
+    """根据请求配置创建 AgentHarness"""
+    config = HarnessConfig(
+        model=request.model,
+        api_key=request.api_key,
+        provider=request.provider,
+        base_url=request.base_url,
+        max_iterations=request.max_iterations,
+        temperature=request.temperature,
+        system_prompt=request.system_prompt,
+        sandbox_workspace=str(self.workspace),
+        tool_result_role=request.tool_result_role,
+    )
+    
+    tools = [
+        ReadTool(),
+        WriteTool(),
+        GlobTool(),
+        GrepTool(),
+        BashTool(),
+    ]
+    
+    return AgentHarness(config=config, tools=tools)
+```
+
+### 流式执行
+
+```python
+async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+    """
+    执行任务并流式返回事件
+    
+    这是核心方法：
+    1. 创建 AgentHarness
+    2. 设置 on_progress 回调
+    3. 执行 agent.run()
+    4. 将 ProgressEvent 转换为 WebSocket 消息
+    
+    ⚠️ 评审意见修复：使用 asyncio.to_thread() + 同步队列，避免事件循环死锁。
+    """
+    self.agent = self._create_agent(request)
+    self._current_session_id = request.session_id
+    self._interrupt_flag = False
+    
+    # 使用同步队列（线程安全）
+    import queue
+    events_queue: queue.Queue = queue.Queue()
+    
+    def on_progress(event: ProgressEvent):
+        """SDK progress callback - 同步方法"""
+        events_queue.put(event)
+    
+    def run_agent_sync():
+        """同步执行 agent（在线程池中运行）"""
+        try:
+            result = self.agent.run(
+                prompt=request.prompt,
+                session_id=request.session_id,
+                on_progress=on_progress,
+            )
+            events_queue.put(("result", result))
+        except Exception as e:
+            events_queue.put(("error", str(e)))
+    
+    # 使用 asyncio.to_thread 在线程池中执行同步 SDK
+    agent_task = asyncio.create_task(asyncio.to_thread(run_agent_sync))
+    
+    # 流式返回事件
+    while True:
+        # 非阻塞检查队列
+        try:
+            item = events_queue.get_nowait()
+        except queue.Empty:
+            await asyncio.sleep(0.01)  # 短暂让出控制权
+            continue
+        
+        if isinstance(item, tuple):
+            if item[0] == "result":
+                yield {
+                    "type": MessageType.RUN_RESULT,
+                    "payload": self._result_to_payload(item[1]),
+                }
+                break
+            elif item[0] == "error":
+                yield {
+                    "type": MessageType.ERROR,
+                    "payload": {"error": item[1]},
+                }
+                break
+        else:
+            # ProgressEvent
+            yield self._translate_event(item)
+    
+    await agent_task
+```
+
+### ProgressEvent 映射
+
+```python
+def _translate_event(self, event: ProgressEvent) -> dict:
+    """
+    将 SDK ProgressEvent 转换为 WebSocket 消息
+    
+    映射规则：
+    - TOOL_CALL → tool_call
+    - TOOL_RESULT → tool_result
+    - TEXT_CHUNK → stream_chunk
+    - 其他 → progress
+    """
+    if event.type == ProgressEventType.TOOL_CALL:
+        return {
+            "type": MessageType.TOOL_CALL,
+            "payload": {
+                "tool_name": event.data.get("tool", ""),
+                "tool_call_id": event.data.get("tool_call_id", ""),
+                "arguments": event.data.get("arguments", {}),
+            },
+        }
+    
+    elif event.type == ProgressEventType.TOOL_RESULT:
+        return {
+            "type": MessageType.TOOL_RESULT,
+            "payload": {
+                "tool_name": event.data.get("tool", ""),
+                "success": event.data.get("success", True),
+                "result": event.data.get("result", "")[:500],
+                "error": event.data.get("error"),
+            },
+        }
+    
+    elif event.type == ProgressEventType.TEXT_CHUNK:
+        return {
+            "type": MessageType.STREAM_CHUNK,
+            "payload": {"content": event.data.get("text", "")},
+        }
+    
+    else:
+        return {
+            "type": MessageType.PROGRESS,
+            "payload": {
+                "event_type": event.type.value,
+                "message": event.message,
+                "data": event.data,
+            },
+        }
+```
+
+## FastAPI WebSocket 端点
+
+### main.py
+
+```python
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
+import asyncio
+
+from harness_cloud.agent.sdk_bridge import SDKBridge
+from harness_cloud.common.messages import MessageEnvelope, MessageType, RunRequest
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时初始化"""
+    yield
+    # 关闭时清理
+
+
+app = FastAPI(title="Harness Container Agent", lifespan=lifespan)
+
+
+@app.websocket("/ws/run")
+async def websocket_run(websocket: WebSocket):
+    """
+    主 WebSocket 端点
+
+    协议流程：
+    1. Client 发送 RunRequest
+    2. Agent 发送 ACK
+    3. Agent 流式发送 ProgressEvent
+    4. Agent 发送 RunResult
+
+    心跳机制：
+    - Client 发送 ping
+    - Agent 响应 pong
+    - 检测超时断线
+
+    ⚠️ 评审意见修复：添加全局异常捕获，防止单个连接异常导致进程崩溃
+    """
+    await websocket.accept()
+    bridge = SDKBridge()
+    session_id = None
+
+    # 心跳检测
+    last_ping = asyncio.get_event_loop().time()
+    HEARTBEAT_TIMEOUT = 90.0  # 90秒超时
+    _closed = False  # 防止双重 close 的标志
+
+    async def heartbeat_monitor():
+        """监控心跳超时"""
+        while True:
+            await asyncio.sleep(30)
+            if _closed:
+                return
+            elapsed = asyncio.get_event_loop().time() - last_ping
+            if elapsed > HEARTBEAT_TIMEOUT:
+                logger.warning("Heartbeat timeout, closing connection")
+                _closed = True
+                try:
+                    await websocket.close(code=1001, reason="Heartbeat timeout")
+                except Exception:
+                    pass  # 防止重复 close 异常
+                return
+
+    heartbeat_task = asyncio.create_task(heartbeat_monitor())
+
+    try:
+        while True:
+            raw_data = await websocket.receive_text()
+            envelope = MessageEnvelope.parse_raw(raw_data)
+
+            # 处理心跳
+            if envelope.type == "ping":
+                last_ping = asyncio.get_event_loop().time()
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            if envelope.type == MessageType.RUN_REQUEST:
+                request = RunRequest.parse_obj(envelope.payload)
+                session_id = request.session_id
+
+                # 发送确认
+                await websocket.send_json({
+                    "type": MessageType.ACK.value,
+                    "session_id": session_id,
+                })
+
+                # 流式执行
+                async for event in bridge.run_stream(request):
+                    await websocket.send_json(event)
+
+            elif envelope.type == MessageType.INTERRUPT:
+                bridge.interrupt()
+                await websocket.send_json({
+                    "type": MessageType.INTERRUPTED.value,
+                })
+
+    except WebSocketDisconnect:
+        # 客户端断开，保存会话状态
+        logger.info(f"Client disconnected, session: {session_id}")
+    except Exception as e:
+        # 全局异常捕获，防止进程崩溃
+        logger.error(f"Unexpected error in websocket: {e}")
+    finally:
+        _closed = True
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+
+
+@app.get("/health")
+async def health_check():
+    """容器健康检查"""
+    return {"status": "healthy"}
+```
+
+## 内存软限制配置（修订）
+
+> ⚠️ **评审意见**：防止 OOM Killer 硬杀进程导致前端无错误提示。
+
+```python
+# agent/main.py 启动时设置内存软限制
+
+import resource
+
+
+def setup_memory_limit():
+    """
+    设置进程内存软限制
+
+    当内存超过 3.8GB 时，Python 会抛出 MemoryError，
+    而不是被 Linux OOM Killer 硬杀（-9）。
+    这样 SDKBridge 可以捕获并转换为友好的 WebSocket 错误消息。
+    """
+    try:
+        # 软限制 3.8GB，硬限制 4GB
+        soft_limit = 3800 * 1024 * 1024  # 3.8GB
+        hard_limit = 4000 * 1024 * 1024  # 4GB
+        resource.setrlimit(resource.RLIMIT_AS, (soft_limit, hard_limit))
+        logger.info(f"Memory limit set: soft={soft_limit}, hard={hard_limit}")
+    except Exception as e:
+        logger.warning(f"Failed to set memory limit: {e}")
+
+
+# 在 lifespan 中调用
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_memory_limit()
+    yield
+```
+
+### 内存超限时的错误处理
+
+```python
+# 在 SDKBridge.run_stream 中捕获 MemoryError
+
+async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+    try:
+        # ... agent 执行逻辑
+    except MemoryError:
+        yield {
+            "type": MessageType.ERROR,
+            "payload": {
+                "error": "内存不足：任务需要超过 3.8GB 内存，请减少数据量或联系管理员",
+                "error_code": "MEMORY_LIMIT",
+            },
+        }
+    except Exception as e:
+        yield {
+            "type": MessageType.ERROR,
+            "payload": {"error": str(e)},
+        }
+```
+
+## 配置
+
+### config.py
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class AgentConfig:
+    """Agent 配置"""
+    
+    workspace: str = "/workspace"
+    default_model: str = "claude-sonnet-4-6"
+    default_max_iterations: int = 10
+    default_temperature: float = 1.0
+    
+    # API Key 可通过环境变量设置
+    # ANTHROPIC_API_KEY 或 OPENAI_API_KEY
+```
+
+## 容器启动命令
+
+```bash
+uvicorn harness_cloud.agent.main:app --host 0.0.0.0 --port 8000
+```
+
+## 复用 SDK 模式
+
+Agent 的设计参考了桌面客户端的 `ChatController`：
+
+| ChatController | SDKBridge |
+|----------------|-----------|
+| `initialize()` | `_create_agent()` |
+| `send_message()` | `run_stream()` |
+| `on_progress` 回调 | `_translate_event()` |
+| `session_manager` | 容器内 SessionManager |
+
+**关键差异**：
+- ChatController 连接 PyQt6 UI → SDKBridge 连接 WebSocket
+- ChatController 使用 Qt 信号 → SDKBridge 使用 asyncio.Queue
+- ChatController 在本地运行 → SDKBridge 在容器内运行
+
+## 错误处理
+
+```python
+async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+    try:
+        # ... agent execution
+    except ValueError as e:
+        yield {
+            "type": MessageType.ERROR,
+            "payload": {"error": f"配置错误: {str(e)}"},
+        }
+    except Exception as e:
+        yield {
+            "type": MessageType.ERROR,
+            "payload": {"error": f"执行错误: {type(e).__name__}: {str(e)}"},
+        }
+```
+
+## 中断支持
+
+```python
+def interrupt(self):
+    """请求中断执行"""
+    self._interrupt_flag = True
+    if self.agent:
+        self.agent.interrupt()
+```
+
+## 验证测试
+
+### 本地测试
+
+```bash
+# 1. 直接运行 Agent（无需容器）
+cd packages/cloud
+uvicorn src.harness_cloud.agent.main:app --reload
+
+# 2. WebSocket 测试
+wscat -c ws://localhost:8000/ws/run
+
+# 3. 发送请求
+> {"type": "run_request", "payload": {"prompt": "Hello", "model": "claude-sonnet-4-6"}}
+```
+
+### 预期响应流程
+
+```
+→ {"type": "ack", "session_id": null}
+→ {"type": "progress", "payload": {"event_type": "loop_start"}}
+→ {"type": "progress", "payload": {"event_type": "llm_call"}}
+→ {"type": "stream_chunk", "payload": {"content": "Hello"}}
+→ {"type": "stream_chunk", "payload": {"content": "!"}}
+→ {"type": "run_result", "payload": {"status": "completed", "content": "Hello!"}}
+```
