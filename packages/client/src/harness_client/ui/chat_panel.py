@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 
 import markdown
+
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
 from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
