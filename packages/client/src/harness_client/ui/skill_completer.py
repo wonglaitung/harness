@@ -2,8 +2,12 @@
 Skill completer - autocomplete for skill names with '/' prefix.
 """
 
+import logging
+
 from PyQt6.QtCore import Qt, QStringListModel
 from PyQt6.QtWidgets import QCompleter
+
+logger = logging.getLogger(__name__)
 
 
 class SkillCompleter(QCompleter):
@@ -35,6 +39,7 @@ class SkillCompleter(QCompleter):
         self._skills = {s["name"]: s.get("description", "") for s in skills}
         # Format: "/skill-name"
         items = [f"/{name}" for name in self._skills.keys()]
+        logger.debug(f"[SkillCompleter] update_skills: {len(items)} items: {items}")
         self.setModel(QStringListModel(items))
 
     def get_skill_description(self, name: str) -> str:

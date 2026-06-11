@@ -878,31 +878,47 @@ class ChatPanel(QWidget):
     def _show_skill_completer(self):
         """Show the skill completer popup if appropriate."""
         text = self.input_field.toPlainText()
+        logger.debug(f"[SkillCompleter] _show_skill_completer: text='{text}'")
         if self.skill_completer.should_complete(text):
             # Set completion prefix for filtering
             prefix = self.skill_completer.get_completion_prefix(text)
+            logger.debug(f"[SkillCompleter] prefix='{prefix}'")
             self.skill_completer.setCompletionPrefix(prefix)
             # Check if there are any matches before showing
-            if self.skill_completer.completionCount() > 0:
+            count = self.skill_completer.completionCount()
+            logger.debug(f"[SkillCompleter] completionCount={count}")
+            if count > 0:
                 # Position popup at cursor
                 cursor_rect = self.input_field.cursorRect()
                 self.skill_completer.complete(cursor_rect)
+                logger.debug(f"[SkillCompleter] popup shown at rect={cursor_rect}")
+            else:
+                logger.debug("[SkillCompleter] no matches, not showing popup")
+        else:
+            logger.debug(f"[SkillCompleter] should_complete=False for '{text}'")
 
     def _update_skill_completer(self):
         """Update completer visibility based on current text."""
         text = self.input_field.toPlainText()
+        logger.debug(f"[SkillCompleter] _update_skill_completer: text='{text}'")
         if self.skill_completer.should_complete(text):
             # Update completion prefix for filtering
             prefix = self.skill_completer.get_completion_prefix(text)
+            logger.debug(f"[SkillCompleter] prefix='{prefix}'")
             self.skill_completer.setCompletionPrefix(prefix)
             # Check if there are any matches
-            if self.skill_completer.completionCount() > 0:
+            count = self.skill_completer.completionCount()
+            logger.debug(f"[SkillCompleter] completionCount={count}")
+            if count > 0:
                 cursor_rect = self.input_field.cursorRect()
                 self.skill_completer.complete(cursor_rect)
+                logger.debug(f"[SkillCompleter] popup shown at rect={cursor_rect}")
             else:
                 self.skill_completer.popup().hide()
+                logger.debug("[SkillCompleter] no matches, hiding popup")
         else:
             self.skill_completer.popup().hide()
+            logger.debug(f"[SkillCompleter] should_complete=False, hiding popup")
 
     def _insert_skill_completion(self, completion: str):
         """Insert the selected skill completion into the input field."""
