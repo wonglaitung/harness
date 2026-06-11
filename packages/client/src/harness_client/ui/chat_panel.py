@@ -875,7 +875,7 @@ class ChatPanel(QWidget):
         if self.skill_completer.should_complete(text):
             # Position popup at cursor
             cursor_rect = self.input_field.cursorRect()
-            self.skill_completer.complete(cursor_rect.bottomLeft())
+            self.skill_completer.complete(cursor_rect)
 
     def _update_skill_completer(self):
         """Update completer visibility based on current text."""
@@ -883,7 +883,7 @@ class ChatPanel(QWidget):
         if self.skill_completer.should_complete(text):
             if not self.skill_completer.popup().isVisible():
                 cursor_rect = self.input_field.cursorRect()
-                self.skill_completer.complete(cursor_rect.bottomLeft())
+                self.skill_completer.complete(cursor_rect)
         else:
             self.skill_completer.popup().hide()
 
