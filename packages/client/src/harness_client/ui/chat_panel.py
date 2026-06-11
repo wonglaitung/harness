@@ -867,6 +867,11 @@ class ChatPanel(QWidget):
                 # Update completer on deletion
                 from PyQt6.QtCore import QTimer
                 QTimer.singleShot(0, self._update_skill_completer)
+            elif self.skill_completer.popup().isVisible():
+                # Update completer when typing while popup is visible
+                if key_event.text() and key_event.text().isprintable():
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(0, self._update_skill_completer)
 
         return super().eventFilter(obj, event)
 
@@ -877,9 +882,11 @@ class ChatPanel(QWidget):
             # Set completion prefix for filtering
             prefix = self.skill_completer.get_completion_prefix(text)
             self.skill_completer.setCompletionPrefix(prefix)
-            # Position popup at cursor
-            cursor_rect = self.input_field.cursorRect()
-            self.skill_completer.complete(cursor_rect)
+            # Check if there are any matches before showing
+            if self.skill_completer.completionCount() > 0:
+                # Position popup at cursor
+                cursor_rect = self.input_field.cursorRect()
+                self.skill_completer.complete(cursor_rect)
 
     def _update_skill_completer(self):
         """Update completer visibility based on current text."""
@@ -888,9 +895,12 @@ class ChatPanel(QWidget):
             # Update completion prefix for filtering
             prefix = self.skill_completer.get_completion_prefix(text)
             self.skill_completer.setCompletionPrefix(prefix)
-            if not self.skill_completer.popup().isVisible():
+            # Check if there are any matches
+            if self.skill_completer.completionCount() > 0:
                 cursor_rect = self.input_field.cursorRect()
                 self.skill_completer.complete(cursor_rect)
+            else:
+                self.skill_completer.popup().hide()
         else:
             self.skill_completer.popup().hide()
 
