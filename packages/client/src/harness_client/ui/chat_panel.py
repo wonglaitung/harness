@@ -259,16 +259,40 @@ class MessageBubble(QWidget):
 
     def _calculate_size(self):
         """Calculate widget size based on content."""
-        # Get document size
+        # Try to get QTextBrowser document size, fall back to font metrics
         doc = self._text_browser.document()
-        doc.setTextWidth(self._max_width)
-        doc_height = doc.size().height()
+        if doc and doc.blockCount() > 0:
+            doc.setTextWidth(self._max_width)
+            doc_height = doc.size().height()
+        else:
+            # Document not ready yet (widget not shown), estimate with font metrics
+            fm = QFontMetrics(self._get_font())
+            text = self._content if self._role != "assistant" else self._strip_html(self._content)
+            lines = text.split('\n')
+            total_height = 0
+            for line in lines:
+                if line.strip():
+                    wrapped = fm.boundingRect(
+                        0, 0, self._max_width - 2 * self._padding_h, 1000,
+                        Qt.TextFlag.TextWordWrap, line
+                    )
+                    total_height += wrapped.height()
+                else:
+                    total_height += fm.height() // 2
+            doc_height = max(total_height, fm.height())
 
         self._preferred_width = int(min(doc.idealWidth() + 2 * self._padding_h, self._max_width))
+        if self._preferred_width < 60:
+            self._preferred_width = 60
         self._preferred_height = int(doc_height + 2 * self._padding_v)
 
         self.setMinimumWidth(60)
         self.setMinimumHeight(30)
+
+    def _strip_html(self, text: str) -> str:
+        """Basic HTML tag stripping for size estimation."""
+        import re
+        return re.sub(r'<[^>]+>', '', text)
 
     def sizeHint(self) -> QSize:
         return QSize(self._preferred_width, self._preferred_height)
@@ -350,6 +374,8 @@ class MessageRow(QWidget):
 
         # Create bubble
         bubble = MessageBubble(self._content, self._role)
+        bubble.setMaximumWidth(450)
+        bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         if self._role == "user":
             # Right-aligned: stretch on left, bubble on right
