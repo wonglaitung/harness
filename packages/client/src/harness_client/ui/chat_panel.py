@@ -12,8 +12,9 @@ import base64
 import logging
 from pathlib import Path
 
+import markdown
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
-from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QFontMetrics
+from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QFontMetrics, QTextDocument, QAbstractTextDocumentLayout
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -102,6 +103,7 @@ class MessageBubble(QWidget):
 
     Uses QPainter.drawRoundedRect() since QTextBrowser HTML
     engine doesn't support border-radius CSS property.
+    For assistant messages, uses QTextDocument for Markdown rendering.
     """
 
     def __init__(
@@ -118,6 +120,14 @@ class MessageBubble(QWidget):
         self._padding_v = 10
         self._max_width = 450
 
+        # For assistant: render markdown to HTML, use QTextDocument
+        self._text_document = None
+        if role == "assistant":
+            html = self._render_markdown(content)
+            self._text_document = QTextDocument()
+            self._text_document.setHtml(html)
+            self._text_document.setTextWidth(self._max_width - 2 * self._padding_h)
+
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self._calculate_size()
 
@@ -131,35 +141,83 @@ class MessageBubble(QWidget):
                 break
         return font
 
+    def _render_markdown(self, text: str) -> str:
+        """Render markdown to HTML with basic styling."""
+        extensions = ["fenced_code", "codehilite", "tables", "nl2br"]
+        html = markdown.markdown(text, extensions=extensions)
+
+        # Add inline styles for code blocks and other elements
+        theme = get_theme()
+        styled_html = f"""
+        <style>
+            body {{
+                font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+                font-size: 10pt;
+                color: {theme.TEXT};
+                line-height: 1.5;
+            }}
+            code {{
+                background-color: {theme.CODE_BACKGROUND};
+                color: {theme.CODE_FOREGROUND};
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 9pt;
+            }}
+            pre {{
+                background-color: {theme.CODE_BACKGROUND};
+                color: {theme.CODE_FOREGROUND};
+                padding: 10px;
+                border-radius: 6px;
+                overflow-x: auto;
+            }}
+            pre code {{
+                background-color: transparent;
+                padding: 0;
+            }}
+            a {{
+                color: {theme.ACCENT_LIGHT};
+            }}
+        </style>
+        {html}
+        """
+        return styled_html
+
     def _calculate_size(self):
         """Calculate widget size based on content."""
-        font = self._get_font()
-        fm = QFontMetrics(font)
+        if self._text_document:
+            # Use QTextDocument for accurate size
+            self._text_document.setTextWidth(self._max_width - 2 * self._padding_h)
+            doc_height = self._text_document.size().height()
+            self._preferred_width = min(self._text_document.idealWidth() + 2 * self._padding_h, self._max_width)
+            self._preferred_height = doc_height + 2 * self._padding_v + 4
+        else:
+            # User message: simple text calculation
+            font = self._get_font()
+            fm = QFontMetrics(font)
 
-        # Calculate text dimensions with word wrap
-        lines = self._content.split('\n')
-        total_height = 0
-        max_line_width = 0
+            lines = self._content.split('\n')
+            total_height = 0
+            max_line_width = 0
 
-        for line in lines:
-            if line.strip():
-                text_rect = fm.boundingRect(
-                    0, 0, self._max_width - 2 * self._padding_h, 1000,
-                    Qt.TextFlag.TextWordWrap,
-                    line
-                )
-                total_height += text_rect.height()
-                max_line_width = max(max_line_width, text_rect.width())
-            else:
-                total_height += fm.height() // 2  # Empty line
+            for line in lines:
+                if line.strip():
+                    text_rect = fm.boundingRect(
+                        0, 0, self._max_width - 2 * self._padding_h, 1000,
+                        Qt.TextFlag.TextWordWrap,
+                        line
+                    )
+                    total_height += text_rect.height()
+                    max_line_width = max(max_line_width, text_rect.width())
+                else:
+                    total_height += fm.height() // 2
 
-        # Minimum width for short messages
-        min_width = 60
-        self._text_width = max(max_line_width, min_width - 2 * self._padding_h)
-        self._text_height = max(total_height, fm.height())
+            min_width = 60
+            self._text_width = max(max_line_width, min_width - 2 * self._padding_h)
+            self._text_height = max(total_height, fm.height())
 
-        self._preferred_width = min(self._text_width + 2 * self._padding_h, self._max_width)
-        self._preferred_height = self._text_height + 2 * self._padding_v + 4
+            self._preferred_width = min(self._text_width + 2 * self._padding_h, self._max_width)
+            self._preferred_height = self._text_height + 2 * self._padding_v + 4
 
     def sizeHint(self) -> QSize:
         return QSize(self._preferred_width, self._preferred_height)
@@ -188,21 +246,27 @@ class MessageBubble(QWidget):
         painter.setBrush(QBrush(bg_color))
         painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
 
-        # Draw text
-        painter.setPen(text_color)
-        painter.setFont(self._get_font())
+        # Draw content
+        if self._text_document:
+            # Render QTextDocument
+            painter.translate(self._padding_h, self._padding_v)
+            self._text_document.drawContents(painter, QRectF(0, 0, self.width() - 2 * self._padding_h, self.height() - 2 * self._padding_v))
+        else:
+            # Draw plain text for user
+            painter.setPen(text_color)
+            painter.setFont(self._get_font())
 
-        text_rect = QRectF(
-            self._padding_h,
-            self._padding_v,
-            self.width() - 2 * self._padding_h,
-            self.height() - 2 * self._padding_v
-        )
-        painter.drawText(
-            text_rect,
-            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
-            self._content
-        )
+            text_rect = QRectF(
+                self._padding_h,
+                self._padding_v,
+                self.width() - 2 * self._padding_h,
+                self.height() - 2 * self._padding_v
+            )
+            painter.drawText(
+                text_rect,
+                Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+                self._content
+            )
 
         painter.end()
 
