@@ -898,7 +898,9 @@ class ChatPanel(QWidget):
                 from PyQt6.QtCore import QRect
                 global_rect = QRect(bottom_left.x(), bottom_left.y(), cursor_rect.width(), cursor_rect.height())
                 self.skill_completer.complete(global_rect)
+                popup = self.skill_completer.popup()
                 logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
+                logger.debug(f"[SkillCompleter] popup.isVisible={popup.isVisible()}, size={popup.size()}, pos={popup.pos()}")
             else:
                 logger.debug("[SkillCompleter] no matches, not showing popup")
         else:
