@@ -315,6 +315,16 @@ async def health_check():
 ## 内存软限制配置（修订）
 
 > ⚠️ **评审意见**：防止 OOM Killer 硬杀进程导致前端无错误提示。
+>
+> **Python resource 限制的局限性**：
+> 1. C 扩展（如 numpy）可能无法正确捕获 MemoryError
+> 2. 子进程（如 BashTool 执行命令）不受此限制
+> 3. 进程仍可能被 Linux OOM Killer 直接杀死（SIGKILL）
+>
+> **解决方案**：
+> - 保留此软限制作为第一道防线
+> - 依赖 Docker/K8s 的 mem_limit（硬限制）作为兜底
+> - Gateway 的 _cleanup_loop 需处理容器被 OOM Kill 后的清理
 
 ```python
 # agent/main.py 启动时设置内存软限制

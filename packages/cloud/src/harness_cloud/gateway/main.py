@@ -1,0 +1,242 @@
+"""
+Gateway main entry point.
+
+Provides:
+- REST API endpoints
+- WebSocket endpoint with authentication
+- CORS configuration
+- Lifespan management
+
+Reference: packages/cloud/docs/03-gateway.md
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import uuid
+from datetime import datetime
+
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from harness_cloud.gateway.auth import User, verify_token
+from harness_cloud.gateway.config import GatewayConfig, Settings
+from harness_cloud.gateway.container_manager import ContainerManager
+from harness_cloud.gateway.docker_manager import DockerManager
+from harness_cloud.gateway.rate_limiter import RedisRateLimiter
+from harness_cloud.gateway.tunnel import WebSocketTunnel
+
+logger = logging.getLogger(__name__)
+
+# Configuration
+settings = Settings.from_env()
+config = GatewayConfig(
+    jwt_secret=settings.jwt_secret or config.jwt_secret,
+    redis_url=settings.redis_url or config.redis_url,
+    environment=settings.environment or config.environment,
+)
+
+# Global instances
+container_manager: ContainerManager
+rate_limiter: RedisRateLimiter
+
+
+class SessionCreateResponse(BaseModel):
+    """Response for session creation."""
+
+    session_id: str
+    container_id: str
+
+
+class HealthResponse(BaseModel):
+    """Health check response."""
+
+    status: str
+    containers: int = 0
+
+
+# Lifespan
+async def lifespan(app: FastAPI):
+    """Initialize and cleanup services."""
+    global container_manager, rate_limiter
+
+    # Initialize container manager
+    container_manager = DockerManager()
+    await container_manager.start()
+
+    # Initialize rate limiter
+    rate_limiter = RedisRateLimiter(
+        redis_url=config.redis_url,
+        max_requests=config.rate_limit_max_requests,
+        window_seconds=config.rate_limit_window_seconds,
+    )
+
+    logger.info("Gateway started")
+
+    yield
+
+    # Cleanup
+    await container_manager.stop()
+    logger.info("Gateway stopped")
+
+
+app = FastAPI(
+    title="Harness Gateway",
+    description="Harness Cloud Gateway - Container orchestration and message routing",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# =============================================================================
+# REST API Endpoints
+# =============================================================================
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Health check endpoint."""
+    return HealthResponse(
+        status="healthy",
+        containers=len(container_manager._containers),  # type: ignore[attr-defined]
+    )
+
+
+@app.post("/api/sessions", response_model=SessionCreateResponse)
+async def create_session(user: User = Depends(lambda: None)):  # Placeholder auth
+    """
+    Create new session.
+
+    1. Check rate limit
+    2. Create sandbox container
+    3. Return session ID
+    """
+    # TODO: Implement proper auth dependency
+    # For MVP, accept requests without auth for testing
+    user_id = user.id if user else "anonymous"
+
+    # Rate limit check
+    if user_id != "anonymous" and not rate_limiter.check(user_id):
+        raise HTTPException(429, "Rate limit exceeded")
+
+    # Generate session ID
+    session_id = str(uuid.uuid4())[:8]
+
+    # Create container
+    try:
+        info = await container_manager.create_container(
+            session_id=session_id,
+            user_id=user_id,
+        )
+        return SessionCreateResponse(
+            session_id=session_id,
+            container_id=info.container_id[:12],
+        )
+    except Exception as e:
+        logger.error(f"Failed to create container: {e}")
+        raise HTTPException(500, f"Failed to create session: {e}")
+
+
+@app.delete("/api/sessions/{session_id}")
+async def destroy_session(session_id: str, user: User = Depends(lambda: None)):
+    """Destroy session and container."""
+    user_id = user.id if user else "anonymous"
+
+    info = container_manager.get_container(session_id)
+    if not info:
+        raise HTTPException(404, "Session not found")
+
+    if info.user_id != user_id and user_id != "anonymous":
+        raise HTTPException(403, "Not authorized")
+
+    await container_manager.destroy_container(session_id)
+    return {"status": "destroyed"}
+
+
+# =============================================================================
+# WebSocket Endpoint
+# =============================================================================
+
+
+@app.websocket("/ws/session/{session_id}")
+async def session_websocket(websocket: WebSocket, session_id: str):
+    """
+    Session WebSocket endpoint.
+
+    Protocol:
+    1. Accept connection
+    2. Wait for auth message (token passed in first message)
+    3. Verify container ownership
+    4. Establish tunnel to container
+
+    Security (ADR-005):
+    - Token passed in first message, not URL
+    - Prevents token leakage in logs/headers
+    """
+    await websocket.accept()
+
+    # Wait for auth message (5 second timeout)
+    try:
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+        auth_data = json.loads(auth_msg)
+
+        if auth_data.get("type") != "auth":
+            await websocket.close(code=4001, reason="Expected auth message")
+            return
+
+        token = auth_data.get("token", "")
+    except asyncio.TimeoutError:
+        await websocket.close(code=4001, reason="Auth timeout")
+        return
+    except json.JSONDecodeError:
+        await websocket.close(code=4001, reason="Invalid auth message")
+        return
+
+    # Verify token
+    try:
+        user = verify_token(token, config)
+    except ValueError:
+        await websocket.close(code=4001, reason="Authentication failed")
+        return
+
+    # Get container
+    info = container_manager.get_container(session_id)
+    if not info:
+        await websocket.close(code=4004, reason="Session not found")
+        return
+
+    # Verify ownership
+    if info.user_id != user.id and user.id != "anonymous":
+        await websocket.close(code=4003, reason="Not authorized")
+        return
+
+    # Update activity timestamp
+    info.last_activity = datetime.now()
+
+    # Establish tunnel
+    try:
+        container_url = container_manager.get_container_url(session_id)
+        tunnel = WebSocketTunnel(container_url)
+        await tunnel.connect(websocket)
+    except Exception as e:
+        logger.error(f"Tunnel error: {e}")
+    finally:
+        info.last_activity = datetime.now()

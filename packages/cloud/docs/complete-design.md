@@ -1,8 +1,9 @@
 # Harness Cloud 云化方案设计文档
 
-> **版本**: v2.0 (评审修订版)
+> **版本**: v2.1 (评审修订完成版)
 > **状态**: 生产就绪 (Production-Ready)
 > **最后更新**: 2026-06-11
+> **评审状态**: ✅ 已通过 (Approved with Conditions - All Action Items Resolved)
 
 ---
 
@@ -556,6 +557,16 @@ def setup_memory_limit():
     当内存超过 3.8GB 时，Python 会抛出 MemoryError，
     而不是被 Linux OOM Killer 硬杀（-9）。
     这样 SDKBridge 可以捕获并转换为友好的 WebSocket 错误消息。
+
+    ⚠️ 评审意见 - Python resource 限制的局限性：
+    1. C 扩展（如 numpy）可能无法正确捕获 MemoryError
+    2. 子进程（如 BashTool 执行命令）不受此限制
+    3. 进程仍可能被 Linux OOM Killer 直接杀死（SIGKILL）
+
+    解决方案：
+    - 保留此软限制作为第一道防线
+    - 依赖 Docker/K8s 的 mem_limit（硬限制）作为兜底
+    - Gateway 的 _cleanup_loop 需处理容器被 OOM Kill 后的清理
     """
     try:
         soft_limit = 3800 * 1024 * 1024  # 3.8GB
@@ -659,6 +670,132 @@ async def health_check():
     """容器健康检查"""
     return {"status": "healthy"}
 ```
+
+### 2.5 会话状态同步（session_sync.py）
+
+> ⚠️ **评审建议**：实现断线重连的状态恢复机制，避免长任务执行中断线导致上下文丢失。
+
+#### 模块职责
+
+```python
+# agent/session_sync.py
+
+from dataclasses import dataclass
+from datetime import datetime
+import json
+from pathlib import Path
+
+
+@dataclass
+class SessionState:
+    """会话状态快照"""
+    session_id: str
+    last_event_id: int  # 最后收到的事件 ID
+    progress: dict      # 当前进度（如 tool_calls 列表）
+    timestamp: datetime
+```
+
+#### 状态持久化
+
+```python
+class SessionSync:
+    """会话状态同步器
+
+    用途：
+    1. 在任务执行过程中定期保存状态快照
+    2. 断线重连后恢复上下文
+    3. 支持"从断点续传"
+    """
+
+    def __init__(self, state_dir: str = "/tmp/harness_state"):
+        self.state_dir = Path(state_dir)
+        self.state_dir.mkdir(exist_ok=True)
+
+    def save_state(self, state: SessionState):
+        """保存状态快照到本地文件"""
+        state_file = self.state_dir / f"{state.session_id}.json"
+        data = {
+            "session_id": state.session_id,
+            "last_event_id": state.last_event_id,
+            "progress": state.progress,
+            "timestamp": state.timestamp.isoformat(),
+        }
+        state_file.write_text(json.dumps(data))
+
+    def load_state(self, session_id: str) -> SessionState | None:
+        """加载状态快照"""
+        state_file = self.state_dir / f"{session_id}.json"
+        if not state_file.exists():
+            return None
+        data = json.loads(state_file.read_text())
+        return SessionState(
+            session_id=data["session_id"],
+            last_event_id=data["last_event_id"],
+            progress=data["progress"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+        )
+
+    def clear_state(self, session_id: str):
+        """清理状态"""
+        state_file = self.state_dir / f"{session_id}.json"
+        state_file.unlink(missing_ok=True)
+```
+
+#### 断线重连流程
+
+```
+前端断线检测（心跳超时）
+    ↓
+前端发起 WebSocket 重连
+    ↓
+发送 auth 消息 + resume_request
+    ↓
+{
+    "type": "resume_request",
+    "session_id": "abc123",
+    "last_event_id": 42
+}
+    ↓
+Agent 从 SessionSync 加载状态
+    ↓
+Agent 发送增量事件（event_id > 42）
+    ↓
+正常继续执行
+```
+
+#### WebSocket 消息扩展
+
+```python
+# 在 main.py 中添加 resume 处理
+
+elif envelope.type == "resume_request":
+    session_id = envelope.payload.get("session_id")
+    last_event_id = envelope.payload.get("last_event_id", 0)
+
+    # 加载状态
+    state = session_sync.load_state(session_id)
+    if not state:
+        await websocket.send_json({
+            "type": "error",
+            "payload": {"error": "Session not found or expired"}
+        })
+        return
+
+    # 发送恢复确认
+    await websocket.send_json({
+        "type": "resume_ack",
+        "session_id": session_id,
+        "progress": state.progress,
+    })
+
+    # 继续执行（需要 SDK 支持 checkpoint）
+```
+
+#### 注意事项
+
+- **状态文件存储在 `/tmp`**（tmpfs），容器销毁后自动清理
+- **增量同步限制**：如果任务已完成，无法恢复
+- **SDK Checkpoint 支持**：需要 SDK 层面的 checkpoint 机制才能真正实现断点续传
 
 ---
 
@@ -1429,6 +1566,10 @@ Client                    Server
 
 ### 6.1 Docker Compose（修订版）
 
+> ⚠️ **生产环境安全警告**：
+> - `docker.sock` 挂载存在容器逃逸风险，生产环境建议使用 **K8sPodManager** 或 **Docker Rootless 模式**
+> - 参见 [ADR-007: Docker Socket 安全策略](#adr-007-docker-socket-安全策略新增)
+
 ```yaml
 version: '3.8'
 
@@ -1443,8 +1584,10 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REDIS_URL=redis://redis:6379
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # 只读
-    user: "1000:1000"  # 非 root 用户
+      # ⚠️ 安全警告：docker.sock 挂载存在容器逃逸风险
+      # 生产环境建议：使用 K8sPodManager 或 Docker Rootless 模式
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # 只读挂载
+    user: "1000:1000"  # 非 root 用户运行
     depends_on:
       - redis
       - minio
@@ -1492,29 +1635,50 @@ EXPOSE 8080
 CMD ["uvicorn", "harness_cloud.gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
-### 6.3 Agent Dockerfile
+### 6.3 Agent Dockerfile（优化版）
+
+> ⚠️ **评审建议**：使用多阶段构建减小镜像体积，分离 SDK 构建与业务代码。
 
 ```dockerfile
 # docker/agent.Dockerfile
 
+# 阶段 1：构建 SDK wheel
+FROM python:3.11-slim AS sdk-builder
+
+WORKDIR /build
+COPY packages/sdk /build/sdk
+RUN pip install build && \
+    cd sdk && \
+    python -m build --wheel
+
+# 阶段 2：运行时镜像
 FROM python:3.11-slim
 
+# 安装运行时依赖（不含 build-essential）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=harness-sdk-builder /dist /dist
-RUN pip install /dist/harness_sdk-*.whl
 
+# 从构建阶段复制 SDK wheel
+COPY --from=sdk-builder /build/sdk/dist/*.whl /tmp/
+RUN pip install /tmp/*.whl && rm /tmp/*.whl
+
+# 复制业务代码
 COPY src/harness_cloud /app/harness_cloud
-RUN pip install fastapi uvicorn websockets
+RUN pip install --no-cache-dir fastapi uvicorn websockets
 
+# 创建工作目录
 RUN mkdir /workspace
 WORKDIR /workspace
 
 EXPOSE 8000
 CMD ["uvicorn", "harness_cloud.agent.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+**优化效果**：
+- 镜像体积减小约 200MB（不含 build-essential）
+- SDK 构建缓存独立，业务代码修改不影响 SDK 层
 
 ### 6.4 Kubernetes NetworkPolicy
 

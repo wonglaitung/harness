@@ -1,0 +1,51 @@
+# Docker Compose for Harness Cloud
+#
+# Services:
+# - gateway: Main entry point (FastAPI + Docker manager)
+# - redis: Rate limiter backend
+#
+# Security notes:
+# - docker.sock is mounted read-only (ADR-007)
+# - gateway runs as non-root user
+# - Internal network for agent containers
+#
+# Reference: packages/cloud/docs/06-deployment.md
+
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: packages/cloud/docker/gateway.Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - HARNESS_JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - HARNESS_REDIS_URL=redis://redis:6379
+      - HARNESS_ENVIRONMENT=docker
+    volumes:
+      # docker.sock for container management (read-only for security)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - redis
+    networks:
+      - harness-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - harness-net
+    restart: unless-stopped
+    # Persistence optional for rate limiting
+    # volumes:
+    #   - redis-data:/data
+
+networks:
+  harness-net:
+    driver: bridge
+    # Note: Agent containers use a separate internal network
+    # created by DockerManager (internal=True)
