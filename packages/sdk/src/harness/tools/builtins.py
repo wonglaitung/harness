@@ -4,7 +4,9 @@ Built-in tools for file operations, search, and shell commands.
 
 import asyncio
 import logging
+import platform
 import re
+import shutil
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,29 @@ from harness.tools.base import Tool, ToolContext
 from harness.types import ToolResult
 
 logger = logging.getLogger(__name__)
+
+# Cache for Windows shell availability
+_WINDOWS_POWERSHELL_AVAILABLE: bool | None = None
+
+
+def _get_windows_shell() -> tuple[str, list[str]]:
+    """Determine the best shell for Windows.
+
+    Returns:
+        Tuple of (shell_executable, prefix_args)
+        - PowerShell: ("powershell.exe", ["-Command"])
+        - cmd: ("cmd.exe", ["/c"])
+    """
+    global _WINDOWS_POWERSHELL_AVAILABLE
+
+    if _WINDOWS_POWERSHELL_AVAILABLE is None:
+        # Check if PowerShell is available
+        _WINDOWS_POWERSHELL_AVAILABLE = shutil.which("powershell.exe") is not None
+
+    if _WINDOWS_POWERSHELL_AVAILABLE:
+        return ("powershell.exe", ["-Command"])
+    else:
+        return ("cmd.exe", ["/c"])
 
 
 class ReadTool(Tool):
@@ -482,13 +507,26 @@ class BashTool(Tool):
             )
 
         try:
-            # Execute command
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(context.working_directory),
-            )
+            # Execute command with platform-appropriate shell
+            if platform.system() == "Windows":
+                # Windows: Use PowerShell if available, fallback to cmd
+                shell_exec, shell_args = _get_windows_shell()
+                process = await asyncio.create_subprocess_exec(
+                    shell_exec,
+                    *shell_args,
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(context.working_directory),
+                )
+            else:
+                # Unix: Use default shell
+                process = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(context.working_directory),
+                )
 
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
