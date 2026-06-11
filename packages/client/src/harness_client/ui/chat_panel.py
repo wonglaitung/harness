@@ -16,7 +16,7 @@ import markdown
 
 logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
-from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
+from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QTextCursor
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -935,7 +935,7 @@ class ChatPanel(QWidget):
             start_pos -= 1
         # Replace the "/" + typed text with the completion
         cursor.setPosition(start_pos)
-        cursor.setPosition(pos, QTextEdit.MoveMode.KeepAnchor)
+        cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
         cursor.insertText(completion)
         self.input_field.setFocus()
 
