@@ -196,7 +196,7 @@ class MessageBubble(QWidget):
             self._padding_h,
             self._padding_v,
             self.width() - 2 * self._padding_h,
-            self.height() - self._padding_v
+            self.height() - 2 * self._padding_v
         )
         painter.drawText(
             text_rect,
@@ -660,8 +660,8 @@ class ChatPanel(QWidget):
 
         # Welcome message (Chinese)
         self.messages_container.add_message(
-            "assistant",
             "你好！我是你的 AI 助手，很高兴为你服务。有什么我可以帮助你的吗？",
+            "assistant",
         )
 
     def _on_send(self):
@@ -670,7 +670,7 @@ class ChatPanel(QWidget):
         if not text:
             return
 
-        self.messages_container.add_message("user", text)
+        self.messages_container.add_message(text, "user")
         self.input_field.clear()
         self._scroll_to_bottom()
         self.message_sent.emit(text)
@@ -721,7 +721,7 @@ class ChatPanel(QWidget):
             logger.warning(f"Invalid role '{role}', defaulting to 'assistant'")
             role = "assistant"
 
-        self.messages_container.add_message(role, content)
+        self.messages_container.add_message(content, role)
         self._scroll_to_bottom()
 
     def append_assistant_message(self, content: str):
