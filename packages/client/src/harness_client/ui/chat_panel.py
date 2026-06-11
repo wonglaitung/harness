@@ -894,9 +894,10 @@ class ChatPanel(QWidget):
                 cursor_rect = self.input_field.cursorRect()
                 # Map the bottom-left corner to global coordinates
                 bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
-                # Create a new rect at the global position
+                # Use input field width for popup width, not cursor width
                 from PyQt6.QtCore import QRect
-                global_rect = QRect(bottom_left.x(), bottom_left.y(), cursor_rect.width(), cursor_rect.height())
+                popup_width = self.input_field.width()
+                global_rect = QRect(bottom_left.x(), bottom_left.y(), popup_width, cursor_rect.height())
                 self.skill_completer.complete(global_rect)
                 popup = self.skill_completer.popup()
                 logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
@@ -922,7 +923,8 @@ class ChatPanel(QWidget):
                 cursor_rect = self.input_field.cursorRect()
                 bottom_left = self.input_field.mapToGlobal(cursor_rect.bottomLeft())
                 from PyQt6.QtCore import QRect
-                global_rect = QRect(bottom_left.x(), bottom_left.y(), cursor_rect.width(), cursor_rect.height())
+                popup_width = self.input_field.width()
+                global_rect = QRect(bottom_left.x(), bottom_left.y(), popup_width, cursor_rect.height())
                 self.skill_completer.complete(global_rect)
                 logger.debug(f"[SkillCompleter] popup shown at global_rect={global_rect}")
             else:
