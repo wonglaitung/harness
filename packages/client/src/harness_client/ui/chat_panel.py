@@ -147,20 +147,24 @@ class MessageBubble(QWidget):
         html = markdown.markdown(text, extensions=extensions)
 
         # Add inline styles for code blocks and other elements
+        # Note: QTextDocument has limited CSS support, use inline styles
         theme = get_theme()
         styled_html = f"""
         <style>
             body {{
                 font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
                 font-size: 10pt;
+            }}
+            p {{
                 color: {theme.TEXT};
-                line-height: 1.5;
+            }}
+            span {{
+                color: {theme.TEXT};
             }}
             code {{
                 background-color: {theme.CODE_BACKGROUND};
                 color: {theme.CODE_FOREGROUND};
                 padding: 2px 6px;
-                border-radius: 4px;
                 font-family: 'Consolas', 'Courier New', monospace;
                 font-size: 9pt;
             }}
@@ -168,8 +172,6 @@ class MessageBubble(QWidget):
                 background-color: {theme.CODE_BACKGROUND};
                 color: {theme.CODE_FOREGROUND};
                 padding: 10px;
-                border-radius: 6px;
-                overflow-x: auto;
             }}
             pre code {{
                 background-color: transparent;
@@ -201,7 +203,9 @@ class MessageBubble(QWidget):
                 margin: 4px 0;
             }}
         </style>
+        <div style="color: {theme.TEXT};">
         {html}
+        </div>
         """
         return styled_html
 
