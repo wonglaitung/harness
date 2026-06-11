@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-06-11: PyQt6 组件选择 - QLabel vs QTextBrowser
+
+### 问题
+
+消息气泡高度计算反复出错：
+1. 最初使用 QTextBrowser，sizeHint() 在 widget 未显示时返回不可靠的值
+2. 尝试用 QTextDocument.documentLayout().documentSize() 修复，仍然不对
+3. 最终改用 QLabel 才彻底解决
+
+### 根本原因
+
+**QTextBrowser/QTextEdit 的 sizeHint() 在 widget 显示前不可靠**：
+- 初始气泡高度过大
+- 添加消息后，气泡高度逐渐收缩直到文字消失
+- 这是因为 QTextBrowser 的 sizeHint 依赖于实际渲染后的布局信息
+
+**QLabel 的 sizeHint() 是准确的**：
+- 即使在 widget 显示前也能正确计算
+- 支持 setWordWrap(True) 自动换行
+- 支持 setTextInteractionFlags(TextSelectableByMouse) 文本选择
+- 支持 setTextFormat(RichText) 富文本渲染
+
+### 解决
+
+```python
+# ❌ 错误：QTextBrowser sizeHint 不可靠
+self._text_browser = QTextBrowser()
+self._text_browser.setHtml(html)
+# sizeHint() 返回不准确的值
+
+# ✅ 正确：QLabel sizeHint 准确
+self._label = QLabel()
+self._label.setWordWrap(True)
+self._label.setTextFormat(Qt.TextFormat.RichText)
+self._label.setText(html)
+# sizeHint() 返回准确的值
+```
+
+### 教训
+
+1. **PyQt6 组件行为要查文档**：不能凭经验假设，不同组件的 sizeHint 行为差异很大
+2. **QLabel 优先用于静态文本**：如果只是显示文本（即使需要富文本、换行、选择），首选 QLabel
+3. **QTextBrowser 用于编辑场景**：只有需要滚动、编辑功能时才用 QTextBrowser/QTextEdit
+4. **写最小测试验证假设**：不确定组件行为时，先写小测试验证
+
+### 参考
+
+- Qt 文档：https://doc.qt.io/qt-6/qlabel.html
+- Qt 文档：https://doc.qt.io/qt-6/qtextbrowser.html
+
+---
+
 ## 2026-06-10: QTextBrowser 布局应避免复杂 CSS
 
 ### 问题
