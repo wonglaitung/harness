@@ -4,12 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ⚠️ 重要原则：PyQt6 开发
 
-**禁止凭经验猜测 PyQt6 组件行为！** 必须先查阅文档：
+**我对 PyQt6 不熟悉，禁止凭经验猜测！** 涉及 PyQt6 的任何改动必须先查文档：
 
-- **QLabel**：首选用于静态文本显示，`sizeHint()` 准确，支持 `setWordWrap()`、文本选择、富文本
-- **QTextBrowser/QTextEdit**：`sizeHint()` 在 widget 未显示时不可靠，仅用于需要滚动/编辑的场景
-- **原则**：不确定时先用 QLabel，复杂需求才用 QTextBrowser
-- **验证方法**：写最小测试验证组件行为，不要假设
+- **必须使用 Context7 或 Qt 官方文档查阅 API 行为**
+- **写最小测试验证假设**，不要假设组件行为
+- **不确定时先问用户**，不要自作主张
 
 **参考文档**：https://doc.qt.io/qt-6/ 或使用 Context7 查阅
 
