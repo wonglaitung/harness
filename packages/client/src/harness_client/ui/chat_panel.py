@@ -97,31 +97,21 @@ def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     return QIcon(pixmap)
 
 
-def create_trash_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
-    """Create a trash/clear icon."""
+def create_clear_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a clear/cancel X icon - simple and clean."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
     pen = QPen(color, 2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
 
-    margin = 4
-    s = size - 2 * margin  # inner size
-    # Bucket body
-    painter.drawRect(margin + 5, margin + 7, s - 10, s - 7)
-    # Lid
-    painter.drawLine(margin + 2, margin + 7, margin + s - 2, margin + 7)
-    # Handle
-    painter.drawLine(margin + 7, margin + 4, margin + s - 7, margin + 4)
-    # Legs
-    painter.drawLine(margin + 6, margin + s - 2, margin + 6, margin + s + 1)
-    painter.drawLine(margin + s - 6, margin + s - 2, margin + s - 6, margin + s + 1)
-    # Inner lines
-    painter.drawLine(margin + 9, margin + 11, margin + 9, margin + s - 2)
-    painter.drawLine(margin + s - 9, margin + 11, margin + s - 9, margin + s - 2)
+    margin = 5
+    # Simple X mark
+    painter.drawLine(margin, margin, size - margin, size - margin)
+    painter.drawLine(size - margin, margin, margin, size - margin)
 
     painter.end()
     return QIcon(pixmap)
@@ -640,7 +630,7 @@ class ChatPanel(QWidget):
 
         # Clear context button
         clear_btn = QPushButton("清空上下文")
-        clear_btn.setIcon(create_trash_icon(16, QColor(theme.TEXT_SUBTLE)))
+        clear_btn.setIcon(create_clear_icon(16, QColor(theme.TEXT_SUBTLE)))
         clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
             QPushButton {{

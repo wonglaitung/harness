@@ -74,7 +74,6 @@ class MainWindow(QMainWindow):
 
         # Initialize UI
         self._setup_menubar()
-        self._setup_header_bar()
         self._setup_central_widget()
         self._setup_statusbar()
 
@@ -178,45 +177,12 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
 
-    def _setup_header_bar(self):
-        """Setup slim header bar with logo and quick actions (~36px)."""
-        header_widget = QWidget()
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(8, 2, 8, 2)
-
-        header_widget.setStyleSheet("""
-            QWidget {
-                background-color: #1e1e1e;
-                border-bottom: 1px solid #3e3e42;
-            }
-        """)
-        header_widget.setMaximumHeight(36)
-
-        # App name (single line, no subtitle)
-        app_name = QLabel("Harness Client")
-        app_name.setStyleSheet("""
-            QLabel {
-                color: #d4d4d4;
-                font-size: 12px;
-                font-weight: bold;
-                margin-left: 8px;
-            }
-        """)
-        header_layout.addWidget(app_name)
-
-        header_layout.addStretch()
-
-        self.header_widget = header_widget
-
     def _setup_central_widget(self):
         """Setup central widget with 3-column splitter layout."""
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        # Add header bar at top
-        layout.addWidget(self.header_widget)
 
         # Create 3-column splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
