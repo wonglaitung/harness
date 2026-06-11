@@ -12,7 +12,7 @@ import base64
 import logging
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
 from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QFontMetrics
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
     QSizePolicy,
@@ -545,32 +546,43 @@ class ChatPanel(QWidget):
             }}
         """)
         input_layout = QHBoxLayout(input_bar)
-        input_layout.setContentsMargins(16, 12, 16, 12)
+        input_layout.setContentsMargins(16, 8, 16, 8)
         input_layout.setSpacing(10)
 
-        # Input field
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("输入消息…  (Enter 发送)")
+        # Multi-line input field (QTextEdit)
+        self.input_field = QTextEdit()
+        self.input_field.setPlaceholderText("输入消息…  (Enter 发送, Shift+Enter 换行)")
         self.input_field.setFont(self._get_font())
         self.input_field.setMinimumHeight(40)
+        self.input_field.setMaximumHeight(120)
+        self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.input_field.setStyleSheet(f"""
-            QLineEdit {{
+            QTextEdit {{
                 background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
-                border-radius: 20px;
-                padding: 0 16px;
+                border-radius: 12px;
+                padding: 8px 12px;
                 color: {theme.TEXT};
             }}
-            QLineEdit:focus {{
+            QTextEdit:focus {{
                 border-color: {theme.ACCENT};
             }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 3px;
+                min-height: 20px;
+            }}
         """)
-        self.input_field.returnPressed.connect(self._on_send)
-        self.input_field.textEdited.connect(self._on_text_edited)
+        # Install event filter for Enter/Shift+Enter handling
+        self.input_field.installEventFilter(self)
 
-        # Skill completer
+        # Skill completer (for QLineEdit compatibility, we'll handle manually)
         self.skill_completer = SkillCompleter(self)
-        self.input_field.setCompleter(self.skill_completer)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -654,7 +666,7 @@ class ChatPanel(QWidget):
 
     def _on_send(self):
         """Handle send button click."""
-        text = self.input_field.text().strip()
+        text = self.input_field.toPlainText().strip()
         if not text:
             return
 
@@ -667,19 +679,24 @@ class ChatPanel(QWidget):
         """Handle stop button click."""
         self.stop_requested.emit()
 
+    def eventFilter(self, obj, event):
+        """Handle Enter/Shift+Enter for multi-line input."""
+        if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
+            key_event = event
+            # Enter without Shift: send message
+            if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
+                if not key_event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self._on_send()
+                    return True  # Consume the event
+                # Shift+Enter: allow default behavior (insert newline)
+        return super().eventFilter(obj, event)
+
     def set_streaming_state(self, is_streaming: bool):
         """Update UI state based on streaming status."""
         self._is_streaming = is_streaming
         self.stop_btn.setVisible(is_streaming)
         self.send_btn.setEnabled(not is_streaming)
         self.input_field.setEnabled(not is_streaming)
-
-    def _on_text_edited(self, text: str):
-        """Handle text editing to trigger skill completer."""
-        if self.skill_completer.should_complete(text):
-            self.skill_completer.setCompletionPrefix(text)
-            if self.skill_completer.completionCount() > 0:
-                self.skill_completer.complete()
 
     def set_skills(self, skills: list[dict]) -> None:
         """Update the skill completer with available skills."""
