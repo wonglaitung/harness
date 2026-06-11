@@ -735,8 +735,10 @@ class ChatPanel(QWidget):
         # Install event filter for Enter/Shift+Enter handling
         self.input_field.installEventFilter(self)
 
-        # Skill completer (for QLineEdit compatibility, we'll handle manually)
+        # Skill completer
         self.skill_completer = SkillCompleter(self)
+        self.skill_completer.setWidget(self.input_field)
+        self.skill_completer.activated.connect(self._insert_skill_completion)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -834,7 +836,7 @@ class ChatPanel(QWidget):
         self.stop_requested.emit()
 
     def eventFilter(self, obj, event):
-        """Handle Enter/Shift+Enter for multi-line input."""
+        """Handle Enter/Shift+Enter for multi-line input and skill completion."""
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
             # Enter without Shift: send message
@@ -843,7 +845,65 @@ class ChatPanel(QWidget):
                     self._on_send()
                     return True  # Consume the event
                 # Shift+Enter: allow default behavior (insert newline)
+
+            # Handle skill completer popup navigation
+            if self.skill_completer.popup().isVisible():
+                if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
+                                        Qt.Key.Key_Enter, Qt.Key.Key_Return,
+                                        Qt.Key.Key_Escape, Qt.Key.Key_Tab):
+                    # Let completer handle these keys
+                    return False
+
+            # Show completer on "/" key or text change
+            if key_event.key() == Qt.Key.Key_Slash:
+                # Check if at start of line or after whitespace
+                cursor = self.input_field.textCursor()
+                text_before = self.input_field.toPlainText()[:cursor.position()]
+                if text_before == "" or text_before.endswith((" ", "\n")):
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(0, self._show_skill_completer)
+            elif key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+                # Update completer on deletion
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, self._update_skill_completer)
+
         return super().eventFilter(obj, event)
+
+    def _show_skill_completer(self):
+        """Show the skill completer popup if appropriate."""
+        text = self.input_field.toPlainText()
+        if self.skill_completer.should_complete(text):
+            # Position popup at cursor
+            cursor_rect = self.input_field.cursorRect()
+            self.skill_completer.complete(cursor_rect.bottomLeft())
+
+    def _update_skill_completer(self):
+        """Update completer visibility based on current text."""
+        text = self.input_field.toPlainText()
+        if self.skill_completer.should_complete(text):
+            if not self.skill_completer.popup().isVisible():
+                cursor_rect = self.input_field.cursorRect()
+                self.skill_completer.complete(cursor_rect.bottomLeft())
+        else:
+            self.skill_completer.popup().hide()
+
+    def _insert_skill_completion(self, completion: str):
+        """Insert the selected skill completion into the input field."""
+        cursor = self.input_field.textCursor()
+        # Find the start of the "/" prefix
+        text = self.input_field.toPlainText()
+        pos = cursor.position()
+        # Look back for "/"
+        start_pos = pos
+        while start_pos > 0 and text[start_pos - 1] != "/":
+            start_pos -= 1
+        if start_pos > 0 and text[start_pos - 1] == "/":
+            start_pos -= 1
+        # Replace the "/" + typed text with the completion
+        cursor.setPosition(start_pos)
+        cursor.setPosition(pos, QTextEdit.MoveMode.KeepAnchor)
+        cursor.insertText(completion)
+        self.input_field.setFocus()
 
     def set_streaming_state(self, is_streaming: bool):
         """Update UI state based on streaming status."""
