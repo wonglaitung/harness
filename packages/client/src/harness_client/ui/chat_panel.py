@@ -863,10 +863,20 @@ class ChatPanel(QWidget):
 
     def _scroll_to_bottom(self):
         """Scroll chat display to bottom with smooth animation."""
+        # Force layout update first
+        self.messages_container.updateGeometry()
+        self._scroll_area.ensureVisible(0, self.messages_container.height())
+
         scrollbar = self._scroll_area.verticalScrollBar()
 
+        # Use QTimer to ensure scroll happens after layout update
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(50, lambda: self._do_scroll(scrollbar))
+
+    def _do_scroll(self, scrollbar):
+        """Perform the actual scroll animation."""
         self._scroll_animation = QPropertyAnimation(scrollbar, QByteArray(b"value"))
-        self._scroll_animation.setDuration(300)
+        self._scroll_animation.setDuration(200)
         self._scroll_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._scroll_animation.setStartValue(scrollbar.value())
         self._scroll_animation.setEndValue(scrollbar.maximum())
