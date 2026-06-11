@@ -738,7 +738,8 @@ class ChatPanel(QWidget):
         # Skill completer
         self.skill_completer = SkillCompleter(self)
         self.skill_completer.setWidget(self.input_field)
-        self.skill_completer.activated.connect(self._insert_skill_completion)
+        # Connect to the str overload of activated signal
+        self.skill_completer.activated[str].connect(self._insert_skill_completion)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -873,6 +874,9 @@ class ChatPanel(QWidget):
         """Show the skill completer popup if appropriate."""
         text = self.input_field.toPlainText()
         if self.skill_completer.should_complete(text):
+            # Set completion prefix for filtering
+            prefix = self.skill_completer.get_completion_prefix(text)
+            self.skill_completer.setCompletionPrefix(prefix)
             # Position popup at cursor
             cursor_rect = self.input_field.cursorRect()
             self.skill_completer.complete(cursor_rect)
@@ -881,6 +885,9 @@ class ChatPanel(QWidget):
         """Update completer visibility based on current text."""
         text = self.input_field.toPlainText()
         if self.skill_completer.should_complete(text):
+            # Update completion prefix for filtering
+            prefix = self.skill_completer.get_completion_prefix(text)
+            self.skill_completer.setCompletionPrefix(prefix)
             if not self.skill_completer.popup().isVisible():
                 cursor_rect = self.input_field.cursorRect()
                 self.skill_completer.complete(cursor_rect)

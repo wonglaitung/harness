@@ -21,6 +21,8 @@ class SkillCompleter(QCompleter):
         self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.setModelSorting(QCompleter.ModelSorting.CaseInsensitivelySortedModel)
         self.setFilterMode(Qt.MatchFlag.MatchContains)
+        # Use popup completion mode
+        self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self._skills: dict[str, str] = {}  # name -> description
 
     def update_skills(self, skills: list[dict]) -> None:
@@ -58,3 +60,17 @@ class SkillCompleter(QCompleter):
             True if text starts with '/' and has at least one character
         """
         return text.startswith("/") and len(text) >= 1
+
+    def get_completion_prefix(self, text: str) -> str:
+        """
+        Get the completion prefix from text.
+
+        Args:
+            text: Current input text
+
+        Returns:
+            The prefix to match (e.g., "/cl" for "/cl" input)
+        """
+        if text.startswith("/"):
+            return text
+        return ""
