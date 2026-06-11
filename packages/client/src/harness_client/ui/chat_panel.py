@@ -151,8 +151,6 @@ class MessageBubble(QWidget):
 
         # Use QLabel instead of QTextBrowser for reliable sizeHint()
         self._label = QLabel()
-        self._label.setWordWrap(True)
-        self._label.setMaximumWidth(self._max_width - 2 * self._padding_h)
         self._label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._label.setOpenExternalLinks(True)
 
@@ -182,10 +180,46 @@ class MessageBubble(QWidget):
 
         layout.addWidget(self._label)
 
-        # Size policy: expand vertically as needed, fixed width
+        # Calculate preferred width based on text
+        self._calculate_width()
+
+        # Size policy: expand vertically as needed
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
         self.setMaximumWidth(self._max_width)
         self.setMinimumWidth(60)
+
+    def _calculate_width(self):
+        """
+        Calculate preferred width and enable word wrap only when needed.
+
+        QLabel with word wrap enabled has unreliable sizeHint width.
+        Solution: Only enable word wrap when text exceeds max width.
+        """
+        fm = QFontMetrics(self._get_font())
+
+        # Get the natural width of the text (without wrapping)
+        if self._role == "assistant":
+            # For rich text, we need to estimate width
+            # Strip HTML tags for width estimation
+            import re
+            plain_text = re.sub(r'<[^>]+>', '', self._content)
+        else:
+            plain_text = self._content
+
+        # Calculate the width needed for the text
+        text_width = fm.horizontalAdvance(plain_text)
+
+        # Add padding
+        total_width = text_width + 2 * self._padding_h
+
+        if total_width > self._max_width:
+            # Text is too long, enable word wrap
+            self._label.setWordWrap(True)
+            self._label.setMaximumWidth(self._max_width - 2 * self._padding_h)
+        else:
+            # Text fits in one line, no wrap needed
+            self._label.setWordWrap(False)
+            self._label.setMaximumWidth(total_width)
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
