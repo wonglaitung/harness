@@ -652,7 +652,7 @@ class RightPanel(QWidget):
     def _setup_ui(self):
         """Setup the right panel UI."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(8, 0, 8, 8)
         layout.setSpacing(8)
 
         # Memory section (first, before Skills)

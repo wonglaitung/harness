@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
         self.chat_panel.stop_requested.connect(self._on_stop_requested)
+        self.chat_panel.clear_chat_requested.connect(self._on_clear_context)
         self.sidebar.session_new_requested.connect(self._on_new_session)
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
@@ -204,25 +205,6 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(app_name)
 
         header_layout.addStretch()
-
-        # Clear context button
-        clear_btn = QPushButton("清空上下文")
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                padding: 4px 10px;
-                color: #d4d4d4;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #2a2a2a;
-                border-color: #505050;
-            }
-        """)
-        clear_btn.clicked.connect(self._on_clear_context)
-        header_layout.addWidget(clear_btn)
 
         self.header_widget = header_widget
 
