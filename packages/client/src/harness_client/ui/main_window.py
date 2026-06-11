@@ -325,8 +325,7 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.chat_panel.clear_chat()
-            self.chat_controller.new_session()
-            self._refresh_session_list()
+            self.chat_controller.clear_context()
             self.statusbar.showMessage("上下文已清空", 3000)
 
     # === Message Handling ===

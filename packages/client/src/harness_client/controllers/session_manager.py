@@ -134,6 +134,16 @@ class SessionManager:
             self._current_id = None
         return True
 
+    def clear_current_messages(self) -> bool:
+        """Clear messages in current session without creating a new session."""
+        current = self.get_current()
+        if not current:
+            return False
+
+        current.messages = []
+        current.trust.clear_trust()
+        return True
+
     def get_history_list(self) -> list[ClientSession]:
         """Get list of historical sessions (excluding current)."""
         if not self._current_id:

@@ -337,6 +337,14 @@ class ChatController:
         """Delete a session."""
         return self.session_manager.delete(session_id)
 
+    def clear_context(self) -> bool:
+        """Clear current session messages without creating new session."""
+        success = self.session_manager.clear_current_messages()
+        if success:
+            # Reset agent to force re-initialization
+            self.agent = None
+        return success
+
     def get_current_session_id(self) -> str | None:
         """Get the current session ID."""
         return self.session_manager.current_id
