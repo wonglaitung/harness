@@ -14,14 +14,12 @@ from pathlib import Path
 
 import markdown
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
-from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QFontMetrics, QTextDocument, QAbstractTextDocumentLayout
+from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QScrollArea,
-    QTextBrowser,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -122,9 +120,8 @@ class MessageBubble(QWidget):
     """
     Message bubble with rounded corners and selectable text.
 
-    Uses layered approach:
-    - Background: QWidget with QPainter.drawRoundedRect() for rounded corners
-    - Content: Transparent QTextBrowser for text selection and Markdown rendering
+    Uses QLabel for accurate sizeHint() with word wrap support.
+    QLabel provides reliable sizing unlike QTextBrowser.
     """
 
     def __init__(
@@ -144,40 +141,51 @@ class MessageBubble(QWidget):
         self._setup_ui()
 
     def _setup_ui(self):
-        """Setup the layered UI."""
+        """Setup the UI with QLabel for accurate sizing."""
         theme = get_theme()
 
-        # Main layout (no margins, text browser handles padding)
+        # Main layout with padding
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(self._padding_h, self._padding_v, self._padding_h, self._padding_v)
         layout.setSpacing(0)
 
-        # Text browser for content (selectable)
-        self._text_browser = QTextBrowser()
-        self._text_browser.setOpenExternalLinks(True)
-        self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._text_browser.setStyleSheet(f"""
-            QTextBrowser {{
+        # Use QLabel instead of QTextBrowser for reliable sizeHint()
+        self._label = QLabel()
+        self._label.setWordWrap(True)
+        self._label.setMaximumWidth(self._max_width - 2 * self._padding_h)
+        self._label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._label.setOpenExternalLinks(True)
+
+        # Set font
+        font = self._get_font()
+        self._label.setFont(font)
+
+        if self._role == "assistant":
+            # Render Markdown to HTML
+            html = self._render_markdown(self._content)
+            self._label.setTextFormat(Qt.TextFormat.RichText)
+            self._label.setText(html)
+        else:
+            # Plain text for user
+            self._label.setTextFormat(Qt.TextFormat.PlainText)
+            self._label.setText(self._content)
+
+        # Set text color via stylesheet
+        text_color = theme.TEXT if self._role == "assistant" else "#ffffff"
+        self._label.setStyleSheet(f"""
+            QLabel {{
                 background-color: transparent;
+                color: {text_color};
                 border: none;
-                padding: {self._padding_v}px {self._padding_h}px;
-                color: {theme.TEXT if self._role == "assistant" else "#ffffff"};
             }}
         """)
 
-        if self._role == "assistant":
-            # Render Markdown for assistant
-            html = self._render_markdown(self._content)
-            self._text_browser.setHtml(html)
-        else:
-            # Plain text for user (escaped)
-            self._text_browser.setText(self._content)
+        layout.addWidget(self._label)
 
-        layout.addWidget(self._text_browser)
-
-        # Calculate size
-        self._calculate_size()
+        # Size policy: expand vertically as needed, fixed width
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
+        self.setMaximumWidth(self._max_width)
+        self.setMinimumWidth(60)
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
@@ -256,55 +264,6 @@ class MessageBubble(QWidget):
         </div>
         """
         return styled_html
-
-    def _calculate_size(self):
-        """
-        Calculate widget size using QTextDocument with setTextWidth.
-
-        Key insight from Qt docs:
-        - QPlainTextDocumentLayout.height() = number of paragraphs, NOT pixels
-        - Must use doc.documentLayout().documentSize().height()
-        - Must call setTextWidth() first to trigger layout calculation
-        """
-        # Create a temporary document to calculate size
-        doc = QTextDocument()
-        doc.setDefaultFont(self._get_font())
-
-        if self._role == "assistant":
-            # Render Markdown to HTML for accurate sizing
-            html = self._render_markdown(self._content)
-            doc.setHtml(html)
-        else:
-            # Plain text for user
-            doc.setPlainText(self._content)
-
-        # CRITICAL: Set text width to trigger layout calculation
-        # This enables proper word wrapping and height calculation
-        doc.setTextWidth(self._max_width - 2 * self._padding_h)
-
-        # Get the correct pixel height from document layout
-        doc_height = doc.documentLayout().documentSize().height()
-        doc_width = doc.documentLayout().documentSize().width()
-
-        # Add padding
-        self._preferred_height = max(
-            int(doc_height) + 2 * self._padding_v,
-            30  # Minimum height
-        )
-        self._preferred_width = min(
-            self._max_width,
-            max(60, int(doc_width) + 2 * self._padding_h)
-        )
-
-        self.setMinimumWidth(60)
-        self.setMinimumHeight(30)
-        self.setMaximumWidth(self._max_width)
-
-    def sizeHint(self) -> QSize:
-        return QSize(self._preferred_width, self._preferred_height)
-
-    def minimumSizeHint(self) -> QSize:
-        return QSize(60, 30)
 
     def paintEvent(self, event):
         """Paint the rounded background."""
