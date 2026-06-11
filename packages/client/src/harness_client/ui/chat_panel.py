@@ -448,8 +448,8 @@ class MessagesContainer(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 2, 0, 2)
-        layout.addStretch()
         layout.addWidget(indicator)
+        layout.addStretch()
         self._layout.insertWidget(self._layout.count() - 1, container)
 
     def add_tool_result(self, tool_name: str, success: bool = True):
@@ -458,8 +458,8 @@ class MessagesContainer(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 2, 0, 2)
-        layout.addStretch()
         layout.addWidget(indicator)
+        layout.addStretch()
         self._layout.insertWidget(self._layout.count() - 1, container)
 
     def add_thinking(self, message: str):
@@ -468,8 +468,8 @@ class MessagesContainer(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 2, 0, 2)
-        layout.addStretch()
         layout.addWidget(indicator)
+        layout.addStretch()
         self._layout.insertWidget(self._layout.count() - 1, container)
 
     def clear(self):
