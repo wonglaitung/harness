@@ -258,44 +258,47 @@ class MessageBubble(QWidget):
         return styled_html
 
     def _calculate_size(self):
-        """Calculate widget size based on QFontMetrics (reliable even before render)."""
-        font = self._get_font()
-        fm = QFontMetrics(font)
+        """
+        Calculate widget size using QTextDocument with setTextWidth.
 
-        # For assistant, strip HTML tags for text measurement
+        Key insight from Qt docs:
+        - QPlainTextDocumentLayout.height() = number of paragraphs, NOT pixels
+        - Must use doc.documentLayout().documentSize().height()
+        - Must call setTextWidth() first to trigger layout calculation
+        """
+        # Create a temporary document to calculate size
+        doc = QTextDocument()
+        doc.setDefaultFont(self._get_font())
+
         if self._role == "assistant":
-            text = self._strip_html(self._content)
+            # Render Markdown to HTML for accurate sizing
+            html = self._render_markdown(self._content)
+            doc.setHtml(html)
         else:
-            text = self._content
+            # Plain text for user
+            doc.setPlainText(self._content)
 
-        # Calculate wrapped line heights
-        lines = text.split('\n')
-        total_height = 0
-        max_char_width = 0
-        for line in lines:
-            if line.strip():
-                wrapped = fm.boundingRect(
-                    0, 0, self._max_width - 2 * self._padding_h, 1000,
-                    Qt.TextFlag.TextWordWrap, line
-                )
-                total_height += wrapped.height()
-                max_char_width = max(max_char_width, fm.horizontalAdvance(line.strip()))
-            else:
-                total_height += fm.height() // 2
+        # CRITICAL: Set text width to trigger layout calculation
+        # This enables proper word wrapping and height calculation
+        doc.setTextWidth(self._max_width - 2 * self._padding_h)
 
-        self._preferred_height = max(int(total_height) + 2 * self._padding_v, fm.height() + 2 * self._padding_v)
-        # Width: based on text content, capped at max_width
-        char_width = fm.horizontalAdvance("a")
-        self._preferred_width = min(self._max_width, max(60, int(max_char_width) + 2 * self._padding_h))
+        # Get the correct pixel height from document layout
+        doc_height = doc.documentLayout().documentSize().height()
+        doc_width = doc.documentLayout().documentSize().width()
+
+        # Add padding
+        self._preferred_height = max(
+            int(doc_height) + 2 * self._padding_v,
+            30  # Minimum height
+        )
+        self._preferred_width = min(
+            self._max_width,
+            max(60, int(doc_width) + 2 * self._padding_h)
+        )
 
         self.setMinimumWidth(60)
         self.setMinimumHeight(30)
         self.setMaximumWidth(self._max_width)
-
-    def _strip_html(self, text: str) -> str:
-        """Basic HTML tag stripping for size estimation."""
-        import re
-        return re.sub(r'<[^>]+>', '', text)
 
     def sizeHint(self) -> QSize:
         return QSize(self._preferred_width, self._preferred_height)
