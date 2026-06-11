@@ -333,16 +333,21 @@ class ChatPanel(QWidget):
 
         if role == "user":
             # User message: blue block, right-aligned, no avatar
+            # Use table with align="right" since QTextBrowser doesn't support text-align on divs
             html = f"""
-<div style="margin: 12px 20px; text-align: right;">
-    <div style="display: inline-block; text-align: left; max-width: 80%;
-                background-color: {theme.USER_BUBBLE}; color: #ffffff;
-                padding: 10px 16px; border-radius: 16px;
-                -webkit-user-select: text; user-select: text;
-                font-size: 14px; line-height: 1.6;">
-        {rendered_content}
-    </div>
-</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 12px 20px;">
+    <tr>
+        <td align="right">
+            <div style="display: inline-block; text-align: left; max-width: 80%;
+                        background-color: {theme.USER_BUBBLE}; color: #ffffff;
+                        padding: 10px 16px; border-radius: 16px;
+                        -webkit-user-select: text; user-select: text;
+                        font-size: 14px; line-height: 1.6;">
+                {rendered_content}
+            </div>
+        </td>
+    </tr>
+</table>
 """
         else:
             # Assistant message: avatar + content block
