@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ 重要原则：PyQt6 开发
+
+**禁止凭经验猜测 PyQt6 组件行为！** 必须先查阅文档：
+
+- **QLabel**：首选用于静态文本显示，`sizeHint()` 准确，支持 `setWordWrap()`、文本选择、富文本
+- **QTextBrowser/QTextEdit**：`sizeHint()` 在 widget 未显示时不可靠，仅用于需要滚动/编辑的场景
+- **原则**：不确定时先用 QLabel，复杂需求才用 QTextBrowser
+- **验证方法**：写最小测试验证组件行为，不要假设
+
+**参考文档**：https://doc.qt.io/qt-6/ 或使用 Context7 查阅
+
+---
+
 ## 快速参考
 
 > **📚 详细文档**：完整指南请查看 `packages/sdk/docs/` 目录
