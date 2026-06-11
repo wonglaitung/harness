@@ -2,7 +2,7 @@
 Chat panel for displaying conversation - Clean, minimal design.
 
 Design principles:
-- No flexbox/grid CSS (QTextBrowser doesn't support it)
+- Custom painted message bubbles with proper rounded corners (QPainter.drawRoundedRect)
 - Visual hierarchy: messages prominent, tool activity secondary
 - Icon glyphs instead of emoji for consistent rendering
 - Chinese UI text matching the app locale
@@ -12,17 +12,17 @@ import base64
 import logging
 from pathlib import Path
 
-import markdown
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray
-from PyQt6.QtGui import QFont, QFontDatabase, QTextCursor, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF
+from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QFontMetrics
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QTextBrowser,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from harness_client.ui.interactive import GlowButton
@@ -95,6 +95,390 @@ def create_stop_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     return QIcon(pixmap)
 
 
+class MessageBubble(QWidget):
+    """
+    Custom painted message bubble with rounded corners.
+
+    Uses QPainter.drawRoundedRect() since QTextBrowser HTML
+    engine doesn't support border-radius CSS property.
+    """
+
+    def __init__(
+        self,
+        content: str,
+        role: str = "assistant",
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._content = content
+        self._role = role
+        self._border_radius = 12.0
+        self._padding_h = 14
+        self._padding_v = 10
+        self._max_width = 450
+
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self._calculate_size()
+
+    def _get_font(self) -> QFont:
+        """Get a suitable font for the system."""
+        font = QFont()
+        font.setPointSize(10)
+        for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
+            font.setFamily(family)
+            if QFontDatabase.families().count(family) > 0 or family in QFontDatabase.families():
+                break
+        return font
+
+    def _calculate_size(self):
+        """Calculate widget size based on content."""
+        font = self._get_font()
+        fm = QFontMetrics(font)
+
+        # Calculate text dimensions with word wrap
+        lines = self._content.split('\n')
+        total_height = 0
+        max_line_width = 0
+
+        for line in lines:
+            if line.strip():
+                text_rect = fm.boundingRect(
+                    0, 0, self._max_width - 2 * self._padding_h, 1000,
+                    Qt.TextFlag.TextWordWrap,
+                    line
+                )
+                total_height += text_rect.height()
+                max_line_width = max(max_line_width, text_rect.width())
+            else:
+                total_height += fm.height() // 2  # Empty line
+
+        # Minimum width for short messages
+        min_width = 60
+        self._text_width = max(max_line_width, min_width - 2 * self._padding_h)
+        self._text_height = max(total_height, fm.height())
+
+        self._preferred_width = min(self._text_width + 2 * self._padding_h, self._max_width)
+        self._preferred_height = self._text_height + 2 * self._padding_v + 4
+
+    def sizeHint(self) -> QSize:
+        return QSize(self._preferred_width, self._preferred_height)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(50, 30)
+
+    def paintEvent(self, event):
+        """Paint the rounded bubble."""
+        theme = get_theme()
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Bubble colors
+        if self._role == "user":
+            bg_color = QColor(theme.USER_BUBBLE)
+            text_color = QColor("#ffffff")
+        else:
+            bg_color = QColor(theme.ASSISTANT_BUBBLE)
+            text_color = QColor(theme.TEXT)
+
+        # Draw rounded rectangle
+        rect = QRectF(0, 0, self.width() - 1, self.height() - 1)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(bg_color))
+        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+
+        # Draw text
+        painter.setPen(text_color)
+        painter.setFont(self._get_font())
+
+        text_rect = QRectF(
+            self._padding_h,
+            self._padding_v,
+            self.width() - 2 * self._padding_h,
+            self.height() - self._padding_v
+        )
+        painter.drawText(
+            text_rect,
+            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            self._content
+        )
+
+        painter.end()
+
+
+class AvatarWidget(QWidget):
+    """Simple avatar widget with rounded corners."""
+
+    def __init__(self, size: int = 24, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._size = size
+        self.setFixedSize(size, size)
+
+    def paintEvent(self, event):
+        theme = get_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw rounded background
+        rect = QRectF(0, 0, self._size - 1, self._size - 1)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.AVATAR_ASSISTANT_BG)))
+        painter.drawRoundedRect(rect, 6.0, 6.0)
+
+        # Draw "A" letter
+        painter.setPen(QColor("#ffffff"))
+        font = QFont()
+        font.setPointSize(10)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "A")
+
+        painter.end()
+
+
+class MessageRow(QWidget):
+    """A row containing a message bubble with proper alignment."""
+
+    def __init__(
+        self,
+        content: str,
+        role: str = "assistant",
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._content = content
+        self._role = role
+        self._setup_ui()
+
+    def _setup_ui(self):
+        theme = get_theme()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 4, 16, 4)
+        layout.setSpacing(0)
+
+        # Create bubble
+        bubble = MessageBubble(self._content, self._role)
+
+        if self._role == "user":
+            # Right-aligned: stretch on left, bubble on right
+            layout.addStretch()
+            layout.addWidget(bubble)
+            layout.addSpacing(4)
+        else:
+            # Left-aligned: avatar, bubble, stretch
+            avatar = AvatarWidget(24)
+            layout.addWidget(avatar)
+            layout.addSpacing(6)
+            layout.addWidget(bubble)
+            layout.addStretch()
+
+        self.setStyleSheet(f"background-color: {theme.PANEL};")
+
+
+class ToolIndicator(QWidget):
+    """Visual indicator for tool calls/results with rounded corners."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._border_radius = 6.0
+
+    def _get_font(self) -> QFont:
+        font = QFont()
+        font.setPointSize(9)
+        for family in ["Microsoft YaHei", "Segoe UI", "SimHei", "Arial"]:
+            font.setFamily(family)
+            break
+        return font
+
+
+class ToolCallIndicator(ToolIndicator):
+    """Visual indicator for tool calls."""
+
+    def __init__(
+        self,
+        tool_name: str,
+        arguments: dict,
+        parent: QWidget | None = None,
+    ):
+        self._tool_name = tool_name
+        self._arguments = arguments
+        super().__init__(parent)
+        self._calculate_size()
+
+    def _calculate_size(self):
+        args_items = list(self._arguments.items())[:3]
+        self._args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in args_items)
+        if len(self._arguments) > 3:
+            self._args_preview += "..."
+
+        fm = QFontMetrics(self._get_font())
+        text = f"▶ {self._tool_name} {self._args_preview}"
+        text_width = fm.horizontalAdvance(text)
+        self._preferred_width = min(text_width + 48, 400)
+        self._preferred_height = 28
+        self.setFixedHeight(28)
+
+    def sizeHint(self) -> QSize:
+        return QSize(self._preferred_width, 28)
+
+    def paintEvent(self, event):
+        theme = get_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Background
+        rect = QRectF(32, 0, self.width() - 33, 27)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.TOOL_THINKING_BG)))
+        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+
+        # Left border
+        painter.setPen(QPen(QColor(theme.TOOL_THINKING_BORDER), 3))
+        painter.drawLine(32, 2, 32, 26)
+
+        # Text
+        text = f"▶ {self._tool_name} {self._args_preview}"
+        painter.setPen(QColor(theme.TEXT_SUBTLE))
+        painter.setFont(self._get_font())
+        painter.drawText(44, 18, text)
+
+        painter.end()
+
+
+class ToolResultIndicator(ToolIndicator):
+    """Visual indicator for tool results."""
+
+    def __init__(
+        self,
+        tool_name: str,
+        success: bool = True,
+        parent: QWidget | None = None,
+    ):
+        self._tool_name = tool_name
+        self._success = success
+        super().__init__(parent)
+        self.setFixedHeight(28)
+
+    def sizeHint(self) -> QSize:
+        fm = QFontMetrics(self._get_font())
+        text = f"{'✓' if self._success else '✗'} {self._tool_name}"
+        width = fm.horizontalAdvance(text) + 48
+        return QSize(min(width, 200), 28)
+
+    def paintEvent(self, event):
+        theme = get_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Background
+        bg_color = "transparent" if self._success else theme.TOOL_FAILURE_BG
+        border_color = theme.TOOL_SUCCESS_BORDER if self._success else theme.TOOL_FAILURE_BORDER
+
+        rect = QRectF(32, 0, self.width() - 33, 27)
+        if bg_color != "transparent":
+            painter.setPen(QPen(Qt.PenStyle.NoPen))
+            painter.setBrush(QBrush(QColor(bg_color)))
+            painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+
+        # Left border
+        painter.setPen(QPen(QColor(border_color), 3))
+        painter.drawLine(32, 2, 32, 26)
+
+        # Icon and text
+        icon = "✓" if self._success else "✗"
+        painter.setPen(QColor(border_color))
+        painter.setFont(self._get_font())
+        painter.drawText(44, 18, f"{icon} {self._tool_name}")
+
+        painter.end()
+
+
+class ThinkingIndicator(QWidget):
+    """Visual indicator for thinking/progress."""
+
+    def __init__(self, message: str, parent: QWidget | None = None):
+        self._message = message
+        super().__init__(parent)
+        self.setFixedHeight(24)
+
+    def sizeHint(self) -> QSize:
+        fm = QFontMetrics(self._get_font())
+        width = fm.horizontalAdvance(self._message) + 48
+        return QSize(width, 24)
+
+    def _get_font(self) -> QFont:
+        font = QFont()
+        font.setPointSize(9)
+        font.setItalic(True)
+        return font
+
+    def paintEvent(self, event):
+        theme = get_theme()
+        painter = QPainter(self)
+
+        painter.setFont(self._get_font())
+        painter.setPen(QColor(theme.TEXT_SUBTLE))
+        painter.drawText(32, 16, self._message)
+
+        painter.end()
+
+
+class MessagesContainer(QWidget):
+    """Container widget for all messages with scroll support."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 16, 0, 16)
+        self._layout.setSpacing(0)
+        self._layout.addStretch()
+
+        theme = get_theme()
+        self.setStyleSheet(f"background-color: {theme.PANEL};")
+
+    def add_message(self, content: str, role: str):
+        """Add a message bubble."""
+        row = MessageRow(content, role)
+        self._layout.insertWidget(self._layout.count() - 1, row)
+
+    def add_tool_call(self, tool_name: str, arguments: dict):
+        """Add a tool call indicator."""
+        indicator = ToolCallIndicator(tool_name, arguments)
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.addStretch()
+        layout.addWidget(indicator)
+        self._layout.insertWidget(self._layout.count() - 1, container)
+
+    def add_tool_result(self, tool_name: str, success: bool = True):
+        """Add a tool result indicator."""
+        indicator = ToolResultIndicator(tool_name, success)
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.addStretch()
+        layout.addWidget(indicator)
+        self._layout.insertWidget(self._layout.count() - 1, container)
+
+    def add_thinking(self, message: str):
+        """Add a thinking indicator."""
+        indicator = ThinkingIndicator(message)
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.addStretch()
+        layout.addWidget(indicator)
+        self._layout.insertWidget(self._layout.count() - 1, container)
+
+    def clear(self):
+        """Clear all messages."""
+        while self._layout.count() > 1:
+            item = self._layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+
 class ChatPanel(QWidget):
     """Panel for displaying chat messages and input."""
 
@@ -124,19 +508,33 @@ class ChatPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Chat display area
-        self.chat_display = QTextBrowser()
-        self.chat_display.setOpenExternalLinks(True)
-        self.chat_display.setFont(self._get_font())
-        self.chat_display.setPlaceholderText("输入消息开始对话...")
-        self.chat_display.setStyleSheet(f"""
-            QTextBrowser {{
+        # Chat display area with scroll
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
                 background-color: {theme.PANEL};
                 border: none;
-                color: {theme.TEXT};
-                padding: 20px 24px;
+            }}
+            QScrollBar:vertical {{
+                background-color: {theme.PANEL};
+                width: 8px;
+                border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 4px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {theme.TEXT_SUBTLE};
             }}
         """)
+
+        # Messages container
+        self.messages_container = MessagesContainer()
+        scroll_area.setWidget(self.messages_container)
 
         # --- Input bar ---
         input_bar = QWidget()
@@ -242,11 +640,14 @@ class ChatPanel(QWidget):
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
-        layout.addWidget(self.chat_display, stretch=1)
+        layout.addWidget(scroll_area, stretch=1)
         layout.addWidget(input_bar)
 
+        # Store scroll area for scrolling
+        self._scroll_area = scroll_area
+
         # Welcome message (Chinese)
-        self._append_message(
+        self.messages_container.add_message(
             "assistant",
             "你好！我是你的 AI 助手，很高兴为你服务。有什么我可以帮助你的吗？",
         )
@@ -257,8 +658,9 @@ class ChatPanel(QWidget):
         if not text:
             return
 
-        self._append_message("user", text)
+        self.messages_container.add_message("user", text)
         self.input_field.clear()
+        self._scroll_to_bottom()
         self.message_sent.emit(text)
 
     def _on_stop(self):
@@ -283,24 +685,9 @@ class ChatPanel(QWidget):
         """Update the skill completer with available skills."""
         self.skill_completer.update_skills(skills)
 
-    def _render_markdown(self, text: str) -> str:
-        """Render markdown to HTML."""
-        extensions = [
-            "fenced_code",
-            "codehilite",
-            "tables",
-            "toc",
-            "nl2br",
-        ]
-        return markdown.markdown(text, extensions=extensions)
-
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML characters."""
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
     def _scroll_to_bottom(self):
         """Scroll chat display to bottom with smooth animation."""
-        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar = self._scroll_area.verticalScrollBar()
 
         self._scroll_animation = QPropertyAnimation(scrollbar, QByteArray(b"value"))
         self._scroll_animation.setDuration(300)
@@ -310,83 +697,14 @@ class ChatPanel(QWidget):
         self._scroll_animation.start()
 
     def _append_message(self, role: str, content: str):
-        """
-        Append a message to the chat display - clean, minimal layout.
-
-        Layout:
-        - User: blue background block, right-aligned text, no avatar
-        - Assistant: avatar + content block, left-aligned
-        """
+        """Append a message to the chat display."""
         if role not in ["user", "assistant"]:
             import logging
             logger = logging.getLogger(__name__)
             logger.warning(f"Invalid role '{role}', defaulting to 'assistant'")
             role = "assistant"
 
-        theme = get_theme()
-
-        # Render markdown for assistant, escape for user
-        if role == "assistant":
-            rendered_content = self._render_markdown(content)
-        else:
-            rendered_content = self._escape_html(content)
-
-        if role == "user":
-            # User message: elegant blue bubble, right-aligned, no avatar
-            # Qt constraint: border-radius requires border property to work
-            # Solution: table for right alignment + span with border for rounded corners
-            # Note: Qt QTextBrowser requires border-width and border-style for border-radius
-            html = f"""
-<table width="100%" cellpadding="0" cellspacing="0" style="margin: 8px 0; border: none; border-spacing: 0;">
-    <tr>
-        <td width="20" style="border: none;"></td>
-        <td style="border: none;"></td>
-        <td align="right" style="border: none;">
-            <span style="background-color: {theme.USER_BUBBLE};
-                        border-width: 1px; border-style: solid; border-color: {theme.USER_BUBBLE};
-                        border-top-left-radius: 18px; border-top-right-radius: 18px;
-                        border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;
-                        padding: 10px 14px; color: #ffffff; font-size: 14px; line-height: 1.5;
-                        -webkit-user-select: text; user-select: text;">
-                {rendered_content}
-            </span>
-        </td>
-    </tr>
-</table>
-"""
-        else:
-            # Assistant message: avatar + content block
-            # Design: clean left-aligned with subtle gray background
-            # Qt constraint: border-radius requires border property to work
-            # Note: Qt QTextBrowser requires border-width and border-style for border-radius
-            avatar_base64 = get_assistant_avatar_base64()
-            avatar_size = 24  # Slightly larger for better visual balance
-
-            if avatar_base64:
-                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 6px; vertical-align: top;">'
-            else:
-                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 6px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 12px; text-align: center; line-height: {avatar_size}px; font-weight: 600;">A</span>'
-
-            html = f"""
-<div style="margin: 8px 0;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="border: none; border-spacing: 0;">
-        <tr>
-            <td width="28" valign="top" style="border: none; padding-right: 8px;">{avatar_html}</td>
-            <td valign="top" style="border: none;">
-                <span style="background-color: {theme.ASSISTANT_BUBBLE};
-                            border-width: 1px; border-style: solid; border-color: {theme.ASSISTANT_BUBBLE};
-                            border-top-left-radius: 18px; border-top-right-radius: 18px;
-                            border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;
-                            padding: 10px 14px; color: {theme.TEXT}; line-height: 1.5;
-                            font-size: 14px; display: inline-block;">
-                    {rendered_content}
-                </span>
-            </td>
-        </tr>
-    </table>
-</div>
-"""
-        self.chat_display.append(html)
+        self.messages_container.add_message(role, content)
         self._scroll_to_bottom()
 
     def append_assistant_message(self, content: str):
@@ -398,81 +716,23 @@ class ChatPanel(QWidget):
         self._append_message("user", content)
 
     def append_tool_call(self, tool_name: str, arguments: dict):
-        """
-        Append a tool call indicator - refined minimal style.
-
-        Subtle left border with compact layout. Uses colored indicator.
-        """
-        theme = get_theme()
-
-        # Format arguments preview
-        args_items = list(arguments.items())[:3]
-        args_preview = ", ".join(f"{k}={repr(v)[:20]}" for k, v in args_items)
-        if len(arguments) > 3:
-            args_preview += "..."
-
-        html = f"""
-<div style="margin: 4px 32px; padding: 8px 12px;
-            background-color: {theme.TOOL_THINKING_BG};
-            border-left: 3px solid {theme.TOOL_THINKING_BORDER};
-            border-radius: 6px;
-            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
-    <span style="color: {theme.TOOL_THINKING_BORDER};">&#9654;</span>
-    <b style="color: {theme.TOOL_THINKING_TEXT};">{self._escape_html(tool_name)}</b>
-    <span style="color: {theme.TEXT_SUBTLE}; font-size: 11px;"> {self._escape_html(args_preview) if args_preview else ''}</span>
-</div>
-"""
-        self.chat_display.append(html)
+        """Append a tool call indicator."""
+        self.messages_container.add_tool_call(tool_name, arguments)
         self._scroll_to_bottom()
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
-        """
-        Append a tool result indicator - refined minimal style.
-
-        Subtle indicator with success/failure status.
-        """
-        theme = get_theme()
-
-        if success:
-            border = theme.TOOL_SUCCESS_BORDER
-            icon = "&#10004;"  # ✓
-        else:
-            border = theme.TOOL_FAILURE_BORDER
-            icon = "&#10008;"  # ✗
-
-        html = f"""
-<div style="margin: 4px 32px; padding: 8px 12px;
-            background-color: {'transparent' if success else theme.TOOL_FAILURE_BG};
-            border-left: 3px solid {border};
-            border-radius: 6px;
-            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
-    <span style="color: {border};">{icon}</span>
-    <span style="color: {theme.TEXT_SUBTLE}; font-size: 11px;"> {self._escape_html(tool_name)}</span>
-</div>
-"""
-        self.chat_display.append(html)
+        """Append a tool result indicator."""
+        self.messages_container.add_tool_result(tool_name, success)
         self._scroll_to_bottom()
 
     def append_thinking(self, message: str):
-        """
-        Append a thinking/progress indicator - refined minimal style.
-
-        Subtle text indicator for processing state.
-        """
-        theme = get_theme()
-
-        html = f"""
-<div style="margin: 4px 32px; padding: 6px 12px;
-            color: {theme.TEXT_SUBTLE}; font-size: 12px; font-style: italic;">
-    {self._escape_html(message)}
-</div>
-"""
-        self.chat_display.append(html)
+        """Append a thinking/progress indicator."""
+        self.messages_container.add_thinking(message)
         self._scroll_to_bottom()
 
     def clear_chat(self):
         """Clear the chat display."""
-        self.chat_display.clear()
+        self.messages_container.clear()
 
     def set_token_usage(self, usage: dict, limit: int = 200000):
         """Update the token usage indicator in the input bar."""
