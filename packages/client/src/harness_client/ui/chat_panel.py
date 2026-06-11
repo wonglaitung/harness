@@ -554,7 +554,7 @@ class ChatPanel(QWidget):
         self.input_field.setPlaceholderText("输入消息…  (Enter 发送, Shift+Enter 换行)")
         self.input_field.setFont(self._get_font())
         self.input_field.setMinimumHeight(40)
-        self.input_field.setMaximumHeight(120)
+        self.input_field.setMaximumHeight(72)  # ~3 lines
         self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.input_field.setStyleSheet(f"""
             QTextEdit {{
