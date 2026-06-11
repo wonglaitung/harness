@@ -141,7 +141,7 @@ class SessionManager:
             return False
 
         current.messages = []
-        current.trust.clear_trust()
+        current.clear_trust()
         return True
 
     def get_history_list(self) -> list[ClientSession]:

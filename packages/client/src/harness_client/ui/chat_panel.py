@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QTextBrowser,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -119,11 +120,11 @@ def create_clear_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIco
 
 class MessageBubble(QWidget):
     """
-    Custom painted message bubble with rounded corners.
+    Message bubble with rounded corners and selectable text.
 
-    Uses QPainter.drawRoundedRect() since QTextBrowser HTML
-    engine doesn't support border-radius CSS property.
-    For assistant messages, uses QTextDocument for Markdown rendering.
+    Uses layered approach:
+    - Background: QWidget with QPainter.drawRoundedRect() for rounded corners
+    - Content: Transparent QTextBrowser for text selection and Markdown rendering
     """
 
     def __init__(
@@ -140,15 +141,42 @@ class MessageBubble(QWidget):
         self._padding_v = 10
         self._max_width = 450
 
-        # For assistant: render markdown to HTML, use QTextDocument
-        self._text_document = None
-        if role == "assistant":
-            html = self._render_markdown(content)
-            self._text_document = QTextDocument()
-            self._text_document.setHtml(html)
-            self._text_document.setTextWidth(self._max_width - 2 * self._padding_h)
+        self._setup_ui()
 
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+    def _setup_ui(self):
+        """Setup the layered UI."""
+        theme = get_theme()
+
+        # Main layout (no margins, text browser handles padding)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Text browser for content (selectable)
+        self._text_browser = QTextBrowser()
+        self._text_browser.setOpenExternalLinks(True)
+        self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._text_browser.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: transparent;
+                border: none;
+                padding: {self._padding_v}px {self._padding_h}px;
+                color: {theme.TEXT if self._role == "assistant" else "#ffffff"};
+            }}
+        """)
+
+        if self._role == "assistant":
+            # Render Markdown for assistant
+            html = self._render_markdown(self._content)
+            self._text_browser.setHtml(html)
+        else:
+            # Plain text for user (escaped)
+            self._text_browser.setText(self._content)
+
+        layout.addWidget(self._text_browser)
+
+        # Calculate size
         self._calculate_size()
 
     def _get_font(self) -> QFont:
@@ -166,8 +194,6 @@ class MessageBubble(QWidget):
         extensions = ["fenced_code", "codehilite", "tables", "nl2br"]
         html = markdown.markdown(text, extensions=extensions)
 
-        # Add inline styles for code blocks and other elements
-        # Note: QTextDocument has limited CSS support, use inline styles
         theme = get_theme()
         styled_html = f"""
         <style>
@@ -177,6 +203,7 @@ class MessageBubble(QWidget):
             }}
             p {{
                 color: {theme.TEXT};
+                margin: 4px 0;
             }}
             span {{
                 color: {theme.TEXT};
@@ -192,6 +219,7 @@ class MessageBubble(QWidget):
                 background-color: {theme.CODE_BACKGROUND};
                 color: {theme.CODE_FOREGROUND};
                 padding: 10px;
+                margin: 8px 0;
             }}
             pre code {{
                 background-color: transparent;
@@ -231,49 +259,25 @@ class MessageBubble(QWidget):
 
     def _calculate_size(self):
         """Calculate widget size based on content."""
-        if self._text_document:
-            # Use QTextDocument for accurate size
-            self._text_document.setTextWidth(self._max_width - 2 * self._padding_h)
-            doc_height = self._text_document.size().height()
-            ideal_width = self._text_document.idealWidth()
-            self._preferred_width = int(min(ideal_width + 2 * self._padding_h, self._max_width))
-            self._preferred_height = int(doc_height + 2 * self._padding_v + 4)
-        else:
-            # User message: simple text calculation
-            font = self._get_font()
-            fm = QFontMetrics(font)
+        # Get document size
+        doc = self._text_browser.document()
+        doc.setTextWidth(self._max_width)
+        doc_height = doc.size().height()
 
-            lines = self._content.split('\n')
-            total_height = 0
-            max_line_width = 0
+        self._preferred_width = int(min(doc.idealWidth() + 2 * self._padding_h, self._max_width))
+        self._preferred_height = int(doc_height + 2 * self._padding_v)
 
-            for line in lines:
-                if line.strip():
-                    text_rect = fm.boundingRect(
-                        0, 0, self._max_width - 2 * self._padding_h, 1000,
-                        Qt.TextFlag.TextWordWrap,
-                        line
-                    )
-                    total_height += text_rect.height()
-                    max_line_width = max(max_line_width, text_rect.width())
-                else:
-                    total_height += fm.height() // 2
-
-            min_width = 60
-            self._text_width = max(max_line_width, min_width - 2 * self._padding_h)
-            self._text_height = max(total_height, fm.height())
-
-            self._preferred_width = int(min(self._text_width + 2 * self._padding_h, self._max_width))
-            self._preferred_height = int(self._text_height + 2 * self._padding_v + 4)
+        self.setMinimumWidth(60)
+        self.setMinimumHeight(30)
 
     def sizeHint(self) -> QSize:
         return QSize(self._preferred_width, self._preferred_height)
 
     def minimumSizeHint(self) -> QSize:
-        return QSize(50, 30)
+        return QSize(60, 30)
 
     def paintEvent(self, event):
-        """Paint the rounded bubble."""
+        """Paint the rounded background."""
         theme = get_theme()
 
         painter = QPainter(self)
@@ -282,38 +286,14 @@ class MessageBubble(QWidget):
         # Bubble colors
         if self._role == "user":
             bg_color = QColor(theme.USER_BUBBLE)
-            text_color = QColor("#ffffff")
         else:
             bg_color = QColor(theme.ASSISTANT_BUBBLE)
-            text_color = QColor(theme.TEXT)
 
-        # Draw rounded rectangle
+        # Draw rounded rectangle background
         rect = QRectF(0, 0, self.width() - 1, self.height() - 1)
         painter.setPen(QPen(Qt.PenStyle.NoPen))
         painter.setBrush(QBrush(bg_color))
         painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
-
-        # Draw content
-        if self._text_document:
-            # Render QTextDocument
-            painter.translate(self._padding_h, self._padding_v)
-            self._text_document.drawContents(painter, QRectF(0, 0, self.width() - 2 * self._padding_h, self.height() - 2 * self._padding_v))
-        else:
-            # Draw plain text for user
-            painter.setPen(text_color)
-            painter.setFont(self._get_font())
-
-            text_rect = QRectF(
-                self._padding_h,
-                self._padding_v,
-                self.width() - 2 * self._padding_h,
-                self.height() - 2 * self._padding_v
-            )
-            painter.drawText(
-                text_rect,
-                Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
-                self._content
-            )
 
         painter.end()
 
