@@ -211,8 +211,9 @@ class MessageBubble(QWidget):
             # Use QTextDocument for accurate size
             self._text_document.setTextWidth(self._max_width - 2 * self._padding_h)
             doc_height = self._text_document.size().height()
-            self._preferred_width = min(self._text_document.idealWidth() + 2 * self._padding_h, self._max_width)
-            self._preferred_height = doc_height + 2 * self._padding_v + 4
+            ideal_width = self._text_document.idealWidth()
+            self._preferred_width = int(min(ideal_width + 2 * self._padding_h, self._max_width))
+            self._preferred_height = int(doc_height + 2 * self._padding_v + 4)
         else:
             # User message: simple text calculation
             font = self._get_font()
@@ -238,8 +239,8 @@ class MessageBubble(QWidget):
             self._text_width = max(max_line_width, min_width - 2 * self._padding_h)
             self._text_height = max(total_height, fm.height())
 
-            self._preferred_width = min(self._text_width + 2 * self._padding_h, self._max_width)
-            self._preferred_height = self._text_height + 2 * self._padding_v + 4
+            self._preferred_width = int(min(self._text_width + 2 * self._padding_h, self._max_width))
+            self._preferred_height = int(self._text_height + 2 * self._padding_v + 4)
 
     def sizeHint(self) -> QSize:
         return QSize(self._preferred_width, self._preferred_height)
