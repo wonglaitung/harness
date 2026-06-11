@@ -178,6 +178,28 @@ class MessageBubble(QWidget):
             a {{
                 color: {theme.ACCENT_LIGHT};
             }}
+            table {{
+                border-collapse: collapse;
+                margin: 8px 0;
+            }}
+            th, td {{
+                border: 1px solid {theme.BORDER};
+                padding: 6px 12px;
+            }}
+            th {{
+                background-color: {theme.CHROME};
+                font-weight: bold;
+            }}
+            td {{
+                background-color: transparent;
+            }}
+            ul, ol {{
+                margin-left: 20px;
+                padding-left: 0;
+            }}
+            li {{
+                margin: 4px 0;
+            }}
         </style>
         {html}
         """
