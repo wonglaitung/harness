@@ -334,7 +334,7 @@ class ChatPanel(QWidget):
         if role == "user":
             # User message: blue block, right-aligned, no avatar
             html = f"""
-<div style="margin: 12px 20px;">
+<div style="margin: 12px 20px; text-align: right;">
     <div style="display: inline-block; text-align: left; max-width: 80%;
                 background-color: {theme.USER_BUBBLE}; color: #ffffff;
                 padding: 10px 16px; border-radius: 16px;
@@ -347,21 +347,21 @@ class ChatPanel(QWidget):
         else:
             # Assistant message: avatar + content block
             avatar_base64 = get_assistant_avatar_base64()
-            avatar_size = 30
+            avatar_size = 22  # Smaller, proportional to text size
 
             if avatar_base64:
-                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 8px; vertical-align: top;">'
+                avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 6px; vertical-align: top;">'
             else:
-                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 8px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 13px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
+                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 6px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 11px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
 
             html = f"""
-<div style="margin: 16px 20px;">
+<div style="margin: 14px 20px;">
     <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-            <td width="{avatar_size + 8}" valign="top">{avatar_html}</td>
+            <td width="{avatar_size + 6}" valign="top">{avatar_html}</td>
             <td valign="top">
                 <div style="background-color: {theme.ASSISTANT_BUBBLE}; border-radius: 16px;
-                            padding: 10px 16px; color: {theme.TEXT}; line-height: 1.6;
+                            padding: 10px 14px; color: {theme.TEXT}; line-height: 1.6;
                             font-size: 14px;">
                     {rendered_content}
                 </div>
