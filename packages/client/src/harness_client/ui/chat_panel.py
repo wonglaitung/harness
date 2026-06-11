@@ -258,36 +258,39 @@ class MessageBubble(QWidget):
         return styled_html
 
     def _calculate_size(self):
-        """Calculate widget size based on content."""
-        # Try to get QTextBrowser document size, fall back to font metrics
-        doc = self._text_browser.document()
-        if doc and doc.blockCount() > 0:
-            doc.setTextWidth(self._max_width)
-            doc_height = doc.size().height()
-        else:
-            # Document not ready yet (widget not shown), estimate with font metrics
-            fm = QFontMetrics(self._get_font())
-            text = self._content if self._role != "assistant" else self._strip_html(self._content)
-            lines = text.split('\n')
-            total_height = 0
-            for line in lines:
-                if line.strip():
-                    wrapped = fm.boundingRect(
-                        0, 0, self._max_width - 2 * self._padding_h, 1000,
-                        Qt.TextFlag.TextWordWrap, line
-                    )
-                    total_height += wrapped.height()
-                else:
-                    total_height += fm.height() // 2
-            doc_height = max(total_height, fm.height())
+        """Calculate widget size based on QFontMetrics (reliable even before render)."""
+        font = self._get_font()
+        fm = QFontMetrics(font)
 
-        self._preferred_width = int(min(doc.idealWidth() + 2 * self._padding_h, self._max_width))
-        if self._preferred_width < 60:
-            self._preferred_width = 60
-        self._preferred_height = int(doc_height + 2 * self._padding_v)
+        # For assistant, strip HTML tags for text measurement
+        if self._role == "assistant":
+            text = self._strip_html(self._content)
+        else:
+            text = self._content
+
+        # Calculate wrapped line heights
+        lines = text.split('\n')
+        total_height = 0
+        max_char_width = 0
+        for line in lines:
+            if line.strip():
+                wrapped = fm.boundingRect(
+                    0, 0, self._max_width - 2 * self._padding_h, 1000,
+                    Qt.TextFlag.TextWordWrap, line
+                )
+                total_height += wrapped.height()
+                max_char_width = max(max_char_width, fm.horizontalAdvance(line.strip()))
+            else:
+                total_height += fm.height() // 2
+
+        self._preferred_height = max(int(total_height) + 2 * self._padding_v, fm.height() + 2 * self._padding_v)
+        # Width: based on text content, capped at max_width
+        char_width = fm.horizontalAdvance("a")
+        self._preferred_width = min(self._max_width, max(60, int(max_char_width) + 2 * self._padding_h))
 
         self.setMinimumWidth(60)
         self.setMinimumHeight(30)
+        self.setMaximumWidth(self._max_width)
 
     def _strip_html(self, text: str) -> str:
         """Basic HTML tag stripping for size estimation."""
