@@ -134,7 +134,7 @@ class ChatPanel(QWidget):
                 background-color: {theme.PANEL};
                 border: none;
                 color: {theme.TEXT};
-                padding: 16px 20px;
+                padding: 20px 24px;
             }}
         """)
 
@@ -332,44 +332,55 @@ class ChatPanel(QWidget):
             rendered_content = self._escape_html(content)
 
         if role == "user":
-            # User message: blue block, right-aligned, no avatar
-            # Use table with align="right" since QTextBrowser doesn't support text-align on divs
+            # User message: elegant blue bubble, right-aligned, no avatar
+            # Qt constraint: border-radius requires border property to work
+            # Solution: table for right alignment + span with border for rounded corners
+            # Note: Qt QTextBrowser requires border-width and border-style for border-radius
             html = f"""
-<table width="100%" cellpadding="0" cellspacing="0" style="margin: 12px 20px;">
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 8px 0; border: none; border-spacing: 0;">
     <tr>
-        <td align="right">
-            <div style="display: inline-block; text-align: left; max-width: 80%;
-                        background-color: {theme.USER_BUBBLE}; color: #ffffff;
-                        padding: 10px 16px; border-radius: 16px;
-                        -webkit-user-select: text; user-select: text;
-                        font-size: 14px; line-height: 1.6;">
+        <td width="20" style="border: none;"></td>
+        <td style="border: none;"></td>
+        <td align="right" style="border: none;">
+            <span style="background-color: {theme.USER_BUBBLE};
+                        border-width: 1px; border-style: solid; border-color: {theme.USER_BUBBLE};
+                        border-top-left-radius: 18px; border-top-right-radius: 18px;
+                        border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;
+                        padding: 10px 14px; color: #ffffff; font-size: 14px; line-height: 1.5;
+                        -webkit-user-select: text; user-select: text;">
                 {rendered_content}
-            </div>
+            </span>
         </td>
     </tr>
 </table>
 """
         else:
             # Assistant message: avatar + content block
+            # Design: clean left-aligned with subtle gray background
+            # Qt constraint: border-radius requires border property to work
+            # Note: Qt QTextBrowser requires border-width and border-style for border-radius
             avatar_base64 = get_assistant_avatar_base64()
-            avatar_size = 22  # Smaller, proportional to text size
+            avatar_size = 24  # Slightly larger for better visual balance
 
             if avatar_base64:
                 avatar_html = f'<img src="{avatar_base64}" width="{avatar_size}" height="{avatar_size}" style="border-radius: 6px; vertical-align: top;">'
             else:
-                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 6px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 11px; text-align: center; line-height: {avatar_size}px; font-weight: bold;">A</span>'
+                avatar_html = f'<span style="display: inline-block; width: {avatar_size}px; height: {avatar_size}px; border-radius: 6px; background-color: {theme.AVATAR_ASSISTANT_BG}; color: white; font-size: 12px; text-align: center; line-height: {avatar_size}px; font-weight: 600;">A</span>'
 
             html = f"""
-<div style="margin: 14px 20px;">
-    <table width="100%" cellpadding="0" cellspacing="0">
+<div style="margin: 8px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="border: none; border-spacing: 0;">
         <tr>
-            <td width="{avatar_size + 6}" valign="top">{avatar_html}</td>
-            <td valign="top">
-                <div style="background-color: {theme.ASSISTANT_BUBBLE}; border-radius: 16px;
-                            padding: 10px 14px; color: {theme.TEXT}; line-height: 1.6;
-                            font-size: 14px;">
+            <td width="28" valign="top" style="border: none; padding-right: 8px;">{avatar_html}</td>
+            <td valign="top" style="border: none;">
+                <span style="background-color: {theme.ASSISTANT_BUBBLE};
+                            border-width: 1px; border-style: solid; border-color: {theme.ASSISTANT_BUBBLE};
+                            border-top-left-radius: 18px; border-top-right-radius: 18px;
+                            border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;
+                            padding: 10px 14px; color: {theme.TEXT}; line-height: 1.5;
+                            font-size: 14px; display: inline-block;">
                     {rendered_content}
-                </div>
+                </span>
             </td>
         </tr>
     </table>
@@ -388,10 +399,9 @@ class ChatPanel(QWidget):
 
     def append_tool_call(self, tool_name: str, arguments: dict):
         """
-        Append a tool call indicator - subtle thin style.
+        Append a tool call indicator - refined minimal style.
 
-        Small, no background, thin left border to avoid competing with messages.
-        Uses colored dot instead of emoji.
+        Subtle left border with compact layout. Uses colored indicator.
         """
         theme = get_theme()
 
@@ -402,18 +412,14 @@ class ChatPanel(QWidget):
             args_preview += "..."
 
         html = f"""
-<div style="margin: 6px 20px; padding: 6px 12px;
+<div style="margin: 4px 32px; padding: 8px 12px;
             background-color: {theme.TOOL_THINKING_BG};
-            border-left: 2px solid {theme.TOOL_THINKING_BORDER};
-            border-radius: 4px;
-            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
-    <span style="color: {theme.TOOL_THINKING_BORDER};">&#9670; </span>
-    <b style="color: {theme.TOOL_THINKING_TEXT}; font-size: 11px;">{self._escape_html(tool_name)}</b>
-    <span style="color: {theme.TEXT_SUBTLE};"> called</span>
-    <div style="color: {theme.TOOL_THINKING_LIGHT}; font-size: 10px;
-                font-style: italic; padding-top: 2px;">
-        {self._escape_html(args_preview) if args_preview else 'no arguments'}
-    </div>
+            border-left: 3px solid {theme.TOOL_THINKING_BORDER};
+            border-radius: 6px;
+            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
+    <span style="color: {theme.TOOL_THINKING_BORDER};">&#9654;</span>
+    <b style="color: {theme.TOOL_THINKING_TEXT};">{self._escape_html(tool_name)}</b>
+    <span style="color: {theme.TEXT_SUBTLE}; font-size: 11px;"> {self._escape_html(args_preview) if args_preview else ''}</span>
 </div>
 """
         self.chat_display.append(html)
@@ -421,38 +427,27 @@ class ChatPanel(QWidget):
 
     def append_tool_result(self, tool_name: str, result: str, success: bool = True):
         """
-        Append a tool result indicator - subtle thin style.
+        Append a tool result indicator - refined minimal style.
 
-        Uses a colored dot glyph instead of emoji. Thin block to avoid
-        competing with actual messages.
+        Subtle indicator with success/failure status.
         """
         theme = get_theme()
-        preview = result[:80] + "..." if len(result) > 80 else result
 
         if success:
             border = theme.TOOL_SUCCESS_BORDER
             icon = "&#10004;"  # ✓
-            status_text = "succeeded"
         else:
             border = theme.TOOL_FAILURE_BORDER
             icon = "&#10008;"  # ✗
-            status_text = "failed"
 
         html = f"""
-<div style="margin: 6px 20px; padding: 6px 12px;
+<div style="margin: 4px 32px; padding: 8px 12px;
             background-color: {'transparent' if success else theme.TOOL_FAILURE_BG};
-            border-left: 2px solid {border};
-            border-radius: 4px;
-            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
+            border-left: 3px solid {border};
+            border-radius: 6px;
+            color: {theme.TEXT_SUBTLE}; font-size: 12px;">
     <span style="color: {border};">{icon}</span>
-    <b style="color: {border}; font-size: 11px;">{self._escape_html(tool_name)}</b>
-    <span style="color: {theme.TEXT_SUBTLE};"> {status_text}</span>
-    <div style="color: {theme.TEXT_SUBTLE}; font-size: 10px;
-                padding-top: 2px;
-                font-family: monospace;
-                max-height: 60px; overflow: hidden;">
-        {self._escape_html(preview)}
-    </div>
+    <span style="color: {theme.TEXT_SUBTLE}; font-size: 11px;"> {self._escape_html(tool_name)}</span>
 </div>
 """
         self.chat_display.append(html)
@@ -460,16 +455,15 @@ class ChatPanel(QWidget):
 
     def append_thinking(self, message: str):
         """
-        Append a thinking/progress indicator - minimal thin style.
+        Append a thinking/progress indicator - refined minimal style.
 
-        Thin, no background, uses a dot glyph instead of emoji.
+        Subtle text indicator for processing state.
         """
         theme = get_theme()
 
         html = f"""
-<div style="margin: 6px 20px; padding: 6px 12px;
-            color: {theme.TEXT_SUBTLE}; font-size: 11px;">
-    <span style="color: {theme.TOOL_THINKING_BORDER};">&#8226;</span>
+<div style="margin: 4px 32px; padding: 6px 12px;
+            color: {theme.TEXT_SUBTLE}; font-size: 12px; font-style: italic;">
     {self._escape_html(message)}
 </div>
 """
