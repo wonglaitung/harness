@@ -744,13 +744,15 @@ class ChatPanel(QWidget):
         # Skill completer
         self.skill_completer = SkillCompleter(self)
         self.skill_completer.setWidget(self.input_field)
-        # Connect to the str overload of activated signal
+        # Connect to both the completer and popup activated signals
         self.skill_completer.activated[str].connect(self._insert_skill_completion)
+        self.skill_completer.popup().activated.connect(self._on_skill_popup_activated)
 
         # File completer
         self.file_completer = FileCompleter(self)
         self.file_completer.setWidget(self.input_field)
         self.file_completer.activated[str].connect(self._insert_file_completion)
+        self.file_completer.popup().activated.connect(self._on_file_popup_activated)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -1018,6 +1020,18 @@ class ChatPanel(QWidget):
     def set_work_dir(self, path: Path) -> None:
         """Update the file completer with the work directory."""
         self.file_completer.set_work_dir(path)
+
+    def _on_skill_popup_activated(self, index):
+        """Handle skill popup activated signal from QListView."""
+        completion = self.skill_completer.popup().model().data(index)
+        if completion:
+            self._insert_skill_completion(completion)
+
+    def _on_file_popup_activated(self, index):
+        """Handle file popup activated signal from QListView."""
+        completion = self.file_completer.popup().model().data(index)
+        if completion:
+            self._insert_file_completion(completion)
 
     def _scroll_to_bottom(self):
         """Scroll chat display to bottom with smooth animation."""
