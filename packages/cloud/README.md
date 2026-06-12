@@ -103,6 +103,7 @@ curl -X POST http://localhost:8080/api/sessions
 
 **Connect WebSocket (two-layer auth)**:
 ```bash
+# Manual connection (must send auth within 30 seconds)
 wscat -c ws://localhost:8080/ws/session/abc123
 
 # Step 1: Gateway auth (JWT token)
@@ -114,6 +115,17 @@ wscat -c ws://localhost:8080/ws/session/abc123
 < {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
 
 # Step 3: Send run requests
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
+```
+
+**Quick test with auto-auth**:
+```bash
+# Send Gateway auth immediately on connect (avoids timeout)
+wscat -c ws://localhost:8080/ws/session/abc123 \
+  -x '{"type":"auth","token":"test-token"}'
+
+# Then continue manually:
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 

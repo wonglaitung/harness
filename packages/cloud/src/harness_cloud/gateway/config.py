@@ -47,6 +47,11 @@ class GatewayConfig:
     force_kill_timeout: int = 10  # seconds
     max_containers_per_user: int = 3
 
+    # Test mode: shorter timeouts for manual testing
+    test_mode: bool = False  # Set to True for testing
+    test_idle_timeout: int = 60  # 1 minute in test mode
+    test_graceful_shutdown: int = 5  # 5 seconds in test mode
+
     # Service
     host: str = "0.0.0.0"
     port: int = 8080

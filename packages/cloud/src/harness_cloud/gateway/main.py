@@ -193,9 +193,9 @@ async def session_websocket(websocket: WebSocket, session_id: str):
     """
     await websocket.accept()
 
-    # Wait for auth message (5 second timeout)
+    # Wait for auth message (30 second timeout for manual testing)
     try:
-        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
         auth_data = json.loads(auth_msg)
 
         if auth_data.get("type") != "auth":
