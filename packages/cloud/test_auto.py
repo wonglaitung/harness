@@ -80,6 +80,17 @@ async def main():
 
                 # Gateway auth
                 await ws.send_json({"type": "auth", "token": "test-token"})
+                print("Sent gateway auth, waiting for response...")
+
+                # Wait for any response
+                try:
+                    response = await asyncio.wait_for(ws.receive(), timeout=5)
+                    print(f"Received: type={response.type}, data={response.data if response.type == aiohttp.WSMsgType.TEXT else None}")
+                    if response.type == aiohttp.WSMsgType.TEXT:
+                        print(f"Response JSON: {json.loads(response.data)}")
+                except asyncio.TimeoutError:
+                    print("No response after 5 seconds")
+
                 await asyncio.sleep(0.5)
 
                 # Agent auth
@@ -119,6 +130,17 @@ async def main():
                         elif msg_type == "stream_chunk":
                             content = data.get("payload", {}).get("content", "")
                             print(content, end="", flush=True)
+                        elif msg_type == "progress":
+                            # Progress events from SDK
+                            event_type = data.get("payload", {}).get("event_type", "")
+                            message = data.get("payload", {}).get("message", "")
+                            if event_type in ["llm_response", "loop_end"]:
+                                content = data.get("payload", {}).get("data", {}).get("content", "")
+                                if content:
+                                    print(content, end="", flush=True)
+                            elif event_type not in ["loop_start", "iteration", "state_change", "llm_call"]:
+                                # Print other progress messages
+                                print(f"[{event_type}] {message}", flush=True)
                         elif msg_type == "run_result":
                             print("\n" + "-" * 40)
                             print("\nTest completed successfully!")
