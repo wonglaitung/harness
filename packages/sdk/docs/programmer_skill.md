@@ -356,6 +356,39 @@ assert "error" not in result.lower()
 - 如果接口期望 `Pattern` 类型，不要传字符串
 - 使用类型检查工具（mypy）在编译期发现问题
 
+**UI 调试的系统化方法**：
+
+当遇到 UI 组件行为异常时，遵循以下调试流程：
+
+1. **添加调试日志定位问题层级**
+   ```python
+   # 打印各层组件的尺寸，定位问题在哪一层
+   logger.debug(f"Content label size: {content_width}x{content_height}")
+   logger.debug(f"Scroll area size: {scroll_area.width()}x{scroll_area.height()}")
+   logger.debug(f"Parent widget size: {self.width()}x{self.height()}")
+   ```
+
+2. **验证方案而非假设**
+   - 不要凭"经验"认为某个属性/方法会生效
+   - 查阅官方文档确认 API 行为
+   - 写最小测试验证假设
+
+3. **逐层排查问题**
+   - UI 问题往往是多层次的（子控件 → 父控件 → 容器布局）
+   - 解决一层问题后，要验证整体效果
+   - 不要假设"应该没问题了"
+
+4. **重视用户反馈**
+   - 用户说"没解决"时，认真分析日志和现象
+   - 不要假设自己只是"漏了细节"
+   - 可能是方案本身有问题
+
+5. **简化往往更有效**
+   - 如果一个方案反复尝试都不工作，考虑换个思路
+   - 复杂的参数调整不如简单的架构改变
+
+> 来源：lessons.md "2026-06-12: UI 调试的系统化方法"
+
 ---
 
 ## 系统定位与差异化原则

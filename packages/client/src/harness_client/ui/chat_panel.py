@@ -193,6 +193,8 @@ class MessageBubble(QWidget):
 
             # Render Markdown to HTML
             html = self._render_markdown(self._content)
+            logger.debug(f"[MessageBubble] Original content:\n{self._content[:200]}...")
+            logger.debug(f"[MessageBubble] Rendered HTML:\n{html[:500]}...")
             self._content_label.setTextFormat(Qt.TextFormat.RichText)
             self._content_label.setText(html)
 
@@ -297,72 +299,98 @@ class MessageBubble(QWidget):
         return font
 
     def _render_markdown(self, text: str) -> str:
-        """Render markdown to HTML with basic styling."""
+        """
+        Render markdown to HTML with inline styles.
+
+        Qt QLabel/QTextBrowser does not support <style> tags.
+        We must use inline style attributes on each element.
+        """
+        from html.parser import HTMLParser
+
+        theme = get_theme()
+
+        # Define inline styles for each element type
+        styles = {
+            "p": f"color: {theme.TEXT}; margin-top: 4px; margin-bottom: 4px;",
+            "span": f"color: {theme.TEXT};",
+            "code": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 2px 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9pt;",
+            "pre": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 10px; margin-top: 8px; margin-bottom: 8px;",
+            "a": f"color: {theme.ACCENT_LIGHT};",
+            "table": f"border-collapse: collapse; margin-top: 8px; margin-bottom: 8px;",
+            "th": f"border: 1px solid {theme.BORDER}; padding: 6px 12px; background-color: {theme.CHROME}; font-weight: bold;",
+            "td": f"border: 1px solid {theme.BORDER}; padding: 6px 12px;",
+            "ul": f"margin-left: 20px; padding-left: 0;",
+            "ol": f"margin-left: 20px; padding-left: 0;",
+            "li": f"margin-top: 4px; margin-bottom: 4px;",
+            "h1": f"color: {theme.TEXT}; font-weight: bold; font-size: 16pt;",
+            "h2": f"color: {theme.TEXT}; font-weight: bold; font-size: 14pt;",
+            "h3": f"color: {theme.TEXT}; font-weight: bold; font-size: 12pt;",
+            "blockquote": f"color: {theme.TEXT}; margin-left: 20px; padding-left: 10px; border-left: 3px solid {theme.BORDER};",
+        }
+
+        # Convert markdown to HTML
         extensions = ["fenced_code", "codehilite", "tables", "nl2br"]
         html = markdown.markdown(text, extensions=extensions)
 
-        theme = get_theme()
-        styled_html = f"""
-        <style>
-            body {{
-                font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
-                font-size: 10pt;
-            }}
-            p {{
-                color: {theme.TEXT};
-                margin: 4px 0;
-            }}
-            span {{
-                color: {theme.TEXT};
-            }}
-            code {{
-                background-color: {theme.CODE_BACKGROUND};
-                color: {theme.CODE_FOREGROUND};
-                padding: 2px 6px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 9pt;
-            }}
-            pre {{
-                background-color: {theme.CODE_BACKGROUND};
-                color: {theme.CODE_FOREGROUND};
-                padding: 10px;
-                margin: 8px 0;
-            }}
-            pre code {{
-                background-color: transparent;
-                padding: 0;
-            }}
-            a {{
-                color: {theme.ACCENT_LIGHT};
-            }}
-            table {{
-                border-collapse: collapse;
-                margin: 8px 0;
-            }}
-            th, td {{
-                border: 1px solid {theme.BORDER};
-                padding: 6px 12px;
-            }}
-            th {{
-                background-color: {theme.CHROME};
-                font-weight: bold;
-            }}
-            td {{
-                background-color: transparent;
-            }}
-            ul, ol {{
-                margin-left: 20px;
-                padding-left: 0;
-            }}
-            li {{
-                margin: 4px 0;
-            }}
-        </style>
-        <div style="color: {theme.TEXT};">
-        {html}
-        </div>
-        """
-        return styled_html
+        # Add inline styles to elements
+        class InlineStyleParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.result = []
+                self.in_pre = False  # Track if inside <pre> to handle <code> differently
+
+            def handle_starttag(self, tag, attrs):
+                # Track pre state
+                if tag == "pre":
+                    self.in_pre = True
+                elif tag == "pre":
+                    self.in_pre = False
+
+                # Get style for this tag
+                style = styles.get(tag, "")
+
+                # Special case: <code> inside <pre> should not have background
+                if tag == "code" and self.in_pre:
+                    style = f"background-color: transparent; padding: 0; font-family: 'Consolas', 'Courier New', monospace; font-size: 9pt;"
+
+                # Build tag with attributes
+                attrs_dict = dict(attrs)
+                if style:
+                    # Merge with existing style if any
+                    existing = attrs_dict.get("style", "")
+                    attrs_dict["style"] = f"{existing}; {style}" if existing else style
+
+                attrs_str = " ".join(f'{k}="{v}"' for k, v in attrs_dict.items())
+                if attrs_str:
+                    self.result.append(f"<{tag} {attrs_str}>")
+                else:
+                    self.result.append(f"<{tag}>")
+
+            def handle_endtag(self, tag):
+                if tag == "pre":
+                    self.in_pre = False
+                self.result.append(f"</{tag}>")
+
+            def handle_data(self, data):
+                self.result.append(data)
+
+            def handle_startendtag(self, tag, attrs):
+                # Self-closing tags like <br/>
+                attrs_dict = dict(attrs)
+                style = styles.get(tag, "")
+                if style:
+                    existing = attrs_dict.get("style", "")
+                    attrs_dict["style"] = f"{existing}; {style}" if existing else style
+                attrs_str = " ".join(f'{k}="{v}"' for k, v in attrs_dict.items())
+                if attrs_str:
+                    self.result.append(f"<{tag} {attrs_str}/>")
+                else:
+                    self.result.append(f"<{tag}/>")
+
+        parser = InlineStyleParser()
+        parser.feed(html)
+
+        return "".join(parser.result)
 
     def paintEvent(self, event):
         """Paint the rounded background."""

@@ -1452,3 +1452,127 @@ self._session = aiohttp.ClientSession(
 | 文件 | 改动 |
 |------|------|
 | `packages/sdk/src/harness/mcp/transport.py` | 设置 `sock_read=None` 防止 SSE 流超时 |
+
+---
+
+## 2026-06-12: UI 调试的系统化方法
+
+### 问题
+
+助手消息气泡高度过高（480px 而不是预期的 ~40px），内容显示不正确。经过多轮尝试才找到根本原因。
+
+### 调试过程
+
+**第一轮**：假设 QTextBrowser 的 NoWrap 模式会自动显示水平滚动条
+- 尝试设置 `setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)`
+- **结果**：不生效
+
+**第二轮**：查阅 Stack Overflow，发现需要 `FixedPixelWidth` 模式
+- 设置 `setLineWrapMode(QTextBrowser.LineWrapMode.FixedPixelWidth)`
+- 设置 `setLineWrapColumnOrWidth(2000)`
+- **结果**：仍然不生效
+
+**第三轮**：添加调试日志，定位问题
+```python
+logger.debug(f"Content label size: {content_width}x{content_height}")
+logger.debug(f"Scroll area size: {scroll_area.width()}x{scroll_area.height()}")
+logger.debug(f"MessageBubble size: {self.width()}x{self.height()}")
+```
+- **日志输出**：
+  ```
+  Content label size: 413x17
+  Scroll area size: 640x17
+  MessageBubble size: 640x480  ← 问题在这里！
+  ```
+- **发现**：子控件高度正确，但父控件 MessageBubble 高度错误
+
+**第四轮**：检查 size policy
+- `MessageBubble` 使用了 `QSizePolicy.Policy.MinimumExpanding`（垂直方向）
+- 改为 `QSizePolicy.Policy.Fixed` 并显式设置 `setFixedHeight()`
+- **结果**：高度问题解决
+
+**第五轮**：发现内容不靠上对齐
+- `MessagesContainer` 的布局缺少 `setAlignment(Qt.AlignmentFlag.AlignTop)`
+- **结果**：修复对齐问题
+
+### 教训
+
+#### 1. 方案验证比经验假设重要
+
+凭"经验"认为 `NoWrap` 会触发滚动条，但实际 Qt 的行为是：
+- `NoWrap` 只是不换行，不会触发滚动条
+- `FixedPixelWidth` + `setLineWrapColumnOrWidth()` 才是正确方法
+- 但即使这样，父控件的宽度限制也会干扰
+
+**原则**：修改 API/框架代码前，必须查阅官方文档或验证示例代码，不能凭经验假设。
+
+#### 2. 调试日志是定位问题的关键
+
+添加 4 行调试日志后，问题一目了然：
+- 子控件高度 17px（正确）
+- 父控件高度 480px（错误）
+
+没有这些日志，可能一直在改子控件的设置，而不是找到真正的问题在父控件。
+
+**原则**：当问题不明确时，先加调试日志定位问题根源，不要盲目尝试各种方案。
+
+#### 3. UI 问题是多层次的
+
+这次遇到的是"问题传递链"：
+1. `QTextBrowser` 水平滚动条不工作 → 换方案
+2. 切换到 `QScrollArea` + `QLabel` 方案
+3. 气泡高度太高 → 发现是 `MessageBubble` 的 size policy
+4. 内容不靠上对齐 → 发现是 `MessagesContainer` 的布局对齐
+
+每一层修复后，都会暴露下一层的问题。
+
+**原则**：复杂 UI 组件的问题往往是多层次的，解决一个问题后要验证整体效果，不要假设"应该没问题了"。
+
+#### 4. 用户反馈是最可靠的验证
+
+过程中用户多次指出"不生效"、"高度不对"、"不对齐"。如果只依赖自己的判断，可能：
+- 认为"方案应该是对的，可能是其他问题"
+- 没有认真对待用户的反馈
+
+**原则**：当用户说"没解决"，不要假设自己漏了什么细节，要认真分析日志和现象。
+
+#### 5. 简化方案往往更有效
+
+最终方案比最初的更简单：
+- 不用 `QTextBrowser` 的各种换行模式
+- 用 `QScrollArea` + `QLabel`，这是更直观的组合
+- 用 `setFixedHeight()` 直接控制高度，而不是依赖复杂的 size policy
+
+**原则**：如果一个方案反复尝试都不工作，可能不是"没调好参数"，而是方案本身有问题。换个思路可能更简单有效。
+
+### 代码示例
+
+```python
+# ✅ 正确的助手消息气泡实现
+# 1. QScrollArea + QLabel 组合
+self._scroll_area = QScrollArea()
+self._scroll_area.setWidgetResizable(False)  # 允许内部 widget 保持自己的尺寸
+self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+# 2. QLabel 显示内容
+self._content_label = QLabel()
+self._content_label.setTextFormat(Qt.TextFormat.RichText)
+self._content_label.setText(html)
+self._content_label.adjustSize()
+
+# 3. 设置固定高度
+self._scroll_area.setFixedHeight(self._content_label.height())
+
+# 4. 父控件使用 Fixed 策略
+self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+self.setFixedHeight(self._scroll_area.height() + 2 * padding)
+
+# 5. 容器布局靠上对齐
+self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/ui/chat_panel.py` | 重构助手消息气泡，使用 QScrollArea + QLabel，修复 size policy 和布局对齐 |
