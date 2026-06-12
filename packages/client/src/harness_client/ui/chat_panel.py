@@ -154,41 +154,18 @@ class MessageBubble(QWidget):
         layout.setSpacing(0)
 
         if self._role == "assistant":
-            # Use QTextBrowser for assistant messages (supports horizontal scrolling and Markdown)
-            self._text_browser = QTextBrowser()
-            self._text_browser.setOpenExternalLinks(True)
-            self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            # Use FixedPixelWidth mode with a large width to enable horizontal scrollbar
-            # When content exceeds the widget width, horizontal scrollbar will appear
-            self._text_browser.setLineWrapColumnOrWidth(2000)  # Large width for long lines
-            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.FixedPixelWidth)
+            # Use QScrollArea + QLabel for assistant messages with horizontal scrolling
+            # QTextBrowser's horizontal scrollbar doesn't work reliably for long lines
 
-            # Debug logging
-            logger.debug(f"[MessageBubble] LineWrapMode: {self._text_browser.lineWrapMode()}")
-            logger.debug(f"[MessageBubble] LineWrapColumnOrWidth: {self._text_browser.lineWrapColumnOrWidth()}")
-            logger.debug(f"[MessageBubble] HorizontalScrollBarPolicy: {self._text_browser.horizontalScrollBarPolicy()}")
-
-            # Set font
-            font = self._get_font()
-            self._text_browser.setFont(font)
-
-            # Render Markdown to HTML
-            html = self._render_markdown(self._content)
-            self._text_browser.setHtml(html)
-
-            # Debug: check document size after setting content
-            doc = self._text_browser.document()
-            logger.debug(f"[MessageBubble] Document size: {doc.size()}")
-            logger.debug(f"[MessageBubble] Horizontal scrollbar visible: {self._text_browser.horizontalScrollBar().isVisible()}")
-
-            # Style the text browser
-            self._text_browser.setStyleSheet(f"""
-                QTextBrowser {{
+            # Create scroll area
+            self._scroll_area = QScrollArea()
+            self._scroll_area.setWidgetResizable(False)  # Important: allow widget to expand
+            self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._scroll_area.setStyleSheet(f"""
+                QScrollArea {{
                     background-color: transparent;
-                    color: {theme.TEXT};
                     border: none;
-                    padding: 0px;
                 }}
                 QScrollBar:horizontal {{
                     background-color: {theme.CHROME};
@@ -205,9 +182,33 @@ class MessageBubble(QWidget):
                 }}
             """)
 
-            # Don't set maximum width on QTextBrowser - let it expand naturally
-            # The parent MessageBubble already has max width set
-            layout.addWidget(self._text_browser)
+            # Create QLabel for content
+            self._content_label = QLabel()
+            self._content_label.setOpenExternalLinks(True)
+            self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+            # Set font
+            font = self._get_font()
+            self._content_label.setFont(font)
+
+            # Render Markdown to HTML
+            html = self._render_markdown(self._content)
+            self._content_label.setTextFormat(Qt.TextFormat.RichText)
+            self._content_label.setText(html)
+
+            # Calculate content width and set it
+            self._content_label.adjustSize()
+            content_width = self._content_label.width()
+            logger.debug(f"[MessageBubble] Content label natural width: {content_width}")
+
+            # Set scroll area viewport size
+            viewport_width = min(content_width, self._max_width)
+            self._scroll_area.setMinimumWidth(viewport_width)
+            self._scroll_area.setMaximumWidth(self._max_width)
+
+            self._scroll_area.setWidget(self._content_label)
+
+            layout.addWidget(self._scroll_area)
 
         else:
             # Use QLabel for user messages (simple text, no scrolling needed)
