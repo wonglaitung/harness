@@ -101,27 +101,64 @@ curl http://localhost:8080/health
 # Response: {"status": "healthy", "containers": 0}
 ```
 
-**Create session and connect**:
+**Test Harness Cloud**:
+
+### Automated Test
+
 ```bash
-# Step 1: Create session (returns session_id)
+# Test with Anthropic API
+python test_auto.py sk-ant-xxx
+
+# Test with OpenAI API
+python test_auto.py sk-xxx --provider openai --model gpt-4o
+
+# Test with custom OpenAI-compatible API
+python test_auto.py your-key --provider openai --base-url https://your-api.com/v1 --model your-model
+```
+
+Output:
+```
+=== Harness Cloud Automated Test ===
+
+Step 1: Creating session...
+Session created: abc123
+
+Step 2: Connecting to WebSocket...
+Provider: openai, Model: gpt-4o
+Base URL: https://your-api.com/v1
+Connected! Authenticating...
+
+Step 3: Sending test prompt: 'Hello, what can you do?'
+
+----------------------------------------
+[AI response here...]
+----------------------------------------
+
+Test completed successfully!
+```
+
+### Manual Test (wscat)
+
+```bash
+# Step 1: Create session
 curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d"}
 
-# Step 2: Connect and authenticate
-# Option A: Use Python test script (recommended)
-python test_ws.py abc123 --api-key your-api-key --provider openai --base-url https://your-api.com/v1 --model your-model
-
-# Option B: Manual wscat (must send auth within 30 seconds)
+# Step 2: Connect with wscat (must send auth within 30 seconds)
 wscat -c ws://localhost:8080/ws/session/abc123
-> {"type": "auth", "token": "test-token"}      # Gateway auth (accepts any non-empty token in test mode)
-> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}  # Agent auth
+
+# Step 3: Gateway auth (test mode accepts any non-empty token)
+> {"type": "auth", "token": "test-token"}
+
+# Step 4: Agent auth
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}
 < {"type": "auth_success", ...}
 
-# Step 3: Send run requests
+# Step 5: Send prompts interactively
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
+< {"type": "stream_chunk", "payload": {"content": "..."}}
+< {"type": "run_result", ...}
 ```
-
-> **Note**: Gateway authentication is in testing mode and accepts any non-empty token. Production deployment requires proper JWT authentication system.
 
 ## WebSocket Protocol
 
