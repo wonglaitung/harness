@@ -141,7 +141,6 @@ class MessageBubble(QWidget):
         self._padding_h = 14
         self._padding_v = 10
         self._max_width = 800  # Increased for better code display
-        self._max_height = 400  # Maximum height before scrolling
 
         self._setup_ui()
 
@@ -155,10 +154,10 @@ class MessageBubble(QWidget):
         layout.setSpacing(0)
 
         if self._role == "assistant":
-            # Use QTextBrowser for assistant messages (supports scrolling and Markdown)
+            # Use QTextBrowser for assistant messages (supports horizontal scrolling and Markdown)
             self._text_browser = QTextBrowser()
             self._text_browser.setOpenExternalLinks(True)
-            self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
 
@@ -178,19 +177,6 @@ class MessageBubble(QWidget):
                     border: none;
                     padding: 0px;
                 }}
-                QScrollBar:vertical {{
-                    background-color: {theme.CHROME};
-                    width: 8px;
-                    border-radius: 4px;
-                }}
-                QScrollBar::handle:vertical {{
-                    background-color: {theme.BORDER};
-                    border-radius: 4px;
-                    min-height: 20px;
-                }}
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                    height: 0px;
-                }}
                 QScrollBar:horizontal {{
                     background-color: {theme.CHROME};
                     height: 8px;
@@ -206,17 +192,7 @@ class MessageBubble(QWidget):
                 }}
             """)
 
-            # Calculate document height
-            doc = self._text_browser.document()
-            doc.setTextWidth(self._max_width - 2 * self._padding_h)
-            doc_height = doc.size().height()
-
-            # Set height limit
-            if doc_height > self._max_height:
-                self._text_browser.setMaximumHeight(self._max_height)
-            else:
-                self._text_browser.setMaximumHeight(int(doc_height) + 20)
-
+            # Set width limits
             self._text_browser.setMaximumWidth(self._max_width - 2 * self._padding_h)
             self._text_browser.setMinimumWidth(200)
 
