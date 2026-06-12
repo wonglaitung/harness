@@ -855,13 +855,36 @@ class ChatPanel(QWidget):
             key_event = event
 
             # Let completer handle navigation keys when popup is visible
-            # Don't intercept - QCompleter's internal event filter will handle it
+            # QCompleter doesn't auto-handle Enter for QTextEdit, so we need to simulate it
             if self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
-                if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
-                                        Qt.Key.Key_Enter, Qt.Key.Key_Return,
-                                        Qt.Key.Key_Escape, Qt.Key.Key_Tab):
-                    # Don't process here - let it propagate to completer
+                if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+                    # Let default handling propagate (completer's internal filter handles these)
                     return super().eventFilter(obj, event)
+
+                if key_event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+                    # QCompleter popup doesn't handle Enter for non-QLineEdit widgets
+                    # We need to manually trigger the selection
+                    if self.file_completer.popup().isVisible():
+                        # Get current selection and insert it
+                        current_idx = self.file_completer.popup().currentIndex()
+                        if current_idx.isValid():
+                            completion = self.file_completer.popup().model().data(current_idx)
+                            if completion:
+                                self._insert_file_completion(completion)
+                                return True  # Consume the event
+                    elif self.skill_completer.popup().isVisible():
+                        current_idx = self.skill_completer.popup().currentIndex()
+                        if current_idx.isValid():
+                            completion = self.skill_completer.popup().model().data(current_idx)
+                            if completion:
+                                self._insert_skill_completion(completion)
+                                return True  # Consume the event
+
+                if key_event.key() == Qt.Key.Key_Escape:
+                    # Hide popup on Escape
+                    self.skill_completer.popup().hide()
+                    self.file_completer.popup().hide()
+                    return True  # Consume the event
 
             # Enter without Shift: send message (only if no popup visible)
             if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:

@@ -4,6 +4,10 @@
 
 本文档定义了前端与后端之间的 WebSocket 消息协议，包括消息类型、数据格式和交互流程。
 
+**协议版本**: v2 (Auth-First Protocol)
+
+**核心原则**: 客户端首次连接后必须先认证，认证成功后可发送多次执行请求，无需重复提供 API Key。
+
 ## 消息格式
 
 ### 消息包装（MessageEnvelope）
@@ -22,10 +26,10 @@ interface MessageEnvelope {
 
 ```json
 {
-  "type": "run_request",
+  "type": "auth",
   "payload": {
-    "prompt": "Hello",
-    "model": "claude-sonnet-4-6"
+    "api_key": "sk-ant-xxx",
+    "provider": "anthropic"
   }
 }
 ```
@@ -36,13 +40,16 @@ interface MessageEnvelope {
 
 | 类型 | 说明 | payload |
 |------|------|---------|
-| `run_request` | 执行任务 | `RunRequest` |
+| `auth` | 认证请求（首次连接必发） | `AuthRequest` |
+| `run_request` | 执行任务（需先认证） | `RunRequest` |
 | `interrupt` | 中断执行 | `{}` |
 
 ### 服务端 → 客户端（响应类）
 
 | 类型 | 说明 | payload |
 |------|------|---------|
+| `auth_success` | 认证成功 | `AuthSuccess` |
+| `auth_failed` | 认证失败 | `AuthFailed` |
 | `ack` | 确认接收 | `{session_id}` |
 | `run_result` | 最终结果 | `RunResult` |
 | `stream_chunk` | 流式文本块 | `{content}` |
@@ -54,22 +61,100 @@ interface MessageEnvelope {
 
 ## 详细定义
 
-### RunRequest - 执行请求
+### AuthRequest - 认证请求（首次连接必发）
+
+```typescript
+interface AuthRequest {
+  api_key: string;             // API Key（必填）
+  provider?: string;           // 提供商（默认 "anthropic"）
+  base_url?: string;           // 自定义 API URL（OpenAI 兼容 API）
+  model?: string;              // 默认模型（默认 "claude-sonnet-4-6"）
+  max_iterations?: number;     // 最大迭代次数（默认 10）
+  temperature?: number;        // 温度参数（默认 1.0）
+  system_prompt?: string;      // 系统提示
+  tool_result_role?: string;   // 工具结果角色（默认 "tool"）
+}
+```
+
+**示例**：
+```json
+{
+  "type": "auth",
+  "payload": {
+    "api_key": "sk-ant-xxx",
+    "provider": "anthropic"
+  }
+}
+```
+
+**OpenAI 兼容 API 示例**：
+```json
+{
+  "type": "auth",
+  "payload": {
+    "api_key": "your-key",
+    "provider": "openai",
+    "base_url": "https://api.your-provider.com/v1",
+    "model": "gpt-4o"
+  }
+}
+```
+
+### AuthSuccess - 认证成功
+
+```typescript
+interface AuthSuccess {
+  provider: string;  // 确认的提供商
+  model: string;     // 确认的默认模型
+}
+```
+
+**示例**：
+```json
+{
+  "type": "auth_success",
+  "payload": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6"
+  }
+}
+```
+
+### AuthFailed - 认证失败
+
+```typescript
+interface AuthFailed {
+  error: string;       // 错误信息
+  error_code: string;  // 错误码：INVALID_API_KEY, UNSUPPORTED_PROVIDER 等
+}
+```
+
+**示例**：
+```json
+{
+  "type": "auth_failed",
+  "payload": {
+    "error": "API key is required",
+    "error_code": "INVALID_API_KEY"
+  }
+}
+```
+
+### RunRequest - 执行请求（需先认证）
 
 ```typescript
 interface RunRequest {
-  prompt: string;              // 用户输入
+  prompt: string;              // 用户输入（必填）
   session_id?: string;         // 会话 ID（可选）
-  model: string;               // 模型名称
-  api_key?: string;            // API Key（可选）
-  provider?: string;           // 提供商（默认 "anthropic"）
-  base_url?: string;           // 自定义 API URL
-  max_iterations: number;      // 最大迭代次数
-  temperature: number;         // 温度参数
-  system_prompt?: string;      // 系统提示
-  tool_result_role?: string;   // 工具结果角色
+  // 以下可选，未设置时使用 auth 时的配置
+  model?: string;              // 覆盖默认模型
+  max_iterations?: number;     // 覆盖默认迭代次数
+  temperature?: number;        // 覆盖默认温度
+  system_prompt?: string;      // 覆盖默认系统提示
 }
 ```
+
+**注意**: `api_key`、`provider`、`base_url` 等敏感信息仅在 `auth` 消息中提供，`run_request` 不再包含这些字段。
 
 **示例**：
 ```json
@@ -77,9 +162,18 @@ interface RunRequest {
   "type": "run_request",
   "payload": {
     "prompt": "读取 main.py 文件",
-    "model": "claude-sonnet-4-6",
-    "max_iterations": 10,
-    "temperature": 1.0
+    "session_id": "abc123"
+  }
+}
+```
+
+**覆盖默认模型示例**：
+```json
+{
+  "type": "run_request",
+  "payload": {
+    "prompt": "分析这个文件",
+    "model": "claude-opus-4-6"
   }
 }
 ```
@@ -232,10 +326,31 @@ Harness SDK 的 `ProgressEvent` 与 WebSocket 消息的映射关系：
 
 ## 交互流程
 
-### 正常执行流程
+### 认证流程（首次连接必须执行）
 
 ```
 Client                                Server
+  │                                     │
+  │──── auth ──────────────────────────>│
+  │     {api_key, provider, model}      │
+  │                                     │
+  │<──── auth_success ──────────────────│
+  │     {provider, model}               │
+  │                                     │
+  │  ───── 或 ─────                     │
+  │                                     │
+  │<──── auth_failed ───────────────────│
+  │     {error, error_code}             │
+  │                                     │
+```
+
+### 正常执行流程（认证后）
+
+```
+Client                                Server
+  │                                     │
+  │──── auth ──────────────────────────>│
+  │<──── auth_success ──────────────────│
   │                                     │
   │──── run_request ───────────────────>│
   │                                     │
@@ -260,6 +375,26 @@ Client                                Server
   │<──── stream_chunk ──────────────────│
   │<──── stream_chunk ──────────────────│
   │                                     │
+  │<──── run_result ────────────────────│
+  │                                     │
+```
+
+### 多次请求流程（无需重复认证）
+
+```
+Client                                Server
+  │                                     │
+  │──── auth ──────────────────────────>│
+  │<──── auth_success ──────────────────│
+  │                                     │
+  │──── run_request #1 ────────────────>│
+  │<──── ack ───────────────────────────│
+  │<──── stream_chunk ──────────────────│
+  │<──── run_result ────────────────────│
+  │                                     │
+  │──── run_request #2 ────────────────>│  (无需再发 auth)
+  │<──── ack ───────────────────────────│
+  │<──── stream_chunk ──────────────────│
   │<──── run_result ────────────────────│
   │                                     │
 ```
