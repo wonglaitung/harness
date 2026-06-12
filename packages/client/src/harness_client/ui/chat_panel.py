@@ -140,7 +140,7 @@ class MessageBubble(QWidget):
         self._border_radius = 12.0
         self._padding_h = 14
         self._padding_v = 10
-        self._max_width = 600  # Increased for better code display
+        self._max_width = 800  # Increased for better code display
         self._max_height = 400  # Maximum height before scrolling
 
         self._setup_ui()
@@ -160,7 +160,7 @@ class MessageBubble(QWidget):
             self._text_browser.setOpenExternalLinks(True)
             self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
+            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
 
             # Set font
             font = self._get_font()
@@ -439,8 +439,8 @@ class MessageRow(QWidget):
 
         # Create bubble
         bubble = MessageBubble(self._content, self._role)
-        # Assistant bubbles need more width for scrolling support
-        max_width = 600 if self._role == "assistant" else 450
+        # Assistant bubbles need more width for code display with scrolling
+        max_width = 800 if self._role == "assistant" else 450
         bubble.setMaximumWidth(max_width)
         bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
