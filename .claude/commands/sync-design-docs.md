@@ -68,8 +68,9 @@ tools:
    ├── 10-comparison.md    # 对比分析
    ├── 11-testing.md       # 测试策略
    ├── 12-deployment.md    # 部署指南
-   └── HARNESS_DESIGN.md   # 设计文档索引
-   README.md               # 用户文档
+   ├── HARNESS_DESIGN.md   # 设计文档索引
+   ├── programmer_skill.md # 编程规范
+   └── README.md           # 用户文档
    ```
 
    **客户端文档** (`packages/client/docs/`)：
@@ -81,6 +82,24 @@ tools:
    ├── 04-configuration.md # 配置
    ├── 05-client-lessons.md # 经验教训
    └── README.md           # 用户文档
+   ```
+
+   **Cloud 文档** (`packages/cloud/docs/`)：
+   ```
+   docs/
+   ├── 01-overview.md      # Cloud 架构概述
+   ├── 02-agent.md         # Agent glue layer
+   ├── 03-gateway.md       # Gateway 控制层
+   ├── 05-messages.md      # WebSocket 协议
+   ├── 06-deployment.md    # 部署指南
+   └── README.md           # 用户文档
+   ```
+
+   **根目录文档**：
+   ```
+   CLAUDE.md               # Claude Code 工作指引
+   lessons.md              # 经验教训总结
+   progress.txt            # 项目进展记录
    ```
 
 2. **确定文档映射关系**
@@ -97,6 +116,7 @@ tools:
    | 安全相关 | 08-security.md |
    | 快速开始示例 | README.md |
    | 架构概述 | 01-overview.md |
+   | 编程规范/经验教训 | programmer_skill.md |
 
    **客户端文档映射**：
    | 功能类型 | 目标文档 |
@@ -105,6 +125,23 @@ tools:
    | 控制器逻辑 | 03-controllers.md |
    | 配置相关 | 04-configuration.md |
    | 经验教训 | 05-client-lessons.md |
+
+   **Cloud 文档映射**：
+   | 功能类型 | 目标文档 |
+   |---------|---------|
+   | 架构概述 | 01-overview.md |
+   | Agent 层设计 | 02-agent.md |
+   | Gateway 层设计 | 03-gateway.md |
+   | WebSocket 协议 | 05-messages.md |
+   | 部署配置 | 06-deployment.md |
+   | 用户指南 | README.md |
+
+   **根目录文档映射**：
+   | 功能类型 | 目标文档 |
+   |---------|---------|
+   | Claude 工作指引 | CLAUDE.md |
+   | 跨包经验教训 | lessons.md |
+   | 项目进展 | progress.txt |
 
 3. **生成文档更新计划**
    ```
@@ -190,16 +227,19 @@ tools:
 
 ## 规则
 
-1. **不删除现有内容**: 只添加或修正，保留有价值的现有文档
-2. **保持格式一致**: 遵循现有文档的格式风格
-3. **代码可运行**: 所有代码示例必须是有效的 Python 代码
-4. **先分析后更新**: 必须先完成代码分析再执行更新
-5. **用户确认**: 执行更新前必须展示计划并等待用户确认
+1. **扫描所有包的文档**: 必须检查 SDK、Client、Cloud 三个包的文档目录
+2. **不删除现有内容**: 只添加或修正，保留有价值的现有文档
+3. **保持格式一致**: 遵循现有文档的格式风格
+4. **代码可运行**: 所有代码示例必须是有效的 Python 代码
+5. **先分析后更新**: 必须先完成代码分析再执行更新
+6. **用户确认**: 执行更新前必须展示计划并等待用户确认
 
 ## 注意事项
 
 1. 对于大型变更，分批更新文档
 2. 保持中英文术语一致性
 3. 注意文档间的交叉引用
-4. 更新 README.md 的功能列表
+4. 更新各包 README.md 的功能列表
 5. 如有 API 变更，检查是否需要更新类型定义文档
+6. **Cloud 相关变更**: 同时更新 `packages/cloud/docs/` 和 `packages/cloud/README.md`
+7. **跨包经验教训**: 更新 `lessons.md` 和 `packages/sdk/docs/programmer_skill.md`
