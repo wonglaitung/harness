@@ -4,6 +4,90 @@
 
 客户端采用 PyQt6 构建用户界面，遵循三栏布局设计。本文档详细介绍各个 UI 组件的设计和实现。
 
+## 自动补全组件
+
+输入框支持两种自动补全：
+
+### 文件名补全（`@` 前缀）
+
+输入 `@` 后弹出文件名补全菜单，支持快速引用工作区文件。
+
+```python
+class FileCompleter(QCompleter):
+    """文件名自动补全，@ 前缀触发"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.setFilterMode(Qt.MatchFlag.MatchContains)
+
+    def update_files(self, files: list[str]):
+        """更新文件列表"""
+        model = QStringListModel(files, self)
+        self.setModel(model)
+```
+
+### 技能补全（`/` 前缀）
+
+输入 `/` 后弹出技能列表，支持快速调用预定义技能。
+
+```python
+class SkillCompleter(QCompleter):
+    """技能自动补全，/ 前缀触发"""
+
+    def __init__(self, skills: list[str], parent=None):
+        super().__init__(skills, parent)
+        self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+```
+
+**实现要点**：
+- 补全菜单通过 `eventFilter` 处理键盘导航（上/下/Enter/Esc）
+- `textChanged` 信号触发补全列表更新
+- 选中后通过 `activated` 信号插入文本
+
+## 消息气泡组件
+
+### 水平滚动支持
+
+助手消息气泡支持水平滚动，用于显示长代码行：
+
+```python
+class MessageBubble(QWidget):
+    """消息气泡，助手消息支持水平滚动"""
+
+    def _setup_assistant_content(self, html: str):
+        # 使用 QScrollArea + QLabel 组合
+        self._scroll_area = QScrollArea()
+        self._scroll_area.setWidgetResizable(False)
+        self._scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        # QLabel 显示 Markdown 渲染后的 HTML
+        self._content_label = QLabel()
+        self._content_label.setTextFormat(Qt.TextFormat.RichText)
+        self._content_label.setText(html)
+        self._content_label.adjustSize()
+
+        # 设置固定高度
+        self._scroll_area.setFixedHeight(self._content_label.height())
+        self.setFixedHeight(self._scroll_area.height() + padding * 2)
+
+        # 父控件使用 Fixed 策略
+        self.setSizePolicy(
+            QSizePolicy.Policy.Maximum,
+            QSizePolicy.Policy.Fixed
+        )
+```
+
+**关键点**：
+- `setWidgetResizable(False)` 允许内部 widget 保持自己的尺寸
+- `adjustSize()` 让 QLabel 根据内容计算尺寸
+- 父控件使用 `Fixed` size policy 防止过度扩展
+
 ## 主窗口 (MainWindow)
 
 主窗口是整个应用的容器，负责协调所有子组件。
