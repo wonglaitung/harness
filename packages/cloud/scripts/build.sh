@@ -26,7 +26,7 @@ echo ""
 echo "=== Building Agent image ==="
 docker build \
     $NO_CACHE \
-    -f "$PROJECT_ROOT/packages/cloud/docker/agent.Dockerfile" \
+    -f "$SCRIPT_DIR/../docker/agent.Dockerfile" \
     -t harness-agent:latest \
     "$PROJECT_ROOT"
 
@@ -35,7 +35,7 @@ echo ""
 echo "=== Building Gateway image ==="
 docker build \
     $NO_CACHE \
-    -f "$PROJECT_ROOT/packages/cloud/docker/gateway.Dockerfile" \
+    -f "$SCRIPT_DIR/../docker/gateway.Dockerfile" \
     -t harness-gateway:latest \
     "$PROJECT_ROOT"
 

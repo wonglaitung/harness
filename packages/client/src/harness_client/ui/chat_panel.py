@@ -858,7 +858,9 @@ class ChatPanel(QWidget):
             # Let completer handle navigation keys when popup is visible
             # QCompleter doesn't auto-handle Enter for QTextEdit, so we need to simulate it
             popup_visible = self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible()
-            logger.debug(f"[ChatPanel] popup visible: {popup_visible}")
+            file_popup_visible = self.file_completer.popup().isVisible()
+            skill_popup_visible = self.skill_completer.popup().isVisible()
+            logger.debug(f"[ChatPanel] key={key_event.key()}, file_popup={file_popup_visible}, skill_popup={skill_popup_visible}")
 
             if popup_visible:
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
