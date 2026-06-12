@@ -78,6 +78,48 @@ class AuthRequest(BaseModel):
     system_prompt: str = ""
     tool_result_role: str = "tool"
 
+    def merge_with_request(self, request: "RunRequest") -> "MergedRequest":
+        """
+        Merge auth config with run request (request can override).
+
+        Args:
+            request: Run request with optional overrides
+
+        Returns:
+            MergedRequest with final configuration
+        """
+        return MergedRequest(
+            prompt=request.prompt,
+            session_id=request.session_id,
+            api_key=self.api_key,
+            provider=self.provider,
+            base_url=self.base_url,
+            model=request.model or self.model,
+            max_iterations=request.max_iterations or self.max_iterations,
+            temperature=request.temperature if request.temperature is not None else self.temperature,
+            system_prompt=request.system_prompt or self.system_prompt,
+            tool_result_role=self.tool_result_role,
+        )
+
+
+class MergedRequest(BaseModel):
+    """
+    Merged request combining auth config and run request.
+
+    Used internally by SDKBridge to execute with final configuration.
+    """
+
+    prompt: str
+    session_id: Optional[str] = None
+    api_key: str
+    provider: str = "anthropic"
+    base_url: Optional[str] = None
+    model: str = "claude-sonnet-4-6"
+    max_iterations: int = 10
+    temperature: float = 1.0
+    system_prompt: str = ""
+    tool_result_role: str = "tool"
+
 
 class RunRequest(BaseModel):
     """

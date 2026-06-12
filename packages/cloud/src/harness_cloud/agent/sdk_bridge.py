@@ -34,7 +34,7 @@ from harness import (
 from harness_cloud.agent.config import AgentConfig
 from harness_cloud.common.messages import (
     MessageType,
-    RunRequest,
+    MergedRequest,
     RunResult,
     StreamChunk,
     ToolCallEvent,
@@ -68,12 +68,12 @@ class SDKBridge:
         self._interrupt_flag = False
         self._current_session_id: str | None = None
 
-    def _create_agent(self, request: RunRequest) -> AgentHarness:
+    def _create_agent(self, request: MergedRequest) -> AgentHarness:
         """
         Create AgentHarness instance based on request configuration.
 
         Args:
-            request: Run request with configuration
+            request: Merged request with configuration
 
         Returns:
             Configured AgentHarness instance
@@ -100,14 +100,14 @@ class SDKBridge:
 
         return AgentHarness(config=config, tools=tools)
 
-    async def run_stream(self, request: RunRequest) -> AsyncIterator[dict[str, Any]]:
+    async def run_stream(self, request: MergedRequest) -> AsyncIterator[dict[str, Any]]:
         """
         Execute task and stream events.
 
         Uses asyncio.to_thread() + sync queue to avoid event loop deadlocks.
 
         Args:
-            request: Run request
+            request: Merged request with final configuration
 
         Yields:
             WebSocket message dictionaries

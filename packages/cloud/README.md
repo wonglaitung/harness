@@ -53,17 +53,33 @@ npm install -g wscat
 # Connect WebSocket
 wscat -c ws://localhost:8000/ws/run
 
-# Anthropic API
-> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "sk-ant-xxx"}}
+# Step 1: Authenticate first
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}
+# Response: {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
 
-# OpenAI API
-> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "sk-xxx", "provider": "openai", "model": "gpt-4o"}}
-
-# Custom OpenAI-compatible API
-> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "your-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}
+# Step 2: Send run request (no API key needed after auth)
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
-**Configuration options in payload**:
+**Authentication examples**:
+```bash
+# Anthropic API
+> {"type": "auth", "payload": {"api_key": "sk-ant-xxx"}}
+
+# OpenAI API
+> {"type": "auth", "payload": {"api_key": "sk-xxx", "provider": "openai", "model": "gpt-4o"}}
+
+# Custom OpenAI-compatible API
+> {"type": "auth", "payload": {"api_key": "your-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}
+```
+
+**Run request with optional overrides**:
+```bash
+# Override model for specific request
+> {"type": "run_request", "payload": {"prompt": "Hello", "model": "claude-opus-4-6"}}
+```
+
+**Configuration options in auth payload**:
 - `api_key`: API key (required)
 - `provider`: "anthropic" (default) or "openai"
 - `base_url`: Custom API endpoint (for OpenAI-compatible APIs)
