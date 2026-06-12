@@ -35,41 +35,62 @@ Docker-based AI Agent sandbox platform.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+## Testing
 
-### Build Images
+### 1. Local Development (without Docker)
 
+**Test Agent service** (SDK execution layer inside container):
+```bash
+cd packages/cloud
+uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
+```
+
+Test with `wscat`:
+```bash
+# Install wscat
+npm install -g wscat
+
+# Connect WebSocket
+wscat -c ws://localhost:8000/ws/run
+
+# Send run request
+> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello"}}
+```
+
+### 2. Docker Full Environment
+
+**Build images and start services**:
 ```bash
 cd packages/cloud
 ./scripts/build.sh
-```
-
-### Start Services
-
-```bash
 docker-compose up -d
 ```
 
-### Check Health
-
+**Check service health**:
 ```bash
 curl http://localhost:8080/health
 ```
 
-### Create Session
-
+**Create session**:
 ```bash
 curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d"}
 ```
 
-### Connect WebSocket
-
+**Connect WebSocket**:
 ```bash
 wscat -c ws://localhost:8080/ws/session/abc123
 # Send auth message first:
 > {"type": "auth", "token": "your-jwt-token"}
 ```
+
+### 3. Required Configuration
+
+Before testing, configure:
+
+1. **API Key** - Set in `agent/config.py` or environment variable
+2. **JWT Secret** - Default in docker-compose, change for production
+3. **Redis** - Auto-started by docker-compose
 
 ## Directory Structure
 
@@ -119,29 +140,6 @@ packages/cloud/
 - JWT token passed in first WebSocket message (not URL)
 - Prevents token leakage in logs/headers
 - 15-minute expiry with refresh mechanism
-
-## Development
-
-### Run Agent Locally
-
-```bash
-cd packages/cloud
-uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
-```
-
-### Run Gateway Locally
-
-```bash
-cd packages/cloud
-uv run uvicorn harness_cloud.gateway.main:app --reload --port 8080
-```
-
-### WebSocket Testing
-
-```bash
-wscat -c ws://localhost:8000/ws/run
-> {"type": "run_request", "payload": {"prompt": "Hello"}}
-```
 
 ## Documentation
 
