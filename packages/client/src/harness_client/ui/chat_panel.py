@@ -753,6 +753,8 @@ class ChatPanel(QWidget):
         self.file_completer.setWidget(self.input_field)
         self.file_completer.activated[str].connect(self._insert_file_completion)
         self.file_completer.popup().activated.connect(self._on_file_popup_activated)
+        # Install event filter on popup to capture keyboard events
+        self.file_completer.popup().installEventFilter(self)
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -856,6 +858,46 @@ class ChatPanel(QWidget):
             key_event = event
             logger.debug(f"[EventFilter] obj={obj.__class__.__name__}, key={key_event.key()}, text='{key_event.text()}'")
 
+        # Handle events from completer popup (QListView)
+        from PyQt6.QtWidgets import QListView
+        if isinstance(obj, QListView) and event.type() == QEvent.Type.KeyPress:
+            key_event = event
+            logger.debug(f"[PopupEvent] key={key_event.key()}")
+
+            # Handle Enter key on popup
+            if key_event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+                logger.debug("[PopupEvent] Enter pressed on popup")
+                # The popup's activated signal should handle this, but let's also manually trigger
+                if obj == self.file_completer.popup():
+                    current_idx = obj.currentIndex()
+                    logger.debug(f"[PopupEvent] file popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
+                    if current_idx.isValid():
+                        completion = obj.model().data(current_idx)
+                        logger.debug(f"[PopupEvent] completion: '{completion}'")
+                        if completion:
+                            self._insert_file_completion(completion)
+                            return True  # Consume event
+                elif obj == self.skill_completer.popup():
+                    current_idx = obj.currentIndex()
+                    logger.debug(f"[PopupEvent] skill popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
+                    if current_idx.isValid():
+                        completion = obj.model().data(current_idx)
+                        logger.debug(f"[PopupEvent] completion: '{completion}'")
+                        if completion:
+                            self._insert_skill_completion(completion)
+                            return True  # Consume event
+
+            # Let popup handle navigation keys (Up/Down) naturally
+            if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+                return False  # Let popup handle it
+
+            # Handle Escape
+            if key_event.key() == Qt.Key.Key_Escape:
+                self.file_completer.popup().hide()
+                self.skill_completer.popup().hide()
+                return True
+
+        # Handle events from input_field
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
             logger.debug(f"[ChatPanel] key pressed: {key_event.key()}, text='{key_event.text()}'")
