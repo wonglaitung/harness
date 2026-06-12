@@ -873,25 +873,31 @@ class ChatPanel(QWidget):
 
             from PyQt6.QtCore import QTimer
 
-            # Show skill completer on "/" key
-            if key_event.key() == Qt.Key.Key_Slash:
-                # Hide file completer if visible
-                self.file_completer.popup().hide()
-                # Check if at start of line or after whitespace
-                cursor = self.input_field.textCursor()
-                text_before = self.input_field.toPlainText()[:cursor.position()]
-                if text_before == "" or text_before.endswith((" ", "\n")):
-                    QTimer.singleShot(0, self._show_skill_completer)
+            # Check for printable text input
+            if key_event.text() and key_event.text().isprintable():
+                char = key_event.text()
 
-            # Show file completer on "@" key
-            elif key_event.key() == Qt.Key.Key_At:
-                # Hide skill completer if visible
-                self.skill_completer.popup().hide()
-                # Check if at start of line or after whitespace
-                cursor = self.input_field.textCursor()
-                text_before = self.input_field.toPlainText()[:cursor.position()]
-                if text_before == "" or text_before.endswith((" ", "\n")):
-                    QTimer.singleShot(0, self._show_file_completer)
+                # Show skill completer on "/" key
+                if char == "/":
+                    # Hide file completer if visible
+                    self.file_completer.popup().hide()
+                    # Check if at start of line or after whitespace
+                    cursor = self.input_field.textCursor()
+                    text_before = self.input_field.toPlainText()[:cursor.position()]
+                    if text_before == "" or text_before.endswith((" ", "\n")):
+                        QTimer.singleShot(0, self._show_skill_completer)
+
+                # Show file completer on "@" key
+                elif char == "@":
+                    logger.debug(f"[FileCompleter] '@' key pressed")
+                    # Hide skill completer if visible
+                    self.skill_completer.popup().hide()
+                    # Check if at start of line or after whitespace
+                    cursor = self.input_field.textCursor()
+                    text_before = self.input_field.toPlainText()[:cursor.position()]
+                    logger.debug(f"[FileCompleter] text_before='{text_before}'")
+                    if text_before == "" or text_before.endswith((" ", "\n")):
+                        QTimer.singleShot(0, self._show_file_completer)
 
             elif key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
                 # Update completers on deletion
@@ -948,6 +954,7 @@ class ChatPanel(QWidget):
         """Show the file completer popup if appropriate."""
         text = self.input_field.toPlainText()
         logger.debug(f"[FileCompleter] _show_file_completer: text='{text}'")
+        logger.debug(f"[FileCompleter] _files count: {len(self.file_completer._files)}")
         if self.file_completer.should_complete(text):
             prefix = self.file_completer.get_completion_prefix(text)
             logger.debug(f"[FileCompleter] prefix='{prefix}'")

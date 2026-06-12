@@ -68,6 +68,7 @@ class FileCompleter(QCompleter):
             path: Path to the work directory
         """
         self._work_dir = path
+        logger.debug(f"[FileCompleter] set_work_dir: {path}")
         self._scan_files()
 
     def _scan_files(self) -> None:
