@@ -39,8 +39,11 @@ WORKDIR /app
 # Copy SDK wheel from builder
 COPY --from=sdk-builder /build/sdk/dist/*.whl /tmp/
 
-# Install SDK and dependencies
-RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+# Install SDK and openai extra (for OpenAI provider support)
+RUN pip install --no-cache-dir /tmp/*.whl openai>=1.0.0 && rm /tmp/*.whl
+
+# Pre-download tiktoken encoding files (needed for offline/internal network)
+RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 
 # Copy agent code (relative to build context)
 COPY packages/cloud/src/harness_cloud /app/harness_cloud

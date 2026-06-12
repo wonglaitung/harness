@@ -61,18 +61,19 @@ class DockerManager(ContainerManager):
         self._ensure_network()
 
     def _ensure_network(self) -> None:
-        """Ensure internal network exists."""
+        """Ensure network exists for Gateway-Agent communication."""
         try:
             self.client.networks.get(self.config.internal_network)
             logger.info(f"Network {self.config.internal_network} already exists")
         except NotFound:
-            # Create internal network (blocks external access)
+            # Create network for Gateway-Agent communication
+            # Note: Not using internal=True because Agent needs outbound access to LLM APIs
             self.client.networks.create(
                 self.config.internal_network,
                 driver="bridge",
-                internal=True,  # Key: blocks external internet access
+                # internal=True would block outbound, but Agent needs LLM API access
             )
-            logger.info(f"Created internal network: {self.config.internal_network}")
+            logger.info(f"Created network: {self.config.internal_network}")
 
     async def create_container(
         self,
@@ -107,8 +108,15 @@ class DockerManager(ContainerManager):
         if workspace_path:
             volumes[workspace_path] = {"bind": "/workspace", "mode": "rw"}
 
-        # tmpfs mount (fix read-only filesystem issue)
-        tmpfs = {"/tmp": "size=100M,mode=1777"}
+        # tmpfs mounts for writable directories
+        # - /tmp: temporary files
+        # - /home: SDK state (.harness directory)
+        # - /workspace: SDK storage (.harness/sessions, etc.)
+        tmpfs = {
+            "/tmp": "size=100M,mode=1777",
+            "/home": "size=50M,mode=1777",
+            "/workspace": "size=200M,mode=1777",
+        }
 
         try:
             container = self.client.containers.run(
@@ -128,7 +136,10 @@ class DockerManager(ContainerManager):
                 memswap_limit=self.config.memory_swap,
                 pids_limit=self.config.pids_limit,
 
-                # Network: internal only
+                # Network configuration
+                # Note: For MVP, Agent needs outbound access to LLM APIs
+                # Using harness-net for Gateway-Agent communication
+                # Agent can access external LLM APIs (not fully isolated)
                 network=self.config.internal_network,
 
                 # Security hardening
@@ -145,6 +156,23 @@ class DockerManager(ContainerManager):
             internal_ip = networks.get(
                 self.config.internal_network, {}
             ).get("IPAddress", "")
+
+            # Wait for container to be ready (up to 10 seconds)
+            logger.info(f"Waiting for container {session_id} to be ready...")
+            max_wait = 10
+            for i in range(max_wait):
+                await asyncio.sleep(1)
+                container.reload()
+                if container.status == "running":
+                    networks = container.attrs["NetworkSettings"]["Networks"]
+                    internal_ip = networks.get(
+                        self.config.internal_network, {}
+                    ).get("IPAddress", "")
+                    if internal_ip:
+                        logger.info(f"Container {session_id} ready with IP {internal_ip}")
+                        break
+            else:
+                logger.warning(f"Container {session_id} not ready after {max_wait}s")
 
             info = ContainerInfo(
                 container_id=container.id,

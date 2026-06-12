@@ -191,40 +191,53 @@ async def session_websocket(websocket: WebSocket, session_id: str):
     - Token passed in first message, not URL
     - Prevents token leakage in logs/headers
     """
+    logger.info(f"WebSocket connection request for session: {session_id}")
     await websocket.accept()
+    logger.info("WebSocket accepted")
 
     # Wait for auth message (30 second timeout for manual testing)
     try:
         auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+        logger.info(f"Received auth message: {auth_msg[:100]}...")
         auth_data = json.loads(auth_msg)
 
         if auth_data.get("type") != "auth":
+            logger.warning(f"Expected auth message, got: {auth_data.get('type')}")
             await websocket.close(code=4001, reason="Expected auth message")
             return
 
         token = auth_data.get("token", "")
+        logger.info(f"Token received: {token[:20]}...")
     except asyncio.TimeoutError:
+        logger.warning("Auth timeout")
         await websocket.close(code=4001, reason="Auth timeout")
         return
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid auth message: {e}")
         await websocket.close(code=4001, reason="Invalid auth message")
         return
 
     # Verify token
     try:
         user = verify_token(token, config)
-    except ValueError:
+        logger.info(f"Token verified, user: {user.id}")
+    except ValueError as e:
+        logger.warning(f"Token verification failed: {e}")
         await websocket.close(code=4001, reason="Authentication failed")
         return
 
     # Get container
     info = container_manager.get_container(session_id)
     if not info:
+        logger.warning(f"Session not found: {session_id}")
         await websocket.close(code=4004, reason="Session not found")
         return
 
+    logger.info(f"Container found: {info.container_id[:12]}")
+
     # Verify ownership
     if info.user_id != user.id and user.id != "anonymous":
+        logger.warning(f"Ownership mismatch: container user={info.user_id}, request user={user.id}")
         await websocket.close(code=4003, reason="Not authorized")
         return
 
@@ -234,11 +247,13 @@ async def session_websocket(websocket: WebSocket, session_id: str):
     # Establish tunnel
     try:
         container_url = container_manager.get_container_url(session_id)
+        logger.info(f"Establishing tunnel to: {container_url}")
         tunnel = WebSocketTunnel(container_url)
         await tunnel.connect(websocket)
     except Exception as e:
-        logger.error(f"Tunnel error: {e}")
+        logger.error(f"Tunnel error: {e}", exc_info=True)
     finally:
         # WebSocket disconnected - mark container as draining
         # Container will be cleaned up after graceful_shutdown_timeout
+        logger.info(f"WebSocket closed, marking container {session_id} as draining")
         await container_manager.mark_draining(session_id)
