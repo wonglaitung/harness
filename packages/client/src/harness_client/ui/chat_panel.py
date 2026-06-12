@@ -876,6 +876,7 @@ class ChatPanel(QWidget):
             # Check for printable text input
             if key_event.text() and key_event.text().isprintable():
                 char = key_event.text()
+                logger.debug(f"[ChatPanel] printable char pressed: '{char}'")
 
                 # Show skill completer on "/" key
                 if char == "/":
@@ -899,7 +900,7 @@ class ChatPanel(QWidget):
                     if text_before == "" or text_before.endswith((" ", "\n")):
                         QTimer.singleShot(0, self._show_file_completer)
 
-            elif key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            if key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
                 # Update completers on deletion
                 QTimer.singleShot(0, self._update_completers)
 
