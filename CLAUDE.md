@@ -31,6 +31,7 @@ Harness 是一个 **Monorepo** 项目，包含：
 |---|------|------|
 | `harness-sdk` | `packages/sdk/` | 可内嵌的 Python AI Agent SDK（跨平台） |
 | `harness-client` | `packages/client/` | Windows 桌面客户端（PyQt6） |
+| `harness-cloud` | `packages/cloud/` | Docker 沙箱云服务 |
 
 **核心公式**：`Agent = Model + Harness`
 
@@ -129,6 +130,23 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
 uv sync --all-packages --extra openai --extra observability --extra sqlite
 ```
 
+### Cloud 开发
+
+```bash
+# 构建 + 启动 Docker 服务
+cd packages/cloud
+./scripts/build.sh
+
+# 测试
+python test_auto.py YOUR_API_KEY --provider openai --base-url YOUR_URL --model YOUR_MODEL
+
+# 本地开发（无 Docker）
+uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
+uv run uvicorn harness_cloud.gateway.main:app --reload --port 8080
+```
+
+**重要**：修改代码后必须重新运行 `./scripts/build.sh` 重建镜像。
+
 ---
 
 ## 架构
@@ -144,12 +162,21 @@ harness/
 │   │   ├── examples/             # 示例代码
 │   │   └── docs/                 # 文档
 │   │
-│   └── client/                   # harness-client 包
-│       ├── src/harness_client/
-│       │   ├── ui/               # PyQt6 UI 组件
-│       │   └── controllers/      # 控制器（连接 SDK）
-│       ├── resources/            # 样式、模板
-│       └── harness-client.spec   # PyInstaller 配置
+│   ├── client/                   # harness-client 包
+│   │   ├── src/harness_client/
+│   │   │   ├── ui/               # PyQt6 UI 组件
+│   │   │   └── controllers/      # 控制器（连接 SDK）
+│   │   ├── resources/            # 样式、模板
+│   │   └── harness-client.spec   # PyInstaller 配置
+│   │
+│   └── cloud/                    # harness-cloud 包
+│       ├── src/harness_cloud/
+│       │   ├── agent/            # 容器内 Agent 服务
+│       │   ├── gateway/          # Gateway 控制层
+│       │   └── common/           # 共享消息定义
+│       ├── docker/               # Dockerfile
+│       ├── scripts/              # 构建脚本
+│       └── docker-compose.yml
 │
 ├── pyproject.toml                # Workspace 根配置
 ├── uv.lock                       # 锁定依赖
@@ -236,6 +263,29 @@ SidebarPanel.update_sessions() (纯渲染)
     ↓
 返回 LoopResult
 ```
+
+### Cloud 架构
+
+```
+Client (WebSocket)
+    ↓ JWT Token
+Gateway (FastAPI)
+    ├─ Container Manager (DockerManager)
+    ├─ Rate Limiter (Redis)
+    └─ Auth (JWT, 测试模式)
+    ↓ Docker API
+Agent Container (FastAPI)
+    ├─ SDK Bridge (asyncio)
+    └─ AgentHarness
+```
+
+**双网络设计**：
+- `cloud-net`: Gateway ↔ Redis（内部通信）
+- `harness-net`: Gateway ↔ Agent（可访问外网 LLM API）
+
+**双层认证**：
+1. Gateway: JWT Token（用户认证，测试模式接受任意 token）
+2. Agent: API Key（LLM Provider 认证）
 
 ---
 
@@ -360,4 +410,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-09.
+Today's date is 2026-06-13.
