@@ -89,6 +89,8 @@ cd packages/cloud
 docker-compose up -d
 ```
 
+> **Important**: After modifying any code, you must rebuild images (`./scripts/build.sh`) before testing. Otherwise, you'll be testing with old code.
+
 **Check service health**:
 ```bash
 curl http://localhost:8080/health
