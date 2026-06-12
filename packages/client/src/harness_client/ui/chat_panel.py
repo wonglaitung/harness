@@ -245,8 +245,13 @@ class MessageBubble(QWidget):
             # Calculate preferred width based on text
             self._calculate_width()
 
-        # Size policy: expand vertically as needed
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
+        # Size policy: width should not expand, height should follow content
+        if self._role == "assistant":
+            # Assistant messages: height follows scroll area content
+            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
+        else:
+            # User messages: allow some vertical expansion for word wrap
+            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
         self.setMaximumWidth(self._max_width)
         self.setMinimumWidth(60)
 
