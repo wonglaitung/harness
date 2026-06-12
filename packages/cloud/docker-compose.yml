@@ -13,6 +13,7 @@
 
 services:
   gateway:
+    image: harness-gateway:latest
     build:
       context: ../..
       dockerfile: packages/cloud/docker/gateway.Dockerfile
@@ -55,8 +56,7 @@ networks:
     driver: bridge
 
   # Network for gateway-agent communication
-  # Must be "external: true" to use the network created by DockerManager
-  # DockerManager creates "harness-net" as an internal network for agents
+  # Created by DockerManager at runtime (not internal - allows LLM API access)
   agent-net:
     name: harness-net
-    external: true
+    driver: bridge
