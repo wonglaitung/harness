@@ -852,21 +852,14 @@ class ChatPanel(QWidget):
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
 
-            # Handle skill completer popup navigation FIRST
-            if self.skill_completer.popup().isVisible():
+            # Let completer handle navigation keys when popup is visible
+            # Don't intercept - QCompleter's internal event filter will handle it
+            if self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
                                         Qt.Key.Key_Enter, Qt.Key.Key_Return,
                                         Qt.Key.Key_Escape, Qt.Key.Key_Tab):
-                    # Let completer handle these keys
-                    return False
-
-            # Handle file completer popup navigation FIRST
-            if self.file_completer.popup().isVisible():
-                if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
-                                        Qt.Key.Key_Enter, Qt.Key.Key_Return,
-                                        Qt.Key.Key_Escape, Qt.Key.Key_Tab):
-                    # Let completer handle these keys
-                    return False
+                    # Don't process here - let it propagate to completer
+                    return super().eventFilter(obj, event)
 
             # Enter without Shift: send message (only if no popup visible)
             if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
