@@ -109,12 +109,12 @@ curl -X POST http://localhost:8080/api/sessions
 
 # Step 2: Connect and authenticate
 # Option A: Use Python test script (recommended)
-python test_ws.py abc123 your-api-key anthropic
+python test_ws.py abc123 --api-key your-api-key --provider openai --base-url https://your-api.com/v1 --model your-model
 
 # Option B: Manual wscat (must send auth within 30 seconds)
 wscat -c ws://localhost:8080/ws/session/abc123
-> {"type": "auth", "token": "test-token"}      # Gateway auth
-> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}  # Agent auth
+> {"type": "auth", "token": "test-token"}      # Gateway auth (accepts any non-empty token in test mode)
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}  # Agent auth
 < {"type": "auth_success", ...}
 
 # Step 3: Send run requests

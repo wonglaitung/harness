@@ -328,6 +328,24 @@ REQUEST_LATENCY = Histogram('harness_request_latency_seconds', 'Request latency'
 
 ## 安全配置
 
+### 认证系统
+
+**当前状态**：Gateway 处于测试模式，接受任意非空 JWT token。
+
+**待开发**：
+- [ ] JWT 认证系统
+  - 用户注册/登录
+  - Token 生成与验证
+  - Token 刷新机制
+  - Token 撤销（登出）
+
+**临时方案**：在测试环境中，Gateway 接受任何非空 token：
+```json
+{"type": "auth", "token": "any-non-empty-string"}
+```
+
+> ⚠️ **警告**：生产部署前必须实现完整的 JWT 认证系统。
+
 ### HTTPS（生产环境）
 
 ```yaml

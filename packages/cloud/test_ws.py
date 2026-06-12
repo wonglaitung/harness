@@ -12,16 +12,55 @@ import aiohttp
 
 async def main():
     if len(sys.argv) < 2:
-        print("Usage: python test_ws.py <session_id> [api_key] [provider]")
-        print("Example: python test_ws.py abc123 sk-ant-xxx anthropic")
+        print("Usage: python test_ws.py <session_id> [options]")
+        print("")
+        print("Options:")
+        print("  --api-key KEY         API key (required)")
+        print("  --provider PROVIDER   Provider: anthropic or openai (default: anthropic)")
+        print("  --base-url URL        Custom API base URL (for OpenAI-compatible APIs)")
+        print("  --model MODEL         Model name (default: claude-sonnet-4-6)")
+        print("")
+        print("Examples:")
+        print("  python test_ws.py abc123 --api-key sk-ant-xxx --provider anthropic")
+        print("  python test_ws.py abc123 --api-key sk-xxx --provider openai --model gpt-4o")
+        print("  python test_ws.py abc123 --api-key your-key --provider openai --base-url https://your-api.com/v1 --model your-model")
         sys.exit(1)
 
     session_id = sys.argv[1]
-    api_key = sys.argv[2] if len(sys.argv) > 2 else "test-api-key"
-    provider = sys.argv[3] if len(sys.argv) > 3 else "anthropic"
+
+    # Parse arguments
+    api_key = None
+    provider = "anthropic"
+    base_url = None
+    model = "claude-sonnet-4-6"
+
+    i = 2
+    while i < len(sys.argv):
+        if sys.argv[i] == "--api-key" and i + 1 < len(sys.argv):
+            api_key = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == "--provider" and i + 1 < len(sys.argv):
+            provider = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == "--base-url" and i + 1 < len(sys.argv):
+            base_url = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == "--model" and i + 1 < len(sys.argv):
+            model = sys.argv[i + 1]
+            i += 2
+        else:
+            print(f"Unknown option: {sys.argv[i]}")
+            sys.exit(1)
+
+    if not api_key:
+        print("Error: --api-key is required")
+        sys.exit(1)
 
     url = f"ws://localhost:8080/ws/session/{session_id}"
     print(f"Connecting to {url}")
+    print(f"Provider: {provider}, Model: {model}")
+    if base_url:
+        print(f"Base URL: {base_url}")
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -34,12 +73,17 @@ async def main():
 
                 # Send Agent auth
                 print("Sending Agent auth...")
+                auth_payload = {
+                    "api_key": api_key,
+                    "provider": provider,
+                    "model": model
+                }
+                if base_url:
+                    auth_payload["base_url"] = base_url
+
                 await ws.send_json({
                     "type": "auth",
-                    "payload": {
-                        "api_key": api_key,
-                        "provider": provider
-                    }
+                    "payload": auth_payload
                 })
 
                 # Wait for auth_success
