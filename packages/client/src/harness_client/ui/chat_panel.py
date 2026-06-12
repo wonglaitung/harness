@@ -851,6 +851,11 @@ class ChatPanel(QWidget):
 
     def eventFilter(self, obj, event):
         """Handle Enter/Shift+Enter for multi-line input and completion."""
+        # Log all events for debugging
+        if event.type() == QEvent.Type.KeyPress:
+            key_event = event
+            logger.debug(f"[EventFilter] obj={obj.__class__.__name__}, key={key_event.key()}, text='{key_event.text()}'")
+
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
             logger.debug(f"[ChatPanel] key pressed: {key_event.key()}, text='{key_event.text()}'")
