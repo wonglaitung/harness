@@ -53,11 +53,23 @@ npm install -g wscat
 # Connect WebSocket
 wscat -c ws://localhost:8000/ws/run
 
-# Send run request (api_key is required in payload)
-> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "your-anthropic-api-key"}}
+# Anthropic API
+> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "sk-ant-xxx"}}
+
+# OpenAI API
+> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "sk-xxx", "provider": "openai", "model": "gpt-4o"}}
+
+# Custom OpenAI-compatible API
+> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "your-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}
 ```
 
-**Note**: The `api_key` must be provided in each `run_request` payload. The agent does not read from environment variables.
+**Configuration options in payload**:
+- `api_key`: API key (required)
+- `provider`: "anthropic" (default) or "openai"
+- `base_url`: Custom API endpoint (for OpenAI-compatible APIs)
+- `model`: Model name (default: "claude-sonnet-4-6")
+- `max_iterations`: Max agent loop iterations (default: 10)
+- `temperature`: LLM temperature (default: 1.0)
 
 ### 2. Docker Full Environment
 
