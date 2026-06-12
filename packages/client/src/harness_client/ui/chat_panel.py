@@ -990,20 +990,24 @@ class ChatPanel(QWidget):
 
     def _insert_file_completion(self, completion: str):
         """Insert the selected file completion into the input field."""
+        logger.debug(f"[FileCompleter] _insert_file_completion called: completion='{completion}'")
         cursor = self.input_field.textCursor()
         # Find the start of the "@" prefix
         text = self.input_field.toPlainText()
         pos = cursor.position()
+        logger.debug(f"[FileCompleter] text='{text}', cursor pos={pos}")
         # Look back for "@"
         start_pos = pos
         while start_pos > 0 and text[start_pos - 1] != "@":
             start_pos -= 1
+        logger.debug(f"[FileCompleter] start_pos={start_pos}")
         if start_pos > 0 and text[start_pos - 1] == "@":
             start_pos -= 1
         # Replace the "@" + typed text with the completion (without @)
         cursor.setPosition(start_pos)
         cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
         cursor.insertText(completion)
+        logger.debug(f"[FileCompleter] inserted text, new text='{self.input_field.toPlainText()}'")
         self.input_field.setFocus()
 
     def set_streaming_state(self, is_streaming: bool):
