@@ -19,11 +19,14 @@ class MessageType(str, Enum):
     """WebSocket message types."""
 
     # Client → Server (request types)
+    AUTH = "auth"  # Authentication with API credentials
     RUN_REQUEST = "run_request"
     INTERRUPT = "interrupt"
 
     # Server → Client (response types)
     ACK = "ack"
+    AUTH_SUCCESS = "auth_success"
+    AUTH_FAILED = "auth_failed"
     RUN_RESULT = "run_result"
     STREAM_CHUNK = "stream_chunk"
     TOOL_CALL = "tool_call"
@@ -50,24 +53,47 @@ class MessageEnvelope(BaseModel):
 # =============================================================================
 
 
-class RunRequest(BaseModel):
+class AuthRequest(BaseModel):
     """
-    Execution request from client.
+    Authentication request with API credentials.
 
-    Contains all configuration needed to create an AgentHarness instance
-    and execute a task.
+    Sent once after WebSocket connection. Subsequent run_request
+    messages will use the cached credentials.
+
+    Required fields:
+    - api_key: API key for the LLM provider
+
+    Optional fields:
+    - provider: "anthropic" (default) or "openai"
+    - base_url: Custom API endpoint (for OpenAI-compatible APIs)
+    - model: Default model to use
     """
 
-    prompt: str
-    session_id: Optional[str] = None
-    model: str = "claude-sonnet-4-6"
-    api_key: Optional[str] = None
+    api_key: str
     provider: str = "anthropic"
     base_url: Optional[str] = None
+    model: str = "claude-sonnet-4-6"
     max_iterations: int = 10
     temperature: float = 1.0
     system_prompt: str = ""
     tool_result_role: str = "tool"
+
+
+class RunRequest(BaseModel):
+    """
+    Execution request from client.
+
+    Requires prior authentication via auth message.
+    Only prompt and optional session_id are needed.
+    """
+
+    prompt: str
+    session_id: Optional[str] = None
+    # Optional overrides (if not set, uses auth config)
+    model: Optional[str] = None
+    max_iterations: Optional[int] = None
+    temperature: Optional[float] = None
+    system_prompt: Optional[str] = None
 
 
 class InterruptRequest(BaseModel):
@@ -79,6 +105,20 @@ class InterruptRequest(BaseModel):
 # =============================================================================
 # Response Types
 # =============================================================================
+
+
+class AuthSuccess(BaseModel):
+    """Successful authentication response."""
+
+    provider: str
+    model: str
+
+
+class AuthFailed(BaseModel):
+    """Failed authentication response."""
+
+    error: str
+    error_code: str  # "INVALID_API_KEY", "UNSUPPORTED_PROVIDER", etc.
 
 
 class AckResponse(BaseModel):

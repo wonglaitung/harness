@@ -906,9 +906,13 @@ class ChatPanel(QWidget):
 
             # Handle typing while popup is visible - update filtering
             elif key_event.text() and key_event.text().isprintable():
+                logger.debug(f"[ChatPanel] checking popup visibility for filtering")
                 # Only update if one of the completers is visible
                 if self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
+                    logger.debug(f"[ChatPanel] popup visible, calling _update_completers")
                     QTimer.singleShot(0, self._update_completers)
+                else:
+                    logger.debug(f"[ChatPanel] no popup visible, skipping")
 
         return super().eventFilter(obj, event)
 
