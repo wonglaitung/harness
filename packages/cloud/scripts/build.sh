@@ -52,5 +52,11 @@ echo "Images built:"
 docker images | grep -E "harness-(agent|gateway)"
 
 echo ""
-echo "To start services:"
-echo "  cd packages/cloud && DOCKER_USER=$CONTAINER_USER DOCKER_UID=$DOCKER_UID DOCKER_GID=$DOCKER_GID docker-compose up -d"
+echo "=== Starting services ==="
+cd "$SCRIPT_DIR/.."
+DOCKER_USER=$CONTAINER_USER DOCKER_UID=$DOCKER_UID DOCKER_GID=$DOCKER_GID docker-compose up -d
+
+echo ""
+echo "=== Services started ==="
+echo "Gateway: http://localhost:8080"
+echo "Check health: curl http://localhost:8080/health"

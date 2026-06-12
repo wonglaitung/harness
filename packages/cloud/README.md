@@ -82,22 +82,18 @@ wscat -c ws://localhost:8000/ws/run
 
 ### 2. Docker Full Environment
 
-**Build images**:
+**Build and start services**:
 ```bash
 cd packages/cloud
 ./scripts/build.sh
 ```
 
-The build script automatically detects:
-- Current user UID and username
-- Docker group GID (for docker.sock access)
+The build script automatically:
+- Detects current user UID, username, and docker group GID
+- Builds images with correct user configuration
+- Starts services with `docker-compose up -d`
 
-**Start services** (copy the command from build.sh output):
-```bash
-DOCKER_USER=<your_username> DOCKER_UID=<your_uid> DOCKER_GID=<docker_gid> docker-compose up -d
-```
-
-> **Important**: After modifying any code, you must rebuild images (`./scripts/build.sh`) before testing. Otherwise, you'll be testing with old code.
+> **Important**: After modifying any code, run `./scripts/build.sh` again to rebuild and restart.
 
 **Check service health**:
 ```bash
