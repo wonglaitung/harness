@@ -835,5 +835,32 @@ class MainWindow(QMainWindow):
                 self.memory_controller.remove_entry(category, index)
 
     def closeEvent(self, event):
-        """Handle window close."""
+        """Handle window close - cleanup resources properly."""
+        import asyncio
+
+        # Stop any ongoing chat stream
+        self.chat_controller.stop_streaming()
+
+        # Disconnect all MCP servers
+        async def cleanup():
+            for name in list(self.mcp_controller.servers.keys()):
+                try:
+                    await self.mcp_controller.disconnect_server(name)
+                except Exception:
+                    pass  # Ignore errors during cleanup
+
+        # Run cleanup synchronously if there's a running loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Schedule cleanup and wait briefly
+                future = asyncio.ensure_future(cleanup())
+                # Give it a short timeout to complete
+                try:
+                    loop.run_until_complete(asyncio.wait_for(future, timeout=2.0))
+                except asyncio.TimeoutError:
+                    pass  # Cleanup timed out, proceed anyway
+        except RuntimeError:
+            pass  # No event loop running
+
         event.accept()

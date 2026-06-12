@@ -76,6 +76,9 @@ def run():
     window = MainWindow()
     window.show()
 
-    # Run event loop
+    # Run event loop with proper cleanup
     with loop:
         loop.run_forever()
+
+    # Cleanup: close the loop properly
+    loop.close()
