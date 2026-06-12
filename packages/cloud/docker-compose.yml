@@ -6,7 +6,7 @@
 #
 # Security notes:
 # - docker.sock is mounted read-only (ADR-007)
-# - gateway runs as non-root user
+# - gateway and agent containers run as non-root user
 # - Internal network for agent containers
 #
 # Reference: packages/cloud/docs/06-deployment.md
@@ -16,6 +16,9 @@ services:
     build:
       context: ../..
       dockerfile: packages/cloud/docker/gateway.Dockerfile
+      args:
+        DOCKER_USER: ${DOCKER_USER:-appuser}
+        DOCKER_UID: ${DOCKER_UID:-1000}
     ports:
       - "8080:8080"
     environment:
@@ -25,6 +28,9 @@ services:
     volumes:
       # docker.sock for container management (read-only for security)
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Add user to docker group at runtime (GID from host)
+    group_add:
+      - ${DOCKER_GID:-1001}
     depends_on:
       - redis
     networks:

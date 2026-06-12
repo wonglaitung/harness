@@ -1,19 +1,24 @@
 # Gateway Dockerfile
 #
 # Security considerations (ADR-007):
-# - Runs as non-root user (marcowong, uid=1000)
+# - Runs as non-root user (member of docker group)
 # - docker.sock mounted read-only
-# - User is in docker group for docker.sock access
+# - Minimal attack surface
+# - UID/GID should match host user for volume permissions
+# - Docker group GID is set at runtime via --group-add
 #
-# Build context: /data/harness (from docker-compose)
 # Reference: packages/cloud/docs/06-deployment.md
 
 FROM python:3.11-slim
 
-# Create user with same uid/gid as host user (marcowong)
-# This allows docker.sock access since host user is in docker group
-RUN groupadd -g 1001 docker && \
-    useradd -m -u 1000 -G docker marcowong
+# Build arguments for user configuration
+ARG DOCKER_USER=appuser
+ARG DOCKER_UID=1000
+
+# Create user with specified UID
+# Note: docker group membership is set at runtime via --group-add
+RUN groupadd -g $DOCKER_UID $DOCKER_USER && \
+    useradd -m -u $DOCKER_UID -g $DOCKER_USER $DOCKER_USER
 
 # Install Docker CLI (for docker.sock access)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy gateway code (relative to build context: /data/harness)
+# Copy gateway code (relative to build context)
 COPY packages/cloud/src/harness_cloud /app/harness_cloud
 
 # Install dependencies
@@ -37,11 +42,8 @@ RUN pip install --no-cache-dir \
     redis \
     httpx
 
-# Set ownership for app directory
-RUN chown -R marcowong:marcowong /app
-
 # Switch to non-root user
-USER marcowong
+USER $DOCKER_USER
 
 EXPOSE 8080
 

@@ -82,11 +82,19 @@ wscat -c ws://localhost:8000/ws/run
 
 ### 2. Docker Full Environment
 
-**Build images and start services**:
+**Build images**:
 ```bash
 cd packages/cloud
 ./scripts/build.sh
-docker-compose up -d
+```
+
+The build script automatically detects:
+- Current user UID and username
+- Docker group GID (for docker.sock access)
+
+**Start services** (copy the command from build.sh output):
+```bash
+DOCKER_USER=<your_username> DOCKER_UID=<your_uid> DOCKER_GID=<docker_gid> docker-compose up -d
 ```
 
 > **Important**: After modifying any code, you must rebuild images (`./scripts/build.sh`) before testing. Otherwise, you'll be testing with old code.
@@ -234,8 +242,9 @@ HARNESS_MAX_CONTAINERS_PER_USER=3
 
 ### Docker Socket (ADR-007)
 
-- Gateway runs as non-root user (marcowong, uid=1000)
-- User is in docker group (gid=1001) for docker.sock access
+- Gateway and Agent run as non-root user
+- User UID matches host user (auto-detected at build time)
+- Docker group GID set at runtime via `group_add`
 - docker.sock mounted read-only
 - Production: Use K8sPodManager or Docker Rootless
 

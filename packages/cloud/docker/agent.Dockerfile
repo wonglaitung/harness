@@ -3,6 +3,10 @@
 # Multi-stage build for optimized image size.
 # Builds SDK wheel separately, then copies to runtime image.
 #
+# Security considerations:
+# - Runs as non-root user
+# - Minimal attack surface
+#
 # Build context: /data/harness (from build.sh)
 # Reference: packages/cloud/docs/06-deployment.md
 
@@ -22,9 +26,13 @@ RUN pip install --no-cache-dir build && \
 # Stage 2: Runtime image
 FROM python:3.11-slim
 
-# Install runtime dependencies only (no build tools)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+# Build arguments for user configuration
+ARG DOCKER_USER=appuser
+ARG DOCKER_UID=1000
+
+# Create user with specified UID
+RUN groupadd -g $DOCKER_UID $DOCKER_USER && \
+    useradd -m -u $DOCKER_UID -g $DOCKER_USER $DOCKER_USER
 
 WORKDIR /app
 
@@ -48,9 +56,12 @@ RUN pip install --no-cache-dir \
     pydantic \
     pydantic-settings
 
-# Create workspace directory
-RUN mkdir /workspace
+# Create workspace directory and set ownership
+RUN mkdir /workspace && chown $DOCKER_USER:$DOCKER_USER /workspace
 WORKDIR /workspace
+
+# Switch to non-root user
+USER $DOCKER_USER
 
 EXPOSE 8000
 
