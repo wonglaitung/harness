@@ -40,7 +40,39 @@ JWT_SECRET=your-secret-key
 REDIS_URL=redis://redis:6379
 ```
 
-## Docker Compose（修订版）
+## 网络架构
+
+### 双网络设计
+
+Harness Cloud 使用两个独立的网络：
+
+| 网络 | 用途 | 访问外网 |
+|-----|------|---------|
+| `cloud-net` | Gateway ↔ Redis 通信 | 否 |
+| `harness-net` | Gateway ↔ Agent 通信 | 是（Agent 需要访问 LLM API） |
+
+**Gateway 连接两个网络**：
+- `cloud-net`: 连接 Redis（速率限制）
+- `harness-net`: 连接 Agent 容器
+
+**Agent 只连接 `harness-net`**：
+- 可以访问外网 LLM API（OpenAI、Anthropic 等）
+- 与 Redis 隔离（安全性）
+
+### 网络配置
+
+```yaml
+networks:
+  # Gateway-Redis 通信
+  cloud-net:
+    driver: bridge
+
+  # Gateway-Agent 通信（非 internal，允许出站）
+  agent-net:
+    name: harness-net
+    driver: bridge
+    # 注意：不设置 internal=True，Agent 需要访问 LLM API
+```
 
 > ⚠️ **评审意见修复**：
 > 1. Gateway 使用非 root 用户
@@ -114,10 +146,17 @@ volumes:
 ### 构建镜像
 
 ```bash
-# 构建所有镜像
-docker-compose build
+# 自动构建并启动（推荐）
+cd packages/cloud
+./scripts/build.sh
 
-# 启动服务
+# build.sh 自动执行：
+# 1. 检测当前用户 UID、用户名、docker 组 GID
+# 2. 构建 harness-agent:latest 和 harness-gateway:latest
+# 3. 启动 docker-compose up -d
+
+# 手动构建（可选）
+docker-compose build --no-cache
 docker-compose up -d
 
 # 查看日志
@@ -395,22 +434,37 @@ spec:
 1. **容器无法启动**
    ```bash
    # 检查镜像是否存在
-   docker images | grep harness-agent
-   
+   docker images | grep harness
+
    # 检查日志
    docker logs harness-<session-id>
+
+   # 重新构建（代码修改后需要重建）
+   ./scripts/build.sh
    ```
 
-2. **WebSocket 连接失败**
+2. **Agent 无法访问 LLM API（DNS 解析失败）**
+   ```bash
+   # 检查网络是否为 internal（应该是 false）
+   docker network inspect harness-net --format '{{.Internal}}'
+   # 输出应该是: false
+
+   # 如果是 true，删除网络并重启
+   docker network rm harness-net
+   docker-compose down
+   docker-compose up -d
+   ```
+
+3. **WebSocket 连接失败**
    ```bash
    # 检查 Gateway 日志
    docker-compose logs gateway
-   
+
    # 检查端口是否开放
    netstat -tlnp | grep 8080
    ```
 
-3. **认证失败**
+4. **认证失败**
    ```bash
    # 检查 JWT Secret
    echo $JWT_SECRET

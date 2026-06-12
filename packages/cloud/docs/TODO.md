@@ -2,6 +2,19 @@
 
 > 最后更新: 2026-06-13
 
+## MVP 已完成 ✅
+
+**Harness Cloud MVP 已可以运行完整的 Agent 会话：**
+- 创建 session → WebSocket 连接 → 双认证 → LLM API 调用 → 流式响应 → 结果返回
+
+### 测试方法
+
+```bash
+cd packages/cloud
+./scripts/build.sh  # 构建 + 启动
+python test_auto.py YOUR_API_KEY --provider openai --base-url YOUR_URL --model YOUR_MODEL
+```
+
 ## 已完成功能
 
 ### Agent (容器内代理)
@@ -28,14 +41,16 @@
 - [x] Docker Compose 配置
 - [x] Agent Dockerfile (多阶段构建)
 - [x] Gateway Dockerfile (非 root 用户)
-- [x] build.sh (自动检测 UID/GID)
-- [x] 内部网络隔离 (`harness-net`)
+- [x] build.sh (自动检测 UID/GID, 自动启动服务)
+- [x] 内部网络 (`harness-net`, 非隔离，允许 LLM API 访问)
+- [x] test_auto.py (全自动测试脚本)
 
 ### 安全
 
 - [x] 容器资源限制 (CPU/Memory/PIDs)
-- [x] 只读文件系统 + tmpfs
-- [x] 内部网络隔离
+- [x] 只读文件系统 + tmpfs (/tmp, /home, /workspace)
+- [x] 内部网络 (Gateway-Agent 通信)
+- [x] Agent 可访问外网 LLM API
 - [x] Gateway 非 root 用户运行
 - [x] docker.sock 只读挂载
 
