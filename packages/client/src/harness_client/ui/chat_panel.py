@@ -936,28 +936,39 @@ class ChatPanel(QWidget):
     def _on_text_changed(self):
         """Handle text changed signal - update completers."""
         text = self.input_field.toPlainText()
+        skill_popup = self.skill_completer.popup().isVisible()
+        file_popup = self.file_completer.popup().isVisible()
+        logger.debug(f"[TextChanged] text='{text}', skill_popup={skill_popup}, file_popup={file_popup}")
 
         # Only update if one of the completers popup is visible
         if self.skill_completer.popup().isVisible():
-            if self.skill_completer.should_complete(text):
+            should = self.skill_completer.should_complete(text)
+            logger.debug(f"[TextChanged] skill should_complete={should}")
+            if should:
                 prefix = self.skill_completer.get_completion_prefix(text)
                 self.skill_completer.setCompletionPrefix(prefix)
                 if self.skill_completer.completionCount() > 0:
                     self.skill_completer.complete()
                 else:
+                    logger.debug("[TextChanged] hiding skill popup (no matches)")
                     self.skill_completer.popup().hide()
             else:
+                logger.debug("[TextChanged] hiding skill popup (should_complete=False)")
                 self.skill_completer.popup().hide()
 
         if self.file_completer.popup().isVisible():
-            if self.file_completer.should_complete(text):
+            should = self.file_completer.should_complete(text)
+            logger.debug(f"[TextChanged] file should_complete={should}")
+            if should:
                 prefix = self.file_completer.get_completion_prefix(text)
                 self.file_completer.setCompletionPrefix(prefix)
                 if self.file_completer.completionCount() > 0:
                     self.file_completer.complete()
                 else:
+                    logger.debug("[TextChanged] hiding file popup (no matches)")
                     self.file_completer.popup().hide()
             else:
+                logger.debug("[TextChanged] hiding file popup (should_complete=False)")
                 self.file_completer.popup().hide()
 
     def _show_skill_completer(self):
@@ -1013,7 +1024,8 @@ class ChatPanel(QWidget):
             logger.debug(f"[FileCompleter] completionCount={count}")
             if count > 0:
                 self.file_completer.complete()
-                logger.debug(f"[FileCompleter] popup shown")
+                popup = self.file_completer.popup()
+                logger.debug(f"[FileCompleter] popup shown, isVisible={popup.isVisible()}")
             else:
                 logger.debug("[FileCompleter] no matches, not showing popup")
         else:

@@ -5,6 +5,7 @@
 # - docker.sock mounted read-only
 # - Minimal attack surface
 #
+# Build context: /data/harness/packages
 # Reference: packages/cloud/docs/06-deployment.md
 
 FROM python:3.11-slim
@@ -19,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy gateway code
-COPY packages/cloud/src/harness_cloud /app/harness_cloud
+# Copy gateway code (relative to build context: packages/)
+COPY cloud/src/harness_cloud /app/harness_cloud
 
 # Install dependencies
 RUN pip install --no-cache-dir \

@@ -3,6 +3,7 @@
 # Multi-stage build for optimized image size.
 # Builds SDK wheel separately, then copies to runtime image.
 #
+# Build context: /data/harness/packages
 # Reference: packages/cloud/docs/06-deployment.md
 
 # Stage 1: Build SDK wheel
@@ -10,8 +11,8 @@ FROM python:3.11-slim AS sdk-builder
 
 WORKDIR /build
 
-# Copy SDK source
-COPY packages/sdk /build/sdk
+# Copy SDK source (relative to build context: packages/)
+COPY sdk /build/sdk
 
 # Build wheel
 RUN pip install --no-cache-dir build && \
@@ -33,8 +34,8 @@ COPY --from=sdk-builder /build/sdk/dist/*.whl /tmp/
 # Install SDK and dependencies
 RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 
-# Copy agent code
-COPY packages/cloud/src/harness_cloud /app/harness_cloud
+# Copy agent code (relative to build context: packages/)
+COPY cloud/src/harness_cloud /app/harness_cloud
 
 # Install agent dependencies
 RUN pip install --no-cache-dir \
