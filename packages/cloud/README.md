@@ -201,6 +201,30 @@ packages/cloud/
 
 ## Security
 
+### Container Lifecycle Management
+
+Containers are automatically cleaned up using a three-layer strategy:
+
+| Trigger | Action | Timeout |
+|---------|--------|---------|
+| WebSocket disconnect | Mark as draining → cleanup | 30s graceful shutdown |
+| Idle timeout | Periodic cleanup | 15 minutes |
+| User limit exceeded | Evict oldest container | 3 containers per user |
+
+**State Flow**:
+```
+[running] ── disconnect ──→ [draining] ── 30s ──→ [removed]
+    │
+    └─ idle 15min ──────────────────────────→ [removed]
+```
+
+**Configuration** (environment variables):
+```bash
+HARNESS_CONTAINER_IDLE_TIMEOUT=900    # 15 minutes
+HARNESS_GRACEFUL_SHUTDOWN_TIMEOUT=30  # seconds
+HARNESS_MAX_CONTAINERS_PER_USER=3
+```
+
 ### Container Isolation (ADR-004)
 
 - `pids_limit`: 100 (prevent fork bombs)

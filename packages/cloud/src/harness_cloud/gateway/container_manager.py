@@ -13,6 +13,16 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+
+
+class ContainerState(Enum):
+    """Container lifecycle state."""
+
+    RUNNING = "running"
+    DRAINING = "draining"  # WebSocket disconnected, waiting for tasks
+    STOPPED = "stopped"
+    REMOVING = "removing"
 
 
 @dataclass
@@ -25,6 +35,7 @@ class ContainerInfo:
     internal_ip: str
     created_at: datetime
     last_activity: datetime
+    state: ContainerState = ContainerState.RUNNING
     internal_port: int = 8000
 
 
@@ -93,6 +104,21 @@ class ContainerManager(ABC):
 
         Returns:
             ContainerInfo if exists, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def mark_draining(self, session_id: str) -> bool:
+        """
+        Mark container as draining (WebSocket disconnected).
+
+        Container will wait for in-flight tasks then cleanup.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if successfully marked
         """
         pass
 

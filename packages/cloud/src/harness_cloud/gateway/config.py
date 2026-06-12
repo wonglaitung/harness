@@ -40,6 +40,13 @@ class GatewayConfig:
     # Docker
     container_config: DockerContainerConfig = field(default_factory=DockerContainerConfig)
 
+    # Container lifecycle management
+    container_idle_timeout: int = 900  # 15 minutes (seconds)
+    cleanup_interval: int = 300  # 5 minutes (seconds)
+    graceful_shutdown_timeout: int = 30  # seconds
+    force_kill_timeout: int = 10  # seconds
+    max_containers_per_user: int = 3
+
     # Service
     host: str = "0.0.0.0"
     port: int = 8080

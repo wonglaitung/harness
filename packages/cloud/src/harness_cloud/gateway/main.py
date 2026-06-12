@@ -69,8 +69,8 @@ async def lifespan(app: FastAPI):
     """Initialize and cleanup services."""
     global container_manager, rate_limiter
 
-    # Initialize container manager
-    container_manager = DockerManager()
+    # Initialize container manager with gateway config
+    container_manager = DockerManager(gateway_config=config)
     await container_manager.start()
 
     # Initialize rate limiter
@@ -239,4 +239,6 @@ async def session_websocket(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"Tunnel error: {e}")
     finally:
-        info.last_activity = datetime.now()
+        # WebSocket disconnected - mark container as draining
+        # Container will be cleaned up after graceful_shutdown_timeout
+        await container_manager.mark_draining(session_id)
