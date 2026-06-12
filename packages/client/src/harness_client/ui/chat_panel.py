@@ -159,6 +159,7 @@ class MessageBubble(QWidget):
             self._text_browser.setOpenExternalLinks(True)
             self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            # NoWrap mode - content won't wrap, horizontal scrollbar will appear for long lines
             self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
 
             # Set font
@@ -192,10 +193,8 @@ class MessageBubble(QWidget):
                 }}
             """)
 
-            # Set width limits
-            self._text_browser.setMaximumWidth(self._max_width - 2 * self._padding_h)
-            self._text_browser.setMinimumWidth(200)
-
+            # Don't set maximum width on QTextBrowser - let it expand naturally
+            # The parent MessageBubble already has max width set
             layout.addWidget(self._text_browser)
 
         else:
