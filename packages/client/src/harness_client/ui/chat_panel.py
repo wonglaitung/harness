@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 from harness_client.ui.interactive import GlowButton
 from harness_client.themes import get_theme
 from harness_client.ui.skill_completer import SkillCompleter
+from harness_client.ui.file_completer import FileCompleter
 
 
 # Cache for avatar base64 data
@@ -743,6 +744,11 @@ class ChatPanel(QWidget):
         # Connect to the str overload of activated signal
         self.skill_completer.activated[str].connect(self._insert_skill_completion)
 
+        # File completer
+        self.file_completer = FileCompleter(self)
+        self.file_completer.setWidget(self.input_field)
+        self.file_completer.activated[str].connect(self._insert_file_completion)
+
         # Token usage label
         self.token_label = QLabel("0 / 200k")
         self.token_label.setStyleSheet(f"""
@@ -839,7 +845,7 @@ class ChatPanel(QWidget):
         self.stop_requested.emit()
 
     def eventFilter(self, obj, event):
-        """Handle Enter/Shift+Enter for multi-line input and skill completion."""
+        """Handle Enter/Shift+Enter for multi-line input and completion."""
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
             # Enter without Shift: send message
@@ -857,23 +863,44 @@ class ChatPanel(QWidget):
                     # Let completer handle these keys
                     return False
 
-            # Show completer on "/" key or text change
+            # Handle file completer popup navigation
+            if self.file_completer.popup().isVisible():
+                if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
+                                        Qt.Key.Key_Enter, Qt.Key.Key_Return,
+                                        Qt.Key.Key_Escape, Qt.Key.Key_Tab):
+                    # Let completer handle these keys
+                    return False
+
+            from PyQt6.QtCore import QTimer
+
+            # Show skill completer on "/" key
             if key_event.key() == Qt.Key.Key_Slash:
+                # Hide file completer if visible
+                self.file_completer.popup().hide()
                 # Check if at start of line or after whitespace
                 cursor = self.input_field.textCursor()
                 text_before = self.input_field.toPlainText()[:cursor.position()]
                 if text_before == "" or text_before.endswith((" ", "\n")):
-                    from PyQt6.QtCore import QTimer
                     QTimer.singleShot(0, self._show_skill_completer)
+
+            # Show file completer on "@" key
+            elif key_event.key() == Qt.Key.Key_At:
+                # Hide skill completer if visible
+                self.skill_completer.popup().hide()
+                # Check if at start of line or after whitespace
+                cursor = self.input_field.textCursor()
+                text_before = self.input_field.toPlainText()[:cursor.position()]
+                if text_before == "" or text_before.endswith((" ", "\n")):
+                    QTimer.singleShot(0, self._show_file_completer)
+
             elif key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-                # Update completer on deletion
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(0, self._update_skill_completer)
-            elif self.skill_completer.popup().isVisible():
+                # Update completers on deletion
+                QTimer.singleShot(0, self._update_completers)
+
+            elif self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
                 # Update completer when typing while popup is visible
                 if key_event.text() and key_event.text().isprintable():
-                    from PyQt6.QtCore import QTimer
-                    QTimer.singleShot(0, self._update_skill_completer)
+                    QTimer.singleShot(0, self._update_completers)
 
         return super().eventFilter(obj, event)
 
@@ -899,28 +926,6 @@ class ChatPanel(QWidget):
         else:
             logger.debug(f"[SkillCompleter] should_complete=False for '{text}'")
 
-    def _update_skill_completer(self):
-        """Update completer visibility based on current text."""
-        text = self.input_field.toPlainText()
-        logger.debug(f"[SkillCompleter] _update_skill_completer: text='{text}'")
-        if self.skill_completer.should_complete(text):
-            # Update completion prefix for filtering
-            prefix = self.skill_completer.get_completion_prefix(text)
-            logger.debug(f"[SkillCompleter] prefix='{prefix}'")
-            self.skill_completer.setCompletionPrefix(prefix)
-            # Check if there are any matches
-            count = self.skill_completer.completionCount()
-            logger.debug(f"[SkillCompleter] completionCount={count}")
-            if count > 0:
-                self.skill_completer.complete()
-                logger.debug(f"[SkillCompleter] popup updated")
-            else:
-                self.skill_completer.popup().hide()
-                logger.debug("[SkillCompleter] no matches, hiding popup")
-        else:
-            self.skill_completer.popup().hide()
-            logger.debug(f"[SkillCompleter] should_complete=False, hiding popup")
-
     def _insert_skill_completion(self, completion: str):
         """Insert the selected skill completion into the input field."""
         cursor = self.input_field.textCursor()
@@ -939,6 +944,68 @@ class ChatPanel(QWidget):
         cursor.insertText(completion)
         self.input_field.setFocus()
 
+    def _show_file_completer(self):
+        """Show the file completer popup if appropriate."""
+        text = self.input_field.toPlainText()
+        logger.debug(f"[FileCompleter] _show_file_completer: text='{text}'")
+        if self.file_completer.should_complete(text):
+            prefix = self.file_completer.get_completion_prefix(text)
+            logger.debug(f"[FileCompleter] prefix='{prefix}'")
+            self.file_completer.setCompletionPrefix(prefix)
+            count = self.file_completer.completionCount()
+            logger.debug(f"[FileCompleter] completionCount={count}")
+            if count > 0:
+                self.file_completer.complete()
+                logger.debug(f"[FileCompleter] popup shown")
+            else:
+                logger.debug("[FileCompleter] no matches, not showing popup")
+        else:
+            logger.debug(f"[FileCompleter] should_complete=False for '{text}'")
+
+    def _update_completers(self):
+        """Update both completers visibility based on current text."""
+        text = self.input_field.toPlainText()
+
+        # Update skill completer
+        if self.skill_completer.should_complete(text):
+            prefix = self.skill_completer.get_completion_prefix(text)
+            self.skill_completer.setCompletionPrefix(prefix)
+            if self.skill_completer.completionCount() > 0:
+                self.skill_completer.complete()
+            else:
+                self.skill_completer.popup().hide()
+        else:
+            self.skill_completer.popup().hide()
+
+        # Update file completer
+        if self.file_completer.should_complete(text):
+            prefix = self.file_completer.get_completion_prefix(text)
+            self.file_completer.setCompletionPrefix(prefix)
+            if self.file_completer.completionCount() > 0:
+                self.file_completer.complete()
+            else:
+                self.file_completer.popup().hide()
+        else:
+            self.file_completer.popup().hide()
+
+    def _insert_file_completion(self, completion: str):
+        """Insert the selected file completion into the input field."""
+        cursor = self.input_field.textCursor()
+        # Find the start of the "@" prefix
+        text = self.input_field.toPlainText()
+        pos = cursor.position()
+        # Look back for "@"
+        start_pos = pos
+        while start_pos > 0 and text[start_pos - 1] != "@":
+            start_pos -= 1
+        if start_pos > 0 and text[start_pos - 1] == "@":
+            start_pos -= 1
+        # Replace the "@" + typed text with the completion (without @)
+        cursor.setPosition(start_pos)
+        cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText(completion)
+        self.input_field.setFocus()
+
     def set_streaming_state(self, is_streaming: bool):
         """Update UI state based on streaming status."""
         self._is_streaming = is_streaming
@@ -949,6 +1016,10 @@ class ChatPanel(QWidget):
     def set_skills(self, skills: list[dict]) -> None:
         """Update the skill completer with available skills."""
         self.skill_completer.update_skills(skills)
+
+    def set_work_dir(self, path: Path) -> None:
+        """Update the file completer with the work directory."""
+        self.file_completer.set_work_dir(path)
 
     def _scroll_to_bottom(self):
         """Scroll chat display to bottom with smooth animation."""

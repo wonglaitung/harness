@@ -85,6 +85,9 @@ class MainWindow(QMainWindow):
         # Update chat controller work dir
         self.chat_controller.work_dir = self.work_dir
 
+        # Update chat panel work dir for file completer
+        self.chat_panel.set_work_dir(self.work_dir)
+
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
         self.chat_panel.stop_requested.connect(self._on_stop_requested)
@@ -535,6 +538,7 @@ class MainWindow(QMainWindow):
         """Handle work directory change from right panel."""
         self.work_dir = path
         self.chat_controller.work_dir = path
+        self.chat_panel.set_work_dir(path)
         self.statusbar.showMessage(f"工作目录已更改: {path}", 3000)
 
     def _on_mcp_changed(self):
