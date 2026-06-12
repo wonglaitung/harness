@@ -851,14 +851,8 @@ class ChatPanel(QWidget):
         """Handle Enter/Shift+Enter for multi-line input and completion."""
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
-            # Enter without Shift: send message
-            if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
-                if not key_event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                    self._on_send()
-                    return True  # Consume the event
-                # Shift+Enter: allow default behavior (insert newline)
 
-            # Handle skill completer popup navigation
+            # Handle skill completer popup navigation FIRST
             if self.skill_completer.popup().isVisible():
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
                                         Qt.Key.Key_Enter, Qt.Key.Key_Return,
@@ -866,13 +860,20 @@ class ChatPanel(QWidget):
                     # Let completer handle these keys
                     return False
 
-            # Handle file completer popup navigation
+            # Handle file completer popup navigation FIRST
             if self.file_completer.popup().isVisible():
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down,
                                         Qt.Key.Key_Enter, Qt.Key.Key_Return,
                                         Qt.Key.Key_Escape, Qt.Key.Key_Tab):
                     # Let completer handle these keys
                     return False
+
+            # Enter without Shift: send message (only if no popup visible)
+            if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
+                if not key_event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self._on_send()
+                    return True  # Consume the event
+                # Shift+Enter: allow default behavior (insert newline)
 
             from PyQt6.QtCore import QTimer
 
