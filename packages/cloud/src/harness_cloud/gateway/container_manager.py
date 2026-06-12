@@ -23,9 +23,9 @@ class ContainerInfo:
     session_id: str
     user_id: str
     internal_ip: str
-    internal_port: int = 8000
     created_at: datetime
     last_activity: datetime
+    internal_port: int = 8000
 
 
 class ContainerManager(ABC):
