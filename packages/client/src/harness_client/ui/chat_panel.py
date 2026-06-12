@@ -613,7 +613,9 @@ class MessagesContainer(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 16, 0, 16)
         self._layout.setSpacing(0)
-        self._layout.addStretch()
+        # Align content to top
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._layout.addStretch(1)
 
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.PANEL};")
