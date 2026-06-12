@@ -101,31 +101,17 @@ curl http://localhost:8080/health
 curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d"}
 
-# Step 2: Connect with auto-auth (recommended for testing)
-# Note: Replace abc123 with your session_id
-wscat -c ws://localhost:8080/ws/session/abc123 \
-  -x '{"type":"auth","token":"test-token"}'
+# Step 2: Connect and authenticate
+# Option A: Use Python test script (recommended)
+python test_ws.py abc123 your-api-key anthropic
 
-# Step 3: Authenticate with LLM provider
-> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}
-< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
-
-# Step 4: Send run requests
-> {"type": "run_request", "payload": {"prompt": "Hello"}}
-```
-
-**Manual connection** (if you prefer typing auth manually):
-```bash
+# Option B: Manual wscat (must send auth within 30 seconds)
 wscat -c ws://localhost:8080/ws/session/abc123
+> {"type": "auth", "token": "test-token"}      # Gateway auth
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}  # Agent auth
+< {"type": "auth_success", ...}
 
-# Must send Gateway auth within 30 seconds
-> {"type": "auth", "token": "test-token"}
-
-# Then Agent auth
-> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "model": "gpt-4o"}}
-< {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
-
-# Send run requests
+# Step 3: Send run requests
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
