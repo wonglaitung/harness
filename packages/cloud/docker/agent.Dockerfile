@@ -37,6 +37,9 @@ RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 # Copy agent code (relative to build context)
 COPY packages/cloud/src/harness_cloud /app/harness_cloud
 
+# Set PYTHONPATH so Python can find harness_cloud module
+ENV PYTHONPATH=/app
+
 # Install agent dependencies
 RUN pip install --no-cache-dir \
     fastapi \

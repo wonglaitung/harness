@@ -11,7 +11,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Build context is harness root (parent of packages)
+BUILD_CONTEXT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 NO_CACHE=""
 if [ "$1" == "--no-cache" ]; then
@@ -19,7 +20,7 @@ if [ "$1" == "--no-cache" ]; then
 fi
 
 echo "Building Harness Cloud images..."
-echo "Project root: $PROJECT_ROOT"
+echo "Build context: $BUILD_CONTEXT"
 
 # Build Agent image
 echo ""
@@ -28,7 +29,7 @@ docker build \
     $NO_CACHE \
     -f "$SCRIPT_DIR/../docker/agent.Dockerfile" \
     -t harness-agent:latest \
-    "$PROJECT_ROOT"
+    "$BUILD_CONTEXT"
 
 # Build Gateway image
 echo ""
@@ -37,7 +38,7 @@ docker build \
     $NO_CACHE \
     -f "$SCRIPT_DIR/../docker/gateway.Dockerfile" \
     -t harness-gateway:latest \
-    "$PROJECT_ROOT"
+    "$BUILD_CONTEXT"
 
 echo ""
 echo "=== Build complete ==="

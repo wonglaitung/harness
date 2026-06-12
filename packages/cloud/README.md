@@ -35,29 +35,36 @@ Docker-based AI Agent sandbox platform.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## Two-Layer Authentication
+
+```
+Client → Gateway (JWT) → Agent (API Key)
+```
+
+| Layer | Component | Credential | Purpose |
+|-------|-----------|------------|---------|
+| Gateway | Gateway WebSocket | JWT Token | User authentication |
+| Agent | Agent WebSocket | API Key | LLM provider authentication |
+
 ## Testing
 
 ### 1. Local Development (without Docker)
 
-**Test Agent service** (SDK execution layer inside container):
+**Test Agent service directly**:
 ```bash
 cd packages/cloud
 uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
 ```
 
-Test with `wscat`:
+**Connect and authenticate**:
 ```bash
-# Install wscat
-npm install -g wscat
-
-# Connect WebSocket
 wscat -c ws://localhost:8000/ws/run
 
-# Step 1: Authenticate first
+# Authenticate with API key
 > {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}
-# Response: {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
 
-# Step 2: Send run request (no API key needed after auth)
+# Send run request
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
@@ -73,20 +80,6 @@ wscat -c ws://localhost:8000/ws/run
 > {"type": "auth", "payload": {"api_key": "your-key", "provider": "openai", "base_url": "https://your-api.com/v1", "model": "your-model"}}
 ```
 
-**Run request with optional overrides**:
-```bash
-# Override model for specific request
-> {"type": "run_request", "payload": {"prompt": "Hello", "model": "claude-opus-4-6"}}
-```
-
-**Configuration options in auth payload**:
-- `api_key`: API key (required)
-- `provider`: "anthropic" (default) or "openai"
-- `base_url`: Custom API endpoint (for OpenAI-compatible APIs)
-- `model`: Model name (default: "claude-sonnet-4-6")
-- `max_iterations`: Max agent loop iterations (default: 10)
-- `temperature`: LLM temperature (default: 1.0)
-
 ### 2. Docker Full Environment
 
 **Build images and start services**:
@@ -99,6 +92,7 @@ docker-compose up -d
 **Check service health**:
 ```bash
 curl http://localhost:8080/health
+# Response: {"status": "healthy", "containers": 0}
 ```
 
 **Create session**:
@@ -107,18 +101,27 @@ curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d"}
 ```
 
-**Connect WebSocket**:
+**Connect WebSocket (two-layer auth)**:
 ```bash
 wscat -c ws://localhost:8080/ws/session/abc123
-# Authenticate with API credentials
+
+# Step 1: Gateway auth (JWT token)
+# Note: Testing mode accepts any non-empty token
+> {"type": "auth", "token": "test-token"}
+
+# Step 2: Agent auth (API credentials)
 > {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "model": "gpt-4o"}}
-# Then send run requests
+< {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
+
+# Step 3: Send run requests
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
+> **Note**: Gateway authentication is in testing mode and accepts any non-empty token. Production deployment requires proper JWT authentication system.
+
 ## WebSocket Protocol
 
-### Message Flow
+### Message Flow (Auth-First Protocol)
 
 ```
 Client                          Agent
@@ -133,7 +136,7 @@ Client                          Agent
   │<─── tool_result ──────────────│
   │<─── run_result ───────────────│
   │                               │
-  │──── run_request ─────────────>│  (no API key needed)
+  │──── run_request ─────────────>│  (no auth needed)
   │<─── ack ──────────────────────│
   │...                            │
 ```
@@ -155,6 +158,18 @@ Client                          Agent
 | `interrupt` | Client → Server | Interrupt execution |
 | `interrupted` | Server → Client | Execution interrupted |
 | `ping/pong` | Both | Heartbeat |
+
+### Auth Payload Options
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `api_key` | Yes | - | LLM provider API key |
+| `provider` | No | `"anthropic"` | `"anthropic"` or `"openai"` |
+| `base_url` | No | - | Custom API endpoint |
+| `model` | No | `"claude-sonnet-4-6"` | Model name |
+| `max_iterations` | No | `10` | Max agent loop iterations |
+| `temperature` | No | `1.0` | LLM temperature |
+| `system_prompt` | No | `""` | System prompt |
 
 ## Directory Structure
 
@@ -195,7 +210,8 @@ packages/cloud/
 
 ### Docker Socket (ADR-007)
 
-- Gateway runs as non-root user
+- Gateway runs as non-root user (marcowong, uid=1000)
+- User is in docker group (gid=1001) for docker.sock access
 - docker.sock mounted read-only
 - Production: Use K8sPodManager or Docker Rootless
 

@@ -550,6 +550,57 @@ uvicorn harness_cloud.gateway.main:app --host 0.0.0.0 --port 8080
 
 **推荐**：MVP 阶段使用 Hardened Container，生产环境考虑 Kata/gVisor。
 
+### Gateway 容器用户配置
+
+Gateway 需要访问宿主机的 docker.sock，必须正确配置用户权限：
+
+```dockerfile
+# gateway.Dockerfile
+FROM python:3.11-slim
+
+# 创建 docker 组（GID 匹配宿主机 docker 组）
+# 宿主机: getent group docker → docker:x:1001:marcowong
+RUN groupadd -g 1001 docker && \
+    useradd -m -u 1000 -G docker marcowong
+
+# 安装 Docker CLI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    docker-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY packages/cloud/src/harness_cloud /app/harness_cloud
+
+# 安装依赖
+RUN pip install --no-cache-dir fastapi uvicorn[standard] ...
+
+# 设置目录权限
+RUN chown -R marcowong:marcowong /app
+
+# 以非 root 用户运行
+USER marcowong
+
+EXPOSE 8080
+CMD ["uvicorn", "harness_cloud.gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+**权限原理**：
+
+```
+宿主机 docker.sock 权限：
+srw-rw---- 1 root docker 0 /var/run/docker.sock
+           │    └── gid=1001 (docker 组)
+
+容器内用户配置：
+uid=1000(marcowong) gid=1000(marcowong) groups=1001(docker)
+                                      └── 可以读写 docker.sock
+```
+
+**为什么需要这样配置**：
+1. docker.sock 的组权限是 `docker`（gid=1001）
+2. 容器用户必须在该组内才能访问
+3. 以 root 运行存在安全风险，非 root 用户是最佳实践
+
 ### 容器安全配置
 
 ```python
