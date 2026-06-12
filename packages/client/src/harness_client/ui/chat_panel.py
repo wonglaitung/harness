@@ -239,9 +239,7 @@ class MessageBubble(QWidget):
 
         # Size policy: expand vertically as needed
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
-        # For assistant messages, don't limit width - let QTextBrowser handle horizontal scrolling
-        if self._role != "assistant":
-            self.setMaximumWidth(self._max_width)
+        self.setMaximumWidth(self._max_width)
         self.setMinimumWidth(60)
 
     def _calculate_width(self):
@@ -429,9 +427,7 @@ class MessageRow(QWidget):
 
         # Create bubble
         bubble = MessageBubble(self._content, self._role)
-        # Only set max width for user messages - assistant messages handle their own scrolling
-        if self._role == "user":
-            bubble.setMaximumWidth(450)
+        bubble.setMaximumWidth(800 if self._role == "assistant" else 450)
         bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         if self._role == "user":
