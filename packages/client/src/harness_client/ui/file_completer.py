@@ -2,13 +2,10 @@
 File completer - autocomplete for file names with '@' prefix.
 """
 
-import logging
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QStringListModel
 from PyQt6.QtWidgets import QCompleter
-
-logger = logging.getLogger(__name__)
 
 # Directories to ignore when scanning
 IGNORE_DIRS = {
@@ -68,7 +65,6 @@ class FileCompleter(QCompleter):
             path: Path to the work directory
         """
         self._work_dir = path
-        logger.debug(f"[FileCompleter] set_work_dir: {path}")
         self._scan_files()
 
     def _scan_files(self) -> None:
@@ -103,11 +99,10 @@ class FileCompleter(QCompleter):
                 count += 1
 
         except PermissionError:
-            logger.warning(f"Permission denied scanning {self._work_dir}")
-        except Exception as e:
-            logger.error(f"Error scanning files: {e}")
+            pass  # Silently skip directories we can't access
+        except Exception:
+            pass  # Silently skip errors
 
-        logger.debug(f"[FileCompleter] Scanned {len(self._files)} files from {self._work_dir}")
         self.setModel(QStringListModel(self._files))
 
     def should_complete(self, text: str) -> bool:

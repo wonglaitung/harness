@@ -340,11 +340,42 @@ def create_token(user_id: str) -> str:
 1. Gateway 容器以**非 root 用户**运行
 2. docker.sock 只读挂载
 3. 严格限制外网对 Gateway API 的非鉴权访问
+4. **用户 GID 映射**：容器用户加入 docker 组，匹配宿主机 docker 组 GID
 
 **生产阶段（长期）**：
 1. 引入轻量级容器编排代理层（如 Podman API）
 2. 或升级为 Docker Rootless 模式
 3. 考虑使用 Kubernetes 替代直接 Docker API
+
+#### Docker.sock 权限配置实现
+
+**原理**：docker.sock 的组权限是 `docker`（gid=1001），容器用户必须在该组内才能访问。
+
+```dockerfile
+# gateway.Dockerfile
+# 创建 docker 组（gid 匹配宿主机）
+RUN groupadd -g 1001 docker && \
+    useradd -m -u 1000 -G docker marcowong
+
+# 设置目录权限
+RUN chown -R marcowong:marcowong /app
+
+# 以非 root 用户运行
+USER marcowong
+```
+
+**权限映射**：
+```
+宿主机                        容器内
+─────────────────────────────────────────
+docker.sock → gid=1001    →   docker 组 gid=1001
+marcowong  → uid=1000     →   marcowong uid=1000
+           → groups=1001  →   groups=1001 (docker)
+```
+
+**注意**：GID/UID 值需与宿主机匹配。不同部署环境可能需要调整：
+- 开发环境：固定 gid=1001, uid=1000
+- 生产环境：通过环境变量或构建参数动态配置
 
 ### ADR-008: 网络隔离策略（修订）
 

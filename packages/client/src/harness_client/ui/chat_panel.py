@@ -855,36 +855,25 @@ class ChatPanel(QWidget):
 
     def eventFilter(self, obj, event):
         """Handle Enter/Shift+Enter for multi-line input and completion."""
-        # Log all events for debugging
-        if event.type() == QEvent.Type.KeyPress:
-            key_event = event
-            logger.debug(f"[EventFilter] obj={obj.__class__.__name__}, key={key_event.key()}, text='{key_event.text()}'")
-
         # Handle events from completer popup (QListView)
         from PyQt6.QtWidgets import QListView
         if isinstance(obj, QListView) and event.type() == QEvent.Type.KeyPress:
             key_event = event
-            logger.debug(f"[PopupEvent] key={key_event.key()}")
 
             # Handle Enter key on popup
             if key_event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
-                logger.debug("[PopupEvent] Enter pressed on popup")
                 # The popup's activated signal should handle this, but let's also manually trigger
                 if obj == self.file_completer.popup():
                     current_idx = obj.currentIndex()
-                    logger.debug(f"[PopupEvent] file popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                     if current_idx.isValid():
                         completion = obj.model().data(current_idx)
-                        logger.debug(f"[PopupEvent] completion: '{completion}'")
                         if completion:
                             self._insert_file_completion(completion)
                             return True  # Consume event
                 elif obj == self.skill_completer.popup():
                     current_idx = obj.currentIndex()
-                    logger.debug(f"[PopupEvent] skill popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                     if current_idx.isValid():
                         completion = obj.model().data(current_idx)
-                        logger.debug(f"[PopupEvent] completion: '{completion}'")
                         if completion:
                             self._insert_skill_completion(completion)
                             return True  # Consume event
@@ -902,41 +891,31 @@ class ChatPanel(QWidget):
         # Handle events from input_field
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
-            logger.debug(f"[ChatPanel] key pressed: {key_event.key()}, text='{key_event.text()}'")
 
             # Let completer handle navigation keys when popup is visible
             # QCompleter doesn't auto-handle Enter for QTextEdit, so we need to simulate it
             popup_visible = self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible()
-            file_popup_visible = self.file_completer.popup().isVisible()
-            skill_popup_visible = self.skill_completer.popup().isVisible()
-            logger.debug(f"[ChatPanel] key={key_event.key()}, file_popup={file_popup_visible}, skill_popup={skill_popup_visible}")
 
             if popup_visible:
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
                     # Let default handling propagate (completer's internal filter handles these)
-                    logger.debug("[ChatPanel] up/down key, propagating")
                     return super().eventFilter(obj, event)
 
                 if key_event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
-                    logger.debug("[ChatPanel] Enter key pressed with popup visible")
                     # QCompleter popup doesn't handle Enter for non-QLineEdit widgets
                     # We need to manually trigger the selection
                     if self.file_completer.popup().isVisible():
                         # Get current selection and insert it
                         current_idx = self.file_completer.popup().currentIndex()
-                        logger.debug(f"[ChatPanel] file popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                         if current_idx.isValid():
                             completion = self.file_completer.popup().model().data(current_idx)
-                            logger.debug(f"[ChatPanel] completion from model: '{completion}'")
                             if completion:
                                 self._insert_file_completion(completion)
                                 return True  # Consume the event
                     elif self.skill_completer.popup().isVisible():
                         current_idx = self.skill_completer.popup().currentIndex()
-                        logger.debug(f"[ChatPanel] skill popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                         if current_idx.isValid():
                             completion = self.skill_completer.popup().model().data(current_idx)
-                            logger.debug(f"[ChatPanel] completion from model: '{completion}'")
                             if completion:
                                 self._insert_skill_completion(completion)
                                 return True  # Consume the event
@@ -985,62 +964,44 @@ class ChatPanel(QWidget):
     def _on_text_changed(self):
         """Handle text changed signal - update completers."""
         text = self.input_field.toPlainText()
-        skill_popup = self.skill_completer.popup().isVisible()
-        file_popup = self.file_completer.popup().isVisible()
-        logger.debug(f"[TextChanged] text='{text}', skill_popup={skill_popup}, file_popup={file_popup}")
 
         # Only update if one of the completers popup is visible
         if self.skill_completer.popup().isVisible():
-            should = self.skill_completer.should_complete(text)
-            logger.debug(f"[TextChanged] skill should_complete={should}")
-            if should:
+            if self.skill_completer.should_complete(text):
                 prefix = self.skill_completer.get_completion_prefix(text)
                 self.skill_completer.setCompletionPrefix(prefix)
                 if self.skill_completer.completionCount() > 0:
                     self.skill_completer.complete()
                 else:
-                    logger.debug("[TextChanged] hiding skill popup (no matches)")
                     self.skill_completer.popup().hide()
             else:
-                logger.debug("[TextChanged] hiding skill popup (should_complete=False)")
                 self.skill_completer.popup().hide()
 
         if self.file_completer.popup().isVisible():
-            should = self.file_completer.should_complete(text)
-            logger.debug(f"[TextChanged] file should_complete={should}")
-            if should:
+            if self.file_completer.should_complete(text):
                 prefix = self.file_completer.get_completion_prefix(text)
                 self.file_completer.setCompletionPrefix(prefix)
                 if self.file_completer.completionCount() > 0:
                     self.file_completer.complete()
                 else:
-                    logger.debug("[TextChanged] hiding file popup (no matches)")
                     self.file_completer.popup().hide()
             else:
-                logger.debug("[TextChanged] hiding file popup (should_complete=False)")
                 self.file_completer.popup().hide()
 
     def _show_skill_completer(self):
         """Show the skill completer popup if appropriate."""
         text = self.input_field.toPlainText()
-        logger.debug(f"[SkillCompleter] _show_skill_completer: text='{text}'")
         if self.skill_completer.should_complete(text):
             # Set completion prefix for filtering
             prefix = self.skill_completer.get_completion_prefix(text)
-            logger.debug(f"[SkillCompleter] prefix='{prefix}'")
             self.skill_completer.setCompletionPrefix(prefix)
             # Check if there are any matches before showing
             count = self.skill_completer.completionCount()
-            logger.debug(f"[SkillCompleter] completionCount={count}")
             if count > 0:
                 # Just call complete() without rect - it will position at widget bottom
                 self.skill_completer.complete()
-                popup = self.skill_completer.popup()
-                logger.debug(f"[SkillCompleter] popup.isVisible={popup.isVisible()}, size={popup.size()}, pos={popup.pos()}, geometry={popup.geometry()}")
             else:
-                logger.debug("[SkillCompleter] no matches, not showing popup")
-        else:
-            logger.debug(f"[SkillCompleter] should_complete=False for '{text}'")
+                pass
 
     def _insert_skill_completion(self, completion: str):
         """Insert the selected skill completion into the input field."""
@@ -1063,43 +1024,29 @@ class ChatPanel(QWidget):
     def _show_file_completer(self):
         """Show the file completer popup if appropriate."""
         text = self.input_field.toPlainText()
-        logger.debug(f"[FileCompleter] _show_file_completer: text='{text}'")
-        logger.debug(f"[FileCompleter] _files count: {len(self.file_completer._files)}")
         if self.file_completer.should_complete(text):
             prefix = self.file_completer.get_completion_prefix(text)
-            logger.debug(f"[FileCompleter] prefix='{prefix}'")
             self.file_completer.setCompletionPrefix(prefix)
             count = self.file_completer.completionCount()
-            logger.debug(f"[FileCompleter] completionCount={count}")
             if count > 0:
                 self.file_completer.complete()
-                popup = self.file_completer.popup()
-                logger.debug(f"[FileCompleter] popup shown, isVisible={popup.isVisible()}")
-            else:
-                logger.debug("[FileCompleter] no matches, not showing popup")
-        else:
-            logger.debug(f"[FileCompleter] should_complete=False for '{text}'")
 
     def _insert_file_completion(self, completion: str):
         """Insert the selected file completion into the input field."""
-        logger.debug(f"[FileCompleter] _insert_file_completion called: completion='{completion}'")
         cursor = self.input_field.textCursor()
         # Find the start of the "@" prefix
         text = self.input_field.toPlainText()
         pos = cursor.position()
-        logger.debug(f"[FileCompleter] text='{text}', cursor pos={pos}")
         # Look back for "@"
         start_pos = pos
         while start_pos > 0 and text[start_pos - 1] != "@":
             start_pos -= 1
-        logger.debug(f"[FileCompleter] start_pos={start_pos}")
         if start_pos > 0 and text[start_pos - 1] == "@":
             start_pos -= 1
         # Replace the "@" + typed text with the completion (without @)
         cursor.setPosition(start_pos)
         cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
         cursor.insertText(completion)
-        logger.debug(f"[FileCompleter] inserted text, new text='{self.input_field.toPlainText()}'")
         self.input_field.setFocus()
 
     def set_streaming_state(self, is_streaming: bool):
