@@ -200,8 +200,6 @@ class MessageBubble(QWidget):
             self._content_label.adjustSize()
             content_width = self._content_label.width()
             content_height = self._content_label.height()
-            logger.debug(f"[MessageBubble] Content label size: {content_width}x{content_height}")
-            logger.debug(f"[MessageBubble] Scroll area max width: {self._max_width}")
 
             # Set scroll area viewport size
             viewport_width = min(content_width, self._max_width)
@@ -212,9 +210,6 @@ class MessageBubble(QWidget):
             self._scroll_area.setFixedHeight(content_height)
 
             self._scroll_area.setWidget(self._content_label)
-
-            logger.debug(f"[MessageBubble] Scroll area size after setup: {self._scroll_area.width()}x{self._scroll_area.height()}")
-            logger.debug(f"[MessageBubble] MessageBubble size after setup: {self.width()}x{self.height()}")
 
             layout.addWidget(self._scroll_area)
 
