@@ -53,9 +53,11 @@ npm install -g wscat
 # Connect WebSocket
 wscat -c ws://localhost:8000/ws/run
 
-# Send run request
-> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello"}}
+# Send run request (api_key is required in payload)
+> {"type": "run_request", "payload": {"session_id": "test-123", "prompt": "Hello", "api_key": "your-anthropic-api-key"}}
 ```
+
+**Note**: The `api_key` must be provided in each `run_request` payload. The agent does not read from environment variables.
 
 ### 2. Docker Full Environment
 
