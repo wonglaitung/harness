@@ -110,17 +110,51 @@ curl -X POST http://localhost:8080/api/sessions
 **Connect WebSocket**:
 ```bash
 wscat -c ws://localhost:8080/ws/session/abc123
-# Send auth message first:
-> {"type": "auth", "token": "your-jwt-token"}
+# Authenticate with API credentials
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "model": "gpt-4o"}}
+# Then send run requests
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
-### 3. Required Configuration
+## WebSocket Protocol
 
-Before testing, configure:
+### Message Flow
 
-1. **API Key** - Set in `agent/config.py` or environment variable
-2. **JWT Secret** - Default in docker-compose, change for production
-3. **Redis** - Auto-started by docker-compose
+```
+Client                          Agent
+  │                               │
+  │──── auth ────────────────────>│
+  │<─── auth_success ─────────────│
+  │                               │
+  │──── run_request ─────────────>│
+  │<─── ack ──────────────────────│
+  │<─── stream_chunk ─────────────│
+  │<─── tool_call ────────────────│
+  │<─── tool_result ──────────────│
+  │<─── run_result ───────────────│
+  │                               │
+  │──── run_request ─────────────>│  (no API key needed)
+  │<─── ack ──────────────────────│
+  │...                            │
+```
+
+### Message Types
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `auth` | Client → Server | Authenticate with API credentials |
+| `auth_success` | Server → Client | Authentication successful |
+| `auth_failed` | Server → Client | Authentication failed |
+| `run_request` | Client → Server | Execute a task |
+| `ack` | Server → Client | Request acknowledged |
+| `stream_chunk` | Server → Client | Streaming text chunk |
+| `tool_call` | Server → Client | Tool call started |
+| `tool_result` | Server → Client | Tool execution result |
+| `run_result` | Server → Client | Final execution result |
+| `error` | Server → Client | Error occurred |
+| `interrupt` | Client → Server | Interrupt execution |
+| `interrupted` | Server → Client | Execution interrupted |
+| `ping/pong` | Both | Heartbeat |
 
 ## Directory Structure
 
