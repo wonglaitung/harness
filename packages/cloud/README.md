@@ -95,37 +95,37 @@ curl http://localhost:8080/health
 # Response: {"status": "healthy", "containers": 0}
 ```
 
-**Create session**:
+**Create session and connect**:
 ```bash
+# Step 1: Create session (returns session_id)
 curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d"}
-```
 
-**Connect WebSocket (two-layer auth)**:
-```bash
-# Manual connection (must send auth within 30 seconds)
-wscat -c ws://localhost:8080/ws/session/abc123
-
-# Step 1: Gateway auth (JWT token)
-# Note: Testing mode accepts any non-empty token
-> {"type": "auth", "token": "test-token"}
-
-# Step 2: Agent auth (API credentials)
-> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "model": "gpt-4o"}}
-< {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
-
-# Step 3: Send run requests
-> {"type": "run_request", "payload": {"prompt": "Hello"}}
-```
-
-**Quick test with auto-auth**:
-```bash
-# Send Gateway auth immediately on connect (avoids timeout)
+# Step 2: Connect with auto-auth (recommended for testing)
+# Note: Replace abc123 with your session_id
 wscat -c ws://localhost:8080/ws/session/abc123 \
   -x '{"type":"auth","token":"test-token"}'
 
-# Then continue manually:
+# Step 3: Authenticate with LLM provider
 > {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "anthropic"}}
+< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+
+# Step 4: Send run requests
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
+```
+
+**Manual connection** (if you prefer typing auth manually):
+```bash
+wscat -c ws://localhost:8080/ws/session/abc123
+
+# Must send Gateway auth within 30 seconds
+> {"type": "auth", "token": "test-token"}
+
+# Then Agent auth
+> {"type": "auth", "payload": {"api_key": "your-api-key", "provider": "openai", "model": "gpt-4o"}}
+< {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
+
+# Send run requests
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
