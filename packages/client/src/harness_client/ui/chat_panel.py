@@ -747,6 +747,8 @@ class ChatPanel(QWidget):
         # Connect to both the completer and popup activated signals
         self.skill_completer.activated[str].connect(self._insert_skill_completion)
         self.skill_completer.popup().activated.connect(self._on_skill_popup_activated)
+        # Install event filter on popup to capture keyboard events
+        self.skill_completer.popup().installEventFilter(self)
 
         # File completer
         self.file_completer = FileCompleter(self)
