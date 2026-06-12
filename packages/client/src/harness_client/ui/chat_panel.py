@@ -193,8 +193,6 @@ class MessageBubble(QWidget):
 
             # Render Markdown to HTML
             html = self._render_markdown(self._content)
-            logger.debug(f"[MessageBubble] Original content:\n{self._content[:200]}...")
-            logger.debug(f"[MessageBubble] Rendered HTML:\n{html[:500]}...")
             self._content_label.setTextFormat(Qt.TextFormat.RichText)
             self._content_label.setText(html)
 
