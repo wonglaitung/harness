@@ -15,11 +15,16 @@ from PyQt6.QtWidgets import QApplication
 from harness_client.themes import apply_theme
 from harness_client.ui.main_window import MainWindow
 
-# Configure logging
+# Configure logging - only show WARNING and above for third-party libraries
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+# Suppress verbose debug logs from third-party libraries
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+logging.getLogger("qasync").setLevel(logging.WARNING)
+logging.getLogger("MARKDOWN").setLevel(logging.WARNING)
 
 
 def get_system_font() -> QFont:
