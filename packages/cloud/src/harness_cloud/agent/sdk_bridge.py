@@ -126,7 +126,7 @@ class SDKBridge:
         def run_agent_sync() -> None:
             """Sync execute agent (runs in thread pool)."""
             try:
-                result = self.agent.run(  # type: ignore[misc]
+                result = self.agent.run_sync(  # type: ignore[misc]
                     prompt=request.prompt,
                     session_id=request.session_id,
                     on_progress=on_progress,
