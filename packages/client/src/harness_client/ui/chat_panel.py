@@ -929,8 +929,6 @@ class ChatPanel(QWidget):
             else:
                 self.file_completer.popup().hide()
 
-        return super().eventFilter(obj, event)
-
     def _show_skill_completer(self):
         """Show the skill completer popup if appropriate."""
         text = self.input_field.toPlainText()
