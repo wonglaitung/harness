@@ -11,8 +11,6 @@
 #
 # Reference: packages/cloud/docs/06-deployment.md
 
-version: '3.8'
-
 services:
   gateway:
     build:
@@ -30,7 +28,8 @@ services:
     depends_on:
       - redis
     networks:
-      - harness-net
+      - cloud-net
+      - agent-net
     restart: unless-stopped
 
   redis:
@@ -38,14 +37,20 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - harness-net
+      - cloud-net
     restart: unless-stopped
     # Persistence optional for rate limiting
     # volumes:
     #   - redis-data:/data
 
 networks:
-  harness-net:
+  # Network for gateway-redis communication
+  cloud-net:
     driver: bridge
-    # Note: Agent containers use a separate internal network
-    # created by DockerManager (internal=True)
+
+  # Network for gateway-agent communication
+  # Must be "external: true" to use the network created by DockerManager
+  # DockerManager creates "harness-net" as an internal network for agents
+  agent-net:
+    name: harness-net
+    external: true
