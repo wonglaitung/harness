@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QTextBrowser,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -123,8 +124,8 @@ class MessageBubble(QWidget):
     """
     Message bubble with rounded corners and selectable text.
 
-    Uses QLabel for accurate sizeHint() with word wrap support.
-    QLabel provides reliable sizing unlike QTextBrowser.
+    Uses QLabel for user messages (simple text).
+    Uses QTextBrowser for assistant messages (Markdown with scrolling).
     """
 
     def __init__(
@@ -139,12 +140,13 @@ class MessageBubble(QWidget):
         self._border_radius = 12.0
         self._padding_h = 14
         self._padding_v = 10
-        self._max_width = 450
+        self._max_width = 600  # Increased for better code display
+        self._max_height = 400  # Maximum height before scrolling
 
         self._setup_ui()
 
     def _setup_ui(self):
-        """Setup the UI with QLabel for accurate sizing."""
+        """Setup the UI with appropriate widget based on role."""
         theme = get_theme()
 
         # Main layout with padding
@@ -152,39 +154,100 @@ class MessageBubble(QWidget):
         layout.setContentsMargins(self._padding_h, self._padding_v, self._padding_h, self._padding_v)
         layout.setSpacing(0)
 
-        # Use QLabel instead of QTextBrowser for reliable sizeHint()
-        self._label = QLabel()
-        self._label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._label.setOpenExternalLinks(True)
-
-        # Set font
-        font = self._get_font()
-        self._label.setFont(font)
-
         if self._role == "assistant":
+            # Use QTextBrowser for assistant messages (supports scrolling and Markdown)
+            self._text_browser = QTextBrowser()
+            self._text_browser.setOpenExternalLinks(True)
+            self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
+
+            # Set font
+            font = self._get_font()
+            self._text_browser.setFont(font)
+
             # Render Markdown to HTML
             html = self._render_markdown(self._content)
-            self._label.setTextFormat(Qt.TextFormat.RichText)
-            self._label.setText(html)
+            self._text_browser.setHtml(html)
+
+            # Style the text browser
+            self._text_browser.setStyleSheet(f"""
+                QTextBrowser {{
+                    background-color: transparent;
+                    color: {theme.TEXT};
+                    border: none;
+                    padding: 0px;
+                }}
+                QScrollBar:vertical {{
+                    background-color: {theme.CHROME};
+                    width: 8px;
+                    border-radius: 4px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background-color: {theme.BORDER};
+                    border-radius: 4px;
+                    min-height: 20px;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar:horizontal {{
+                    background-color: {theme.CHROME};
+                    height: 8px;
+                    border-radius: 4px;
+                }}
+                QScrollBar::handle:horizontal {{
+                    background-color: {theme.BORDER};
+                    border-radius: 4px;
+                    min-width: 20px;
+                }}
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                    width: 0px;
+                }}
+            """)
+
+            # Calculate document height
+            doc = self._text_browser.document()
+            doc.setTextWidth(self._max_width - 2 * self._padding_h)
+            doc_height = doc.size().height()
+
+            # Set height limit
+            if doc_height > self._max_height:
+                self._text_browser.setMaximumHeight(self._max_height)
+            else:
+                self._text_browser.setMaximumHeight(int(doc_height) + 20)
+
+            self._text_browser.setMaximumWidth(self._max_width - 2 * self._padding_h)
+            self._text_browser.setMinimumWidth(200)
+
+            layout.addWidget(self._text_browser)
+
         else:
-            # Plain text for user
+            # Use QLabel for user messages (simple text, no scrolling needed)
+            self._label = QLabel()
+            self._label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self._label.setOpenExternalLinks(True)
+
+            # Set font
+            font = self._get_font()
+            self._label.setFont(font)
+
             self._label.setTextFormat(Qt.TextFormat.PlainText)
             self._label.setText(self._content)
 
-        # Set text color via stylesheet
-        text_color = theme.TEXT if self._role == "assistant" else "#ffffff"
-        self._label.setStyleSheet(f"""
-            QLabel {{
-                background-color: transparent;
-                color: {text_color};
-                border: none;
-            }}
-        """)
+            # Set text color via stylesheet
+            self._label.setStyleSheet(f"""
+                QLabel {{
+                    background-color: transparent;
+                    color: #ffffff;
+                    border: none;
+                }}
+            """)
 
-        layout.addWidget(self._label)
+            layout.addWidget(self._label)
 
-        # Calculate preferred width based on text
-        self._calculate_width()
+            # Calculate preferred width based on text
+            self._calculate_width()
 
         # Size policy: expand vertically as needed
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
@@ -376,7 +439,9 @@ class MessageRow(QWidget):
 
         # Create bubble
         bubble = MessageBubble(self._content, self._role)
-        bubble.setMaximumWidth(450)
+        # Assistant bubbles need more width for scrolling support
+        max_width = 600 if self._role == "assistant" else 450
+        bubble.setMaximumWidth(max_width)
         bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         if self._role == "user":
