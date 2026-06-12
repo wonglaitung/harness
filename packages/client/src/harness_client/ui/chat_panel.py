@@ -159,8 +159,15 @@ class MessageBubble(QWidget):
             self._text_browser.setOpenExternalLinks(True)
             self._text_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            # NoWrap mode - content won't wrap, horizontal scrollbar will appear for long lines
-            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
+            # Use FixedPixelWidth mode with a large width to enable horizontal scrollbar
+            # When content exceeds the widget width, horizontal scrollbar will appear
+            self._text_browser.setLineWrapColumnOrWidth(2000)  # Large width for long lines
+            self._text_browser.setLineWrapMode(QTextBrowser.LineWrapMode.FixedPixelWidth)
+
+            # Debug logging
+            logger.debug(f"[MessageBubble] LineWrapMode: {self._text_browser.lineWrapMode()}")
+            logger.debug(f"[MessageBubble] LineWrapColumnOrWidth: {self._text_browser.lineWrapColumnOrWidth()}")
+            logger.debug(f"[MessageBubble] HorizontalScrollBarPolicy: {self._text_browser.horizontalScrollBarPolicy()}")
 
             # Set font
             font = self._get_font()
@@ -169,6 +176,11 @@ class MessageBubble(QWidget):
             # Render Markdown to HTML
             html = self._render_markdown(self._content)
             self._text_browser.setHtml(html)
+
+            # Debug: check document size after setting content
+            doc = self._text_browser.document()
+            logger.debug(f"[MessageBubble] Document size: {doc.size()}")
+            logger.debug(f"[MessageBubble] Horizontal scrollbar visible: {self._text_browser.horizontalScrollBar().isVisible()}")
 
             # Style the text browser
             self._text_browser.setStyleSheet(f"""
