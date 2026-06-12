@@ -404,6 +404,9 @@ Client                                Server
 ```
 Client                                Server
   │                                     │
+  │──── auth ──────────────────────────>│
+  │<──── auth_success ──────────────────│
+  │                                     │
   │──── run_request ───────────────────>│
   │                                     │
   │<──── ack ───────────────────────────│
@@ -421,6 +424,9 @@ Client                                Server
 ```
 Client                                Server
   │                                     │
+  │──── auth ──────────────────────────>│
+  │<──── auth_success ──────────────────│
+  │                                     │
   │──── run_request ───────────────────>│
   │                                     │
   │<──── ack ───────────────────────────│
@@ -429,6 +435,19 @@ Client                                Server
   │                                     │
   │<──── error ─────────────────────────│
   │     {error: "API key invalid"}      │
+  │                                     │
+```
+
+### 未认证错误流程
+
+```
+Client                                Server
+  │                                     │
+  │──── run_request ───────────────────>│  (未先发送 auth)
+  │                                     │
+  │<──── error ─────────────────────────│
+  │     {error: "Not authenticated",   │
+  │      error_code: "NOT_AUTHENTICATED"}
   │                                     │
 ```
 
@@ -444,11 +463,16 @@ from typing import Any, Optional
 
 class MessageType(str, Enum):
     """WebSocket 消息类型"""
-    
+
+    # 认证类
+    AUTH = "auth"
+    AUTH_SUCCESS = "auth_success"
+    AUTH_FAILED = "auth_failed"
+
     # 请求类
     RUN_REQUEST = "run_request"
     INTERRUPT = "interrupt"
-    
+
     # 响应类
     ACK = "ack"
     RUN_RESULT = "run_result"
@@ -467,18 +491,53 @@ class MessageEnvelope(BaseModel):
     timestamp: Optional[str] = None
 
 
-class RunRequest(BaseModel):
-    """执行请求"""
-    prompt: str
-    session_id: Optional[str] = None
-    model: str = "claude-sonnet-4-6"
-    api_key: Optional[str] = None
-    provider: str = "anthropic"
-    base_url: Optional[str] = None
+class AuthRequest(BaseModel):
+    """认证请求（首次连接必发）"""
+    api_key: str                       # 必填
+    provider: str = "anthropic"        # 提供商
+    base_url: Optional[str] = None     # 自定义 API URL
+    model: str = "claude-sonnet-4-6"   # 默认模型
     max_iterations: int = 10
     temperature: float = 1.0
     system_prompt: str = ""
     tool_result_role: str = "tool"
+
+
+class AuthSuccess(BaseModel):
+    """认证成功"""
+    provider: str
+    model: str
+
+
+class AuthFailed(BaseModel):
+    """认证失败"""
+    error: str
+    error_code: str
+
+
+class MergedRequest(BaseModel):
+    """合并后的请求（内部使用）"""
+    prompt: str
+    session_id: Optional[str] = None
+    api_key: str
+    provider: str = "anthropic"
+    base_url: Optional[str] = None
+    model: str = "claude-sonnet-4-6"
+    max_iterations: int = 10
+    temperature: float = 1.0
+    system_prompt: str = ""
+    tool_result_role: str = "tool"
+
+
+class RunRequest(BaseModel):
+    """执行请求（需先认证）"""
+    prompt: str                        # 必填
+    session_id: Optional[str] = None
+    # 可选覆盖字段（未设置使用 auth 配置）
+    model: Optional[str] = None
+    max_iterations: Optional[int] = None
+    temperature: Optional[float] = None
+    system_prompt: Optional[str] = None
 
 
 class RunResult(BaseModel):
@@ -518,16 +577,34 @@ class ToolResultEvent(BaseModel):
 # 连接
 wscat -c ws://localhost:8000/ws/run
 
-# 发送请求
+# Step 1: 认证（必须先执行）
+> {"type": "auth", "payload": {"api_key": "sk-ant-xxx", "provider": "anthropic"}}
+< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+
+# Step 2: 发送请求（无需再提供 API Key）
 > {"type": "run_request", "payload": {"prompt": "Hello"}}
 
 # 接收响应
-< {"type": "ack", "session_id": null}
+< {"type": "ack", "payload": {"session_id": null}}
 < {"type": "progress", "payload": {"event_type": "loop_start", ...}}
 < {"type": "stream_chunk", "payload": {"content": "Hello"}}
 < {"type": "run_result", "payload": {"status": "completed", ...}}
 
+# Step 3: 再次请求（无需重复认证）
+> {"type": "run_request", "payload": {"prompt": "Tell me more"}}
+
 # 发送中断
 > {"type": "interrupt", "payload": {}}
 < {"type": "interrupted", "payload": {}}
+```
+
+### OpenAI 兼容 API 测试
+
+```bash
+# 认证时指定 base_url
+> {"type": "auth", "payload": {"api_key": "your-key", "provider": "openai", "base_url": "https://api.your-provider.com/v1", "model": "gpt-4o"}}
+< {"type": "auth_success", "payload": {"provider": "openai", "model": "gpt-4o"}}
+
+# 发送请求
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```

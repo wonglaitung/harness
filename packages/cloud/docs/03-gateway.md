@@ -850,22 +850,29 @@ async def get_download_url(object_name: str, user: User = Depends(get_current_us
     return {"download_url": download_url}
 ```
 
-## WebSocket 鉴权方式（修订）
+## WebSocket 鉴权方式
 
-> ⚠️ **修订**：Token 通过首条消息传递，避免 URL 参数泄露。
+> **Gateway 层鉴权**：JWT Token 通过首条消息传递，避免 URL 参数泄露。
+>
+> **Agent 层鉴权**：Gateway 透传前端消息，Agent 负责 API Key 认证（auth-first 协议）。
 
 ```python
 @app.websocket("/ws/session/{session_id}")
 async def session_websocket(websocket: WebSocket, session_id: str):
-    """会话 WebSocket 端点 - 首条消息鉴权"""
+    """
+    会话 WebSocket 端点
+
+    Gateway 负责 JWT 验证，然后透传所有消息到容器内的 Agent。
+    Agent 负责 API Key 认证（auth-first 协议）。
+    """
     await websocket.accept()
 
-    # 等待首条鉴权消息
+    # Gateway 层：等待首条 JWT 鉴权消息
     try:
         auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
         auth_data = json.loads(auth_msg)
-        if auth_data.get("type") != "auth":
-            await websocket.close(code=4001, reason="Expected auth message")
+        if auth_data.get("type") != "gateway_auth":
+            await websocket.close(code=4001, reason="Expected gateway_auth message")
             return
         token = auth_data.get("token")
     except Exception:
@@ -877,23 +884,17 @@ async def session_websocket(websocket: WebSocket, session_id: str):
     except Exception:
         await websocket.close(code=4001, reason="Authentication failed")
         return
-    # ... 后续处理
-```
 
-    def __init__(self, endpoint: str = "minio:9000", access_key: str = "minioadmin", secret_key: str = "minioadmin"):
-        self.client = Minio(endpoint, access_key, secret_key, secure=False)
-        self.bucket = "harness-files"
-        self._ensure_bucket()
+    # 验证会话所有权
+    info = docker_manager.get_container(session_id)
+    if not info or info.user_id != user.id:
+        await websocket.close(code=4003, reason="Not authorized")
+        return
 
-    async def upload(self, file_name: str, data: bytes, user_id: str) -> str:
-        """上传文件，返回对象路径"""
-        object_name = f"{user_id}/{file_name}"
-        self.client.put_object(self.bucket, object_name, io.BytesIO(data), len(data))
-        return object_name
-
-    async def get_download_url(self, object_name: str, expires: int = 3600) -> str:
-        """获取预签名下载 URL"""
-        return self.client.presigned_get_object(self.bucket, object_name, expires=expires)
+    # 建立隧道，透传所有后续消息（包括 Agent 的 auth 消息）
+    container_url = docker_manager.get_container_url(session_id)
+    tunnel = WebSocketTunnel(container_url)
+    await tunnel.connect(websocket)
 ```
 
 ## 验证测试
@@ -901,7 +902,7 @@ async def session_websocket(websocket: WebSocket, session_id: str):
 ### 创建会话
 
 ```bash
-# 获取 token
+# 获取 JWT token
 TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "test", "password": "test"}' | jq -r '.token')
@@ -911,8 +912,18 @@ curl -X POST http://localhost:8080/api/sessions \
   -H "Authorization: Bearer $TOKEN"
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d4"}
 
-# 连接 WebSocket
-wscat -c "ws://localhost:8080/ws/session/abc123?token=$TOKEN"
+# 连接 WebSocket（Gateway 鉴权）
+wscat -c "ws://localhost:8080/ws/session/abc123"
+
+# Gateway 鉴权（首条消息）
+> {"type": "gateway_auth", "token": "$TOKEN"}
+
+# Agent 鉴权（API Key）
+> {"type": "auth", "payload": {"api_key": "sk-ant-xxx", "provider": "anthropic"}}
+< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+
+# 执行任务
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
 ### 资源限制验证

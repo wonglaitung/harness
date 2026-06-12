@@ -146,14 +146,18 @@ Gateway 是统一入口，负责：
 
 ```python
 class SDKBridge:
-    async def run_stream(request: RunRequest) -> AsyncIterator[dict]:
+    async def run_stream(request: MergedRequest) -> AsyncIterator[dict]:
         """
         1. 创建 AgentHarness 实例
-        2. 调用 agent.run(prompt, session_id, on_progress)
+        2. 调用 agent.run_sync(prompt, session_id, on_progress)
         3. 将 ProgressEvent 转换为 WebSocket 消息
         4. 流式返回给前端
+
+        注意：使用 run_sync() 因为 asyncio.to_thread() 需要同步函数。
         """
 ```
+
+**认证流程**: 客户端首次连接必须发送 `auth` 消息（包含 API Key），认证成功后可发送多次 `run_request`，无需重复提供 API Key。
 
 ## 数据流
 
@@ -163,7 +167,16 @@ class SDKBridge:
 用户输入（Vue 组件）
     │
     ↓
-WebSocket 发送 RunRequest
+WebSocket 发送 Auth（首次连接）
+    │
+    ↓
+Container Agent 验证 API Key
+    │
+    ↓
+返回 auth_success
+    │
+    ↓
+WebSocket 发送 RunRequest（无需 API Key）
     │
     ↓
 Gateway 创建/获取容器
@@ -175,7 +188,7 @@ WebSocket Tunnel 转发消息
 Container Agent 接收消息
     │
     ↓
-SDKBridge 调用 AgentHarness.run()
+SDKBridge 调用 AgentHarness.run_sync()
     │
     ↓
 SDK 生成 ProgressEvent

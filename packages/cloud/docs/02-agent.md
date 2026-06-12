@@ -4,6 +4,10 @@
 
 Agent 是运行在每个 Docker 沙箱容器内的 FastAPI 服务，负责连接 WebSocket 与 Harness SDK。
 
+**协议版本**: v2 (Auth-First Protocol)
+
+**核心原则**: 客户端首次连接后必须先认证，认证成功后可发送多次执行请求，无需重复提供 API Key。
+
 ## 目录结构
 
 ```
@@ -45,8 +49,8 @@ class SDKBridge:
 ### 创建 Agent
 
 ```python
-def _create_agent(self, request: RunRequest) -> AgentHarness:
-    """根据请求配置创建 AgentHarness"""
+def _create_agent(self, request: MergedRequest) -> AgentHarness:
+    """根据合并后的请求配置创建 AgentHarness"""
     config = HarnessConfig(
         model=request.model,
         api_key=request.api_key,
@@ -58,7 +62,7 @@ def _create_agent(self, request: RunRequest) -> AgentHarness:
         sandbox_workspace=str(self.workspace),
         tool_result_role=request.tool_result_role,
     )
-    
+
     tools = [
         ReadTool(),
         WriteTool(),
@@ -66,41 +70,41 @@ def _create_agent(self, request: RunRequest) -> AgentHarness:
         GrepTool(),
         BashTool(),
     ]
-    
+
     return AgentHarness(config=config, tools=tools)
 ```
 
 ### 流式执行
 
 ```python
-async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+async def run_stream(self, request: MergedRequest) -> AsyncIterator[dict]:
     """
     执行任务并流式返回事件
-    
+
     这是核心方法：
     1. 创建 AgentHarness
     2. 设置 on_progress 回调
-    3. 执行 agent.run()
+    3. 执行 agent.run_sync()
     4. 将 ProgressEvent 转换为 WebSocket 消息
-    
-    ⚠️ 评审意见修复：使用 asyncio.to_thread() + 同步队列，避免事件循环死锁。
+
+    ⚠️ 注意：使用 run_sync() 而非 run()，因为 asyncio.to_thread() 需要同步函数。
     """
     self.agent = self._create_agent(request)
     self._current_session_id = request.session_id
     self._interrupt_flag = False
-    
+
     # 使用同步队列（线程安全）
     import queue
     events_queue: queue.Queue = queue.Queue()
-    
+
     def on_progress(event: ProgressEvent):
         """SDK progress callback - 同步方法"""
         events_queue.put(event)
-    
+
     def run_agent_sync():
         """同步执行 agent（在线程池中运行）"""
         try:
-            result = self.agent.run(
+            result = self.agent.run_sync(
                 prompt=request.prompt,
                 session_id=request.session_id,
                 on_progress=on_progress,
@@ -108,7 +112,7 @@ async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
             events_queue.put(("result", result))
         except Exception as e:
             events_queue.put(("error", str(e)))
-    
+
     # 使用 asyncio.to_thread 在线程池中执行同步 SDK
     agent_task = asyncio.create_task(asyncio.to_thread(run_agent_sync))
     
@@ -202,14 +206,21 @@ from contextlib import asynccontextmanager
 import asyncio
 
 from harness_cloud.agent.sdk_bridge import SDKBridge
-from harness_cloud.common.messages import MessageEnvelope, MessageType, RunRequest
+from harness_cloud.common.messages import (
+    MessageEnvelope,
+    MessageType,
+    AuthRequest,
+    AuthSuccess,
+    AuthFailed,
+    RunRequest,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """启动时初始化"""
+    setup_memory_limit()
     yield
-    # 关闭时清理
 
 
 app = FastAPI(title="Harness Container Agent", lifespan=lifespan)
@@ -220,27 +231,27 @@ async def websocket_run(websocket: WebSocket):
     """
     主 WebSocket 端点
 
-    协议流程：
-    1. Client 发送 RunRequest
-    2. Agent 发送 ACK
-    3. Agent 流式发送 ProgressEvent
-    4. Agent 发送 RunResult
+    协议流程（Auth-First Protocol）：
+    1. Client 发送 auth 消息（包含 API Key）
+    2. Agent 验证后响应 auth_success 或 auth_failed
+    3. Client 发送 run_request（无需 API Key）
+    4. Agent 流式发送 ProgressEvent，返回 run_result
 
     心跳机制：
     - Client 发送 ping
     - Agent 响应 pong
     - 检测超时断线
-
-    ⚠️ 评审意见修复：添加全局异常捕获，防止单个连接异常导致进程崩溃
     """
     await websocket.accept()
     bridge = SDKBridge()
     session_id = None
+    authenticated = False
+    auth_config: AuthRequest | None = None
 
     # 心跳检测
     last_ping = asyncio.get_event_loop().time()
-    HEARTBEAT_TIMEOUT = 90.0  # 90秒超时
-    _closed = False  # 防止双重 close 的标志
+    HEARTBEAT_TIMEOUT = 90.0
+    _closed = False
 
     async def heartbeat_monitor():
         """监控心跳超时"""
@@ -255,7 +266,7 @@ async def websocket_run(websocket: WebSocket):
                 try:
                     await websocket.close(code=1001, reason="Heartbeat timeout")
                 except Exception:
-                    pass  # 防止重复 close 异常
+                    pass
                 return
 
     heartbeat_task = asyncio.create_task(heartbeat_monitor())
@@ -271,31 +282,110 @@ async def websocket_run(websocket: WebSocket):
                 await websocket.send_json({"type": "pong"})
                 continue
 
+            # 处理认证
+            if envelope.type == MessageType.AUTH:
+                if authenticated:
+                    logger.warning("Received auth while already authenticated")
+                    continue
+
+                try:
+                    auth_request = AuthRequest.parse_obj(envelope.payload)
+                    if not auth_request.api_key:
+                        await websocket.send_json({
+                            "type": MessageType.AUTH_FAILED.value,
+                            "payload": {
+                                "error": "API key is required",
+                                "error_code": "INVALID_API_KEY",
+                            },
+                        })
+                        continue
+
+                    # 存储 auth 配置
+                    auth_config = auth_request
+                    authenticated = True
+
+                    await websocket.send_json({
+                        "type": MessageType.AUTH_SUCCESS.value,
+                        "payload": {
+                            "provider": auth_config.provider,
+                            "model": auth_config.model,
+                        },
+                    })
+                    logger.info(f"Authenticated: provider={auth_config.provider}")
+
+                except Exception as e:
+                    logger.error(f"Auth validation error: {e}")
+                    await websocket.send_json({
+                        "type": MessageType.AUTH_FAILED.value,
+                        "payload": {
+                            "error": str(e),
+                            "error_code": "INVALID_AUTH_PAYLOAD",
+                        },
+                    })
+                continue
+
+            # 处理 run_request（需要先认证）
             if envelope.type == MessageType.RUN_REQUEST:
-                request = RunRequest.parse_obj(envelope.payload)
-                session_id = request.session_id
+                if not authenticated or not auth_config:
+                    await websocket.send_json({
+                        "type": MessageType.ERROR.value,
+                        "payload": {
+                            "error": "Not authenticated. Send auth message first.",
+                            "error_code": "NOT_AUTHENTICATED",
+                        },
+                    })
+                    continue
 
-                # 发送确认
-                await websocket.send_json({
-                    "type": MessageType.ACK.value,
-                    "session_id": session_id,
-                })
+                try:
+                    request = RunRequest.parse_obj(envelope.payload)
+                    session_id = request.session_id
 
-                # 流式执行
-                async for event in bridge.run_stream(request):
-                    await websocket.send_json(event)
+                    # 合并 auth 配置与 run request
+                    merged_request = auth_config.merge_with_request(request)
 
-            elif envelope.type == MessageType.INTERRUPT:
+                    # 发送确认
+                    await websocket.send_json({
+                        "type": MessageType.ACK.value,
+                        "payload": {"session_id": session_id},
+                    })
+
+                    # 流式执行
+                    async for event in bridge.run_stream(merged_request):
+                        await websocket.send_json(event)
+
+                except Exception as e:
+                    logger.error(f"Run request error: {e}")
+                    await websocket.send_json({
+                        "type": MessageType.ERROR.value,
+                        "payload": {
+                            "error": str(e),
+                            "error_code": "INVALID_RUN_REQUEST",
+                        },
+                    })
+                continue
+
+            # 处理中断
+            if envelope.type == MessageType.INTERRUPT:
                 bridge.interrupt()
                 await websocket.send_json({
                     "type": MessageType.INTERRUPTED.value,
+                    "payload": {},
                 })
+                continue
+
+            # 未知消息类型
+            logger.warning(f"Unknown message type: {envelope.type}")
+            await websocket.send_json({
+                "type": MessageType.ERROR.value,
+                "payload": {
+                    "error": f"Unknown message type: {envelope.type}",
+                    "error_code": "UNKNOWN_MESSAGE_TYPE",
+                },
+            })
 
     except WebSocketDisconnect:
-        # 客户端断开，保存会话状态
         logger.info(f"Client disconnected, session: {session_id}")
     except Exception as e:
-        # 全局异常捕获，防止进程崩溃
         logger.error(f"Unexpected error in websocket: {e}")
     finally:
         _closed = True
@@ -458,22 +548,29 @@ def interrupt(self):
 ```bash
 # 1. 直接运行 Agent（无需容器）
 cd packages/cloud
-uvicorn src.harness_cloud.agent.main:app --reload
+uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
 
 # 2. WebSocket 测试
 wscat -c ws://localhost:8000/ws/run
 
-# 3. 发送请求
-> {"type": "run_request", "payload": {"prompt": "Hello", "model": "claude-sonnet-4-6"}}
+# 3. 认证（必须先执行）
+> {"type": "auth", "payload": {"api_key": "sk-ant-xxx", "provider": "anthropic"}}
+< {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+
+# 4. 发送请求（无需再提供 API Key）
+> {"type": "run_request", "payload": {"prompt": "Hello"}}
 ```
 
 ### 预期响应流程
 
 ```
-→ {"type": "ack", "session_id": null}
-→ {"type": "progress", "payload": {"event_type": "loop_start"}}
-→ {"type": "progress", "payload": {"event_type": "llm_call"}}
-→ {"type": "stream_chunk", "payload": {"content": "Hello"}}
-→ {"type": "stream_chunk", "payload": {"content": "!"}}
-→ {"type": "run_result", "payload": {"status": "completed", "content": "Hello!"}}
+→ {"type": "auth", "payload": {"api_key": "...", "provider": "anthropic"}}
+← {"type": "auth_success", "payload": {"provider": "anthropic", "model": "claude-sonnet-4-6"}}
+→ {"type": "run_request", "payload": {"prompt": "Hello"}}
+← {"type": "ack", "payload": {"session_id": null}}
+← {"type": "progress", "payload": {"event_type": "loop_start"}}
+← {"type": "progress", "payload": {"event_type": "llm_call"}}
+← {"type": "stream_chunk", "payload": {"content": "Hello"}}
+← {"type": "stream_chunk", "payload": {"content": "!"}}
+← {"type": "run_result", "payload": {"status": "completed", "content": "Hello!"}}
 ```

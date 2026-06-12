@@ -853,29 +853,39 @@ class ChatPanel(QWidget):
         """Handle Enter/Shift+Enter for multi-line input and completion."""
         if obj == self.input_field and event.type() == QEvent.Type.KeyPress:
             key_event = event
+            logger.debug(f"[ChatPanel] key pressed: {key_event.key()}, text='{key_event.text()}'")
 
             # Let completer handle navigation keys when popup is visible
             # QCompleter doesn't auto-handle Enter for QTextEdit, so we need to simulate it
-            if self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
+            popup_visible = self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible()
+            logger.debug(f"[ChatPanel] popup visible: {popup_visible}")
+
+            if popup_visible:
                 if key_event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
                     # Let default handling propagate (completer's internal filter handles these)
+                    logger.debug("[ChatPanel] up/down key, propagating")
                     return super().eventFilter(obj, event)
 
                 if key_event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+                    logger.debug("[ChatPanel] Enter key pressed with popup visible")
                     # QCompleter popup doesn't handle Enter for non-QLineEdit widgets
                     # We need to manually trigger the selection
                     if self.file_completer.popup().isVisible():
                         # Get current selection and insert it
                         current_idx = self.file_completer.popup().currentIndex()
+                        logger.debug(f"[ChatPanel] file popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                         if current_idx.isValid():
                             completion = self.file_completer.popup().model().data(current_idx)
+                            logger.debug(f"[ChatPanel] completion from model: '{completion}'")
                             if completion:
                                 self._insert_file_completion(completion)
                                 return True  # Consume the event
                     elif self.skill_completer.popup().isVisible():
                         current_idx = self.skill_completer.popup().currentIndex()
+                        logger.debug(f"[ChatPanel] skill popup currentIndex: {current_idx}, valid: {current_idx.isValid()}")
                         if current_idx.isValid():
                             completion = self.skill_completer.popup().model().data(current_idx)
+                            logger.debug(f"[ChatPanel] completion from model: '{completion}'")
                             if completion:
                                 self._insert_skill_completion(completion)
                                 return True  # Consume the event
