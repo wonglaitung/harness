@@ -78,20 +78,9 @@ async def main():
             async with session.ws_connect(url) as ws:
                 print("Connected! Authenticating...")
 
-                # Gateway auth
+                # Gateway auth (no response expected)
                 await ws.send_json({"type": "auth", "token": "test-token"})
-                print("Sent gateway auth, waiting for response...")
-
-                # Wait for any response
-                try:
-                    response = await asyncio.wait_for(ws.receive(), timeout=5)
-                    print(f"Received: type={response.type}, data={response.data if response.type == aiohttp.WSMsgType.TEXT else None}")
-                    if response.type == aiohttp.WSMsgType.TEXT:
-                        print(f"Response JSON: {json.loads(response.data)}")
-                except asyncio.TimeoutError:
-                    print("No response after 5 seconds")
-
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.5)  # Brief wait for gateway to process
 
                 # Agent auth
                 auth_payload = {
