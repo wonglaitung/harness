@@ -1576,3 +1576,217 @@ self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 | 文件 | 改动 |
 |------|------|
 | `packages/client/src/harness_client/ui/chat_panel.py` | 重构助手消息气泡，使用 QScrollArea + QLabel，修复 size policy 和布局对齐 |
+---
+
+## 2026-06-13: Docker 内部网络阻止 Agent 访问 LLM API
+
+### 问题
+
+Agent 容器调用 LLM API 时报错：
+
+```
+HTTPSConnectionPool(host='openaipublic.blob.core.windows.net', port=443): 
+Max retries exceeded... Temporary failure in name resolution
+```
+
+### 原因
+
+Docker 网络被设置为 `internal=True`，阻止了所有出站连接：
+
+```python
+# 错误配置
+self.client.networks.create(
+    "harness-net",
+    driver="bridge",
+    internal=True,  # 阻止所有出站连接
+)
+```
+
+`internal=True` 创建的是完全隔离的网络，容器无法访问外网（包括 LLM API）。
+
+### 解决
+
+移除 `internal=True`，使用普通 bridge 网络：
+
+```python
+# 正确配置
+self.client.networks.create(
+    "harness-net",
+    driver="bridge",
+    # 不设置 internal=True，允许出站访问
+)
+```
+
+### 教训
+
+1. **`internal=True` 是完全隔离**：不只是阻止入站，也阻止出站
+2. **Agent 需要访问 LLM API**：沙箱隔离需要权衡功能性
+3. **网络安全设计要明确需求**：
+   - 如果需要阻止 Agent 访问内网服务，应该用防火墙规则而不是 `internal=True`
+   - 如果 Agent 需要访问外部 API，不能使用 `internal=True`
+
+### 参考
+
+- [Docker Network Driver docs](https://docs.docker.com/engine/network/drivers/bridge/)
+- 关键文件：`packages/cloud/src/harness_cloud/gateway/docker_manager.py`
+
+---
+
+## 2026-06-13: 容器启动后立即连接导致 IP 未分配
+
+### 问题
+
+Gateway 创建容器后立即尝试获取 IP 地址，结果为空：
+
+```python
+container = self.client.containers.run(...)
+internal_ip = container.attrs["NetworkSettings"]["Networks"]["harness-net"]["IPAddress"]
+# internal_ip = ""  ← IP 还未分配
+```
+
+### 原因
+
+Docker 容器启动是异步的，网络配置需要时间。`containers.run()` 返回时容器可能还在启动中。
+
+### 解决
+
+添加等待循环，直到 IP 分配：
+
+```python
+container = self.client.containers.run(...)
+for i in range(10):
+    await asyncio.sleep(1)
+    container.reload()
+    if container.status == "running":
+        networks = container.attrs["NetworkSettings"]["Networks"]
+        internal_ip = networks.get("harness-net", {}).get("IPAddress", "")
+        if internal_ip:
+            break
+```
+
+### 教训
+
+1. **Docker 操作是异步的**：创建、启动、停止都需要时间
+2. **检查容器状态**：不要假设 `containers.run()` 返回后容器就完全就绪
+3. **添加超时保护**：等待循环要有最大重试次数，避免无限等待
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/cloud/src/harness_cloud/gateway/docker_manager.py` | 添加容器就绪等待 |
+
+---
+
+## 2026-06-13: 只读文件系统导致 SDK 无法写入状态
+
+### 问题
+
+Agent 容器启动后报错：
+
+```
+Read-only file system: '.harness'
+```
+
+### 原因
+
+容器配置了 `read_only=True` 根文件系统，但 SDK 需要写入 `.harness/` 目录存储状态。
+
+### 解决
+
+添加 tmpfs 挂载点用于可写目录：
+
+```python
+tmpfs = {
+    "/tmp": "size=100M,mode=1777",
+    "/home": "size=50M,mode=1777",      # SDK 状态
+    "/workspace": "size=200M,mode=1777", # 工作区
+}
+```
+
+### 教训
+
+1. **只读文件系统 + tmpfs 是常见模式**：安全隔离的同时提供必要的可写空间
+2. **明确可写目录需求**：设计时要列出所有需要写入的目录
+3. **tmpfs 大小要合理**：太小可能导致空间不足，太大会占用过多内存
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/cloud/src/harness_cloud/gateway/docker_manager.py` | 扩展 tmpfs 挂载点 |
+
+---
+
+## 2026-06-13: Docker 镜像缺少依赖包
+
+### 问题
+
+Agent 容器启动后报错：
+
+```
+ModuleNotFoundError: No module named 'openai'
+```
+
+### 原因
+
+Agent Dockerfile 只安装了 SDK wheel，没有安装 OpenAI provider 的依赖。
+
+### 解决
+
+在 Dockerfile 中添加 openai 包：
+
+```dockerfile
+RUN pip install --no-cache-dir /tmp/*.whl openai>=1.0.0
+```
+
+### 教训
+
+1. **明确运行时依赖**：Dockerfile 要包含所有运行时需要的包
+2. **区分构建时和运行时依赖**：
+   - 构建时：build-essential、编译工具
+   - 运行时：API 客户端、SDK extras
+3. **测试最小镜像**：构建后要测试所有功能是否正常
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/cloud/docker/agent.Dockerfile` | 添加 openai 包 |
+
+---
+
+## 2026-06-13: tiktoken 需要网络下载编码文件
+
+### 问题
+
+Agent 容器在调用 LLM API 时报错：
+
+```
+Couldn't find encoding 'cl100k_base'
+```
+
+### 原因
+
+tiktoken 首次使用时需要从网络下载编码文件。如果容器在无网络环境下运行（如 `internal=True`），下载会失败。
+
+### 解决
+
+在 Dockerfile 构建阶段预下载编码文件：
+
+```dockerfile
+# Pre-download tiktoken encoding files
+RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+```
+
+### 教训
+
+1. **离线环境要预下载**：tiktoken、sentence-transformers 等库需要网络下载
+2. **构建阶段下载**：在 Dockerfile 中下载，运行时就有缓存
+3. **明确网络需求**：设计时要区分哪些操作需要网络
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/cloud/docker/agent.Dockerfile` | 预下载 tiktoken 编码文件 |

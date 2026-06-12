@@ -759,3 +759,126 @@ FastMCP SSE session 过期后（POST 返回 404）自动重连 `/sse` 获取新 
 #### 经验教训
 - 添加到 lessons.md: PyQt6 组件选择 - QLabel vs QTextBrowser
 - 更新 CLAUDE.md: 在最前面添加 PyQt6 警告原则
+## 2026-06-13
+
+### Harness Cloud MVP ✅ 完成
+
+#### 实现内容
+
+**Agent (容器内代理)**：
+- FastAPI WebSocket 端点 (`/ws/run`)
+- SDK Bridge - 连接 WebSocket 与 Harness SDK
+- 流式执行 (`asyncio.to_thread`)
+- 进度事件转换 (ProgressEvent → WebSocket 消息)
+- 心跳检测
+- 内存软限制
+- SessionSync 模块 (状态持久化)
+
+**Gateway (网关控制层)**：
+- FastAPI 入口
+- DockerManager - Docker 容器管理
+- WebSocket Tunnel - 消息转发
+- JWT 认证 (测试模式，接受任意 token)
+- Redis Rate Limiter
+- 容器生命周期管理 (创建/销毁/超时清理)
+
+**部署**：
+- Docker Compose 配置
+- Agent Dockerfile (多阶段构建)
+- Gateway Dockerfile (非 root 用户)
+- build.sh (自动检测 UID/GID, 自动启动服务)
+- 内部网络 (`harness-net`, 非隔离，允许 LLM API 访问)
+- test_auto.py (全自动测试脚本)
+
+**安全**：
+- 容器资源限制 (CPU/Memory/PIDs)
+- 只读文件系统 + tmpfs (/tmp, /home, /workspace)
+- 内部网络 (Gateway-Agent 通信)
+- Agent 可访问外网 LLM API
+- Gateway 非 root 用户运行
+- docker.sock 只读挂载
+
+#### 关键修复
+
+1. **网络配置**：`harness-net` 从 `internal=True` 改为普通 bridge 网络，允许 Agent 访问外网 LLM API
+2. **容器就绪检测**：DockerManager 等待容器 IP 分配后才返回
+3. **tmpfs 扩展**：添加 `/home` 和 `/workspace` tmpfs，解决只读文件系统问题
+4. **Agent Dockerfile**：添加 openai 包和预下载 tiktoken
+
+#### 测试验证
+
+```bash
+cd packages/cloud
+./scripts/build.sh  # 构建 + 启动
+python test_auto.py YOUR_API_KEY --provider openai --base-url YOUR_URL --model YOUR_MODEL
+
+# 输出：
+# Session created: xxx
+# Connected! Authenticating...
+# [LLM response]
+# Test completed successfully!
+```
+
+#### 待开发功能
+
+- JWT 认证系统（当前测试模式）
+- MinIO 文件存储
+- K8sPodManager（Kubernetes 支持）
+- Vue 前端
+- 断线重连
+
+#### 提交记录
+
+- feat(cloud): Implement Harness Cloud backend MVP (8e08d71)
+- feat(cloud): Remove hardcoded user config, use dynamic UID/GID detection (fe7ac99)
+- feat(cloud): build.sh auto-starts services after build (acea8e3)
+- feat(cloud): Support custom OpenAI-compatible API in test_ws.py (fc94b1d)
+- feat(cloud): Add test_auto.py for automated testing (14d5330)
+- fix(cloud): Use non-internal network for agent LLM API access (d7140ef)
+- fix(cloud): Multiple fixes for agent container networking and readiness (637d20c)
+- docs(cloud): Update documentation for MVP completion (e90ced5)
+
+---
+
+## 当前状态总结
+
+### Harness SDK 功能状态
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+
+**所有 P0-P3 功能已完成！**
+
+### Harness Client 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| 3-column UI layout | ✅ |
+| 技能系统 UI | ✅ |
+| MCP 服务器管理 | ✅ |
+| 工作区文件树 | ✅ |
+| 技能自动补全 | ✅ |
+| 统一配置目录 (~/.harness) | ✅ |
+| 会话管理 | ✅ |
+
+### Harness Cloud 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| Agent WebSocket | ✅ MVP |
+| Gateway 容器管理 | ✅ MVP |
+| Docker 部署 | ✅ MVP |
+| 自动化测试 | ✅ |
+| JWT 认证系统 | 📝 待开发 |
+| MinIO 文件存储 | 📝 待开发 |
+| Vue 前端 | 📝 待开发 |
