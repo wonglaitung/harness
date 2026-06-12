@@ -900,13 +900,14 @@ class ChatPanel(QWidget):
                     if text_before == "" or text_before.endswith((" ", "\n")):
                         QTimer.singleShot(0, self._show_file_completer)
 
+            # Handle backspace/delete - update or hide completers
             if key_event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-                # Update completers on deletion
                 QTimer.singleShot(0, self._update_completers)
 
-            elif self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
-                # Update completer when typing while popup is visible
-                if key_event.text() and key_event.text().isprintable():
+            # Handle typing while popup is visible - update filtering
+            elif key_event.text() and key_event.text().isprintable():
+                # Only update if one of the completers is visible
+                if self.skill_completer.popup().isVisible() or self.file_completer.popup().isVisible():
                     QTimer.singleShot(0, self._update_completers)
 
         return super().eventFilter(obj, event)
@@ -973,28 +974,39 @@ class ChatPanel(QWidget):
     def _update_completers(self):
         """Update both completers visibility based on current text."""
         text = self.input_field.toPlainText()
+        logger.debug(f"[Completers] _update_completers: text='{text}'")
 
         # Update skill completer
         if self.skill_completer.should_complete(text):
             prefix = self.skill_completer.get_completion_prefix(text)
+            logger.debug(f"[SkillCompleter] updating prefix='{prefix}'")
             self.skill_completer.setCompletionPrefix(prefix)
-            if self.skill_completer.completionCount() > 0:
+            count = self.skill_completer.completionCount()
+            logger.debug(f"[SkillCompleter] completionCount={count}")
+            if count > 0:
                 self.skill_completer.complete()
             else:
                 self.skill_completer.popup().hide()
+                logger.debug("[SkillCompleter] hiding popup (no matches)")
         else:
             self.skill_completer.popup().hide()
+            logger.debug("[SkillCompleter] hiding popup (should_complete=False)")
 
         # Update file completer
         if self.file_completer.should_complete(text):
             prefix = self.file_completer.get_completion_prefix(text)
+            logger.debug(f"[FileCompleter] updating prefix='{prefix}'")
             self.file_completer.setCompletionPrefix(prefix)
-            if self.file_completer.completionCount() > 0:
+            count = self.file_completer.completionCount()
+            logger.debug(f"[FileCompleter] completionCount={count}")
+            if count > 0:
                 self.file_completer.complete()
             else:
                 self.file_completer.popup().hide()
+                logger.debug("[FileCompleter] hiding popup (no matches)")
         else:
             self.file_completer.popup().hide()
+            logger.debug("[FileCompleter] hiding popup (should_complete=False)")
 
     def _insert_file_completion(self, completion: str):
         """Insert the selected file completion into the input field."""
