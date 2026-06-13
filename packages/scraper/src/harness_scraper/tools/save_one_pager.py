@@ -25,7 +25,7 @@ class SaveOnePagerTool(Tool):
 
     @property
     def description(self) -> str:
-        return "Save an intelligence One-Pager as a Markdown file. Generates structured content from the provided information."
+        return "Save an intelligence One-Pager as a Markdown file. IMPORTANT: Use domain='stocks' for stock/financial content (港股, buybacks, financial news), domain='ai' for AI/tech content."
 
     @property
     def input_schema(self) -> dict[str, Any]:
