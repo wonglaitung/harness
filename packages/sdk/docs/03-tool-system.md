@@ -25,9 +25,10 @@
 │  └─────────────────────────────────────────┘    │
 │                                                  │
 │  ┌─────────────────────────────────────────┐    │
-│  │          Built-in Tools (8)              │    │
+│  │          Built-in Tools (9)              │    │
 │  │  Read │ Write │ Edit │ Glob │ Grep      │    │
 │  │  Bash │ WebSearch │ WebFetch            │    │
+│  │  WebToMarkdown                           │    │
 │  └─────────────────────────────────────────┘    │
 │                                                  │
 │  ┌─────────────────────────────────────────┐    │
@@ -221,6 +222,28 @@ class WebFetchTool(Tool):
     # 参数:
     #   url: str - URL（必需）
     #   format: str - "text" | "markdown" | "html"
+```
+
+### WebToMarkdown - 网页转 Markdown
+
+```python
+class WebToMarkdownTool(Tool):
+    name = "web_to_markdown"
+    description = "获取网页并转换为干净的 Markdown 格式"
+    permission_level = PermissionLevel.NETWORK
+
+    # 参数:
+    #   url: str - 网页 URL（必需）
+    #   selector: str | None - CSS 选择器提取特定内容
+    #   max_length: int - 最大内容长度（默认 50000）
+    #   include_links: bool - 是否保留链接（默认 True）
+    #   include_images: bool - 是否包含图片引用（默认 False）
+
+    # 特性:
+    #   - 提取主要内容（article, main, body）
+    #   - 保留代码块、表格、列表、标题
+    #   - 自动移除广告、导航、页脚
+    #   - 支持 BeautifulSoup 解析
 ```
 
 ## ToolExecutor

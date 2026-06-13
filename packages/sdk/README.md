@@ -240,16 +240,17 @@ agent = AgentHarness(
 | `BashTool` | 执行 shell 命令 |
 | `WebSearchTool` | Web 搜索（DuckDuckGo 免费API） |
 | `WebFetchTool` | 获取网页内容 |
+| `WebToMarkdownTool` | 获取网页并转换为 Markdown |
 
 ### Web Tools 示例
 
 ```python
-from harness import AgentHarness, WebSearchTool, WebFetchTool
+from harness import AgentHarness, WebSearchTool, WebFetchTool, WebToMarkdownTool
 
 agent = AgentHarness(
     model="your-model",
     provider="openai",
-    tools=[WebSearchTool(), WebFetchTool()],
+    tools=[WebSearchTool(), WebFetchTool(), WebToMarkdownTool()],
 )
 
 # Web 搜索
@@ -257,6 +258,9 @@ result = await agent.run("搜索 Python asyncio 最佳实践")
 
 # 获取网页内容
 result = await agent.run("获取 https://docs.python.org/3/library/asyncio.html 的内容")
+
+# 获取网页并转换为 Markdown
+result = await agent.run("将 https://blog.python.org 转换为 Markdown 格式")
 ```
 
 **依赖**：
