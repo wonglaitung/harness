@@ -17,6 +17,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import (
     Depends,
@@ -26,6 +27,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from harness_cloud.gateway.auth import User, verify_token
@@ -169,6 +171,35 @@ async def destroy_session(session_id: str, user: User = Depends(lambda: None)):
 
     await container_manager.destroy_container(session_id)
     return {"status": "destroyed"}
+
+
+# =============================================================================
+# Static Files (Frontend)
+# =============================================================================
+
+# Mount frontend static files if built
+# Check multiple possible locations (development and Docker)
+FRONTEND_DIST = (
+    Path(__file__).parent.parent.parent.parent.parent / "frontend" / "dist"  # Development
+    or Path("/app/frontend/dist")  # Docker container
+)
+if not FRONTEND_DIST.exists():
+    FRONTEND_DIST = Path("/app/frontend/dist")
+
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    logger.info(f"Frontend static files mounted from {FRONTEND_DIST}")
+
+
+@app.get("/")
+async def serve_index():
+    """Serve frontend index.html."""
+    if FRONTEND_DIST.exists():
+        index_file = FRONTEND_DIST / "index.html"
+        if index_file.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(index_file)
+    return {"message": "Harness Gateway - Frontend not built"}
 
 
 # =============================================================================

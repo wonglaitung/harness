@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+/* Message bubble styles */
+.message-user {
+  background-color: #2B5B8A;
+  border-radius: 16px;
+}
+
+.message-assistant {
+  background-color: #2F2F2F;
+  border-radius: 16px;
+}
+
+/* Code block styling */
+pre {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+code {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* Tool call card */
+.tool-card {
+  background-color: #1e3a5f;
+  border-left: 3px solid #3b82f6;
+  border-radius: 8px;
+}
+
+/* Input area */
+.input-area textarea {
+  resize: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}

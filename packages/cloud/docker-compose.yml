@@ -29,6 +29,8 @@ services:
     volumes:
       # docker.sock for container management (read-only for security)
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Frontend static files (for serving web UI)
+      - ./frontend/dist:/app/frontend/dist:ro
     # Add user to docker group at runtime (GID from host)
     group_add:
       - ${DOCKER_GID:-1001}
