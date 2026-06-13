@@ -39,13 +39,15 @@ jobs:
 
     - name: Set environment variables
       run: |
+        # Email configuration
         echo "EMAIL_SENDER=${{ secrets.EMAIL_SENDER }}" >> $GITHUB_ENV
         echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> $GITHUB_ENV
         echo "SMTP_SERVER=${{ secrets.SMTP_SERVER }}" >> $GITHUB_ENV
         echo "RECIPIENT_EMAIL=${{ secrets.RECIPIENT_EMAIL }}" >> $GITHUB_ENV
-        echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> $GITHUB_ENV
-        echo "LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
-        echo "LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
+        # LLM configuration (HARNESS_LLM_* for scraper)
+        echo "HARNESS_LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> $GITHUB_ENV
+        echo "HARNESS_LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
+        echo "HARNESS_LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
 
     - name: Run AI intelligence scraper
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
