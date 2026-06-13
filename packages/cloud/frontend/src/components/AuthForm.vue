@@ -14,9 +14,10 @@ const provider = ref<'anthropic' | 'openai'>('anthropic')
 const model = ref('claude-sonnet-4-6')
 const baseUrl = ref('')
 const showAdvanced = ref(false)
+const useCustomModel = ref(false)
 
-// Model options based on provider
-const modelOptions = computed(() => {
+// Model presets based on provider
+const modelPresets = computed(() => {
   if (provider.value === 'anthropic') {
     return [
       { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
@@ -31,12 +32,23 @@ const modelOptions = computed(() => {
   ]
 })
 
-// Update model when provider changes
+// Update model when provider changes (only if using preset)
 function onProviderChange() {
-  if (provider.value === 'anthropic') {
-    model.value = 'claude-sonnet-4-6'
-  } else {
-    model.value = 'gpt-4o'
+  if (!useCustomModel.value) {
+    if (provider.value === 'anthropic') {
+      model.value = 'claude-sonnet-4-6'
+    } else {
+      model.value = 'gpt-4o'
+    }
+  }
+}
+
+// Toggle custom model input
+function toggleCustomModel() {
+  useCustomModel.value = !useCustomModel.value
+  if (!useCustomModel.value) {
+    // Reset to preset when switching back
+    onProviderChange()
   }
 }
 
@@ -47,9 +59,14 @@ function saveSettings() {
     return
   }
 
+  if (!model.value.trim()) {
+    alert('Please enter a model name')
+    return
+  }
+
   settingsStore.setApiKey(apiKey.value.trim())
   settingsStore.setProvider(provider.value)
-  settingsStore.setModel(model.value)
+  settingsStore.setModel(model.value.trim())
   if (baseUrl.value.trim()) {
     settingsStore.setBaseUrl(baseUrl.value.trim())
   }
@@ -91,14 +108,36 @@ function saveSettings() {
       <!-- Model -->
       <div>
         <label class="block text-sm font-medium mb-1">Model</label>
+
+        <!-- Preset select -->
         <select
+          v-if="!useCustomModel"
           v-model="model"
           class="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
         >
-          <option v-for="opt in modelOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in modelPresets" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
+
+        <!-- Custom input -->
+        <input
+          v-else
+          v-model="model"
+          type="text"
+          placeholder="Enter model name (e.g., gpt-4o, claude-sonnet-4-6)"
+          class="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+          required
+        />
+
+        <!-- Toggle button -->
+        <button
+          type="button"
+          @click="toggleCustomModel"
+          class="text-xs text-gray-400 hover:text-white mt-1"
+        >
+          {{ useCustomModel ? '▼ Use preset model' : '▶ Enter custom model name' }}
+        </button>
       </div>
 
       <!-- Advanced settings toggle -->

@@ -202,6 +202,17 @@ async def serve_index():
     return {"message": "Harness Gateway - Frontend not built"}
 
 
+@app.get("/icon.svg")
+async def serve_icon():
+    """Serve frontend icon.svg."""
+    if FRONTEND_DIST.exists():
+        icon_file = FRONTEND_DIST / "icon.svg"
+        if icon_file.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(icon_file, media_type="image/svg+xml")
+    raise HTTPException(404, "Icon not found")
+
+
 # =============================================================================
 # WebSocket Endpoint
 # =============================================================================
