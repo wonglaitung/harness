@@ -423,7 +423,183 @@ output:
 - [ ] CLI 命令 (`harness-scraper run --once`)
 - [ ] 端到端测试
 
-## 依赖
+## SDK 化重构方案
+
+### 当前问题
+
+Scraper 完全独立于 Harness SDK，存在以下问题：
+1. **重复造轮子**：自己实现了 LLM Client、Tool 体系
+2. **能力受限**：无法使用 SDK 的高级功能（Session、Memory、Hooks、Skills）
+3. **维护成本高**：两套代码需要分别维护
+4. **核心问题**：把 LLM 当作"结构化输出器"，而非"智能代理"
+
+### 方案 A：完全 SDK 化（推荐）
+
+将 Scraper 重构为基于 `AgentHarness` 的智能代理：
+
+```
+用户输入: "运行情报抽取"
+    ↓
+AgentHarness (主 Agent)
+    ├── Tool: FetchRSSTool        # 封装 RSS 抓取
+    ├── Tool: FetchHNTool         # 封装 HN API
+    ├── Tool: FetchGitHubTrendingTool
+    ├── Tool: FetchURLTool        # 深度探针
+    ├── Tool: SaveOnePagerTool    # 保存 Markdown
+    └── Skill: intel-extraction   # 情报抽取技能（Prompt + 流程）
+    ↓
+Agent 自主决策：
+    1. 调用 FetchRSSTool 获取 RSS 文章
+    2. 调用 FetchHNTool 获取 HN 帖子
+    3. 判断哪些文章是新范式（内置 LLM 判断）
+    4. 调用 FetchURLTool 深度抓取
+    5. 调用 SaveOnePagerTool 生成 One-Pager
+```
+
+### 方案 A 的优势
+
+| 优势 | 说明 |
+|-----|------|
+| **Agent 自主决策** | 不再是死板的流水线，Agent 可以根据内容动态调整策略 |
+| **多轮对话优化** | 用户可以说"这次多关注前端类项目"，Agent 会调整判断标准 |
+| **Session 记忆** | Agent 记住之前的判断，避免重复分析相似项目 |
+| **Memory 系统** | 将"已知的成熟项目列表"存入 MEMORY.md，Agent 自动参考 |
+| **Hooks 扩展** | 在 LLM 调用前后插入自定义逻辑（如成本监控、质量检查） |
+| **Skills 复用** | 情报抽取 Skill 可以被其他 Agent 复用 |
+| **统一 LLM 配置** | 复用 SDK 的 LLM Client，支持所有 Provider |
+| **成本控制** | SDK 内置 `CostController`、`StepBudgetController` |
+| **容错机制** | SDK 内置 `CircuitBreaker`、`ErrorHandler` |
+| **可观测性** | SDK 内置 `ObservabilityManager`，支持 OpenTelemetry |
+
+### 实现步骤
+
+#### Phase 1：创建 Tools
+
+将数据源封装为 SDK Tools：
+
+```python
+# packages/scraper/src/harness_scraper/tools/fetch_rss.py
+from harness.tools.base import Tool, ToolContext
+from harness.types import ToolResult
+
+class FetchRSSTool(Tool):
+    @property
+    def name(self) -> str:
+        return "fetch_rss"
+
+    @property
+    def description(self) -> str:
+        return "Fetch articles from RSS feeds"
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "RSS feed URL"},
+                "limit": {"type": "integer", "description": "Max articles to fetch"},
+            },
+            "required": ["url"],
+        }
+
+    async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+        # 复用现有的 RSSSource 逻辑
+        ...
+```
+
+需要创建的 Tools：
+- `FetchRSSTool` - RSS 抓取
+- `FetchHNTool` - Hacker News API
+- `FetchGitHubTrendingTool` - GitHub Trending
+- `FetchURLTool` - 深度探针（GitHub README + Jina Reader）
+- `SaveOnePagerTool` - 保存 One-Pager Markdown
+
+#### Phase 2：创建 Skill
+
+将情报抽取流程封装为 Skill：
+
+```yaml
+# ~/.harness/skills/intel-extraction.md
+# Intel Extraction Skill
+
+Extract AI intelligence from web sources.
+
+## Workflow
+
+1. Use fetch_rss to get articles from configured feeds
+2. Use fetch_hn to get trending Hacker News posts
+3. Use fetch_github_trending to get AI repos
+4. For each article/repo, judge if it represents a new paradigm
+5. For promising items, use fetch_url to get README/content
+6. Use save_one_pager to save the extracted intelligence
+
+## Judgment Criteria
+
+TRUE if:
+- New project (< 3 months old)
+- New paradigm/buzzword (taste-skill, vibe-coding)
+- New standard/protocol (MCP)
+
+FALSE if:
+- Mature project (vLLM, LangChain)
+- Tutorial/best practices
+- Incremental update
+```
+
+#### Phase 3：创建 IntelAgent
+
+```python
+# packages/scraper/src/harness_scraper/agent.py
+from harness import AgentHarness
+from harness_scraper.tools import (
+    FetchRSSTool, FetchHNTool, FetchGitHubTrendingTool,
+    FetchURLTool, SaveOnePagerTool
+)
+
+class IntelAgent:
+    """Intelligence extraction agent powered by Harness SDK."""
+
+    def __init__(self, config: ScraperConfig):
+        self._agent = AgentHarness(
+            model=config.llm.model,
+            api_key=config.llm.api_key,
+            base_url=config.llm.base_url,
+            tools=[
+                FetchRSSTool(),
+                FetchHNTool(),
+                FetchGitHubTrendingTool(),
+                FetchURLTool(),
+                SaveOnePagerTool(),
+            ],
+            system_prompt=self._build_system_prompt(),
+        )
+
+    async def run(self, prompt: str = "Extract AI intelligence"):
+        result = await self._agent.run(prompt)
+        return result
+```
+
+### 关键文件修改
+
+| 文件 | 改动 |
+|-----|------|
+| `tools/__init__.py` | 新建，导出所有 Tools |
+| `tools/fetch_rss.py` | 新建，封装 RSSSource |
+| `tools/fetch_hn.py` | 新建，封装 HackerNewsSource |
+| `tools/fetch_github_trending.py` | 新建，封装 GitHubTrendingSource |
+| `tools/fetch_url.py` | 新建，封装 GitHubExplorer + JinaReader |
+| `tools/save_one_pager.py` | 新建，封装 OnePagerGenerator |
+| `agent.py` | 新建，IntelAgent 类 |
+| `cli.py` | 修改，使用 IntelAgent |
+| `pyproject.toml` | 添加 `harness-sdk` 依赖 |
+
+### 风险与缓解
+
+| 风险 | 缓解措施 |
+|-----|---------|
+| Agent 决策不稳定 | 使用 Skill 固化流程，降低 Agent 自由度 |
+| Token 消耗增加 | 使用 SDK 的 `StepBudgetController` 控制成本 |
+| 改动范围大 | 分 Phase 实施，每 Phase 独立可测 |
 
 ```toml
 [project]

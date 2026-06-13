@@ -3,9 +3,7 @@
 Harness Scraper CLI.
 
 Usage:
-    harness-scraper run              # Run continuously (traditional pipeline)
-    harness-scraper run --once       # Run once (traditional pipeline)
-    harness-scraper agent            # Run with SDK agent (autonomous)
+    harness-scraper agent            # Run SDK agent (default: extract from all sources)
     harness-scraper agent "prompt"   # Run agent with custom prompt
     harness-scraper config           # Create default config
     harness-scraper config --show    # Show current config
@@ -15,10 +13,8 @@ import argparse
 import asyncio
 import logging
 import sys
-from datetime import datetime, timedelta
 
 from harness_scraper.config import load_config, create_default_config_file
-from harness_scraper.scheduler import ScraperScheduler
 
 
 def setup_logging(verbose: bool = False):
@@ -31,27 +27,8 @@ def setup_logging(verbose: bool = False):
     )
 
 
-async def run_once_async(scheduler, since):
-    """Run once and cleanup"""
-    await scheduler.run_once(since=since)
-    await scheduler.close()
-
-
-def cmd_run(args):
-    """Run scraper (traditional pipeline)"""
-    setup_logging(args.verbose)
-    config = load_config()
-    scheduler = ScraperScheduler(config)
-
-    if args.once:
-        since = datetime.now() - timedelta(hours=args.hours)
-        asyncio.run(run_once_async(scheduler, since))
-    else:
-        asyncio.run(scheduler.run(interval_hours=args.interval))
-
-
 def cmd_agent(args):
-    """Run with SDK agent (autonomous)"""
+    """Run SDK agent (autonomous intelligence extraction)"""
     setup_logging(args.verbose)
     config = load_config()
 
@@ -66,7 +43,21 @@ def cmd_agent(args):
     if args.prompt:
         prompt = args.prompt
     else:
-        prompt = "运行情报抽取：从 RSS、HN、GitHub Trending 获取内容，识别新范式，生成 One-Pager"
+        prompt = """运行情报抽取：
+
+1. 使用 fetch_rss 抓取以下 RSS 源：
+   - https://openai.com/blog/rss.xml
+   - https://huggingface.co/blog/feed.xml
+
+2. 使用 fetch_hn 抓取 Hacker News 高分帖子 (min_points=150)
+
+3. 使用 fetch_show_hn 抓取 Show HN 早期新项目 (min_points=50)
+
+4. 使用 fetch_github_trending 抓取 Python 和 TypeScript trending
+
+对发现的新范式项目：
+- 使用 fetch_url 深度抓取 README
+- 使用 save_one_pager 保存情报一页纸"""
 
     result = asyncio.run(agent.run(prompt=prompt, verbose=args.verbose))
     print("\n=== Agent Result ===")
@@ -90,21 +81,14 @@ def cmd_config(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="harness-scraper",
-        description="AI Intelligence Extraction System",
+        description="AI Intelligence Extraction System (SDK Agent)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
-    # run command (traditional pipeline)
-    run_parser = subparsers.add_parser("run", help="Run scraper (traditional pipeline)")
-    run_parser.add_argument("--once", action="store_true", help="Run once and exit")
-    run_parser.add_argument("--interval", type=int, default=12, help="Hours between runs (default: 12)")
-    run_parser.add_argument("--hours", type=int, default=12, help="Hours to look back (default: 12)")
-    run_parser.set_defaults(func=cmd_run)
-
-    # agent command (SDK agent)
-    agent_parser = subparsers.add_parser("agent", help="Run with SDK agent (autonomous)")
+    # agent command (default)
+    agent_parser = subparsers.add_parser("agent", help="Run SDK agent for intelligence extraction")
     agent_parser.add_argument("prompt", nargs="?", help="Custom prompt for the agent")
     agent_parser.set_defaults(func=cmd_agent)
 
@@ -115,9 +99,11 @@ def main():
 
     args = parser.parse_args()
 
+    # Default to agent command
     if not args.command:
-        parser.print_help()
-        sys.exit(1)
+        args.command = "agent"
+        args.prompt = None
+        args.func = cmd_agent
 
     args.func(args)
 

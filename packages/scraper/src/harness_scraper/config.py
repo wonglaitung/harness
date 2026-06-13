@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from harness_scraper.models import ScraperConfig, LLMConfig, SourceConfig, FilterConfig, OutputConfig
+from harness_scraper.models import ScraperConfig, LLMConfig, SourceConfig, OutputConfig
 
 
 DEFAULT_CONFIG_PATH = Path.home() / ".harness" / "scraper.yaml"
@@ -52,7 +52,6 @@ def load_config(config_path: Path | str | None = None) -> ScraperConfig:
     return ScraperConfig(
         llm=llm_config,
         sources=_build_source_config(yaml_config.get("sources", {})),
-        filter=_build_filter_config(yaml_config.get("filter", {})),
         output=_build_output_config(yaml_config.get("output", {})),
     )
 
@@ -65,7 +64,7 @@ def _merge_llm_config(yaml_llm: dict) -> LLMConfig:
         api_key=os.getenv("HARNESS_LLM_API_KEY", yaml_llm.get("api_key")),
         model=os.getenv("HARNESS_LLM_MODEL", yaml_llm.get("model", "gpt-4o-mini")),
         temperature=float(os.getenv("HARNESS_LLM_TEMPERATURE", yaml_llm.get("temperature", "0.1"))),
-        max_tokens=int(os.getenv("HARNESS_LLM_MAX_TOKENS", yaml_llm.get("max_tokens", "1000"))),
+        max_tokens=int(os.getenv("HARNESS_LLM_MAX_TOKENS", yaml_llm.get("max_tokens", "2000"))),
     )
 
 
@@ -73,19 +72,8 @@ def _build_source_config(yaml_sources: dict) -> SourceConfig:
     """Build source config from YAML"""
     return SourceConfig(
         rss=yaml_sources.get("rss", []),
-        hacker_news=yaml_sources.get("hacker_news", {"min_points": 150, "include_show_hn": True}),
-        reddit=yaml_sources.get("reddit", {"subreddits": ["LocalLLaMA"], "timeframe": "24h"}),
-    )
-
-
-def _build_filter_config(yaml_filter: dict) -> FilterConfig:
-    """Build filter config from YAML"""
-    return FilterConfig(
-        prefilter_keywords=yaml_filter.get("prefilter_keywords", [
-            "github.com", "release", "announce", "open source",
-            "npm install", "pip install", "docker run"
-        ]),
-        hn_high_score_threshold=yaml_filter.get("hn_high_score_threshold", 300),
+        hacker_news=yaml_sources.get("hacker_news", {"min_points": 150}),
+        github_trending=yaml_sources.get("github_trending", {"languages": ["python", "typescript"], "since": "daily"}),
     )
 
 
@@ -93,7 +81,6 @@ def _build_output_config(yaml_output: dict) -> OutputConfig:
     """Build output config from YAML"""
     return OutputConfig(
         directory=yaml_output.get("directory", "~/.harness/scraper"),
-        dedup_db=yaml_output.get("dedup_db", "~/.harness/scraper/seen.db"),
     )
 
 
@@ -102,22 +89,22 @@ def create_default_config_file() -> Path:
     config_content = """# Harness Scraper Configuration
 # https://github.com/wonglaitung/harness/tree/main/packages/scraper
 
-# LLM Configuration
+# LLM Configuration - Used by SDK Agent
 # Supports: vllm, ollama, openai, anthropic, or any OpenAI-compatible API
 llm:
   provider: "openai"
   base_url: "https://api.openai.com/v1"
-  api_key: ""  # Set via HARNESS_LLM_API_KEY env var
+  api_key: ""  # Or set via HARNESS_LLM_API_KEY env var
   model: "gpt-4o-mini"
   temperature: 0.1
-  max_tokens: 1000
+  max_tokens: 2000
 
   # Alternative: Local vLLM/Ollama
-  # provider: "vllm"
+  # provider: "openai"
   # base_url: "http://localhost:8000/v1"
   # model: "Qwen2.5-7B-Instruct"
 
-  # Alternative: SiliconFlow (便宜)
+  # Alternative: SiliconFlow
   # provider: "openai"
   # base_url: "https://api.siliconflow.cn/v1"
   # api_key: "sk-xxx"
@@ -129,45 +116,24 @@ llm:
   # api_key: "sk-xxx"
   # model: "deepseek-chat"
 
-# Data Sources
+# Data Sources (供 Agent 参考)
 sources:
   rss:
-    # Official AI blogs
-    - url: "https://www.anthropic.com/research/rss"
-      name: "Anthropic Research"
     - url: "https://openai.com/blog/rss.xml"
       name: "OpenAI Blog"
     - url: "https://huggingface.co/blog/feed.xml"
       name: "Hugging Face Blog"
 
-    # X (Twitter) via RSSHub - add your expert list
-    # - url: "https://rsshub.app/twitter/list/your-list-id"
-    #   name: "X AI Experts"
-
   hacker_news:
     min_points: 150
-    include_show_hn: true
 
-  reddit:
-    subreddits: ["LocalLLaMA"]
-    timeframe: "24h"
-
-# Filtering
-filter:
-  prefilter_keywords:
-    - "github.com"
-    - "release"
-    - "announce"
-    - "open source"
-    - "npm install"
-    - "pip install"
-    - "docker run"
-  hn_high_score_threshold: 300  # Skip prefilter for high-score posts
+  github_trending:
+    languages: ["python", "typescript"]
+    since: "daily"
 
 # Output
 output:
   directory: "~/.harness/scraper"
-  dedup_db: "~/.harness/scraper/seen.db"
 """
 
     config_path = DEFAULT_CONFIG_PATH
