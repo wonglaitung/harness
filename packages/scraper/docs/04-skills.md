@@ -10,12 +10,45 @@
 
 ## 技能文件位置
 
+技能文件按以下优先级加载：
+
+1. **仓库内置技能** (`packages/scraper/skills/`) - CI/CD 和首次运行使用
+2. **用户技能目录** (`~/.harness/skills/`) - 自定义技能
+
 ```
-~/.harness/skills/
+# 仓库内置（优先）
+packages/scraper/skills/
 ├── ai-intelligence.md    # AI 情报抽取
-├── stock-analysis.md     # 股票分析
+├── hk-stocks-alpha.md    # 港股 Alpha 监控
+└── ...
+
+# 用户目录（备选）
+~/.harness/skills/
+├── ai-intelligence.md    # 用户自定义版本
+├── stock-analysis.md     # 其他技能
 └── custom.md             # 自定义技能
 ```
+
+### 加载逻辑
+
+```python
+def load_skill(skill_name: str) -> str | None:
+    # 1. 优先查找仓库内置技能（CI/CD 场景）
+    repo_skill_path = REPO_SKILL_DIR / f"{skill_name}.md"
+    if repo_skill_path.exists():
+        return repo_skill_path.read_text()
+
+    # 2. 查找用户技能目录
+    skill_path = SKILL_DIR / f"{skill_name}.md"
+    if skill_path.exists():
+        return skill_path.read_text()
+
+    return None
+```
+
+**设计原因**：
+- CI/CD 环境需要稳定的内置技能
+- 用户可以在 `~/.harness/skills/` 覆盖或自定义技能
 
 ## 技能文件格式
 

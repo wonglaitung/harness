@@ -190,4 +190,48 @@ MCP 是一个开放协议，用于标准化大模型与外部数据源的通信�
 - [概述](docs/01-overview.md) - 架构设计
 - [工具系统](docs/03-tools.md) - 所有工具详解
 - [技能系统](docs/04-skills.md) - 技能文件格式和示例
+- [CLI 使用](docs/05-cli.md) - 命令行和 CI/自动化
 - [配置说明](docs/06-configuration.md) - 完整配置选项
+
+## CI 自动化
+
+### GitHub Actions 每日推送
+
+项目内置 GitHub Actions 工作流，自动每日运行并发送邮件：
+
+```yaml
+# .github/workflows/daily-intelligence.yml
+on:
+  schedule:
+    - cron: '0 22 * * *'  # 每天 06:00 HKT
+  workflow_dispatch:       # 手动触发
+```
+
+**配置 GitHub Secrets**：
+
+| Secret | 说明 |
+|--------|------|
+| `EMAIL_SENDER` | 发件邮箱 |
+| `EMAIL_PASSWORD` | 邮箱授权码 |
+| `SMTP_SERVER` | SMTP 服务器 |
+| `RECIPIENT_EMAIL` | 收件邮箱 |
+| `LLM_API_KEY` | LLM API Key |
+| `LLM_BASE_URL` | LLM API URL |
+| `LLM_MODEL` | 模型名称 |
+
+**邮件通知**：
+- AI 情报日报（`ai/` 目录）
+- 港股异动日报（`stocks/` 目录）
+
+### 本地脚本
+
+```bash
+# 运行情报抽取（带超时）
+cd packages/scraper
+uv run python scripts/run_scraper.py --skill ai-intelligence --timeout 180
+uv run python scripts/run_scraper.py --skill hk-stocks-alpha
+
+# 发送邮件
+uv run python scripts/send_intelligence_email.py
+uv run python scripts/send_intelligence_email.py --dry-run  # 预览
+```

@@ -340,10 +340,84 @@ asyncio.run(main())
 
 ### 定时运行
 
+#### 方式 1：GitHub Actions CI（推荐）
+
+项目内置 GitHub Actions 工作流，自动每日运行并发送邮件：
+
+```yaml
+# .github/workflows/daily-intelligence.yml
+on:
+  schedule:
+    - cron: '0 22 * * *'  # 每天 06:00 HKT
+  workflow_dispatch:       # 手动触发
+```
+
+**配置 GitHub Secrets**：
+
+| Secret | 说明 |
+|--------|------|
+| `EMAIL_SENDER` | 发件邮箱 |
+| `EMAIL_PASSWORD` | 邮箱密码/授权码 |
+| `SMTP_SERVER` | SMTP 服务器 (如 `smtp.163.com`) |
+| `RECIPIENT_EMAIL` | 收件邮箱 |
+| `LLM_API_KEY` | LLM API Key |
+| `LLM_BASE_URL` | LLM API URL |
+| `LLM_MODEL` | 模型名称 |
+
+**手动触发**：
+
+1. 进入 GitHub Actions 页面
+2. 选择 "每日情报推送" workflow
+3. 点击 "Run workflow"
+4. 可选择运行特定技能或全部
+
+#### 方式 2：本地 cron
+
 ```bash
 # 使用 cron 定时运行
 crontab -e
 
 # 每天早上 9 点运行
-0 9 * * * /path/to/harness-scraper >> /var/log/scraper.log 2>&1
+0 9 * * * cd /path/to/harness/packages/scraper && uv run python scripts/run_scraper.py --skill ai-intelligence
+0 9 * * * cd /path/to/harness/packages/scraper && uv run python scripts/run_scraper.py --skill hk-stocks-alpha
 ```
+
+#### 方式 3：手动运行脚本
+
+```bash
+# 运行 AI 情报抽取
+cd packages/scraper
+uv run python scripts/run_scraper.py --skill ai-intelligence --timeout 180
+
+# 运行港股监控
+uv run python scripts/run_scraper.py --skill hk-stocks-alpha
+
+# 发送邮件（可选）
+uv run python scripts/send_intelligence_email.py           # 发送
+uv run python scripts/send_intelligence_email.py --dry-run # 预览
+```
+
+### 输出目录结构
+
+```
+~/.harness/scraper/
+├── 2026-06-13/
+│   ├── ai/              # AI 情报 (domain="ai")
+│   │   ├── mcp.md
+│   │   └── autoresearch.md
+│   └── stocks/          # 股票分析 (domain="stocks")
+│       ├── 00700.md
+│       └── macro.md
+├── 2026-06-14/
+│   └── ...
+└── MEMORY.md            # 已处理项目记录
+```
+
+### 邮件通知
+
+CI 工作流会发送两封邮件：
+
+1. **AI 情报日报** - 包含 `ai/` 目录下的 One-Pagers
+2. **港股异动日报** - 包含 `stocks/` 目录下的 One-Pagers
+
+邮件使用 HTML 格式，支持 Markdown 渲染（表格、列表、链接）。

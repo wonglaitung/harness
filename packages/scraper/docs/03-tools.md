@@ -332,26 +332,71 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 
 保存情报一页纸到文件系统，支持按领域分类存储。
 
+**双模式支持**：
+- **Simple mode**：直接保存 title + content（适用于股票分析、自定义报告）
+- **Structured mode**：使用 AI 情报字段生成标准 One-Pager
+
 ### 输入 Schema
 
 ```json
 {
   "type": "object",
   "properties": {
-    "title": {"type": "string", "description": "Project/tool name"},
-    "content": {"type": "string", "description": "One-Pager content in Markdown"},
-    "filename": {"type": "string", "description": "Output filename (optional)"},
-    "domain": {"type": "string", "description": "Domain subdirectory: 'ai' or 'stocks' (optional)"}
+    "title": {"type": "string", "description": "标题 (Simple mode)"},
+    "content": {"type": "string", "description": "Markdown 内容 (Simple mode)"},
+    "filename": {"type": "string", "description": "文件名 (可选)"},
+    "concept_name": {"type": "string", "description": "概念名称 (Structured mode)"},
+    "definition": {"type": "string", "description": "技术定义"},
+    "pain_point": {"type": "string", "description": "行业痛点"},
+    "old_paradigm": {"type": "string", "description": "旧做法"},
+    "new_paradigm": {"type": "string", "description": "新做法"},
+    "production_impact": {"type": "string", "description": "生产力影响"},
+    "adoption_cost": {"type": "string", "description": "采用成本"},
+    "github_url": {"type": "string", "description": "GitHub 链接"},
+    "source_url": {"type": "string", "description": "来源链接"},
+    "domain": {"type": "string", "enum": ["ai", "stocks"], "description": "领域: 'ai' 或 'stocks' (港股必须用 stocks)"}
   },
-  "required": ["title", "content"]
+  "required": []
 }
 ```
+
+**重要**：`domain` 参数决定输出目录：
+- `domain="ai"` → `~/.harness/scraper/YYYY-MM-DD/ai/`（AI 情报）
+- `domain="stocks"` → `~/.harness/scraper/YYYY-MM-DD/stocks/`（港股分析）
 
 ### 输出格式
 
 ```json
 {
-  "content": "One-Pager saved: ~/.harness/scraper/2026-06-13/stocks/project-name.md"
+  "content": "One-Pager saved to: ~/.harness/scraper/2026-06-13/stocks/00700.md\n\nPreview:\n# 腾讯控股..."
+}
+```
+
+### 使用示例
+
+#### Simple mode（股票分析）
+
+```python
+# 直接保存自定义内容
+{
+  "title": "腾讯控股 - 回购公告分析",
+  "content": "# 腾讯控股 (00700.HK)\n\n## 事件概述\n回购 100 亿港元...",
+  "domain": "stocks"
+}
+```
+
+#### Structured mode（AI 情报）
+
+```python
+# 使用标准字段生成 One-Pager
+{
+  "concept_name": "Model Context Protocol",
+  "definition": "标准化 LLM 与外部数据源通信的开放协议",
+  "pain_point": "各平台重复对接数据源",
+  "old_paradigm": "各平台各自为战",
+  "new_paradigm": "MCP 提供统一协议",
+  "github_url": "https://github.com/modelcontextprotocol/servers",
+  "domain": "ai"
 }
 ```
 
@@ -361,28 +406,29 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 OUTPUT_DIR = Path.home() / ".harness" / "scraper"
 
 async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+    domain = arguments.get("domain", "ai")
+
+    # 判断模式
+    if "title" in arguments and "content" in arguments:
+        # Simple mode: 直接保存
+        return await self._execute_simple(arguments, domain)
+    elif "concept_name" in arguments:
+        # Structured mode: 生成 AI 情报格式
+        return await self._execute_structured(arguments, domain)
+
+async def _execute_simple(self, arguments: dict, domain: str) -> ToolResult:
     title = arguments["title"]
     content = arguments["content"]
     filename = arguments.get("filename", sanitize_filename(title))
-    domain = arguments.get("domain")  # "ai" 或 "stocks"
 
-    # 按日期分目录，可选按领域分子目录
-    date_dir = OUTPUT_DIR / datetime.now().strftime("%Y-%m-%d")
-    if domain:
-        date_dir = date_dir / domain  # ai/ 或 stocks/
+    # 按日期 + 领域分目录
+    date_dir = OUTPUT_DIR / datetime.now().strftime("%Y-%m-%d") / domain
     date_dir.mkdir(parents=True, exist_ok=True)
 
-    # 写入文件
     file_path = date_dir / f"{filename}.md"
     file_path.write_text(content, encoding="utf-8")
 
-    # 更新 MEMORY.md
-    update_memory_md(title, filename)
-
-    return ToolResult_success(
-        content=f"One-Pager saved: {file_path}",
-        metadata={"path": str(file_path)}
-    )
+    return ToolResult_success(content=f"One-Pager saved to: {file_path}")
 ```
 
 ### 目录结构

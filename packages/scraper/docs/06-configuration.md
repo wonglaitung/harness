@@ -68,7 +68,12 @@ output:
 | `api_key` | str | `None` | API Key |
 | `model` | str | `gpt-4o-mini` | 模型名称 |
 | `temperature` | float | `0.1` | 生成温度 |
-| `max_tokens` | int | `2000` | 最大输出 token |
+| `max_tokens` | int | `8192` | 最大输出 token（8K，留 ~56K 给输入） |
+
+**max_tokens 说明**：
+- 默认 8192（8K）输出 token
+- 对于 64K context 模型，留约 56K 给输入 context
+- 情报抽取任务通常需要较长输出（One-Pager 生成）
 
 ### 支持的 LLM 提供者
 
@@ -366,3 +371,90 @@ harness-scraper config --show
 | 模型不存在 | 模型名称错误 | 查看提供者文档 |
 | 连接超时 | 网络问题或 URL 错误 | 检查 base_url |
 | 认证失败 | API Key 权限不足 | 检查 API Key 权限 |
+
+## GitHub Actions 配置
+
+### 必需的 GitHub Secrets
+
+在 GitHub 仓库设置 → Secrets and variables → Actions 中配置：
+
+| Secret | 说明 | 示例 |
+|--------|------|------|
+| `EMAIL_SENDER` | 发件邮箱 | `your@163.com` |
+| `EMAIL_PASSWORD` | 邮箱授权码 | `xxxxxxxxxxxx` |
+| `SMTP_SERVER` | SMTP 服务器 | `smtp.163.com` |
+| `RECIPIENT_EMAIL` | 收件邮箱 | `target@gmail.com` |
+| `LLM_API_KEY` | LLM API Key | `sk-xxx` |
+| `LLM_BASE_URL` | LLM API URL | `https://api.openai.com/v1` |
+| `LLM_MODEL` | 模型名称 | `gpt-4o-mini` |
+
+### 邮箱配置说明
+
+#### 163 邮箱
+
+1. 登录 163 邮箱
+2. 设置 → POP3/SMTP/IMAP → 开启 SMTP
+3. 获取授权码（不是邮箱密码）
+4. 配置：
+   - `SMTP_SERVER`: `smtp.163.com`
+   - `EMAIL_PASSWORD`: 授权码
+
+#### QQ 邮箱
+
+1. 登录 QQ 邮箱
+2. 设置 → 账户 → POP3/SMTP 服务
+3. 获取授权码
+4. 配置：
+   - `SMTP_SERVER`: `smtp.qq.com`
+   - `EMAIL_PASSWORD`: 授权码
+
+#### Gmail
+
+1. 开启两步验证
+2. 生成应用专用密码
+3. 配置：
+   - `SMTP_SERVER`: `smtp.gmail.com`
+   - `EMAIL_PASSWORD`: 应用专用密码
+
+### 工作流文件位置
+
+```
+.github/workflows/daily-intelligence.yml
+```
+
+### 工作流配置
+
+```yaml
+name: 每日情报推送
+
+on:
+  # 每天上午 6:00 香港时间 (UTC 22:00 前一天)
+  schedule:
+    - cron: '0 22 * * *'
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: '是否发送邮件'
+        default: 'true'
+      skill:
+        description: '运行特定技能'
+        default: 'all'
+```
+
+### 手动触发工作流
+
+1. 进入 GitHub 仓库 → Actions
+2. 选择 "每日情报推送" workflow
+3. 点击 "Run workflow"
+4. 选择参数：
+   - `send_email`: 是否发送邮件
+   - `skill`: `all` / `ai-intelligence` / `hk-stocks-alpha`
+
+### 查看 CI 运行结果
+
+```bash
+# 本地查看生成的文件
+ls ~/.harness/scraper/$(date +%Y-%m-%d)/ai/
+ls ~/.harness/scraper/$(date +%Y-%m-%d)/stocks/
+```

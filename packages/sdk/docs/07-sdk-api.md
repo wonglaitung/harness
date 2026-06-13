@@ -722,6 +722,8 @@ client = AnthropicClient(
 
 ### OpenAIClient
 
+支持所有 OpenAI 兼容 API（DeepSeek、硅基流动、本地 vLLM 等）。
+
 ```python
 from harness.llm.openai import OpenAIClient
 
@@ -731,6 +733,37 @@ client = OpenAIClient(
     base_url="https://api.openai.com/v1",  # 可自定义
 )
 ```
+
+#### 第三方 API 兼容性
+
+OpenAIClient 已处理部分第三方 API 的非标准响应：
+
+```python
+# 自动处理非标准错误响应
+# 某些 API 在错误时返回字符串而非标准响应对象
+if isinstance(response, str):
+    raise ValueError(f"API returned non-standard response: {response[:200]}")
+```
+
+**常见第三方 API**：
+
+| 提供者 | base_url | 说明 |
+|-------|----------|------|
+| DeepSeek | `https://api.deepseek.com/v1` | ~0.01元/千token |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | 多模型支持 |
+| 本地 vLLM | `http://localhost:8000/v1` | 本地推理 |
+| 本地 Ollama | `http://localhost:11434/v1` | 本地推理 |
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `api_key` | str | 必填 | API Key |
+| `model` | str | 必填 | 模型名称 |
+| `base_url` | str | OpenAI URL | API 基础 URL |
+| `max_tokens` | int | 8192 | 最大输出 token |
+| `temperature` | float | 1.0 | 生成温度 |
+| `timeout` | float | 120.0 | 请求超时（秒） |
 
 ### 自定义 LLM 客户端
 
