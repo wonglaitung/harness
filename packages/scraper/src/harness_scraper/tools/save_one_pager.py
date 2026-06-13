@@ -32,6 +32,20 @@ class SaveOnePagerTool(Tool):
         return {
             "type": "object",
             "properties": {
+                # Simple mode (direct content)
+                "title": {
+                    "type": "string",
+                    "description": "Title for the One-Pager (simple mode)",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Markdown content to save (simple mode)",
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Filename for the output file (simple mode, optional)",
+                },
+                # Structured mode (AI intelligence)
                 "concept_name": {
                     "type": "string",
                     "description": "Name of the concept/tool/technology",
@@ -74,7 +88,8 @@ class SaveOnePagerTool(Tool):
                     "description": "Output domain: 'ai' for AI intelligence, 'stocks' for stock analysis",
                 },
             },
-            "required": ["concept_name", "definition", "pain_point", "old_paradigm", "new_paradigm"],
+            # Either (title + content) or (concept_name + definition + ...) required
+            "required": [],
         }
 
     async def execute(
@@ -82,16 +97,82 @@ class SaveOnePagerTool(Tool):
         arguments: dict[str, Any],
         context: ToolContext,
     ) -> ToolResult:
+        domain = arguments.get("domain", "ai")
+
+        # Determine mode: simple (title + content) or structured (concept_name + ...)
+        if "title" in arguments and "content" in arguments:
+            # Simple mode
+            return await self._execute_simple(arguments, domain)
+        elif "concept_name" in arguments:
+            # Structured mode (AI intelligence)
+            return await self._execute_structured(arguments, domain)
+        else:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="Either (title + content) or (concept_name + definition + ...) required",
+            )
+
+    async def _execute_simple(
+        self,
+        arguments: dict[str, Any],
+        domain: str,
+    ) -> ToolResult:
+        """Simple mode: save title + content directly."""
+        title = arguments["title"]
+        content = arguments["content"]
+        filename = arguments.get("filename", "")
+
+        try:
+            # Create output directory with domain subdirectory
+            output_path = Path("~/.harness/scraper").expanduser()
+            date_dir = output_path / datetime.now().strftime("%Y-%m-%d") / domain
+            date_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate filename
+            if not filename:
+                filename = self._to_filename(title) + ".md"
+            elif not filename.endswith(".md"):
+                filename = filename + ".md"
+
+            filepath = date_dir / filename
+
+            # Write content directly
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            logger.info(f"Saved One-Pager (simple): {filepath}")
+
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=f"One-Pager saved to: {filepath}\n\nPreview:\n{content[:500]}...",
+            )
+
+        except Exception as e:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Failed to save One-Pager: {str(e)}",
+            )
+
+    async def _execute_structured(
+        self,
+        arguments: dict[str, Any],
+        domain: str,
+    ) -> ToolResult:
+        """Structured mode: generate AI intelligence One-Pager."""
         concept_name = arguments["concept_name"]
-        definition = arguments["definition"]
-        pain_point = arguments["pain_point"]
-        old_paradigm = arguments["old_paradigm"]
-        new_paradigm = arguments["new_paradigm"]
+        definition = arguments.get("definition", "")
+        pain_point = arguments.get("pain_point", "")
+        old_paradigm = arguments.get("old_paradigm", "")
+        new_paradigm = arguments.get("new_paradigm", "")
         production_impact = arguments.get("production_impact", "待评估")
         adoption_cost = arguments.get("adoption_cost", "待评估")
         github_url = arguments.get("github_url", "")
         source_url = arguments.get("source_url", "")
-        domain = arguments.get("domain", "ai")  # Default to ai
 
         try:
             # Create output directory with domain subdirectory
@@ -120,7 +201,7 @@ class SaveOnePagerTool(Tool):
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(markdown)
 
-            logger.info(f"Saved One-Pager: {filepath}")
+            logger.info(f"Saved One-Pager (structured): {filepath}")
 
             return ToolResult(
                 tool_call_id="",
