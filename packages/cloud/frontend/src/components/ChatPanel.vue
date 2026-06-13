@@ -12,7 +12,10 @@ const props = defineProps<{
 
 const settingsStore = useSettingsStore()
 const sessionStore = useSessionStore()
-const { connect, on, send, isConnected } = useWebSocket(props.sessionId)
+
+// Only initialize WebSocket when sessionId is non-empty
+const sessionIdRef = ref(props.sessionId)
+const { connect, on, send, isConnected } = useWebSocket(sessionIdRef.value)
 
 const input = ref('')
 const messagesContainer = ref<HTMLDivElement | null>(null)
@@ -37,8 +40,22 @@ watch(
   () => scrollToBottom()
 )
 
-// Setup message handlers
+// Watch sessionId changes
+watch(
+  () => props.sessionId,
+  (newId) => {
+    sessionIdRef.value = newId
+  }
+)
+
+// Setup message handlers and connect only when sessionId is valid
 onMounted(() => {
+  // Don't connect if sessionId is empty
+  if (!props.sessionId) {
+    console.warn('[ChatPanel] sessionId is empty, waiting...')
+    return
+  }
+
   // Register WebSocket message handlers
   on('stream_chunk', (payload: unknown) => {
     const p = payload as { content: string }
@@ -84,6 +101,7 @@ onMounted(() => {
 
   // Connect WebSocket with auth
   const token = 'test-token' // Gateway accepts any token in test mode
+  console.log('[ChatPanel] Connecting with sessionId:', props.sessionId)
   connect(token, settingsStore.getAuthPayload())
 })
 

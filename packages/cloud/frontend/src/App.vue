@@ -11,12 +11,12 @@ const isConfigured = computed(() => settingsStore.hasApiKey)
 
 // Session ID (generated on mount or from route)
 const sessionId = ref<string>('')
+const isSessionReady = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   // Generate session ID
-  generateSessionId().then(id => {
-    sessionId.value = id
-  })
+  sessionId.value = await generateSessionId()
+  isSessionReady.value = true
 })
 
 async function generateSessionId(): Promise<string> {
@@ -32,6 +32,7 @@ async function generateSessionId(): Promise<string> {
 
 async function handleConfigured() {
   sessionId.value = await generateSessionId()
+  isSessionReady.value = true
 }
 </script>
 
@@ -56,16 +57,21 @@ async function handleConfigured() {
 
     <!-- Main content -->
     <main class="flex-1 flex items-center justify-center p-4">
-      <!-- Auth form if not configured -->
-      <AuthForm v-if="!isConfigured" @configured="handleConfigured" />
+      <!-- Loading state -->
+      <div v-if="isConfigured && !isSessionReady" class="text-gray-500">
+        Creating session...
+      </div>
 
-      <!-- Chat panel if configured -->
+      <!-- Auth form if not configured -->
+      <AuthForm v-else-if="!isConfigured" @configured="handleConfigured" />
+
+      <!-- Chat panel if configured and session ready -->
       <ChatPanel v-else :session-id="sessionId" class="w-full max-w-4xl h-full" @new-session="sessionId = ''" />
     </main>
 
     <!-- Footer -->
     <footer class="bg-dark-surface border-t border-dark-border px-4 py-2 text-center text-sm text-gray-500">
-      Session: {{ sessionId }}
+      Session: {{ sessionId || 'connecting...' }}
     </footer>
   </div>
 </template>
