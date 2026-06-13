@@ -95,6 +95,18 @@ tools:
    └── README.md           # 用户文档
    ```
 
+   **Scraper 文档** (`packages/scraper/docs/`)：
+   ```
+   docs/
+   ├── 01-overview.md      # Scraper 架构概述
+   ├── 02-agent-design.md  # Agent 设计
+   ├── 03-tools.md         # 工具系统
+   ├── 04-skills.md        # 技能系统
+   ├── 05-cli.md           # CLI 使用指南
+   ├── 06-configuration.md # 配置说明
+   └── README.md           # 用户文档
+   ```
+
    **根目录文档**：
    ```
    CLAUDE.md               # Claude Code 工作指引
@@ -134,6 +146,17 @@ tools:
    | Gateway 层设计 | 03-gateway.md |
    | WebSocket 协议 | 05-messages.md |
    | 部署配置 | 06-deployment.md |
+   | 用户指南 | README.md |
+
+   **Scraper 文档映射**：
+   | 功能类型 | 目标文档 |
+   |---------|---------|
+   | 架构概述 | 01-overview.md |
+   | Agent 设计 | 02-agent-design.md |
+   | 工具相关 | 03-tools.md |
+   | 技能相关 | 04-skills.md |
+   | CLI 使用 | 05-cli.md |
+   | 配置相关 | 06-configuration.md |
    | 用户指南 | README.md |
 
    **根目录文档映射**：
@@ -227,7 +250,7 @@ tools:
 
 ## 规则
 
-1. **扫描所有包的文档**: 必须检查 SDK、Client、Cloud 三个包的文档目录
+1. **扫描所有包的文档**: 必须检查 SDK、Client、Cloud、Scraper 四个包的文档目录
 2. **不删除现有内容**: 只添加或修正，保留有价值的现有文档
 3. **保持格式一致**: 遵循现有文档的格式风格
 4. **代码可运行**: 所有代码示例必须是有效的 Python 代码
@@ -242,4 +265,5 @@ tools:
 4. 更新各包 README.md 的功能列表
 5. 如有 API 变更，检查是否需要更新类型定义文档
 6. **Cloud 相关变更**: 同时更新 `packages/cloud/docs/` 和 `packages/cloud/README.md`
-7. **跨包经验教训**: 更新 `lessons.md` 和 `packages/sdk/docs/programmer_skill.md`
+7. **Scraper 相关变更**: 同时更新 `packages/scraper/docs/` 和 `packages/scraper/README.md`
+8. **跨包经验教训**: 更新 `lessons.md` 和 `packages/sdk/docs/programmer_skill.md`
