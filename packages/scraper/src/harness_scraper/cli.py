@@ -29,6 +29,12 @@ def setup_logging(verbose: bool = False):
     )
 
 
+async def run_once_async(scheduler, since):
+    """Run once and cleanup"""
+    await scheduler.run_once(since=since)
+    await scheduler.close()
+
+
 def cmd_run(args):
     """Run scraper"""
     setup_logging(args.verbose)
@@ -37,7 +43,7 @@ def cmd_run(args):
 
     if args.once:
         since = datetime.now() - timedelta(hours=args.hours)
-        asyncio.run(scheduler.run_once(since=since))
+        asyncio.run(run_once_async(scheduler, since))
     else:
         asyncio.run(scheduler.run(interval_hours=args.interval))
 

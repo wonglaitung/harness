@@ -17,9 +17,10 @@ dev-dependencies = [
 harness-sdk = { workspace = true }
 harness-client = { workspace = true }
 harness-cloud = { workspace = true }
+harness-scraper = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/sdk", "packages/client", "packages/cloud"]
+members = ["packages/sdk", "packages/client", "packages/cloud", "packages/scraper"]
 
 [tool.ruff]
 line-length = 100

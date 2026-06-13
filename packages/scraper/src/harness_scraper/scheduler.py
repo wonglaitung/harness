@@ -22,7 +22,8 @@ from harness_scraper.llm import LLMClient
 from harness_scraper.models import Article, ScraperConfig
 from harness_scraper.output import DedupStore, OnePagerGenerator
 from harness_scraper.sources import Source
-from harness_scraper.sources.hacker_news import HackerNewsSource
+from harness_scraper.sources.github_trending import GitHubTrendingSource
+from harness_scraper.sources.hacker_news import HackerNewsSource, ShowHNSource
 from harness_scraper.sources.rss import create_rss_sources
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class ScraperScheduler:
         if self.config.sources.rss:
             sources.extend(create_rss_sources(self.config.sources.rss))
 
-        # Hacker News source
+        # Hacker News source (high threshold for quality)
         hn_config = self.config.sources.hacker_news
         sources.append(
             HackerNewsSource(
@@ -70,6 +71,25 @@ class ScraperScheduler:
                 include_show_hn=hn_config.get("include_show_hn", True),
             )
         )
+
+        # Show HN source (low threshold for early new projects)
+        show_hn_config = self.config.sources.show_hn
+        if show_hn_config.get("enabled", True):
+            sources.append(
+                ShowHNSource(
+                    min_points=show_hn_config.get("min_points", 50),
+                )
+            )
+
+        # GitHub Trending source
+        gh_config = self.config.sources.github_trending
+        if gh_config.get("enabled", True):
+            sources.append(
+                GitHubTrendingSource(
+                    languages=gh_config.get("languages"),
+                    since=gh_config.get("since", "daily"),
+                )
+            )
 
         return sources
 

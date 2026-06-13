@@ -8,7 +8,7 @@ Key models:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -147,8 +147,16 @@ class SourceConfig(BaseModel):
     """数据源配置"""
 
     rss: list[dict[str, str]] = Field(description="RSS 源列表", default_factory=list)
-    hacker_news: dict[str, any] = Field(description="HN 配置", default_factory=lambda: {"min_points": 150, "include_show_hn": True})
-    reddit: dict[str, any] = Field(description="Reddit 配置", default_factory=lambda: {"subreddits": ["LocalLLaMA"], "timeframe": "24h"})
+    hacker_news: dict[str, Any] = Field(description="HN 配置", default_factory=lambda: {"min_points": 150, "include_show_hn": True})
+    reddit: dict[str, Any] = Field(description="Reddit 配置", default_factory=lambda: {"subreddits": ["LocalLLaMA"], "timeframe": "24h"})
+    github_trending: dict[str, Any] = Field(
+        description="GitHub Trending 配置",
+        default_factory=lambda: {"enabled": True, "since": "daily", "languages": ["python", "typescript"]}
+    )
+    show_hn: dict[str, Any] = Field(
+        description="Show HN 专门源配置（低阈值捕获早期新项目）",
+        default_factory=lambda: {"enabled": True, "min_points": 50}
+    )
 
 
 class FilterConfig(BaseModel):

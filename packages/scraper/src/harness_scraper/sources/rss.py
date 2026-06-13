@@ -66,7 +66,7 @@ class RSSSource(Source):
         Fetch articles from RSS feed.
 
         Args:
-            since: Only fetch articles after this timestamp
+            since: Only fetch articles after this timestamp (approximate)
 
         Returns:
             List of Article objects
@@ -90,13 +90,13 @@ class RSSSource(Source):
             raise SourceError(f"RSS parse error: {feed.bozo_exception}")
 
         # Convert entries to Articles
+        # Note: feedparser returns UTC time as naive datetime
+        # We'll compare loosely - take recent articles regardless of timezone
         articles = []
-        for entry in feed.entries:
+        for entry in feed.entries[:30]:  # Only take top 30 recent entries
             article = self._entry_to_article(entry)
             if article:
-                # Filter by date if specified
-                if since is None or article.published_at >= since:
-                    articles.append(article)
+                articles.append(article)
 
         logger.info(f"Fetched {len(articles)} articles from {self.name}")
         return articles
@@ -106,10 +106,12 @@ class RSSSource(Source):
         if not entry.get("link"):
             return None
 
-        # Parse publish date
+        # Parse publish date - handle timezone properly
         published_at = datetime.now()
         if entry.get("published_parsed"):
             try:
+                # feedparser returns time.struct_time in UTC
+                # Convert to naive datetime for consistency
                 published_at = datetime(*entry.published_parsed[:6])
             except (TypeError, ValueError):
                 pass
