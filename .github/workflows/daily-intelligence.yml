@@ -1,0 +1,75 @@
+name: 每日情报推送
+
+on:
+  # 每天上午 6:00 香港时间 (UTC 22:00 前一天)
+  schedule:
+    - cron: '0 22 * * *'
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: '是否发送邮件'
+        required: false
+        default: 'true'
+        type: boolean
+      skill:
+        description: '运行特定技能 (ai-intelligence 或 hk-stocks-alpha)'
+        required: false
+        default: 'all'
+
+jobs:
+  scrape-and-send:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Hong_Kong
+    steps:
+    - name: Checkout harness
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install uv
+        uv sync --all-packages
+
+    - name: Set environment variables
+      run: |
+        echo "EMAIL_SENDER=${{ secrets.EMAIL_SENDER }}" >> $GITHUB_ENV
+        echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> $GITHUB_ENV
+        echo "SMTP_SERVER=${{ secrets.SMTP_SERVER }}" >> $GITHUB_ENV
+        echo "RECIPIENT_EMAIL=${{ secrets.RECIPIENT_EMAIL }}" >> $GITHUB_ENV
+        echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> $GITHUB_ENV
+        echo "LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
+        echo "LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
+
+    - name: Run AI intelligence scraper
+      if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
+      run: |
+        echo "=== Running AI Intelligence Scraper ==="
+        uv run python scripts/run_scraper.py --skill ai-intelligence --timeout 180
+      continue-on-error: true
+
+    - name: Run HK stocks scraper
+      if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'hk-stocks-alpha' || github.event.inputs.skill == '' }}
+      run: |
+        echo "=== Running HK Stocks Alpha Scraper ==="
+        uv run python scripts/run_scraper.py --skill hk-stocks-alpha --timeout 180
+      continue-on-error: true
+
+    - name: Send intelligence emails
+      if: ${{ github.event.inputs.send_email == 'true' || github.event.inputs.send_email == '' }}
+      run: |
+        echo "=== Sending Intelligence Emails ==="
+        uv run python scripts/send_intelligence_email.py
+
+    - name: Show generated files
+      run: |
+        echo "=== Generated Files ==="
+        date_str=$(date +%Y-%m-%d)
+        ls -la ~/.harness/scraper/$date_str/ai/ 2>/dev/null || echo "No AI files"
+        ls -la ~/.harness/scraper/$date_str/stocks/ 2>/dev/null || echo "No stocks files"
