@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "harness-scraper"
+version = "0.1.0"
+description = "AI Intelligence Extraction System - Automated scraping and analysis of AI industry trends"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Harness Team"}]
+
+dependencies = [
+    "aiohttp>=3.8.0",
+    "feedparser>=6.0.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "jinja2>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+harness-scraper = "harness_scraper.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness_scraper"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
