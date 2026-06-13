@@ -46,9 +46,72 @@ Client → Gateway (JWT) → Agent (API Key)
 | Gateway | Gateway WebSocket | JWT Token | User authentication |
 | Agent | Agent WebSocket | API Key | LLM provider authentication |
 
+## Frontend
+
+Vue 3 + TypeScript + Vite + Pinia + TailwindCSS
+
+### Build Frontend
+
+```bash
+cd packages/cloud/frontend
+npm install
+npm run build
+# Output: frontend/dist/
+```
+
+### Development Mode
+
+```bash
+npm run dev
+# http://localhost:5173 (with Vite proxy to Gateway)
+```
+
+### Frontend Features
+
+| Feature | Status |
+|---------|--------|
+| API Key configuration | ✅ |
+| Provider/Model selection | ✅ |
+| WebSocket chat | ✅ |
+| Streaming text display | ✅ |
+| Tool call visualization | ✅ |
+| Heartbeat + reconnect | ✅ |
+| Token usage stats | ✅ |
+
+### Frontend Directory
+
+```
+frontend/
+├── src/
+│   ├── api/           # REST API, WebSocket client, types
+│   ├── components/    # AuthForm, ChatPanel, MessageList, InputArea
+│   ├── stores/        # Pinia stores (settings, session)
+│   └── composables/   # useWebSocket hook
+└── dist/              # Build output (served by Gateway)
+```
+
+---
+
 ## Testing
 
-### 1. Local Development (without Docker)
+### 1. Web UI Test (Recommended)
+
+**Build and start all services**:
+```bash
+cd packages/cloud
+./scripts/build.sh  # Builds Docker images + frontend + starts services
+```
+
+**Access web UI**: http://localhost:8080
+
+**Steps**:
+1. Enter your API Key
+2. Select Provider (Anthropic/OpenAI)
+3. Select Model
+4. (Optional) Enter custom Base URL for OpenAI-compatible APIs
+5. Start chatting!
+
+### 2. Local Development (without Docker)
 
 **Test Agent service directly**:
 ```bash
@@ -225,17 +288,22 @@ packages/cloud/
 │   │   ├── session_sync.py   # Session state sync
 │   │   └── config.py         # Agent configuration
 │   └── gateway/
-│       ├── main.py           # Gateway FastAPI entry
+│       ├── main.py           # Gateway FastAPI entry + frontend serving
 │       ├── container_manager.py  # Abstract interface
 │       ├── docker_manager.py     # Docker implementation
 │       ├── tunnel.py         # WebSocket tunnel
 │       ├── auth.py           # JWT authentication
 │       ├── rate_limiter.py   # Redis rate limiter
 │       └── config.py         # Gateway configuration
+├── frontend/
+│   ├── src/                  # Vue frontend source
+│   ├── dist/                 # Build output (served by Gateway)
+│   └── package.json          # npm dependencies
 ├── docker/
 │   ├── agent.Dockerfile      # Agent container image
 │   └── gateway.Dockerfile    # Gateway container image
 ├── docker-compose.yml        # Docker Compose config
+├── test_auto.py              # Automated test script
 └── scripts/
     └── build.sh              # Build script
 ```
@@ -294,5 +362,6 @@ See `docs/` directory for detailed design documents:
 - `01-overview.md` - Architecture overview
 - `02-agent.md` - Agent glue layer design
 - `03-gateway.md` - Gateway control layer
+- `04-frontend.md` - Vue frontend development
 - `05-messages.md` - WebSocket protocol
 - `06-deployment.md` - Deployment guide
