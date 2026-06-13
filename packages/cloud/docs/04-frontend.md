@@ -65,15 +65,19 @@ export enum MessageType {
   // 请求类
   RUN_REQUEST = "run_request",
   INTERRUPT = "interrupt",
-  
+  PING = "ping",
+
   // 响应类
   ACK = "ack",
+  AUTH_SUCCESS = "auth_success",
+  AUTH_FAILED = "auth_failed",
   RUN_RESULT = "run_result",
   STREAM_CHUNK = "stream_chunk",
   TOOL_CALL = "tool_call",
   TOOL_RESULT = "tool_result",
   PROGRESS = "progress",
   ERROR = "error",
+  PONG = "pong",
 }
 
 /**
@@ -672,4 +676,167 @@ npm run dev
 
 # 构建生产版本
 npm run build
+```
+
+## Markdown 渲染
+
+前端使用 `marked` + `highlight.js` 渲染 AI 回复中的 Markdown 内容：
+
+### 依赖
+
+```json
+{
+  "dependencies": {
+    "marked": "^12.0.0",
+    "highlight.js": "^11.9.0"
+  }
+}
+```
+
+### MessageBubble.vue 实现
+
+```vue
+<script setup lang="ts">
+import { computed } from 'vue'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+
+const props = defineProps<{
+  message: string
+  isUser?: boolean
+}>()
+
+// Configure marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
+
+// Custom renderer for code highlighting
+const renderer = new marked.Renderer()
+renderer.code = function(code: string, infostring: string | undefined): string {
+  const lang = infostring || ''
+  let highlighted: string
+  if (lang && hljs.getLanguage(lang)) {
+    highlighted = hljs.highlight(code, { language: lang }).value
+  } else {
+    highlighted = hljs.highlightAuto(code).value
+  }
+  return `<pre><code class="hljs">${highlighted}</code></pre>`
+}
+
+marked.use({ renderer })
+
+// Render markdown to HTML
+const renderedContent = computed(() => {
+  if (props.isUser) {
+    return escapeHtml(props.message)  // User messages are plain text
+  }
+  return marked.parse(props.message) as string
+})
+</script>
+
+<template>
+  <div :class="isUser ? 'message-user' : 'message-assistant'">
+    <div v-if="isUser" class="whitespace-pre-wrap">{{ message }}</div>
+    <div v-else v-html="renderedContent" class="markdown-content"></div>
+  </div>
+</template>
+```
+
+### 样式
+
+```css
+.markdown-content code {
+  background-color: #1e293b;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.markdown-content pre {
+  background-color: #1e293b;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+}
+```
+
+## 工具调用显示
+
+### 工具调用历史记录
+
+`sessionStore.ts` 维护 `toolCallHistory` 数组，存储所有工具调用及其结果：
+
+```typescript
+export interface ToolCallWithResult {
+  call: ToolCallEvent
+  result?: ToolResultEvent
+}
+
+export const useSessionStore = defineStore('session', () => {
+  const toolCallHistory = ref<ToolCallWithResult[]>([])
+
+  function setCurrentToolCall(toolCall: ToolCallEvent | null) {
+    if (toolCall) {
+      toolCallHistory.value.push({ call: toolCall })
+    }
+  }
+
+  function setToolResult(result: ToolResultEvent) {
+    const lastToolCall = toolCallHistory.value[toolCallHistory.value.length - 1]
+    if (lastToolCall) {
+      lastToolCall.result = result
+    }
+  }
+
+  function setRunning(running: boolean) {
+    if (running) {
+      toolCallHistory.value = []  // Clear on new run
+    }
+  }
+})
+```
+
+### 显示顺序
+
+工具调用显示在**用户消息之后、AI回复之前**：
+
+```
+用户消息 → 工具调用历史 → AI回复（streaming）
+```
+
+`MessageList.vue` 实现：
+
+```vue
+<template>
+  <div class="space-y-4">
+    <template v-for="(msg, index) in messages" :key="msg.id">
+      <MessageBubble v-if="msg.role === 'user'" :message="msg.content" is-user />
+      <div v-else>
+        <MessageBubble :message="msg.content" />
+      </div>
+
+      <!-- After last user message, show tool calls + streaming -->
+      <template v-if="msg.role === 'user' && index === messages.length - 1 && isRunning">
+        <!-- Tool call history -->
+        <div v-for="(toolCall, idx) in toolCallHistory" :key="idx">
+          <div v-if="!toolCall.result" class="tool-call-card">
+            ▶ {{ toolCall.call.tool_name }}
+          </div>
+          <div v-else :class="toolCall.result.success ? 'success' : 'failure'">
+            {{ toolCall.result.success ? '✓' : '✗' }} {{ toolCall.call.tool_name }}
+          </div>
+        </div>
+        <!-- Streaming text -->
+        <MessageBubble v-if="streamingText" :message="streamingText" />
+      </template>
+    </template>
+  </div>
+</template>
 ```

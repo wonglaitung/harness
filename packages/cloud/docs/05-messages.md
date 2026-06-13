@@ -43,6 +43,7 @@ interface MessageEnvelope {
 | `auth` | 认证请求（首次连接必发） | `AuthRequest` |
 | `run_request` | 执行任务（需先认证） | `RunRequest` |
 | `interrupt` | 中断执行 | `{}` |
+| `ping` | 心跳请求 | `{}` |
 
 ### 服务端 → 客户端（响应类）
 
@@ -58,6 +59,7 @@ interface MessageEnvelope {
 | `progress` | 进度事件 | `ProgressEvent` |
 | `error` | 错误 | `{error}` |
 | `interrupted` | 已中断 | `{}` |
+| `pong` | 心跳响应 | `{}` |
 
 ## 详细定义
 

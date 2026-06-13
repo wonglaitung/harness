@@ -72,9 +72,13 @@ npm run dev
 |---------|--------|
 | API Key configuration | ✅ |
 | Provider/Model selection | ✅ |
+| Custom model name input | ✅ |
 | WebSocket chat | ✅ |
 | Streaming text display | ✅ |
+| Markdown rendering (GFM) | ✅ |
+| Code syntax highlighting | ✅ |
 | Tool call visualization | ✅ |
+| Multi-tool call history | ✅ |
 | Heartbeat + reconnect | ✅ |
 | Token usage stats | ✅ |
 

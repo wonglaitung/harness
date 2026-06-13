@@ -1,5 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <circle cx="50" cy="50" r="45" fill="#3b82f6"/>
-  <path d="M30 50 L50 30 L70 50 L50 70 Z" fill="white"/>
-  <circle cx="50" cy="50" r="10" fill="#3b82f6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Harness - AI Agent Desktop Icon -->
+  <!-- Friendly robot with greeting gesture - refined for clarity at small sizes -->
+
+  <!-- Background -->
+  <rect width="256" height="256" rx="56" fill="#0A0F1A"/>
+
+  <!-- Head -->
+  <ellipse cx="128" cy="70" rx="48" ry="44" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="3"/>
+
+  <!-- Face visor -->
+  <rect x="88" y="50" width="80" height="40" rx="20" fill="#1E293B"/>
+
+  <!-- Left eye glow -->
+  <circle cx="108" cy="70" r="11" fill="#38BDF8"/>
+  <circle cx="108" cy="70" r="6" fill="#7DD3FC"/>
+  <circle cx="105" cy="67" r="2" fill="#FFFFFF"/>
+
+  <!-- Right eye glow -->
+  <circle cx="148" cy="70" r="11" fill="#38BDF8"/>
+  <circle cx="148" cy="70" r="6" fill="#7DD3FC"/>
+  <circle cx="146" cy="68" r="2" fill="#FFFFFF"/>
+
+  <!-- Head side decorations (ears) -->
+  <ellipse cx="80" cy="70" rx="6" ry="12" fill="#CBD5E1"/>
+  <ellipse cx="176" cy="70" rx="6" ry="12" fill="#CBD5E1"/>
+
+  <!-- Antenna -->
+  <rect x="120" y="28" width="16" height="18" rx="8" fill="#CBD5E1"/>
+  <circle cx="128" cy="24" r="8" fill="#38BDF8"/>
+  <circle cx="128" cy="24" r="4" fill="#7DD3FC"/>
+
+  <!-- Neck -->
+  <rect x="110" y="95" width="36" height="12" fill="#94A3B8"/>
+
+  <!-- Body -->
+  <ellipse cx="128" cy="145" rx="38" ry="32" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2"/>
+  <path d="M 100 142 Q 128 155 156 142" stroke="#38BDF8" stroke-width="4" fill="none" opacity="0.7"/>
+
+  <!-- Chest indicator -->
+  <circle cx="128" cy="148" r="4" fill="#38BDF8" opacity="0.8"/>
+
+  <!-- Left arm (raised greeting) -->
+  <ellipse cx="90" cy="130" rx="10" ry="8" fill="#CBD5E1"/>
+  <path d="M 80 125 Q 65 110 72 92" stroke="#CBD5E1" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 70 90 Q 60 82 66 76" stroke="#E2E8F0" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- Hand -->
+  <ellipse cx="62" cy="74" rx="8" ry="6" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2"/>
+  <!-- Fingers -->
+  <line x1="56" y1="70" x2="52" y2="64" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+  <line x1="60" y1="68" x2="57" y2="62" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="68" x2="63" y2="62" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+  <line x1="68" y1="70" x2="70" y2="65" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Right arm -->
+  <ellipse cx="166" cy="130" rx="10" ry="8" fill="#CBD5E1"/>
+  <path d="M 176 135 Q 188 155 182 172" stroke="#CBD5E1" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <ellipse cx="184" cy="176" rx="7" ry="5" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2"/>
+
+  <!-- Left leg -->
+  <path d="M 108 175 Q 100 200 108 215" stroke="#CBD5E1" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <ellipse cx="108" cy="220" rx="12" ry="6" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2"/>
+
+  <!-- Right leg -->
+  <path d="M 148 175 Q 156 200 148 215" stroke="#CBD5E1" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <ellipse cx="148" cy="220" rx="12" ry="6" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2"/>
 </svg>

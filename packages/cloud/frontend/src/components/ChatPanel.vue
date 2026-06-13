@@ -66,9 +66,9 @@ onMounted(() => {
     sessionStore.setCurrentToolCall(payload as any)
   })
 
-  on('tool_result', () => {
-    // Clear tool call after result
-    sessionStore.setCurrentToolCall(null)
+  on('tool_result', (payload: unknown) => {
+    const result = payload as { tool_name: string; success: boolean; result: string; error?: string }
+    sessionStore.setToolResult(result)
   })
 
   on('progress', (payload: unknown) => {
@@ -150,6 +150,7 @@ function handleInterrupt() {
         :messages="sessionStore.messages"
         :streaming-text="sessionStore.streamingText"
         :current-tool-call="sessionStore.currentToolCall"
+        :tool-call-history="sessionStore.toolCallHistory"
       />
     </div>
 

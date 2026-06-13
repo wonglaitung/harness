@@ -1,15 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Message, ToolCallEvent } from '@/api/types'
+import type { ToolCallEvent, ToolResultEvent } from '@/api/types'
+
+// Tool call with result
+export interface ToolCallWithResult {
+  call: ToolCallEvent
+  result?: ToolResultEvent
+}
+
+// Extended message with tool calls
+export interface MessageWithTools {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+  toolCalls?: ToolCallWithResult[]
+  isStreaming?: boolean
+}
 
 export const useSessionStore = defineStore('session', () => {
   // State
   const sessionId = ref<string | null>(null)
-  const messages = ref<Message[]>([])
+  const messages = ref<MessageWithTools[]>([])
   const tokenUsage = ref({ input: 0, output: 0 })
   const isRunning = ref(false)
   const streamingText = ref('')
   const currentToolCall = ref<ToolCallEvent | null>(null)
+  // All tool calls in current run (cleared when run starts)
+  const toolCallHistory = ref<ToolCallWithResult[]>([])
 
   // Computed
   const messageCount = computed(() => messages.value.length)
@@ -19,8 +37,8 @@ export const useSessionStore = defineStore('session', () => {
     sessionId.value = id
   }
 
-  function addMessage(role: 'user' | 'assistant', content: string): Message {
-    const msg: Message = {
+  function addMessage(role: 'user' | 'assistant', content: string): MessageWithTools {
+    const msg: MessageWithTools = {
       id: crypto.randomUUID(),
       role,
       content,
@@ -54,6 +72,20 @@ export const useSessionStore = defineStore('session', () => {
 
   function setCurrentToolCall(toolCall: ToolCallEvent | null) {
     currentToolCall.value = toolCall
+    if (toolCall) {
+      // Add new tool call to history
+      toolCallHistory.value.push({ call: toolCall })
+    }
+  }
+
+  function setToolResult(result: ToolResultEvent) {
+    // Update the last tool call in history with its result
+    const lastToolCall = toolCallHistory.value[toolCallHistory.value.length - 1]
+    if (lastToolCall && lastToolCall.call.tool_name === result.tool_name) {
+      lastToolCall.result = result
+    }
+    // Clear current tool call indicator
+    currentToolCall.value = null
   }
 
   function updateTokenUsage(input: number, output: number) {
@@ -63,6 +95,10 @@ export const useSessionStore = defineStore('session', () => {
 
   function setRunning(running: boolean) {
     isRunning.value = running
+    // Clear tool call history when starting a new run
+    if (running) {
+      toolCallHistory.value = []
+    }
   }
 
   function clearMessages() {
@@ -70,6 +106,7 @@ export const useSessionStore = defineStore('session', () => {
     tokenUsage.value = { input: 0, output: 0 }
     streamingText.value = ''
     currentToolCall.value = null
+    toolCallHistory.value = []
   }
 
   function reset() {
@@ -79,6 +116,7 @@ export const useSessionStore = defineStore('session', () => {
     isRunning.value = false
     streamingText.value = ''
     currentToolCall.value = null
+    toolCallHistory.value = []
   }
 
   return {
@@ -89,6 +127,7 @@ export const useSessionStore = defineStore('session', () => {
     isRunning,
     streamingText,
     currentToolCall,
+    toolCallHistory,
     // Computed
     messageCount,
     // Actions
@@ -99,6 +138,7 @@ export const useSessionStore = defineStore('session', () => {
     clearStreamingText,
     finalizeStreamingText,
     setCurrentToolCall,
+    setToolResult,
     updateTokenUsage,
     setRunning,
     clearMessages,
