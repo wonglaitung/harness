@@ -6,9 +6,11 @@ Uses AgentHarness with custom tools for:
 - Hacker News fetching
 - GitHub Trending fetching
 - URL content fetching
+- HKEX (Hong Kong Stock Exchange) announcements
+- Financial news (Cailian, Wallstreetcn)
 - One-Pager saving
 
-The agent can be specialized via skill files (e.g., AI intelligence, stock analysis).
+The agent can be specialized via skill files (e.g., AI intelligence, HK stocks).
 """
 
 import logging
@@ -26,6 +28,8 @@ from harness_scraper.tools import (
     FetchGitHubTrendingTool,
     FetchURLTool,
     SaveOnePagerTool,
+    FetchHKEXTool,
+    FetchFinancialNewsTool,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,11 +43,13 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 ## 角色定位
 
 你是一个专业的信息提取代理，负责从海量内容中识别高价值信息。你的核心能力是：
-1. 高效获取多源数据（RSS、HN、GitHub、URL）
+1. 高效获取多源数据（RSS、HN、GitHub、港交所、财经新闻）
 2. 精准筛选有价值的信号
 3. 结构化输出情报一页纸
 
 ## 工具清单
+
+### AI 情报工具
 
 | 工具 | 用途 | 建议使用场景 |
 |-----|------|-------------|
@@ -52,7 +58,19 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 | `fetch_show_hn` | 抓取 Show HN 早期项目 | 发现刚发布的早期新项目 |
 | `fetch_github_trending` | 抓取 GitHub Trending | 发现正在爆发的开源项目 |
 | `fetch_url` | 深度抓取 URL 内容 | 获取 README、技术文章全文 |
-| `save_one_pager` | 保存情报一页纸 | 将发现的情报结构化保存 |
+
+### 股票/金融工具
+
+| 工具 | 用途 | 建议使用场景 |
+|-----|------|-------------|
+| `fetch_hkex` | 抓取港交所公告 | 回购、减持、内幕交易披露 |
+| `fetch_financial_news` | 抓取财经快讯 | 财联社、华尔街见闻、政策突发 |
+
+### 输出工具
+
+| 工具 | 用途 | 参数说明 |
+|-----|------|---------|
+| `save_one_pager` | 保存情报一页纸 | domain="ai" 或 domain="stocks" |
 
 ## 通用工作流程
 
@@ -62,6 +80,8 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 - HN → 社区验证的热点
 - Show HN → 早期信号
 - GitHub Trending → 技术趋势
+- HKEX → 港股公告
+- Financial News → 政策快讯
 
 ### 第二步：精准筛选
 根据【技能文件】中定义的判断标准，识别高价值内容。
@@ -75,6 +95,9 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 ### 第四步：结构化输出
 使用 `save_one_pager` 保存，格式参考技能文件中的模板。
+**重要**：保存时指定 domain 参数：
+- AI 情报：domain="ai"
+- 股票分析：domain="stocks"
 
 ## 通用判断原则
 
@@ -85,7 +108,7 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 ## 技能注入
 
-当前会话可能已加载领域技能（AI情报、股票分析等）。
+当前会话可能已加载领域技能（AI情报、港股Alpha等）。
 技能文件包含：
 - 领域特定的判断标准
 - 已知实体列表（如成熟项目）
@@ -160,7 +183,7 @@ class IntelAgent:
         self.config = config
         self.skill = skill
 
-        # Default tools
+        # Default tools - all intel and financial tools
         if tools is None:
             tools = [
                 FetchRSSTool(),
@@ -169,6 +192,8 @@ class IntelAgent:
                 FetchGitHubTrendingTool(),
                 FetchURLTool(),
                 SaveOnePagerTool(),
+                FetchHKEXTool(),
+                FetchFinancialNewsTool(),
             ]
 
         # Build system prompt

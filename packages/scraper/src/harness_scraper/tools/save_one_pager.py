@@ -68,9 +68,10 @@ class SaveOnePagerTool(Tool):
                     "type": "string",
                     "description": "Original source URL where discovered",
                 },
-                "output_dir": {
+                "domain": {
                     "type": "string",
-                    "description": "Output directory (default: ~/.harness/scraper)",
+                    "enum": ["ai", "stocks"],
+                    "description": "Output domain: 'ai' for AI intelligence, 'stocks' for stock analysis",
                 },
             },
             "required": ["concept_name", "definition", "pain_point", "old_paradigm", "new_paradigm"],
@@ -90,12 +91,12 @@ class SaveOnePagerTool(Tool):
         adoption_cost = arguments.get("adoption_cost", "待评估")
         github_url = arguments.get("github_url", "")
         source_url = arguments.get("source_url", "")
-        output_dir = arguments.get("output_dir", "~/.harness/scraper")
+        domain = arguments.get("domain", "ai")  # Default to ai
 
         try:
-            # Create output directory
-            output_path = Path(output_dir).expanduser()
-            date_dir = output_path / datetime.now().strftime("%Y-%m-%d")
+            # Create output directory with domain subdirectory
+            output_path = Path("~/.harness/scraper").expanduser()
+            date_dir = output_path / datetime.now().strftime("%Y-%m-%d") / domain
             date_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate filename from concept name
