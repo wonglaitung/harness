@@ -22,6 +22,7 @@ class MessageType(str, Enum):
     AUTH = "auth"  # Authentication with API credentials
     RUN_REQUEST = "run_request"
     INTERRUPT = "interrupt"
+    PING = "ping"  # Heartbeat request
 
     # Server → Client (response types)
     ACK = "ack"
@@ -34,6 +35,7 @@ class MessageType(str, Enum):
     PROGRESS = "progress"
     ERROR = "error"
     INTERRUPTED = "interrupted"
+    PONG = "pong"  # Heartbeat response
 
 
 class MessageEnvelope(BaseModel):

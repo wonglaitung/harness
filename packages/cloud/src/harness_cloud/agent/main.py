@@ -131,7 +131,7 @@ async def websocket_run(websocket: WebSocket):
             envelope = MessageEnvelope.model_validate_json(raw_data)
 
             # Handle heartbeat
-            if envelope.type == "ping":
+            if envelope.type == MessageType.PING:
                 last_ping = asyncio.get_event_loop().time()
                 await websocket.send_json({"type": "pong"})
                 continue
