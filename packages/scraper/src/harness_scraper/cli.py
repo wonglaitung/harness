@@ -3,8 +3,10 @@
 Harness Scraper CLI.
 
 Usage:
-    harness-scraper run              # Run continuously
-    harness-scraper run --once       # Run once
+    harness-scraper run              # Run continuously (traditional pipeline)
+    harness-scraper run --once       # Run once (traditional pipeline)
+    harness-scraper agent            # Run with SDK agent (autonomous)
+    harness-scraper agent "prompt"   # Run agent with custom prompt
     harness-scraper config           # Create default config
     harness-scraper config --show    # Show current config
 """
@@ -36,7 +38,7 @@ async def run_once_async(scheduler, since):
 
 
 def cmd_run(args):
-    """Run scraper"""
+    """Run scraper (traditional pipeline)"""
     setup_logging(args.verbose)
     config = load_config()
     scheduler = ScraperScheduler(config)
@@ -46,6 +48,29 @@ def cmd_run(args):
         asyncio.run(run_once_async(scheduler, since))
     else:
         asyncio.run(scheduler.run(interval_hours=args.interval))
+
+
+def cmd_agent(args):
+    """Run with SDK agent (autonomous)"""
+    setup_logging(args.verbose)
+    config = load_config()
+
+    from harness_scraper.agent import IntelAgent
+
+    agent = IntelAgent(
+        config=config,
+        memory_path="~/.harness/scraper/MEMORY.md",
+    )
+
+    # Build prompt
+    if args.prompt:
+        prompt = args.prompt
+    else:
+        prompt = "运行情报抽取：从 RSS、HN、GitHub Trending 获取内容，识别新范式，生成 One-Pager"
+
+    result = asyncio.run(agent.run(prompt=prompt, verbose=args.verbose))
+    print("\n=== Agent Result ===")
+    print(result.content)
 
 
 def cmd_config(args):
@@ -71,12 +96,17 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
-    # run command
-    run_parser = subparsers.add_parser("run", help="Run scraper")
+    # run command (traditional pipeline)
+    run_parser = subparsers.add_parser("run", help="Run scraper (traditional pipeline)")
     run_parser.add_argument("--once", action="store_true", help="Run once and exit")
     run_parser.add_argument("--interval", type=int, default=12, help="Hours between runs (default: 12)")
     run_parser.add_argument("--hours", type=int, default=12, help="Hours to look back (default: 12)")
     run_parser.set_defaults(func=cmd_run)
+
+    # agent command (SDK agent)
+    agent_parser = subparsers.add_parser("agent", help="Run with SDK agent (autonomous)")
+    agent_parser.add_argument("prompt", nargs="?", help="Custom prompt for the agent")
+    agent_parser.set_defaults(func=cmd_agent)
 
     # config command
     config_parser = subparsers.add_parser("config", help="Manage configuration")

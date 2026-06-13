@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{name = "Harness Team"}]
 
 dependencies = [
+    "harness-sdk",  # Workspace dependency
     "aiohttp>=3.8.0",
     "feedparser>=6.0.0",
     "pyyaml>=6.0",
