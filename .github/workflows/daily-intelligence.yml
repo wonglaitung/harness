@@ -53,21 +53,21 @@ jobs:
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running AI Intelligence Scraper ==="
-        uv run python scripts/run_scraper.py --skill ai-intelligence --timeout 180
+        uv run python packages/scraper/scripts/run_scraper.py --skill ai-intelligence --timeout 180
       continue-on-error: true
 
     - name: Run HK stocks scraper
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'hk-stocks-alpha' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running HK Stocks Alpha Scraper ==="
-        uv run python scripts/run_scraper.py --skill hk-stocks-alpha --timeout 180
+        uv run python packages/scraper/scripts/run_scraper.py --skill hk-stocks-alpha --timeout 180
       continue-on-error: true
 
     - name: Send intelligence emails
       if: ${{ github.event.inputs.send_email == 'true' || github.event.inputs.send_email == '' }}
       run: |
         echo "=== Sending Intelligence Emails ==="
-        uv run python scripts/send_intelligence_email.py
+        uv run python packages/scraper/scripts/send_intelligence_email.py
 
     - name: Show generated files
       run: |

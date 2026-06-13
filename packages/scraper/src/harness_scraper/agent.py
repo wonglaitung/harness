@@ -35,9 +35,9 @@ from harness_scraper.tools import (
 logger = logging.getLogger(__name__)
 
 # Default skill directories (in order of priority)
-# 1. Repo-local skills (for CI/CD)
+# 1. Repo-local skills (for CI/CD) - inside packages/scraper/skills
 # 2. User skills directory
-REPO_SKILL_DIR = Path(__file__).parent.parent.parent.parent / "skills"
+REPO_SKILL_DIR = Path(__file__).parent.parent.parent / "skills"
 SKILL_DIR = Path.home() / ".harness" / "skills"
 
 # Base system prompt - generic methodology, no domain-specific knowledge
