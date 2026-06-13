@@ -64,7 +64,7 @@ def _merge_llm_config(yaml_llm: dict) -> LLMConfig:
         api_key=os.getenv("HARNESS_LLM_API_KEY", yaml_llm.get("api_key")),
         model=os.getenv("HARNESS_LLM_MODEL", yaml_llm.get("model", "gpt-4o-mini")),
         temperature=float(os.getenv("HARNESS_LLM_TEMPERATURE", yaml_llm.get("temperature", "0.1"))),
-        max_tokens=int(os.getenv("HARNESS_LLM_MAX_TOKENS", yaml_llm.get("max_tokens", "2000"))),
+        max_tokens=int(os.getenv("HARNESS_LLM_MAX_TOKENS", yaml_llm.get("max_tokens", "8192"))),  # 8K default
     )
 
 
@@ -97,7 +97,7 @@ llm:
   api_key: ""  # Or set via HARNESS_LLM_API_KEY env var
   model: "gpt-4o-mini"
   temperature: 0.1
-  max_tokens: 2000
+  max_tokens: 8192  # 8K output tokens for extraction tasks
 
   # Alternative: Local vLLM/Ollama
   # provider: "openai"

@@ -27,7 +27,7 @@ class LLMConfig:
     """Base configuration for LLM clients."""
 
     model: str
-    max_tokens: int = 16384  # Output tokens (reasonable for 64K context models)
+    max_tokens: int = 8192  # Output tokens (8K default, leaving input space for 64K context)
     temperature: float = 1.0
     timeout: float = 120.0
     retry_count: int = 3

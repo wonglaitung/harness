@@ -39,7 +39,7 @@ CONTEXT_LEVELS: dict[str, int] = {
 DEFAULT_PRESET = ModelPreset(
     name="default",
     context_window=65536,  # 64K as reasonable default
-    default_output_tokens=4096,
+    default_output_tokens=8192,  # 8K output, leaving ~56K for input
     provider="auto",
 )
 
