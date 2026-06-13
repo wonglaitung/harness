@@ -37,6 +37,14 @@ export function useWebSocket(sessionId: string) {
     ws.value.onopen = () => {
       // Send gateway auth message first
       ws.value!.send(JSON.stringify({ type: 'auth', token: currentToken }))
+      // Immediately send agent auth with API credentials
+      // Gateway will forward to Agent once tunnel is established
+      if (authPayload) {
+        console.log('[WS] Sending agent auth with payload:', authPayload)
+        ws.value!.send(JSON.stringify({ type: 'auth', payload: authPayload }))
+      } else {
+        console.error('[WS] No authPayload provided for agent auth')
+      }
     }
 
     ws.value.onmessage = (event) => {
@@ -44,27 +52,20 @@ export function useWebSocket(sessionId: string) {
         const envelope: MessageEnvelope = JSON.parse(event.data)
         const msgType = envelope.type as string
 
-        // Handle gateway auth success (connection to container ready)
-        if (msgType === 'auth_success' || envelope.payload?.provider) {
-          // This is Agent auth_success, send agent auth if needed
-          if (authPayload && !isAuthSuccess.value) {
-            ws.value!.send(JSON.stringify({ type: 'auth', payload: authPayload }))
-          }
-          return
-        }
+        console.log('[WS] Received:', msgType, envelope.payload)
 
-        // Handle agent auth success
+        // Handle agent auth success (connection fully established)
         if (msgType === 'auth_success') {
           isAuthSuccess.value = true
           isConnected.value = true
           reconnectAttempts = 0
           startHeartbeat()
-          console.log('[WS] Authenticated successfully')
+          console.log('[WS] Agent authenticated successfully')
           return
         }
 
         // Handle auth failed
-        if (msgType === 'auth_failed' || (msgType === 'error' && envelope.payload?.error_code === 'AUTH_FAILED')) {
+        if (msgType === 'auth_failed' || (msgType === 'error' && (envelope.payload as any)?.error_code === 'AUTH_FAILED')) {
           console.error('[WS] Authentication failed:', envelope.payload)
           disconnect()
           return

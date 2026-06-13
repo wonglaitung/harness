@@ -108,6 +108,7 @@ async def websocket_run(websocket: WebSocket):
 
     async def heartbeat_monitor():
         """Monitor heartbeat timeout."""
+        nonlocal _closed
         while True:
             await asyncio.sleep(30)
             if _closed:
