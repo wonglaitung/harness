@@ -1,0 +1,324 @@
+# 06 - 配置说明
+
+## 配置层级
+
+Scraper 按以下优先级加载配置：
+
+1. **环境变量**（最高优先级）
+2. **配置文件** `~/.harness/scraper.yaml`
+3. **默认值**（最低优先级）
+
+## 配置文件
+
+### 位置
+
+```
+~/.harness/scraper.yaml
+```
+
+### 创建配置文件
+
+```bash
+harness-scraper config
+```
+
+### 完整配置示例
+
+```yaml
+# Harness Scraper Configuration
+# https://github.com/wonglaitung/harness/tree/main/packages/scraper
+
+# LLM Configuration - Used by SDK Agent
+llm:
+  provider: "openai"
+  base_url: "https://api.openai.com/v1"
+  api_key: ""  # Or set via HARNESS_LLM_API_KEY env var
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 2000
+
+# Data Sources (for reference, skill may override)
+sources:
+  rss:
+    - url: "https://openai.com/blog/rss.xml"
+      name: "OpenAI Blog"
+    - url: "https://huggingface.co/blog/feed.xml"
+      name: "Hugging Face Blog"
+
+  hacker_news:
+    min_points: 150
+
+  github_trending:
+    languages: ["python", "typescript"]
+    since: "daily"
+
+# Output
+output:
+  directory: "~/.harness/scraper"
+```
+
+## LLM 配置
+
+### 配置项
+
+| 项 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `provider` | str | `openai` | 提供者类型 |
+| `base_url` | str | OpenAI API URL | API 基础 URL |
+| `api_key` | str | `None` | API Key |
+| `model` | str | `gpt-4o-mini` | 模型名称 |
+| `temperature` | float | `0.1` | 生成温度 |
+| `max_tokens` | int | `2000` | 最大输出 token |
+
+### 支持的 LLM 提供者
+
+所有 OpenAI 兼容的 API 都使用 `provider: openai`：
+
+#### OpenAI 官方
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-xxx"
+  model: "gpt-4o-mini"  # 或 gpt-4o, gpt-4-turbo
+```
+
+#### DeepSeek
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "sk-xxx"
+  model: "deepseek-chat"
+```
+
+#### 硅基流动 (SiliconFlow)
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "https://api.siliconflow.cn/v1"
+  api_key: "sk-xxx"
+  model: "Qwen/Qwen2.5-7B-Instruct"
+```
+
+#### 智谱 AI
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  api_key: "xxx"
+  model: "glm-4-flash"
+```
+
+#### 本地 vLLM
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "http://localhost:8000/v1"
+  api_key: ""  # 本地模型不需要
+  model: "Qwen2.5-7B-Instruct"
+```
+
+#### 本地 Ollama
+
+```yaml
+llm:
+  provider: "openai"
+  base_url: "http://localhost:11434/v1"
+  api_key: ""
+  model: "qwen2.5:7b"
+```
+
+### 模型选择建议
+
+| 场景 | 推荐模型 | 原因 |
+|------|---------|------|
+| **成本敏感** | DeepSeek / 硅基流动 | ~0.01 元/千 token |
+| **质量优先** | GPT-4o / Claude | 最佳推理能力 |
+| **本地部署** | Qwen2.5-7B | 开源，性能好 |
+| **快速测试** | gpt-4o-mini | 便宜，快速 |
+
+## 数据源配置
+
+### RSS 源
+
+```yaml
+sources:
+  rss:
+    - url: "https://openai.com/blog/rss.xml"
+      name: "OpenAI Blog"
+    - url: "https://huggingface.co/blog/feed.xml"
+      name: "Hugging Face Blog"
+    - url: "https://www.anthropic.com/research/rss"
+      name: "Anthropic Research"
+```
+
+**推荐 RSS 源**：
+
+| 源 | URL | 频率 |
+|----|-----|------|
+| OpenAI Blog | https://openai.com/blog/rss.xml | 每周 1-2 篇 |
+| Anthropic | https://www.anthropic.com/research/rss | 每周 1-2 篇 |
+| Hugging Face | https://huggingface.co/blog/feed.xml | 每周 2-3 篇 |
+| Google AI | https://blog.google/technology/ai/rss/ | 每周 2-3 篇 |
+
+### Hacker News
+
+```yaml
+sources:
+  hacker_news:
+    min_points: 150  # 最低分数阈值
+```
+
+**阈值建议**：
+
+| 阈值 | 效果 |
+|------|------|
+| `100` | 更多内容，噪音增加 |
+| `150` | 平衡质量和数量（推荐） |
+| `200` | 高质量，可能漏掉早期项目 |
+
+### GitHub Trending
+
+```yaml
+sources:
+  github_trending:
+    languages: ["python", "typescript"]
+    since: "daily"
+```
+
+**语言建议**：
+
+- AI 相关：`python`, `typescript`, `jupyter-notebook`
+- 前端相关：`typescript`, `javascript`, `vue`
+- 系统相关：`rust`, `go`, `c++`
+
+**时间范围**：
+
+| 值 | 说明 |
+|----|------|
+| `daily` | 今日热门 |
+| `weekly` | 本周热门 |
+| `monthly` | 本月热门 |
+
+## 输出配置
+
+```yaml
+output:
+  directory: "~/.harness/scraper"
+```
+
+### 目录结构
+
+```
+~/.harness/scraper/
+├── 2026-06-13/           # 按日期分目录
+│   ├── project1.md
+│   ├── project2.md
+│   └── ...
+├── 2026-06-14/
+│   └── ...
+└── MEMORY.md             # 已处理项目记录
+```
+
+## 环境变量
+
+### 支持的环境变量
+
+| 变量 | 对应配置项 |
+|------|-----------|
+| `HARNESS_LLM_PROVIDER` | `llm.provider` |
+| `HARNESS_LLM_BASE_URL` | `llm.base_url` |
+| `HARNESS_LLM_API_KEY` | `llm.api_key` |
+| `HARNESS_LLM_MODEL` | `llm.model` |
+| `HARNESS_LLM_TEMPERATURE` | `llm.temperature` |
+| `HARNESS_LLM_MAX_TOKENS` | `llm.max_tokens` |
+
+### 使用示例
+
+```bash
+# 设置环境变量
+export HARNESS_LLM_API_KEY="sk-xxx"
+export HARNESS_LLM_MODEL="gpt-4o"
+
+# 运行（配置文件中的值会被覆盖）
+harness-scraper
+```
+
+## 配置加载逻辑
+
+```python
+def load_config(config_path: Path | None = None) -> ScraperConfig:
+    """加载配置，优先级：环境变量 > 配置文件 > 默认值"""
+
+    # 1. 读取配置文件
+    if config_path and config_path.exists():
+        yaml_config = yaml.safe_load(config_path)
+    else:
+        yaml_config = {}
+
+    # 2. 环境变量覆盖
+    llm_config = LLMConfig(
+        provider=os.getenv("HARNESS_LLM_PROVIDER", yaml_config.get("provider", "openai")),
+        base_url=os.getenv("HARNESS_LLM_BASE_URL", yaml_config.get("base_url", "...")),
+        api_key=os.getenv("HARNESS_LLM_API_KEY", yaml_config.get("api_key")),
+        ...
+    )
+
+    return ScraperConfig(llm=llm_config, ...)
+```
+
+## 配置最佳实践
+
+### 安全
+
+```yaml
+# ❌ 不要在配置文件中硬编码 API Key
+llm:
+  api_key: "sk-xxx"  # 不安全
+
+# ✅ 使用环境变量
+llm:
+  api_key: ""  # 通过 HARNESS_LLM_API_KEY 设置
+```
+
+### 多环境
+
+```bash
+# 开发环境
+export HARNESS_LLM_MODEL="gpt-4o-mini"
+
+# 生产环境
+export HARNESS_LLM_MODEL="gpt-4o"
+```
+
+### 成本控制
+
+```yaml
+llm:
+  temperature: 0.1   # 低温度，减少随机性
+  max_tokens: 2000   # 限制输出长度
+  model: "gpt-4o-mini"  # 使用更便宜的模型
+```
+
+## 故障排查
+
+### 查看当前配置
+
+```bash
+harness-scraper config --show
+```
+
+### 常见问题
+
+| 问题 | 原因 | 解决方法 |
+|------|------|---------|
+| API Key 无效 | 未设置或格式错误 | 检查环境变量或配置文件 |
+| 模型不存在 | 模型名称错误 | 查看提供者文档 |
+| 连接超时 | 网络问题或 URL 错误 | 检查 base_url |
+| 认证失败 | API Key 权限不足 | 检查 API Key 权限 |
