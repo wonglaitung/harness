@@ -125,6 +125,7 @@ from harness.tools.builtins import (
     ReadTool,
     WebFetchTool,
     WebSearchTool,
+    WebToMarkdownTool,
     WriteTool,
 )
 from harness.types import (
@@ -184,6 +185,7 @@ __all__ = [
     "BashTool",
     "WebSearchTool",
     "WebFetchTool",
+    "WebToMarkdownTool",
     # Core types
     "Message",
     "Session",

@@ -9,10 +9,13 @@ import re
 import shutil
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from harness.tools.base import Tool, ToolContext
 from harness.types import ToolResult
+
+if TYPE_CHECKING:
+    from bs4 import NavigableString, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -823,3 +826,383 @@ class WebFetchTool(Tool):
                 content="",
                 error=f"Fetch failed: {str(e)}",
             )
+
+
+class WebToMarkdownTool(Tool):
+    """
+    Fetch a webpage and convert to clean Markdown.
+
+    Features:
+    - Extracts main content (article, main, or body)
+    - Converts HTML to clean Markdown
+    - Preserves code blocks with syntax highlighting hints
+    - Handles tables, lists, headings, links, images
+    - Removes ads, navigation, footers
+    """
+
+    @property
+    def name(self) -> str:
+        return "web_to_markdown"
+
+    @property
+    def description(self) -> str:
+        return "Fetch a webpage and convert it to clean Markdown format"
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL of the webpage to fetch and convert",
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector to extract specific content (optional, defaults to main content)",
+                },
+                "max_length": {
+                    "type": "integer",
+                    "description": "Maximum content length in characters (default 50000)",
+                },
+                "include_links": {
+                    "type": "boolean",
+                    "description": "Whether to preserve links (default true)",
+                },
+                "include_images": {
+                    "type": "boolean",
+                    "description": "Whether to include image references (default false)",
+                },
+            },
+            "required": ["url"],
+        }
+
+    async def execute(
+        self,
+        arguments: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        url = arguments["url"]
+        selector = arguments.get("selector")
+        max_length = arguments.get("max_length", 50000)
+        include_links = arguments.get("include_links", True)
+        include_images = arguments.get("include_images", False)
+
+        try:
+            import aiohttp
+        except ImportError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="aiohttp is required. Install with: pip install aiohttp",
+            )
+
+        try:
+            from bs4 import BeautifulSoup, NavigableString, Tag
+        except ImportError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="beautifulsoup4 is required. Install with: pip install beautifulsoup4",
+            )
+
+        try:
+            # Fetch the webpage
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (compatible; HarnessBot/1.0; +https://github.com/harness)",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "en-US,en;q=0.9",
+                }
+
+                async with session.get(
+                    url, headers=headers, timeout=30, allow_redirects=True
+                ) as response:
+                    if response.status != 200:
+                        return ToolResult(
+                            tool_call_id="",
+                            success=False,
+                            content="",
+                            error=f"Fetch failed: HTTP {response.status}",
+                        )
+
+                    html = await response.text()
+
+            # Parse HTML
+            soup = BeautifulSoup(html, "html.parser")
+
+            # Remove unwanted elements
+            for element in soup([
+                "script", "style", "nav", "footer", "header",
+                "aside", "iframe", "noscript", "form",
+                "button", "input", "select", "textarea",
+            ]):
+                element.decompose()
+
+            # Remove elements with common ad/class names
+            for class_name in ["ad", "ads", "advertisement", "sidebar", "comment", "comments", "social", "share", "related", "recommendation"]:
+                for element in soup.find_all(class_=lambda x: x and class_name in str(x).lower()):
+                    element.decompose()
+
+            # Remove elements with ad-related IDs
+            for id_pattern in ["ad", "ads", "sidebar", "comment"]:
+                for element in soup.find_all(id=lambda x: x and id_pattern in str(x).lower()):
+                    element.decompose()
+
+            # Extract main content
+            if selector:
+                content_elements = soup.select(selector)
+                if content_elements:
+                    main_content = content_elements[0]
+                else:
+                    return ToolResult(
+                        tool_call_id="",
+                        success=False,
+                        content="",
+                        error=f"No elements found for selector: {selector}",
+                    )
+            else:
+                # Try to find main content areas
+                main_content = (
+                    soup.find("article") or
+                    soup.find("main") or
+                    soup.find("div", class_=lambda x: x and any(c in str(x).lower() for c in ["content", "article", "post", "entry"])) or
+                    soup.find("body")
+                )
+
+                if not main_content:
+                    main_content = soup
+
+            # Convert to Markdown
+            markdown = self._html_to_markdown(main_content, include_links, include_images)
+
+            # Extract title
+            title = soup.find("title")
+            if title:
+                title_text = title.get_text(strip=True)
+                markdown = f"# {title_text}\n\n{markdown}"
+
+            # Add source URL
+            markdown = f"[Source]({url})\n\n{markdown}"
+
+            # Truncate if needed
+            if len(markdown) > max_length:
+                markdown = markdown[:max_length] + "\n\n... (truncated)"
+
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=markdown,
+            )
+
+        except asyncio.TimeoutError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error="Fetch request timed out",
+            )
+
+        except Exception as e:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Failed to fetch and convert: {str(e)}",
+            )
+
+    def _html_to_markdown(
+        self,
+        element: "Tag | NavigableString",
+        include_links: bool = True,
+        include_images: bool = False,
+    ) -> str:
+        """Convert HTML element to Markdown."""
+        if isinstance(element, NavigableString):
+            text = str(element).strip()
+            # Escape markdown special characters in plain text
+            if text:
+                # Don't escape in code blocks
+                return text
+            return ""
+
+        if not isinstance(element, Tag):
+            return ""
+
+        tag_name = element.name.lower()
+
+        # Skip certain elements
+        if tag_name in ["script", "style", "nav", "footer", "header", "aside"]:
+            return ""
+
+        # Process children
+        children_md = []
+        for child in element.children:
+            child_md = self._html_to_markdown(child, include_links, include_images)
+            if child_md:
+                children_md.append(child_md)
+
+        children_text = "".join(children_md)
+
+        # Convert based on tag type
+        if tag_name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+            level = int(tag_name[1])
+            # Get plain text for heading
+            text = element.get_text(strip=True)
+            return f"\n\n{'#' * level} {text}\n\n"
+
+        elif tag_name == "p":
+            text = element.get_text(strip=True)
+            if text:
+                return f"\n\n{text}\n\n"
+            return ""
+
+        elif tag_name == "br":
+            return "\n"
+
+        elif tag_name == "hr":
+            return "\n\n---\n\n"
+
+        elif tag_name in ["strong", "b"]:
+            text = element.get_text(strip=True)
+            if text:
+                return f"**{text}**"
+            return ""
+
+        elif tag_name in ["em", "i"]:
+            text = element.get_text(strip=True)
+            if text:
+                return f"*{text}*"
+            return ""
+
+        elif tag_name == "code":
+            text = element.get_text()
+            if "\n" in text:
+                # Multi-line code block
+                lang = element.get("class", [""])[0].replace("language-", "") if element.get("class") else ""
+                return f"\n\n```{lang}\n{text}\n```\n\n"
+            else:
+                # Inline code
+                return f"`{text}`"
+
+        elif tag_name == "pre":
+            # Get the code element inside if exists
+            code_elem = element.find("code")
+            if code_elem:
+                code_text = code_elem.get_text()
+                lang = ""
+                if code_elem.get("class"):
+                    for cls in code_elem.get("class", []):
+                        if cls.startswith("language-"):
+                            lang = cls.replace("language-", "")
+                            break
+                return f"\n\n```{lang}\n{code_text}\n```\n\n"
+            else:
+                text = element.get_text()
+                return f"\n\n```\n{text}\n```\n\n"
+
+        elif tag_name == "blockquote":
+            lines = children_text.strip().split("\n")
+            quoted = "\n".join(f"> {line}" for line in lines if line.strip())
+            return f"\n\n{quoted}\n\n"
+
+        elif tag_name == "a":
+            if include_links:
+                href = element.get("href", "")
+                text = element.get_text(strip=True)
+                if href and text:
+                    return f"[{text}]({href})"
+                return text
+            else:
+                return element.get_text(strip=True)
+
+        elif tag_name == "img":
+            if include_images:
+                src = element.get("src", "")
+                alt = element.get("alt", "image")
+                if src:
+                    # Handle relative URLs
+                    if src.startswith("//"):
+                        src = "https:" + src
+                    return f"![{alt}]({src})"
+            return ""
+
+        elif tag_name == "ul":
+            items = []
+            for li in element.find_all("li", recursive=False):
+                li_text = self._html_to_markdown(li, include_links, include_images).strip()
+                if li_text:
+                    items.append(f"- {li_text}")
+            if items:
+                return "\n\n" + "\n".join(items) + "\n\n"
+            return ""
+
+        elif tag_name == "ol":
+            items = []
+            for i, li in enumerate(element.find_all("li", recursive=False), 1):
+                li_text = self._html_to_markdown(li, include_links, include_images).strip()
+                if li_text:
+                    items.append(f"{i}. {li_text}")
+            if items:
+                return "\n\n" + "\n".join(items) + "\n\n"
+            return ""
+
+        elif tag_name == "li":
+            # Just return the content, parent handles formatting
+            return children_text
+
+        elif tag_name == "table":
+            return self._table_to_markdown(element, include_links)
+
+        elif tag_name in ["div", "section", "article", "main", "span"]:
+            return children_text
+
+        elif tag_name == "figure":
+            return f"\n\n{children_text}\n\n"
+
+        elif tag_name == "figcaption":
+            text = element.get_text(strip=True)
+            return f"*{text}*" if text else ""
+
+        else:
+            # Default: just return children's content
+            return children_text
+
+    def _table_to_markdown(self, table: "Tag", include_links: bool = True) -> str:
+        """Convert HTML table to Markdown."""
+        rows = []
+
+        # Get all rows
+        for tr in table.find_all("tr"):
+            cells = []
+            for cell in tr.find_all(["th", "td"]):
+                cell_text = self._html_to_markdown(cell, include_links, False)
+                # Clean up cell text
+                cell_text = cell_text.replace("\n", " ").strip()
+                cells.append(cell_text if cell_text else " ")
+
+            if cells:
+                rows.append(cells)
+
+        if not rows:
+            return ""
+
+        # Build markdown table
+        md_lines = []
+
+        # First row as header
+        if rows:
+            header = rows[0]
+            md_lines.append("| " + " | ".join(header) + " |")
+            md_lines.append("| " + " | ".join(["---"] * len(header)) + " |")
+
+            # Remaining rows
+            for row in rows[1:]:
+                # Pad row if needed
+                while len(row) < len(header):
+                    row.append(" ")
+                md_lines.append("| " + " | ".join(row[:len(header)]) + " |")
+
+        return "\n\n" + "\n".join(md_lines) + "\n\n"

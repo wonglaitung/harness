@@ -16,7 +16,16 @@ from harness import (
     ConfirmationResult,
 )
 from harness.core import ConfirmationHook, get_trust_key
-from harness.tools.builtins import BashTool, GlobTool, GrepTool, ReadTool, WriteTool
+from harness.tools.builtins import (
+    BashTool,
+    GlobTool,
+    GrepTool,
+    ReadTool,
+    WriteTool,
+    WebSearchTool,
+    WebFetchTool,
+    WebToMarkdownTool,
+)
 
 from harness_client.controllers.session_manager import SessionManager
 from harness_client.utils.settings import get_config_dir
@@ -180,6 +189,9 @@ class ChatController:
             GlobTool(),
             GrepTool(),
             BashTool(),
+            WebSearchTool(),
+            WebFetchTool(),
+            WebToMarkdownTool(),
         ]
 
         # Add MCP tools if provided

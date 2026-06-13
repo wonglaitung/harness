@@ -29,6 +29,9 @@ from harness import (
     GlobTool,
     GrepTool,
     BashTool,
+    WebSearchTool,
+    WebFetchTool,
+    WebToMarkdownTool,
 )
 
 from harness_cloud.agent.config import AgentConfig
@@ -96,6 +99,9 @@ class SDKBridge:
             GlobTool(),
             GrepTool(),
             BashTool(),
+            WebSearchTool(),
+            WebFetchTool(),
+            WebToMarkdownTool(),
         ]
 
         return AgentHarness(config=config, tools=tools)
