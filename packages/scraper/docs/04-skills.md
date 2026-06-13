@@ -102,6 +102,152 @@ AI 行业情报抽取技能。
 - 发布时间：...
 ```
 
+### hk-stocks-alpha.md
+
+港股 Alpha 事件捕获技能。
+
+**用途**：监控港股异动、捕捉市场事件、生成投资分析报告。
+
+**数据源**：
+
+| 工具 | 数据源 | 用途 |
+|------|--------|------|
+| `fetch_hkex` | AkShare (东方财富) | 港股实时行情、异动监控 |
+| `fetch_financial_news` | 财联社 + yfinance | 财经快讯、美国国债收益率 |
+
+**判断标准**：
+
+| 类型 | 描述 | 示例 |
+|------|------|------|
+| **Type A** | 公司事件 | 回购、减持、并购、业绩惊喜 |
+| **Type B** | 行业/宏观 | 政策变化、监管动态、利率变动 |
+| **Type C** | 技术/情绪 | 异常成交量、突破关键技术位 |
+
+**噪音过滤**：
+
+- 常规分红公告
+- 小额回购（< 1 亿港元）
+- 分析师评级（滞后指标）
+- 常规产品更新
+
+**工作流程**：
+
+1. 使用 `fetch_hkex` 获取异动股票（volume_threshold=50M, pct_threshold=3%）
+2. 使用 `fetch_financial_news` 获取财经快讯（keywords=["港股", "监管", "政策"]）
+3. 使用 `fetch_financial_news source=macro` 获取美国国债收益率
+4. 结合技术面和消息面，识别 Alpha 事件
+5. 使用 `save_one_pager domain="stocks"` 保存分析报告
+
+**输出模板**：
+
+```markdown
+# [公司/事件]
+
+## 事件概述 (What)
+简述发生了什么事件。
+
+## 市场影响 (Why)
+分析事件对股价/行业的潜在影响。
+
+## 数据支撑
+- 股价变化：+5.2%
+- 成交额：125M 港元（较平日 +300%）
+- 换手率：0.45%
+- 时间窗口：2026-06-13
+
+## 消息面
+- 相关新闻：[链接]
+- 宏观背景：美联储利率、美债收益率
+
+## 风险提示
+- 潜在风险 1
+- 潜在风险 2
+
+## 核心线索
+- 来源：东方财富、财联社
+- 时间：2026-06-13 14:30
+- 相关标的：00700.HK, 03690.HK
+```
+
+**使用示例**：
+
+```bash
+# 创建技能文件
+mkdir -p ~/.harness/skills
+cat > ~/.harness/skills/hk-stocks-alpha.md << 'EOF'
+# HK Stocks Alpha Event Capture
+
+Monitor HK stock market for alpha events: major moves, corporate actions, policy changes.
+
+## Data Sources
+
+- `fetch_hkex`: HK stock real-time quotes via AkShare
+- `fetch_financial_news`: Cailian news + US Treasury yields
+
+## Judgment Criteria
+
+### Type A: Company Events
+- Buybacks > 100M HKD
+- Insider trading disclosures
+- M&A announcements
+- Earnings surprises > 5%
+
+### Type B: Sector/Macro
+- Policy changes (regulatory, tax)
+- Interest rate decisions
+- Industry rotation signals
+
+### Type C: Technical/Sentiment
+- Volume spike > 3x average
+- Price break key levels
+- Unusual options activity
+
+## Noise Filter
+
+- Routine dividends
+- Small buybacks (< 100M HKD)
+- Analyst ratings (lagging indicator)
+
+## Workflow
+
+1. fetch_hkex (volume_threshold=50M, pct_threshold=3)
+2. fetch_financial_news (keywords=["港股", "监管"])
+3. fetch_financial_news (source="macro")
+4. Synthesize findings
+5. save_one_pager (domain="stocks")
+
+## Output Template
+
+# [Company/Event]
+
+## Event Overview (What)
+...
+
+## Market Impact (Why)
+...
+
+## Data Support
+- Price change: ...
+- Volume: ...
+- Time: ...
+
+## News Context
+- Related news: ...
+- Macro backdrop: ...
+
+## Risk Warning
+...
+
+## Key Clues
+- Source: ...
+- Time: ...
+- Related tickers: ...
+EOF
+
+# 运行
+harness-scraper --skill hk-stocks-alpha
+```
+
 ### stock-analysis.md
 
 股票市场分析技能。

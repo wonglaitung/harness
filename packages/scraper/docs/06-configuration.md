@@ -218,13 +218,57 @@ output:
 ```
 ~/.harness/scraper/
 ├── 2026-06-13/           # 按日期分目录
-│   ├── project1.md
-│   ├── project2.md
-│   └── ...
+│   ├── ai/               # AI 情报 (domain="ai")
+│   │   ├── mcp.md
+│   │   └── autoresearch.md
+│   └── stocks/           # 股票分析 (domain="stocks")
+│       ├── 00700.md
+│       └── macro.md
 ├── 2026-06-14/
 │   └── ...
 └── MEMORY.md             # 已处理项目记录
 ```
+
+### 领域分类
+
+使用 `save_one_pager` 时可指定 `domain` 参数：
+
+| domain | 子目录 | 用途 |
+|--------|--------|------|
+| `ai` | `ai/` | AI 情报一页纸 |
+| `stocks` | `stocks/` | 股票分析报告 |
+| 不指定 | 根目录 | 通用内容 |
+
+## 依赖配置
+
+### 金融数据依赖
+
+使用港股和财经工具需要安装额外依赖：
+
+```bash
+# 在 scraper 目录安装
+cd packages/scraper
+uv sync
+
+# 或手动安装
+pip install akshare>=1.12.0 yfinance>=0.2.0 pandas>=2.0.0
+```
+
+| 包 | 版本 | 用途 | 数据源 |
+|---|------|------|--------|
+| `akshare` | >=1.12.0 | 港股行情、财经新闻 | 东方财富 |
+| `yfinance` | >=0.2.0 | 美国国债收益率 | Yahoo Finance |
+| `pandas` | >=2.0.0 | 数据处理 | - |
+
+**数据源稳定性**：
+
+| 数据源 | API | 稳定性 | 维护方 |
+|-------|-----|--------|-------|
+| 东方财富 | `ak.stock_hk_spot_em()` | 高 | 开源社区 |
+| 东方财富港股新闻 | `ak.stock_news_em(symbol="港股")` | 高 | 开源社区 |
+| Yahoo Finance | `yf.Ticker("^TNX")` | 高 | 开源社区 |
+
+**推荐使用 AkShare**：社区维护，API 稳定，无需处理反爬虫。
 
 ## 环境变量
 

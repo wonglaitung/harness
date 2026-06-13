@@ -9,6 +9,8 @@ from harness.tools.base import Tool, ToolContext
 from harness.types import ToolResult
 ```
 
+### AI 情报工具
+
 | 工具 | 名称 | 数据源 | 用途 |
 |------|------|--------|------|
 | FetchRSSTool | `fetch_rss` | RSS Feed | 抓取 RSS 文章 |
@@ -16,7 +18,19 @@ from harness.types import ToolResult
 | FetchShowHNTool | `fetch_show_hn` | Hacker News API | 早期项目 (>50) |
 | FetchGitHubTrendingTool | `fetch_github_trending` | GitHub Trending | 热门开源项目 |
 | FetchURLTool | `fetch_url` | GitHub/Jina Reader | 深度抓取 README |
-| SaveOnePagerTool | `save_one_pager` | 文件系统 | 保存 Markdown |
+
+### 金融/股票工具
+
+| 工具 | 名称 | 数据源 | 用途 |
+|------|------|--------|------|
+| FetchHKEXTool | `fetch_hkex` | AkShare (东方财富) | 港股实时行情、异动监控 |
+| FetchFinancialNewsTool | `fetch_financial_news` | AkShare + yfinance | 财经快讯、美国国债收益率 |
+
+### 输出工具
+
+| 工具 | 名称 | 数据源 | 用途 |
+|------|------|--------|------|
+| SaveOnePagerTool | `save_one_pager` | 文件系统 | 保存 Markdown One-Pager |
 
 ## 工具设计模式
 
@@ -316,7 +330,7 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 
 ### 用途
 
-保存情报一页纸到文件系统。
+保存情报一页纸到文件系统，支持按领域分类存储。
 
 ### 输入 Schema
 
@@ -326,7 +340,8 @@ def convert_to_raw_readme_url(github_url: str) -> str:
   "properties": {
     "title": {"type": "string", "description": "Project/tool name"},
     "content": {"type": "string", "description": "One-Pager content in Markdown"},
-    "filename": {"type": "string", "description": "Output filename (optional)"}
+    "filename": {"type": "string", "description": "Output filename (optional)"},
+    "domain": {"type": "string", "description": "Domain subdirectory: 'ai' or 'stocks' (optional)"}
   },
   "required": ["title", "content"]
 }
@@ -336,7 +351,7 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 
 ```json
 {
-  "content": "One-Pager saved: ~/.harness/scraper/2026-06-13/project-name.md"
+  "content": "One-Pager saved: ~/.harness/scraper/2026-06-13/stocks/project-name.md"
 }
 ```
 
@@ -349,9 +364,12 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     title = arguments["title"]
     content = arguments["content"]
     filename = arguments.get("filename", sanitize_filename(title))
+    domain = arguments.get("domain")  # "ai" 或 "stocks"
 
-    # 按日期分目录
+    # 按日期分目录，可选按领域分子目录
     date_dir = OUTPUT_DIR / datetime.now().strftime("%Y-%m-%d")
+    if domain:
+        date_dir = date_dir / domain  # ai/ 或 stocks/
     date_dir.mkdir(parents=True, exist_ok=True)
 
     # 写入文件
@@ -366,6 +384,177 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
         metadata={"path": str(file_path)}
     )
 ```
+
+### 目录结构
+
+```
+~/.harness/scraper/
+├── 2026-06-13/
+│   ├── ai/              # AI 情报
+│   │   ├── mcp.md
+│   │   └── autoresearch.md
+│   └── stocks/          # 股票分析
+│       │   ├── 00700.md
+│       │   └── macro.md
+├── 2026-06-14/
+│   └── ...
+└── MEMORY.md
+```
+
+## FetchHKEXTool
+
+### 用途
+
+抓取港股实时行情数据，监控异动个股（高成交量、大幅涨跌）。使用 AkShare 稳定 API（东方财富数据源）。
+
+### 输入 Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "volume_threshold": {"type": "integer", "description": "最低成交额 (港元，默认 50000000 = 50M)"},
+    "pct_threshold": {"type": "number", "description": "最低涨跌幅 % (默认 3.0)"},
+    "limit": {"type": "integer", "description": "返回数量上限 (默认 20)"},
+    "focus_codes": {"type": "array", "items": {"type": "string"}, "description": "关注特定股票代码"}
+  },
+  "required": []
+}
+```
+
+### 输出格式
+
+```markdown
+## 港股异动监控
+
+### 📈 腾讯控股 (00700.HK)
+- 最新价: 380.50 港元
+- 涨跌幅: **+5.23%**
+- 成交额: 125.3 百万港元
+- 换手率: 0.45%
+- 股吧: https://guba.eastmoney.com/list,hk00700.html
+
+### 📉 美团-W (03690.HK)
+- 最新价: 120.80 港元
+- 涨跌幅: **-4.12%**
+- 成交额: 89.2 百万港元
+- 换手率: 0.32%
+- 股吧: https://guba.eastmoney.com/list,hk03690.html
+
+**共 5 只个股发生显著异动，请结合宏观消息面分析。**
+```
+
+### 实现要点
+
+```python
+import akshare as ak
+
+async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+    volume_threshold = arguments.get("volume_threshold", 50_000_000)
+    pct_threshold = arguments.get("pct_threshold", 3.0)
+    limit = arguments.get("limit", 20)
+    focus_codes = arguments.get("focus_codes", [])
+
+    # 在线程池中运行同步的 AkShare API
+    loop = asyncio.get_running_loop()
+    df = await loop.run_in_executor(None, ak.stock_hk_spot_em)
+
+    # 过滤：成交额 > threshold 且涨跌幅 > pct_threshold
+    df = df[df['成交额'] >= volume_threshold]
+    df = df[df['涨跌幅'].abs() >= pct_threshold]
+
+    # 按成交额排序
+    df = df.sort_values('成交额', ascending=False).head(limit)
+
+    return ToolResult_success(content=format_stocks(df))
+```
+
+### 数据源说明
+
+| 数据源 | API | 稳定性 | 维护方 |
+|-------|-----|--------|-------|
+| 东方财富 | `ak.stock_hk_spot_em()` | 高 | 开源社区 |
+| 港交所官网 | 网页抓取 | 低（反爬） | 已弃用 |
+
+**推荐使用 AkShare**：社区维护，API 稳定，无需处理反爬。
+
+## FetchFinancialNewsTool
+
+### 用途
+
+抓取实时财经快讯（财联社、华尔街见闻）和美国宏观数据（国债收益率）。用于港股 Alpha 事件捕获。
+
+### 输入 Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "source": {"type": "string", "enum": ["cailian", "macro", "all"], "description": "数据源"},
+    "keywords": {"type": "array", "items": {"type": "string"}, "description": "关键词过滤"},
+    "limit": {"type": "integer", "description": "每源返回上限 (默认 30)"}
+  },
+  "required": []
+}
+```
+
+### 输出格式
+
+```markdown
+## 金融快讯 (cailian)
+
+### 港交所推科创板简化上市流程
+- 来源: 东方财富-财联社
+- 时间: 2026-06-13 14:30
+- 链接: https://finance.eastmoney.com/xxx
+- 内容: 港交所宣布将简化上市流程，预计三季度实施...
+
+### 美国国债收益率监控
+- 来源: US_Macro
+- 级别: MACRO
+- 时间: 2026-06-13
+- 内容:
+  10年期国债收益率 (^TNX): 4.25%
+  2年期国债收益率 (^IRX): 4.50%
+  收益率曲线: 倒挂
+```
+
+### 实现要点
+
+```python
+import akshare as ak
+import yfinance as yf
+
+async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+    source = arguments.get("source", "cailian")
+    keywords = arguments.get("keywords", [])
+    limit = arguments.get("limit", 30)
+
+    loop = asyncio.get_running_loop()
+
+    # 财联社快讯 (东方财富港股新闻)
+    if source in ["cailian", "all"]:
+        df = await loop.run_in_executor(None, lambda: ak.stock_news_em(symbol="港股"))
+        news_items = filter_news(df, keywords, limit)
+
+    # 美国国债收益率
+    if source in ["macro", "all"]:
+        tnx = yf.Ticker("^TNX")
+        irx = yf.Ticker("^IRX")
+        rates = {
+            'tnx': tnx.history(period="1d")['Close'].iloc[-1],
+            'irx': irx.history(period="1d")['Close'].iloc[-1],
+        }
+
+    return ToolResult_success(content=format_news(news_items, rates))
+```
+
+### 数据源说明
+
+| 数据源 | API | 内容 | 稳定性 |
+|-------|-----|------|--------|
+| 东方财富港股新闻 | `ak.stock_news_em(symbol="港股")` | 港股相关新闻 | 高 |
+| Yahoo Finance | `yf.Ticker("^TNX")` | 美国国债收益率 | 高 |
 
 ## 工具输出格式规范
 
@@ -471,12 +660,37 @@ class FetchRedditTool(Tool):
 from .fetch_reddit import FetchRedditTool
 
 __all__ = [
+    # AI 情报工具
     "FetchRSSTool",
     "FetchHNTool",
     "FetchShowHNTool",
     "FetchGitHubTrendingTool",
     "FetchURLTool",
+    # 金融/股票工具
+    "FetchHKEXTool",
+    "FetchFinancialNewsTool",
+    # 输出工具
     "SaveOnePagerTool",
+    # 自定义工具
     "FetchRedditTool",  # 新增
 ]
 ```
+
+## 依赖说明
+
+### 金融工具依赖
+
+港股和财经工具需要以下依赖：
+
+```bash
+# 安装金融数据依赖
+pip install akshare>=1.12.0 yfinance>=0.2.0 pandas>=2.0.0
+```
+
+| 包 | 用途 | 数据源 |
+|---|------|--------|
+| `akshare` | 港股行情、财经新闻 | 东方财富 |
+| `yfinance` | 美国国债收益率 | Yahoo Finance |
+| `pandas` | 数据处理 | - |
+
+**注意**：AkShare 使用东方财富数据源，由开源社区维护，API 稳定性高。
