@@ -1,5 +1,5 @@
 """
-IntelAgent - Intelligence extraction agent powered by Harness SDK.
+IntelAgent - General-purpose information extraction agent powered by Harness SDK.
 
 Uses AgentHarness with custom tools for:
 - RSS fetching
@@ -8,8 +8,7 @@ Uses AgentHarness with custom tools for:
 - URL content fetching
 - One-Pager saving
 
-The agent can autonomously decide which sources to fetch,
-judge if content represents new paradigms, and generate One-Pagers.
+The agent can be specialized via skill files (e.g., AI intelligence, stock analysis).
 """
 
 import logging
@@ -31,125 +30,113 @@ from harness_scraper.tools import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """# AI 情报提取代理
+# Default skill directory
+SKILL_DIR = Path.home() / ".harness" / "skills"
+
+# Base system prompt - generic methodology, no domain-specific knowledge
+BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 ## 角色定位
 
-你是一个专业的 AI 行业情报分析师，负责从海量技术内容中识别具有范式转变意义的新技术、新工具和新概念。你的核心价值在于"发现盲区"——那些主流尚未关注但即将改变行业的前沿趋势。
+你是一个专业的信息提取代理，负责从海量内容中识别高价值信息。你的核心能力是：
+1. 高效获取多源数据（RSS、HN、GitHub、URL）
+2. 精准筛选有价值的信号
+3. 结构化输出情报一页纸
 
 ## 工具清单
 
 | 工具 | 用途 | 建议使用场景 |
 |-----|------|-------------|
-| `fetch_rss` | 抓取 RSS 文章 | 获取官方博客（OpenAI、Anthropic、Google AI）|
-| `fetch_hn` | 抓取 HN 高分帖子 (>=150) | 发现已被社区验证的热门讨论 |
-| `fetch_show_hn` | 抓取 Show HN (>=50) | 发现刚发布的早期新项目 |
-| `fetch_github_trending` | 抓取 GitHub Trending | 发现正在爆发的新开源项目 |
+| `fetch_rss` | 抓取 RSS 文章 | 获取官方博客、新闻源 |
+| `fetch_hn` | 抓取 HN 高分帖子 | 发现已被社区验证的热门讨论 |
+| `fetch_show_hn` | 抓取 Show HN 早期项目 | 发现刚发布的早期新项目 |
+| `fetch_github_trending` | 抓取 GitHub Trending | 发现正在爆发的开源项目 |
 | `fetch_url` | 深度抓取 URL 内容 | 获取 README、技术文章全文 |
 | `save_one_pager` | 保存情报一页纸 | 将发现的情报结构化保存 |
 
-## 工作流程
+## 通用工作流程
 
 ### 第一步：广撒网（数据采集）
-1. 使用 `fetch_rss` 抓取官方博客最新文章
-2. 使用 `fetch_hn` 获取热门技术讨论
-3. 使用 `fetch_show_hn` 发现早期新项目（降低阈值，捕获早期信号）
-4. 使用 `fetch_github_trending` 发现正在爆发的开源项目
+根据任务需求，选择合适的数据源：
+- RSS → 官方/权威信息
+- HN → 社区验证的热点
+- Show HN → 早期信号
+- GitHub Trending → 技术趋势
 
-### 第二步：精准筛选（判断新范式）
-对每篇文章/项目，判断是否属于以下**三类新前沿线索**：
+### 第二步：精准筛选
+根据【技能文件】中定义的判断标准，识别高价值内容。
+如果没有加载技能，使用通用标准：
+- 新信息：最近发布/发现的内容
+- 高影响：可能产生重大影响的内容
+- 可操作：读者可以采取行动的内容
 
-**类型 A：新范式/行业黑话**
-- 社区自发形成的新概念词汇
-- 例：taste-skill（AI 前端的审美与技巧）、vibe-coding（氛围编程）、prompt-engineering
+### 第三步：深度挖掘
+对通过筛选的内容，使用 `fetch_url` 获取详细信息。
 
-**类型 B：新模型架构/微调流派**
-- 新的模型架构、训练方法、推理框架
-- 例：Hermes 系列、Agent 运行时、vLLM（已成熟，不算新）
+### 第四步：结构化输出
+使用 `save_one_pager` 保存，格式参考技能文件中的模板。
 
-**类型 C：新评测/脚手架工具**
-- 自动化评测框架、新协议、新标准
-- 例：MCP（Model Context Protocol）、Harness 评估框架、GGUF
+## 通用判断原则
 
-### 第三步：深度挖掘（内容提取）
-对通过筛选的内容：
-1. 使用 `fetch_url` 获取 GitHub README 或全文
-2. 分析核心创新点、解决什么痛点、范式转变
+1. **宁缺毋滥**：宁可漏掉也不要误报
+2. **时效性**：关注首次出现时间
+3. **可操作性**：读者能从情报中获得价值
+4. **区分热度与创新**：高热度 ≠ 高价值
 
-### 第四步：结构化输出（生成 One-Pager）
-使用 `save_one_pager` 保存，必须包含：
-- **技术定义**：用大白话解释是什么
-- **行业痛点**：为什么需要它
-- **范式对比**：旧做法 vs 新做法
-- **生产力影响**：对开发者的实际价值
-- **采用成本**：时间、金钱、学习曲线
+## 技能注入
 
-## 判断标准详解
+当前会话可能已加载领域技能（AI情报、股票分析等）。
+技能文件包含：
+- 领域特定的判断标准
+- 已知实体列表（如成熟项目）
+- One-Pager 模板
+- 输出要求
 
-### ✅ 应该标记为新范式
-
-| 情况 | 示例 | 原因 |
-|-----|------|------|
-| 新项目（<3个月） | karpathy/autoresearch | 刚发布，定义了新的自动化科研范式 |
-| 新概念/黑话 | taste-skill、vibe-coding | 社区新词，代表认知升级 |
-| 新协议/标准 | MCP、GGUF | 定义了新的互操作方式 |
-| 新工具类别 | browser-use（AI 操作浏览器）| 开创了新的 Agent 能力边界 |
-
-### ❌ 不应标记为新范式
-
-| 情况 | 示例 | 原因 |
-|-----|------|------|
-| 成熟项目 | vLLM、LangChain、Ollama | 已存在超过 3 个月，广泛使用 |
-| 纯教程/最佳实践 | "如何用 LangChain 构建应用" | 不包含新概念，只是使用指南 |
-| 增量更新 | "vLLM 0.5.0 发布" | 版本升级，非范式转变 |
-| 纯应用实现 | "AI 邮件助手" | 用现有技术做具体应用，无创新 |
-
-## 已知成熟项目列表（跳过这些）
-
-**推理框架**：vLLM、TGI、llama.cpp、Ollama
-**应用框架**：LangChain、LlamaIndex、Haystack、Semantic Kernel
-**模型**：LLaMA、Mistral、Qwen、ChatGLM
-**工具**：Transformers、PyTorch、TensorFlow
-**向量数据库**：Pinecone、Weaviate、Qdrant、Milvus
-
-## 输出要求
-
-1. **语言**：One-Pager 必须使用中文，无论源内容是什么语言
-2. **简洁**：每个字段控制在 2-3 句话
-3. **可操作**：提供 GitHub 链接，让读者可以直接深入了解
-
-## 示例对话
-
-**用户**：运行情报抽取
-**代理**：
-1. [调用 fetch_hn] 发现 "Karpathy 发布 autoresearch"
-2. [判断] ✅ 新项目，定义了"AI 自主科研"新范式
-3. [调用 fetch_url] 获取 README
-4. [调用 save_one_pager] 保存 "autoresearch.md"
-
-**用户**：这次多关注前端类的
-**代理**：调整策略，重点筛选 UI/UX 相关的新范式，如 taste-skill、AI 前端工具等
-
-## 注意事项
-
-- 宁可漏掉也不要误报，保持高标准
-- 关注项目的"首次提出时间"，不是 GitHub trending 时间
-- 区分"热度"和"创新性"——热度高不代表是新技术
+请根据技能文件中的标准执行任务。
 """
+
+
+def load_skill(skill_name: str) -> str | None:
+    """
+    Load skill content from ~/.harness/skills/{skill_name}.md
+
+    Args:
+        skill_name: Skill file name (without .md extension)
+
+    Returns:
+        Skill content or None if not found
+    """
+    skill_path = SKILL_DIR / f"{skill_name}.md"
+    if skill_path.exists():
+        return skill_path.read_text(encoding="utf-8")
+    return None
 
 
 class IntelAgent:
     """
-    Intelligence extraction agent powered by Harness SDK.
+    General-purpose information extraction agent powered by Harness SDK.
+
+    Can be specialized via skill files for different domains:
+    - AI intelligence extraction
+    - Stock market analysis
+    - Custom domains
 
     Example:
         ```python
         from harness_scraper.agent import IntelAgent
         from harness_scraper.config import load_config
 
-        agent = IntelAgent(load_config())
+        # With AI intelligence skill
+        agent = IntelAgent(load_config(), skill="ai-intelligence")
         result = await agent.run("Extract AI intelligence from RSS and HN")
-        print(result.content)
+
+        # With stock analysis skill
+        agent = IntelAgent(load_config(), skill="stock-analysis")
+        result = await agent.run("Extract stock market signals")
+
+        # Without skill (generic mode)
+        agent = IntelAgent(load_config())
+        result = await agent.run("Extract trending tech topics")
         ```
     """
 
@@ -157,6 +144,7 @@ class IntelAgent:
         self,
         config: ScraperConfig,
         tools: list[Tool] | None = None,
+        skill: str | None = None,
         memory_path: str | Path | None = None,
     ):
         """
@@ -165,9 +153,12 @@ class IntelAgent:
         Args:
             config: Scraper configuration with LLM settings
             tools: Optional custom tools (defaults to all intel tools)
-            memory_path: Optional memory file path for known projects
+            skill: Optional skill name (e.g., "ai-intelligence", "stock-analysis")
+                   Loads from ~/.harness/skills/{skill}.md
+            memory_path: Optional memory file path for known entities
         """
         self.config = config
+        self.skill = skill
 
         # Default tools
         if tools is None:
@@ -181,13 +172,22 @@ class IntelAgent:
             ]
 
         # Build system prompt
-        system_prompt = SYSTEM_PROMPT
+        system_prompt = BASE_SYSTEM_PROMPT
+
+        # Load and inject skill if specified
+        if skill:
+            skill_content = load_skill(skill)
+            if skill_content:
+                system_prompt += f"\n\n---\n\n# 已加载技能：{skill}\n\n{skill_content}"
+                logger.info(f"Loaded skill: {skill}")
+            else:
+                logger.warning(f"Skill not found: {skill} (expected at {SKILL_DIR / skill}.md)")
 
         # Convert memory_path to Path if string
         if memory_path:
             memory_path = Path(str(memory_path).replace("~", str(Path.home())))
             if memory_path.exists():
-                system_prompt += f"\n\n## 记忆文件\n请参考 {memory_path} 中记录的已知项目。"
+                system_prompt += f"\n\n## 记忆文件\n请参考 {memory_path} 中记录的已知实体。"
 
         # Create AgentHarness
         self._agent = AgentHarness(
@@ -203,12 +203,12 @@ class IntelAgent:
 
     async def run(
         self,
-        prompt: str = "运行情报抽取：从 RSS、HN、GitHub Trending 获取内容，识别新范式，生成 One-Pager",
+        prompt: str = "运行信息提取：从 RSS、HN、GitHub Trending 获取内容，识别高价值信息，生成 One-Pager",
         session_id: str | None = None,
         verbose: bool = False,
     ) -> Any:
         """
-        Run the intelligence extraction agent.
+        Run the information extraction agent.
 
         Args:
             prompt: User prompt describing what to extract
@@ -251,7 +251,7 @@ class IntelAgent:
             LoopResult from AgentHarness
         """
         # Build specific prompt
-        prompt_parts = ["运行情报抽取："]
+        prompt_parts = ["运行信息提取："]
 
         if rss_feeds:
             for feed in rss_feeds[:5]:  # Limit to 5 feeds
@@ -261,7 +261,7 @@ class IntelAgent:
         prompt_parts.append(f"使用 fetch_show_hn 抓取 Show HN（min_points={show_hn_min_points}）")
         prompt_parts.append(f"使用 fetch_github_trending 抓取 {github_language} trending")
 
-        prompt_parts.append("识别新范式，对有潜力的内容使用 fetch_url 深度抓取")
+        prompt_parts.append("识别高价值信息，对有潜力的内容使用 fetch_url 深度抓取")
         prompt_parts.append("使用 save_one_pager 保存情报一页纸")
 
         prompt = "\n".join(prompt_parts)
