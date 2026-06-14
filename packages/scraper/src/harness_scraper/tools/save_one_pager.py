@@ -16,7 +16,9 @@ from harness.types import ToolResult
 logger = logging.getLogger(__name__)
 
 # Default output directory: packages/scraper/output/
-DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
+# save_one_pager.py is in packages/scraper/src/harness_scraper/tools/
+# Need to go up 4 levels: tools -> harness_scraper -> src -> scraper -> output
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
 
 
 class SaveOnePagerTool(Tool):
