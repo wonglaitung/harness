@@ -28,7 +28,6 @@ from harness_scraper.tools import (
     FetchGitHubTrendingTool,
     FetchURLTool,
     SaveOnePagerTool,
-    UpdateMemoryTool,
     FetchHKEXTool,
     FetchFinancialNewsTool,
 )
@@ -72,8 +71,7 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 | 工具 | 用途 | 参数说明 |
 |-----|------|---------|
-| `save_one_pager` | 保存情报一页纸 | domain="ai" 或 domain="stocks" |
-| `update_memory` | 记录已处理项目 | items=[{name, category, source_url}] |
+| `save_one_pager` | 保存情报一页纸（自动记录到 MEMORY.md） | domain="ai" 或 domain="stocks" |
 
 ## 通用工作流程
 
@@ -102,11 +100,7 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 - AI 情报：domain="ai"
 - 股票分析：domain="stocks"
 
-### 第五步：记录记忆
-使用 `update_memory` 记录已处理的项目，避免下次重复提取：
-```
-update_memory(items=[{name: "项目名", category: "新范式/工具", source_url: "https://..."}])
-```
+保存后会自动记录到 MEMORY.md，下次运行时会参考已处理项目避免重复。
 
 ## 通用判断原则
 
@@ -207,7 +201,6 @@ class IntelAgent:
                 FetchGitHubTrendingTool(),
                 FetchURLTool(),
                 SaveOnePagerTool(),
-                UpdateMemoryTool(),
                 FetchHKEXTool(),
                 FetchFinancialNewsTool(),
             ]
@@ -227,8 +220,6 @@ class IntelAgent:
         # Convert memory_path to Path if string
         if memory_path:
             memory_path = Path(str(memory_path).replace("~", str(Path.home())))
-            if memory_path.exists():
-                system_prompt += f"\n\n## 记忆文件\n请参考 {memory_path} 中记录的已知实体。"
 
         # Create AgentHarness
         self._agent = AgentHarness(

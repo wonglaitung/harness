@@ -2,6 +2,7 @@
 SaveOnePagerTool - SDK Tool for saving One-Pager Markdown files.
 
 Generates and saves intelligence One-Pagers to the output directory.
+Automatically updates MEMORY.md to track processed items.
 """
 
 import logging
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # save_one_pager.py is in packages/scraper/src/harness_scraper/tools/
 # Need to go up 4 levels: tools -> harness_scraper -> src -> scraper -> output
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+MEMORY_PATH = DEFAULT_OUTPUT_DIR / "MEMORY.md"
 
 
 class SaveOnePagerTool(Tool):
@@ -149,6 +151,9 @@ class SaveOnePagerTool(Tool):
 
             logger.info(f"Saved One-Pager (simple): {filepath}")
 
+            # Update MEMORY.md
+            self._update_memory(title, domain, arguments.get("source_url", ""))
+
             return ToolResult(
                 tool_call_id="",
                 success=True,
@@ -207,6 +212,9 @@ class SaveOnePagerTool(Tool):
                 f.write(markdown)
 
             logger.info(f"Saved One-Pager (structured): {filepath}")
+
+            # Update MEMORY.md
+            self._update_memory(concept_name, domain, source_url or github_url)
 
             return ToolResult(
                 tool_call_id="",
@@ -271,3 +279,116 @@ class SaveOnePagerTool(Tool):
 - 来源：{source_url}
 - 发布时间：{date_str}
 """
+
+    def _update_memory(self, name: str, domain: str, source_url: str) -> None:
+        """
+        Update MEMORY.md with the saved item.
+
+        Args:
+            name: Item name (title or concept_name)
+            domain: "ai" or "stocks"
+            source_url: Source URL
+        """
+        try:
+            # Determine category based on domain
+            if domain == "stocks":
+                category = "港股分析"
+            else:
+                category = "新范式/工具"
+
+            # Load or create MEMORY.md
+            MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+            if MEMORY_PATH.exists():
+                content = MEMORY_PATH.read_text(encoding="utf-8")
+            else:
+                content = self._create_initial_memory()
+
+            # Add entry
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            content = self._add_memory_entry(content, name, category, source_url, date_str)
+
+            # Write back
+            MEMORY_PATH.write_text(content, encoding="utf-8")
+            logger.debug(f"Updated MEMORY.md with: {name}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update MEMORY.md: {e}")
+
+    def _create_initial_memory(self) -> str:
+        """Create initial MEMORY.md content."""
+        return """# 已提取的情报项目
+
+记录已处理的 AI 项目和港股分析，避免重复抓取。
+
+## 注意事项
+
+- 成熟项目（vLLM、LangChain、Ollama 等）已通过技能文件排除
+- 新范式项目优先级：概念 > 架构 > 工具
+- 定期审查，移除已成熟的项目
+
+"""
+
+    def _add_memory_entry(self, content: str, name: str, category: str, source_url: str, date_str: str) -> str:
+        """Add an entry to MEMORY.md content."""
+        date_header = f"## {date_str} 提取"
+
+        # Check if date section exists
+        if date_header not in content:
+            # Add new date section before 注意事项
+            if "## 注意事项" in content:
+                content = content.replace("## 注意事项", f"{date_header}\n\n## 注意事项")
+            else:
+                content = content.rstrip() + f"\n\n{date_header}\n"
+
+        # Build entry line
+        if source_url:
+            entry_line = f"- **{name}** - {source_url}"
+        else:
+            entry_line = f"- **{name}**"
+
+        # Check if entry already exists
+        if entry_line in content:
+            return content
+
+        # Find the date section and add entry
+        lines = content.split("\n")
+        result_lines = []
+        in_date_section = False
+        in_category_section = False
+        category_header = f"### {category}"
+        inserted = False
+
+        for i, line in enumerate(lines):
+            result_lines.append(line)
+
+            if line.strip() == date_header:
+                in_date_section = True
+            elif in_date_section and line.strip().startswith("## "):
+                # End of date section
+                if not inserted:
+                    # Add category and entry
+                    result_lines.append(f"\n{category_header}")
+                    result_lines.append(entry_line)
+                    inserted = True
+                in_date_section = False
+            elif in_date_section and line.strip() == category_header:
+                in_category_section = True
+            elif in_category_section and line.strip().startswith("### "):
+                # End of category section
+                if not inserted:
+                    result_lines.append(entry_line)
+                    inserted = True
+                in_category_section = False
+
+        # If not inserted, add at the end of date section
+        if not inserted:
+            # Find position after date header
+            for i, line in enumerate(result_lines):
+                if line.strip() == date_header:
+                    # Insert category and entry after date header
+                    result_lines.insert(i + 1, f"\n{category_header}")
+                    result_lines.insert(i + 2, entry_line)
+                    break
+
+        return "\n".join(result_lines)
