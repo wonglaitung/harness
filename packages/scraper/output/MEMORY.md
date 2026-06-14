@@ -40,7 +40,12 @@
 - **Holo3.1** - https://huggingface.co/blog/Hcompany/holo31
 - **HelixDB** - https://github.com/HelixDB/helix-db
 
+## 2026-06-15 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **Mellum2** - https://huggingface.co/blog/JetBrains/mellum2-launch
 
 ### 港股分析
 - **立讯精密H股上市 - IPO事件跟踪**
