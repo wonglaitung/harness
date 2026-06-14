@@ -330,11 +330,16 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 
 ### 用途
 
-保存情报一页纸到文件系统，支持按领域分类存储。
+保存情报一页纸到文件系统，支持按领域分类存储。**自动更新 MEMORY.md 记录已处理项目**。
 
 **双模式支持**：
 - **Simple mode**：直接保存 title + content（适用于股票分析、自定义报告）
 - **Structured mode**：使用 AI 情报字段生成标准 One-Pager
+
+**自动记忆管理**：
+- 保存后自动记录到 MEMORY.md
+- 超过 30 天的条目自动归档到 `archive/MEMORY-YYYY-MM.md`
+- SDK 下次运行时加载 MEMORY.md 避免重复提取
 
 ### 输入 Schema
 
@@ -361,14 +366,14 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 ```
 
 **重要**：`domain` 参数决定输出目录：
-- `domain="ai"` → `~/.harness/scraper/YYYY-MM-DD/ai/`（AI 情报）
-- `domain="stocks"` → `~/.harness/scraper/YYYY-MM-DD/stocks/`（港股分析）
+- `domain="ai"` → `packages/scraper/output/YYYY-MM-DD/ai/`（AI 情报）
+- `domain="stocks"` → `packages/scraper/output/YYYY-MM-DD/stocks/`（港股分析）
 
 ### 输出格式
 
 ```json
 {
-  "content": "One-Pager saved to: ~/.harness/scraper/2026-06-13/stocks/00700.md\n\nPreview:\n# 腾讯控股..."
+  "content": "One-Pager saved to: packages/scraper/output/2026-06-13/stocks/00700.md\n\nPreview:\n# 腾讯控股..."
 }
 ```
 
@@ -403,7 +408,9 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 ### 实现要点
 
 ```python
-OUTPUT_DIR = Path.home() / ".harness" / "scraper"
+# 输出目录：packages/scraper/output/
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+MEMORY_PATH = OUTPUT_DIR / "MEMORY.md"
 
 async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     domain = arguments.get("domain", "ai")
@@ -420,6 +427,7 @@ async def _execute_simple(self, arguments: dict, domain: str) -> ToolResult:
     title = arguments["title"]
     content = arguments["content"]
     filename = arguments.get("filename", sanitize_filename(title))
+    source_url = arguments.get("source_url", "")
 
     # 按日期 + 领域分目录
     date_dir = OUTPUT_DIR / datetime.now().strftime("%Y-%m-%d") / domain
@@ -428,24 +436,42 @@ async def _execute_simple(self, arguments: dict, domain: str) -> ToolResult:
     file_path = date_dir / f"{filename}.md"
     file_path.write_text(content, encoding="utf-8")
 
+    # 自动更新 MEMORY.md
+    self._update_memory(title, domain, source_url)
+
     return ToolResult_success(content=f"One-Pager saved to: {file_path}")
+
+def _update_memory(self, name: str, domain: str, source_url: str) -> None:
+    """自动更新 MEMORY.md，记录已处理项目"""
+    # 加载或创建 MEMORY.md
+    # 添加条目到当天的记录
+    # 自动归档超过 30 天的条目
+    pass
 ```
 
 ### 目录结构
 
 ```
-~/.harness/scraper/
+packages/scraper/output/
+├── MEMORY.md                    # 已处理项目记录（最近 30 天）
+├── archive/
+│   ├── MEMORY-2026-05.md        # 月度归档
+│   └── MEMORY-2026-04.md
 ├── 2026-06-13/
-│   ├── ai/              # AI 情报
+│   ├── ai/                      # AI 情报
 │   │   ├── mcp.md
 │   │   └── autoresearch.md
-│   └── stocks/          # 股票分析
-│       │   ├── 00700.md
-│       │   └── macro.md
+│   └── stocks/                  # 股票分析
+│       ├── 00700.md
+│       └── macro.md
 ├── 2026-06-14/
 │   └── ...
-└── MEMORY.md
 ```
+
+**自动归档机制**：
+- MEMORY.md 只保留最近 30 天的记录
+- 超过 30 天的条目自动移至 `archive/MEMORY-YYYY-MM.md`
+- 保持 MEMORY.md 文件大小可控，便于快速加载
 
 ## FetchHKEXTool
 

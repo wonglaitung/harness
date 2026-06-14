@@ -51,7 +51,7 @@
 │  │  └──────────────────────────────────────────────────────┘  │ │
 │  │                              ↓                              │ │
 │  │  ┌──────────────────────────────────────────────────────┐  │ │
-│  │  │                   Skill (~/.harness/skills/)          │  │ │
+│  │  │                   Skill (packages/scraper/skills/)          │  │ │
 │  │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐               │  │ │
 │  │  │  │ai-intel │  │ stock   │  │ custom  │               │  │ │
 │  │  │  │ ligence │  │ analysis│  │         │               │  │ │
@@ -61,8 +61,8 @@
 │         ↓                              ↓                         │
 │  ┌─────────────────┐          ┌─────────────────┐               │
 │  │  LLM PROVIDERS  │          │  OUTPUT         │               │
-│  │  OpenAI/DeepSeek│          │  ~/.harness/    │               │
-│  │  vLLM/Ollama    │          │  scraper/       │               │
+│  │  OpenAI/DeepSeek│          │ packages/scraper│               │
+│  │  vLLM/Ollama    │          │ /output/        │               │
 │  └─────────────────┘          └─────────────────┘               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -87,15 +87,16 @@
 │  ┌─────────────────────────────────────────────┐   │
 │  │              AgentHarness (SDK)              │   │
 │  │  - System Prompt: BASE + Skill              │   │
-│  │  - Tools: 6 intel tools                     │   │
-│  │  - Memory: MEMORY.md                        │   │
+│  │  - Tools: 8 intel + financial tools         │   │
+│  │  - Memory: MEMORY.md (auto-managed)         │   │
 │  └─────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
                              │
                              ↓
                     ┌─────────────────┐
                     │   One-Pagers    │
-                    │   Output Files  │
+                    │   + MEMORY.md   │
+                    │   (auto-update) │
                     └─────────────────┘
 ```
 
@@ -158,7 +159,7 @@ vLLM, LangChain, Ollama, LLaMA, Mistral...
 
 ### 记忆系统
 
-MEMORY.md 记录已处理内容：
+MEMORY.md 记录已处理内容，**由 SaveOnePagerTool 自动维护**：
 
 ```markdown
 # 已提取的情报项目
@@ -171,7 +172,10 @@ MEMORY.md 记录已处理内容：
 ...
 ```
 
-Agent 自动参考 MEMORY.md，避免重复抓取。
+**自动管理机制**：
+- 每次保存 One-Pager 时自动更新 MEMORY.md
+- 超过 30 天的条目自动归档到 `archive/MEMORY-YYYY-MM.md`
+- SDK 加载 MEMORY.md 注入系统提示，避免重复提取
 
 ## 数据流
 
@@ -231,7 +235,18 @@ packages/scraper/
 │       ├── fetch_hn.py      # FetchHNTool + FetchShowHNTool
 │       ├── fetch_github_trending.py
 │       ├── fetch_url.py
-│       └── save_one_pager.py
+│       ├── save_one_pager.py  # 自动更新 MEMORY.md
+│       ├── fetch_hkex.py      # 港股异动监控
+│       └── fetch_financial_news.py  # 财经快讯
+├── skills/                  # 技能文件（版本管理）
+│   ├── ai-intelligence.md
+│   └── hk-stocks-alpha.md
+├── output/                  # 输出目录（版本管理）
+│   ├── MEMORY.md            # 已处理项目（最近 30 天）
+│   ├── archive/             # 月度归档
+│   └── YYYY-MM-DD/          # 日期目录
+│       ├── ai/              # AI 情报
+│       └── stocks/          # 股票分析
 ├── docs/
 │   ├── README.md            # 文档索引
 │   ├── 01-overview.md       # 本文件
@@ -240,7 +255,6 @@ packages/scraper/
 │   ├── 04-skills.md         # 技能系统
 │   ├── 05-cli.md            # CLI 使用
 │   └── 06-configuration.md  # 配置说明
-│   └── plan.md              # 原始设计计划（已实现的方案 A）
 ├── pyproject.toml
 └── README.md
 ```

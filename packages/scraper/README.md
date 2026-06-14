@@ -111,7 +111,7 @@ uv run harness-scraper --skill my-custom
 
 ### AI 情报
 
-`~/.harness/scraper/2026-06-13/ai/mcp.md`:
+`packages/scraper/output/2026-06-13/ai/mcp.md`:
 
 ```markdown
 # Model Context Protocol
@@ -132,7 +132,7 @@ MCP 是一个开放协议，用于标准化大模型与外部数据源的通信�
 
 ### 股票分析
 
-`~/.harness/scraper/2026-06-13/stocks/00700.md`:
+`packages/scraper/output/2026-06-13/stocks/00700.md`:
 
 ```markdown
 # 腾讯控股 (00700.HK) - 回购公告
@@ -160,17 +160,26 @@ MCP 是一个开放协议，用于标准化大模型与外部数据源的通信�
 ## 目录结构
 
 ```
-~/.harness/scraper/
+packages/scraper/output/
+├── MEMORY.md                    # 已处理项目（最近 30 天）
+├── archive/
+│   ├── MEMORY-2026-05.md        # 月度归档
+│   └── MEMORY-2026-04.md
 ├── 2026-06-13/
-│   ├── ai/              # AI 情报
+│   ├── ai/                      # AI 情报
 │   │   ├── mcp.md
 │   │   └── autoresearch.md
-│   └── stocks/          # 股票分析
+│   └── stocks/                  # 股票分析
 │       ├── 00700.md
 │       └── macro.md
 ├── 2026-06-14/
-└── MEMORY.md            # 已处理项目记录
+│   └── ...
 ```
+
+**MEMORY.md 自动管理**：
+- 每次保存 One-Pager 时自动记录
+- 超过 30 天自动归档
+- SDK 加载后避免重复提取
 
 ## 架构
 
@@ -204,6 +213,7 @@ MCP 是一个开放协议，用于标准化大模型与外部数据源的通信�
 on:
   schedule:
     - cron: '0 22 * * *'  # 每天 06:00 HKT
+    - cron: '0 4 * * *'   # 每天 12:00 HKT
   workflow_dispatch:       # 手动触发
 ```
 

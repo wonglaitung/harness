@@ -215,24 +215,35 @@ sources:
 
 ```yaml
 output:
-  directory: "~/.harness/scraper"
+  directory: ""  # 默认使用 packages/scraper/output/
 ```
+
+**注意**：默认输出目录已改为 `packages/scraper/output/`（项目内），便于版本管理。如需自定义，可在配置文件中设置。
 
 ### 目录结构
 
 ```
-~/.harness/scraper/
-├── 2026-06-13/           # 按日期分目录
-│   ├── ai/               # AI 情报 (domain="ai")
+packages/scraper/output/
+├── MEMORY.md                    # 已处理项目记录（最近 30 天）
+├── archive/
+│   ├── MEMORY-2026-05.md        # 月度归档
+│   └── MEMORY-2026-04.md
+├── 2026-06-13/                  # 按日期分目录
+│   ├── ai/                      # AI 情报 (domain="ai")
 │   │   ├── mcp.md
 │   │   └── autoresearch.md
-│   └── stocks/           # 股票分析 (domain="stocks")
+│   └── stocks/                  # 股票分析 (domain="stocks")
 │       ├── 00700.md
 │       └── macro.md
 ├── 2026-06-14/
 │   └── ...
-└── MEMORY.md             # 已处理项目记录
 ```
+
+### MEMORY.md 自动管理
+
+- **自动记录**：每次保存 One-Pager 时自动更新 MEMORY.md
+- **自动归档**：超过 30 天的条目移至 `archive/MEMORY-YYYY-MM.md`
+- **避免重复**：SDK 加载 MEMORY.md 避免重复提取相同内容
 
 ### 领域分类
 
@@ -455,6 +466,6 @@ on:
 
 ```bash
 # 本地查看生成的文件
-ls ~/.harness/scraper/$(date +%Y-%m-%d)/ai/
-ls ~/.harness/scraper/$(date +%Y-%m-%d)/stocks/
+ls packages/scraper/output/$(date +%Y-%m-%d)/ai/
+ls packages/scraper/output/$(date +%Y-%m-%d)/stocks/
 ```
