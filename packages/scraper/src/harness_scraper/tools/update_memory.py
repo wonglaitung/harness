@@ -2,10 +2,15 @@
 UpdateMemoryTool - SDK Tool for updating MEMORY.md with processed items.
 
 Records processed projects/articles to avoid duplicate extraction.
+
+Features:
+- Auto-archiving: entries older than 30 days are moved to archive/
+- Rolling window: MEMORY.md only keeps recent entries for fast loading
 """
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -14,12 +19,23 @@ from harness.types import ToolResult
 
 logger = logging.getLogger(__name__)
 
-# Default memory file path: packages/scraper/output/MEMORY.md
-DEFAULT_MEMORY_PATH = Path(__file__).parent.parent.parent.parent / "output" / "MEMORY.md"
+# Default paths
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
+DEFAULT_MEMORY_PATH = DEFAULT_OUTPUT_DIR / "MEMORY.md"
+ARCHIVE_DIR = DEFAULT_OUTPUT_DIR / "archive"
+
+# Keep last N days in MEMORY.md
+RETENTION_DAYS = 30
 
 
 class UpdateMemoryTool(Tool):
-    """Update MEMORY.md with processed items to avoid duplicate extraction."""
+    """Update MEMORY.md with processed items to avoid duplicate extraction.
+
+    Features:
+    - Records processed items with date, category, and source URL
+    - Auto-archives entries older than 30 days to archive/MEMORY-YYYY-MM.md
+    - Keeps MEMORY.md small for fast loading
+    """
 
     @property
     def name(self) -> str:
@@ -92,6 +108,9 @@ class UpdateMemoryTool(Tool):
 
             # Add new items
             content = self._add_items(content, items, date_str)
+
+            # Auto-archive old entries
+            content = self._archive_old_entries(content)
 
             # Write back
             memory_path.write_text(content, encoding="utf-8")
@@ -175,3 +194,125 @@ class UpdateMemoryTool(Tool):
                 inserted = True
 
         return "\n".join(result_lines)
+
+    def _archive_old_entries(self, content: str) -> str:
+        """
+        Archive entries older than RETENTION_DAYS to archive/MEMORY-YYYY-MM.md.
+
+        Args:
+            content: Current MEMORY.md content
+
+        Returns:
+            Content with old entries removed (archived to separate files)
+        """
+        cutoff_date = datetime.now() - timedelta(days=RETENTION_DAYS)
+
+        # Find all date sections
+        date_pattern = re.compile(r'^## (\d{4}-\d{2}-\d{2}) 提取$')
+        lines = content.split('\n')
+
+        # Parse sections
+        sections: dict[str, list[str]] = {}  # date -> lines
+        header_lines: list[str] = []  # Lines before first date section
+        footer_lines: list[str] = []  # Lines after last date section (注意事项 etc.)
+        current_date: str | None = None
+        current_lines: list[str] = []
+        in_footer = False
+
+        for line in lines:
+            match = date_pattern.match(line.strip())
+            if match:
+                # Save previous section
+                if current_date:
+                    sections[current_date] = current_lines
+                elif current_lines:
+                    header_lines = current_lines
+                current_date = match.group(1)
+                current_lines = [line]
+                in_footer = False
+            elif current_date is None:
+                # Before any date section
+                current_lines.append(line)
+            elif line.strip().startswith('## 注意事项') or line.strip().startswith('## '):
+                # New section that's not a date = footer
+                in_footer = True
+                footer_lines.append(line)
+            elif in_footer:
+                footer_lines.append(line)
+            else:
+                current_lines.append(line)
+
+        # Save last section
+        if current_date:
+            sections[current_date] = current_lines
+        elif current_lines and not sections:
+            header_lines = current_lines
+
+        # Separate old and recent entries
+        old_dates: list[str] = []
+        recent_dates: list[str] = []
+
+        for date_str in sections.keys():
+            try:
+                entry_date = datetime.strptime(date_str, "%Y-%m-%d")
+                if entry_date < cutoff_date:
+                    old_dates.append(date_str)
+                else:
+                    recent_dates.append(date_str)
+            except ValueError:
+                # Invalid date format, keep it
+                recent_dates.append(date_str)
+
+        # Archive old entries by month
+        if old_dates:
+            archive_dir = DEFAULT_OUTPUT_DIR / "archive"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+
+            # Group by month
+            monthly_entries: dict[str, list[str]] = {}
+            for date_str in old_dates:
+                month_key = date_str[:7]  # YYYY-MM
+                if month_key not in monthly_entries:
+                    monthly_entries[month_key] = []
+                monthly_entries[month_key].extend(sections[date_str])
+
+            # Write archive files
+            for month_key, entry_lines in monthly_entries.items():
+                archive_path = archive_dir / f"MEMORY-{month_key}.md"
+
+                # Read existing archive content
+                if archive_path.exists():
+                    existing = archive_path.read_text(encoding="utf-8")
+                    # Merge: add new entries after header
+                    if existing.strip():
+                        # Find insertion point (after header, before existing content)
+                        existing_lines = existing.split('\n')
+                        insert_idx = 0
+                        for i, l in enumerate(existing_lines):
+                            if l.strip().startswith('## '):
+                                insert_idx = i
+                                break
+                        merged = existing_lines[:insert_idx] + entry_lines + existing_lines[insert_idx:]
+                        archive_content = '\n'.join(merged)
+                    else:
+                        archive_content = '\n'.join(entry_lines)
+                else:
+                    archive_content = f"# 已提取的情报项目 - {month_key} 归档\n\n" + '\n'.join(entry_lines)
+
+                archive_path.write_text(archive_content, encoding="utf-8")
+                logger.info(f"Archived {len(entry_lines)} lines to {archive_path}")
+
+        # Build new content with only recent entries
+        result_lines = header_lines.copy()
+
+        # Sort recent dates (newest first)
+        recent_dates.sort(reverse=True)
+        for date_str in recent_dates:
+            if date_str in sections:
+                result_lines.extend(sections[date_str])
+
+        # Add footer
+        if footer_lines:
+            result_lines.extend(footer_lines)
+
+        return '\n'.join(result_lines)
