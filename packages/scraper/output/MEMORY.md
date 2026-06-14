@@ -34,11 +34,19 @@
 - **Claw Patrol** - https://github.com/denoland/clawpatrol
 
 ### 数据库/基础设施
+- **DeepSeek-V4** - https://huggingface.co/blog/deepseekv4
+- **obsidian-wiki** - https://github.com/Ar9av/obsidian-wiki
 - **GPT-Rosalind** - https://openai.com/index/introducing-new-capabilities-to-gpt-rosalind
 - **Holo3.1** - https://huggingface.co/blog/Hcompany/holo31
 - **HelixDB** - https://github.com/HelixDB/helix-db
 
 ## 注意事项
+
+### 港股分析
+- **立讯精密H股上市 - IPO事件跟踪**
+
+### 港股分析
+- **港股半导体板块 - 板块联动异动**
 
 ### 港股分析
 - **港股互联网指数 - 估值洼地左侧信号**

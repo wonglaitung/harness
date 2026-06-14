@@ -1,20 +1,20 @@
-# Obsidian Wiki
+# obsidian-wiki
 
 ## 技术定义 (What)
-基于 Andrej Karpathy LLM Wiki 模式的 AI Agent 数字大脑框架，让 Agent 将知识编译成互联的 Markdown 文件并持续更新，避免重复询问相同问题。
+基于 Karpathy LLM Wiki 模式的 AI Agent 数字大脑框架，让 Agent 自动构建和维护 Obsidian 知识库。通过 Markdown 文件作为技能定义，支持 Claude Code、Cursor、Codex、Gemini CLI 等所有主流 AI 编码 Agent。
 
 ## 行业痛点 (Why)
-每次遇到相同问题都需重新解释上下文，或依赖 RAG 检索（成本高、延迟大）。Agent 无法积累个人知识，每次对话从零开始。
+重复向 LLM 提问相同问题，或为相同上下文反复运行 RAG，浪费 token 和时间。知识散落在聊天记录、文档、代码注释中，缺乏结构化管理和自动更新机制。
 
 ## 旧范式 vs 新范式
-- **旧做法**：每次对话重新提供上下文，或使用向量数据库做 RAG（embedding 成本 + 检索延迟）。知识分散在多个工具，无法形成个人知识图谱。
-- **新做法**：Agent 直接读写 Obsidian vault（Markdown 文件），支持 PDF/JSONL/图片/聊天记录等多格式输入，自动提取概念、实体、关系，构建双向链接的知识网络。一次编译、持续更新、即时查询。
+- **旧做法**：1）每次提问都重新检索和生成；2）使用传统笔记工具手动整理知识；3）依赖外部 RAG 系统管理知识，缺乏与 Agent 工作流的深度集成。
+- **新做法**：让 Agent 自动从代码、文档、对话中提取知识，编译成互联的 Markdown 文件（数字大脑）。Agent 通过读取这些文件快速获取上下文，避免重复计算。支持增量更新和跨会话持久化。
 
 ## 生产力影响 (How)
-开发者可用自然语言向 Agent "投喂"知识，Agent 自动整理成可检索的数字大脑。支持 Claude Code、Cursor、Codex、Gemini 等 15+ 主流 Agent，技能跨平台复用。
+将知识管理从手动整理转变为 Agent 驱动的自动化流程。一次编译、多次复用，显著降低重复提问的 token 成本。Obsidian 可视化让知识图谱可审计、可导航，适合长期项目知识积累。
 
 ## 采用成本
-pip install 即用，需指定 Obsidian vault 路径。setup.sh 自动为所有 Agent 安装技能。学习曲线平缓，核心是"告诉 Agent 记住什么"。
+安装简单（pip install 或 npx skills add），配置 Obsidian vault 路径即可。学习成本中等，需要理解 wiki-ingest、wiki-query 等 Agent 指令。适合已有 Obsidian 使用习惯的开发者。
 
 ## 核心线索
 - GitHub：https://github.com/Ar9av/obsidian-wiki
