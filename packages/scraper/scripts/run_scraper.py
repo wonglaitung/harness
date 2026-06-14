@@ -22,7 +22,7 @@ from harness_scraper.config import load_config
 from harness_scraper.agent import IntelAgent
 
 # Default output directory for One-Pagers
-DEFAULT_OUTPUT_DIR = Path.home() / ".harness" / "scraper"
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 
 def setup_logging(verbose: bool = False):

@@ -2,7 +2,7 @@
 """
 Send daily intelligence emails.
 
-Collects One-Pagers from ~/.harness/scraper/YYYY-MM-DD/ai/ and stocks/
+Collects One-Pagers from packages/scraper/output/YYYY-MM-DD/ai/ and stocks/
 and sends two separate emails:
 1. AI Intelligence Daily
 2. HK Stocks Alpha Daily
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 # Default output directory for One-Pagers
-DEFAULT_OUTPUT_DIR = Path.home() / ".harness" / "scraper"
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 # HTML email style
 HTML_STYLE = """

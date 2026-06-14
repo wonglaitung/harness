@@ -79,8 +79,9 @@ def _build_source_config(yaml_sources: dict) -> SourceConfig:
 
 def _build_output_config(yaml_output: dict) -> OutputConfig:
     """Build output config from YAML"""
+    default_dir = str(Path(__file__).parent.parent.parent / "output")
     return OutputConfig(
-        directory=yaml_output.get("directory", "~/.harness/scraper"),
+        directory=yaml_output.get("directory", default_dir),
     )
 
 
@@ -133,7 +134,7 @@ sources:
 
 # Output
 output:
-  directory: "~/.harness/scraper"
+  directory: ""  # 默认使用 packages/scraper/output/，可自定义
 """
 
     config_path = DEFAULT_CONFIG_PATH

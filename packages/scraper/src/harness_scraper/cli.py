@@ -19,10 +19,10 @@ import sys
 from pathlib import Path
 
 from harness_scraper.config import load_config, create_default_config_file
-from harness_scraper.agent import IntelAgent, SKILL_DIR
+from harness_scraper.agent import IntelAgent, REPO_SKILL_DIR
 
 # Default output directory for One-Pagers
-DEFAULT_OUTPUT_DIR = Path.home() / ".harness" / "scraper"
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
 
 
 def setup_logging(verbose: bool = False):
@@ -110,10 +110,10 @@ def cmd_config(args):
 
 def cmd_skills(args):
     """List available skills"""
-    skill_dir = SKILL_DIR
+    skill_dir = REPO_SKILL_DIR
     if not skill_dir.exists():
         print(f"Skill directory not found: {skill_dir}")
-        print("Create skill files in ~/.harness/skills/ directory.")
+        print(f"Create skill files in {skill_dir} directory.")
         return
 
     skill_files = list(skill_dir.glob("*.md"))
@@ -121,7 +121,7 @@ def cmd_skills(args):
         print(f"No skill files found in {skill_dir}")
         print("\nExample skills:")
         print("  - ai-intelligence.md  # AI intelligence extraction")
-        print("  - stock-analysis.md   # Stock market analysis")
+        print("  - hk-stocks-alpha.md   # HK stock analysis")
         return
 
     print(f"Available skills in {skill_dir}:\n")

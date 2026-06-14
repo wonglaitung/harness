@@ -6,9 +6,16 @@ so we only need configuration models here.
 """
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+
+
+def _get_default_output_dir() -> str:
+    """Get default output directory relative to package."""
+    # models.py is in src/harness_scraper/, so go up 3 levels to packages/scraper/output
+    return str(Path(__file__).parent.parent.parent / "output")
 
 
 class LLMConfig(BaseModel):
@@ -60,7 +67,7 @@ class SourceConfig(BaseModel):
 class OutputConfig(BaseModel):
     """输出配置"""
 
-    directory: str = Field(description="One-Pager 输出目录", default="~/.harness/scraper")
+    directory: str = Field(description="One-Pager 输出目录", default_factory=_get_default_output_dir)
 
 
 class ScraperConfig(BaseModel):

@@ -15,6 +15,9 @@ from harness.types import ToolResult
 
 logger = logging.getLogger(__name__)
 
+# Default output directory: packages/scraper/output/
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
+
 
 class SaveOnePagerTool(Tool):
     """Save a One-Pager Markdown file with extracted intelligence."""
@@ -126,7 +129,7 @@ class SaveOnePagerTool(Tool):
 
         try:
             # Create output directory with domain subdirectory
-            output_path = Path("~/.harness/scraper").expanduser()
+            output_path = DEFAULT_OUTPUT_DIR
             date_dir = output_path / datetime.now().strftime("%Y-%m-%d") / domain
             date_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,7 +179,7 @@ class SaveOnePagerTool(Tool):
 
         try:
             # Create output directory with domain subdirectory
-            output_path = Path("~/.harness/scraper").expanduser()
+            output_path = DEFAULT_OUTPUT_DIR
             date_dir = output_path / datetime.now().strftime("%Y-%m-%d") / domain
             date_dir.mkdir(parents=True, exist_ok=True)
 

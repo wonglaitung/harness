@@ -17,6 +17,9 @@ on:
         required: false
         default: 'all'
 
+permissions:
+  contents: write
+
 jobs:
   scrape-and-send:
     runs-on: ubuntu-latest
@@ -73,5 +76,21 @@ jobs:
       run: |
         echo "=== Generated Files ==="
         date_str=$(date +%Y-%m-%d)
-        ls -la ~/.harness/scraper/$date_str/ai/ 2>/dev/null || echo "No AI files"
-        ls -la ~/.harness/scraper/$date_str/stocks/ 2>/dev/null || echo "No stocks files"
+        ls -la packages/scraper/output/$date_str/ai/ 2>/dev/null || echo "No AI files"
+        ls -la packages/scraper/output/$date_str/stocks/ 2>/dev/null || echo "No stocks files"
+
+    - name: Commit generated files and memory
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        # Add output directory (One-Pagers and MEMORY.md)
+        git add packages/scraper/output/
+
+        # Check if there are changes to commit
+        if ! git diff --staged --quiet; then
+          git commit -m "docs(scraper): Update daily intelligence reports [skip ci]"
+          git push || echo "No changes to push"
+        else
+          echo "No new files to commit"
+        fi

@@ -34,11 +34,9 @@ from harness_scraper.tools import (
 
 logger = logging.getLogger(__name__)
 
-# Default skill directories (in order of priority)
-# 1. Repo-local skills (for CI/CD) - inside packages/scraper/skills
-# 2. User skills directory
+# Skill directory: repo-local skills only
+# skills/ is at packages/scraper/skills/
 REPO_SKILL_DIR = Path(__file__).parent.parent.parent / "skills"
-SKILL_DIR = Path.home() / ".harness" / "skills"
 
 # Base system prompt - generic methodology, no domain-specific knowledge
 BASE_SYSTEM_PROMPT = """# 信息提取代理
@@ -128,7 +126,6 @@ def load_skill(skill_name: str) -> str | None:
 
     Priority:
     1. Repo-local skills (./skills/ in the repository)
-    2. User skills directory (~/.harness/skills/)
 
     Args:
         skill_name: Skill file name (without .md extension)
@@ -141,12 +138,6 @@ def load_skill(skill_name: str) -> str | None:
     if repo_skill_path.exists():
         logger.info(f"Loaded skill from repo: {repo_skill_path}")
         return repo_skill_path.read_text(encoding="utf-8")
-
-    # Try user skills directory
-    skill_path = SKILL_DIR / f"{skill_name}.md"
-    if skill_path.exists():
-        logger.info(f"Loaded skill from user dir: {skill_path}")
-        return skill_path.read_text(encoding="utf-8")
 
     return None
 
@@ -192,8 +183,8 @@ class IntelAgent:
         Args:
             config: Scraper configuration with LLM settings
             tools: Optional custom tools (defaults to all intel tools)
-            skill: Optional skill name (e.g., "ai-intelligence", "stock-analysis")
-                   Loads from ~/.harness/skills/{skill}.md
+            skill: Optional skill name (e.g., "ai-intelligence", "hk-stocks-alpha")
+                   Loads from packages/scraper/skills/{skill}.md
             memory_path: Optional memory file path for known entities
         """
         self.config = config
@@ -222,7 +213,7 @@ class IntelAgent:
                 system_prompt += f"\n\n---\n\n# 已加载技能：{skill}\n\n{skill_content}"
                 logger.info(f"Loaded skill: {skill}")
             else:
-                logger.warning(f"Skill not found: {skill} (checked {REPO_SKILL_DIR} and {SKILL_DIR})")
+                logger.warning(f"Skill not found: {skill} (checked {REPO_SKILL_DIR})")
 
         # Convert memory_path to Path if string
         if memory_path:
