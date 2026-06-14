@@ -28,6 +28,7 @@ from harness_scraper.tools import (
     FetchGitHubTrendingTool,
     FetchURLTool,
     SaveOnePagerTool,
+    UpdateMemoryTool,
     FetchHKEXTool,
     FetchFinancialNewsTool,
 )
@@ -72,6 +73,7 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 | 工具 | 用途 | 参数说明 |
 |-----|------|---------|
 | `save_one_pager` | 保存情报一页纸 | domain="ai" 或 domain="stocks" |
+| `update_memory` | 记录已处理项目 | items=[{name, category, source_url}] |
 
 ## 通用工作流程
 
@@ -99,6 +101,12 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 **重要**：保存时指定 domain 参数：
 - AI 情报：domain="ai"
 - 股票分析：domain="stocks"
+
+### 第五步：记录记忆
+使用 `update_memory` 记录已处理的项目，避免下次重复提取：
+```
+update_memory(items=[{name: "项目名", category: "新范式/工具", source_url: "https://..."}])
+```
 
 ## 通用判断原则
 
@@ -199,6 +207,7 @@ class IntelAgent:
                 FetchGitHubTrendingTool(),
                 FetchURLTool(),
                 SaveOnePagerTool(),
+                UpdateMemoryTool(),
                 FetchHKEXTool(),
                 FetchFinancialNewsTool(),
             ]

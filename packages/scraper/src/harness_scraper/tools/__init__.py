@@ -16,6 +16,7 @@ Stock/Financial Tools:
 
 Output Tools:
 - SaveOnePagerTool: Save intelligence One-Pager
+- UpdateMemoryTool: Record processed items to MEMORY.md
 """
 
 from harness_scraper.tools.fetch_rss import FetchRSSTool
@@ -23,6 +24,7 @@ from harness_scraper.tools.fetch_hn import FetchHNTool, FetchShowHNTool
 from harness_scraper.tools.fetch_github_trending import FetchGitHubTrendingTool
 from harness_scraper.tools.fetch_url import FetchURLTool
 from harness_scraper.tools.save_one_pager import SaveOnePagerTool
+from harness_scraper.tools.update_memory import UpdateMemoryTool
 
 # Stock/Financial Tools
 from harness_scraper.tools.fetch_hkex import FetchHKEXTool
@@ -36,6 +38,7 @@ __all__ = [
     "FetchGitHubTrendingTool",
     "FetchURLTool",
     "SaveOnePagerTool",
+    "UpdateMemoryTool",
     # Stock/Financial Tools
     "FetchHKEXTool",
     "FetchFinancialNewsTool",
