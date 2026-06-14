@@ -43,9 +43,12 @@ class SystemPromptSource:
                 logger.debug(f"Loaded system prompt from '{self.name}' ({self.file_path}): {len(content)} chars")
                 return content
             else:
-                logger.warning(f"System prompt file not found for '{self.name}': {self.file_path}")
+                # Use debug level for missing files (warning only for required files)
                 if self.required:
+                    logger.warning(f"Required system prompt file not found for '{self.name}': {self.file_path}")
                     raise FileNotFoundError(f"Required system prompt file not found: {self.file_path}")
+                else:
+                    logger.debug(f"System prompt file not found for '{self.name}': {self.file_path}")
                 return ""
 
         return ""
