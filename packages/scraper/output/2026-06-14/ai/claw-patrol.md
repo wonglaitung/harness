@@ -1,20 +1,20 @@
 # Claw Patrol
 
 ## 技术定义 (What)
-Deno 发布的 Agent 安全防火墙，位于 Agent 和生产环境之间，在协议层解析流量并按 HCL 规则进行访问控制。支持 SQL、Kubernetes、HTTP 等协议的细粒度权限管理。
+专为 AI Agent 设计的安全防火墙，基于 HCL 规则在网络层拦截危险操作，支持 Kubernetes、PostgreSQL、ClickHouse、HTTP 等协议，提供审批流程。
 
 ## 行业痛点 (Why)
-AI Agent 拥有生产环境访问权限后，可能执行破坏性操作（如删除数据库、暴露密钥），缺乏统一的安全控制层。
+Agent 在生产环境执行危险操作（如删除 Pod、修改数据库）缺乏防护，可能导致生产事故，企业不敢大规模部署 Agent。
 
 ## 旧范式 vs 新范式
-- **旧做法**：在 Agent 代码中硬编码安全限制，或依赖沙箱环境隔离，难以统一管理和审计跨协议访问。
-- **新做法**：独立的安全代理层，使用 HCL 声明式规则，支持"人类审批"模式（如 kubectl delete 需人工确认），在协议层拦截危险操作。
+- **旧做法**：依赖 Agent 自身的对齐机制或人工监督，无法在网络层拦截危险请求，存在安全盲区。
+- **新做法**：在网络层解析 Agent 流量，基于 CEL 表达式规则实时拦截危险操作，支持人工审批流程，提供审计日志。
 
 ## 生产力影响 (How)
-将 Agent 安全控制从"代码层面"提升到"基础设施层面"，统一管理所有 Agent 的生产环境访问权限，支持审计和人工审批流程。
+DevOps 团队可为 Agent 配置安全策略，阻止 kubectl delete pod、DROP TABLE 等危险操作，企业可安全部署 Agent 到生产环境。
 
 ## 采用成本
-单二进制文件，支持 Linux/macOS/Windows，配置学习成本低（HCL 语法），可渐进式部署（从单个 Agent 开始）。
+开源免费（MIT 许可证），Go 语言编写，提供三种部署模式：gateway、join、run，支持 WireGuard/Tailscale 隧道。
 
 ## 核心线索
 - GitHub：https://github.com/denoland/clawpatrol

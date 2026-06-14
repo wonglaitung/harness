@@ -34,9 +34,14 @@
 - **Claw Patrol** - https://github.com/denoland/clawpatrol
 
 ### 数据库/基础设施
+- **GPT-Rosalind** - https://openai.com/index/introducing-new-capabilities-to-gpt-rosalind
+- **Holo3.1** - https://huggingface.co/blog/Hcompany/holo31
 - **HelixDB** - https://github.com/HelixDB/helix-db
 
 ## 注意事项
+
+### 港股分析
+- **港股互联网指数 - 估值洼地左侧信号**
 
 - 成熟项目（vLLM、LangChain、Ollama 等）已通过技能文件排除
 - 新范式项目优先级：概念 > 架构 > 工具
