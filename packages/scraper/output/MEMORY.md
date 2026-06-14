@@ -4,6 +4,21 @@
 
 ## 2026-06-14 提取
 
+### 港股分析/估值跟踪
+- **港股互联网指数估值洼地** - http://finance.eastmoney.com/a/202606143770678496.html
+
+### 港股分析/板块联动
+- **港股半导体板块异动** - http://finance.eastmoney.com/a/202606123769325548.html
+
+### 新范式/协作工具
+- **Paca** - https://github.com/Paca-AI/paca
+
+### 新范式/评估工具
+- **olmo-eval** - https://github.com/allenai/olmo-eval
+
+### 新范式/协议层
+- **OpenEnv** - https://github.com/huggingface/OpenEnv
+
 ### 港股分析/板块联动
 - **港股半导体板块异动** - http://finance.eastmoney.com/a/202606123769325548.html
 
