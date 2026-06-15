@@ -4,6 +4,13 @@ node_modules/
 # Build output
 dist/
 
+# TypeScript build cache
+*.tsbuildinfo
+
+# Vite config compiled output
+vite.config.d.ts
+vite.config.js
+
 # IDE
 .vscode/
 .idea/
