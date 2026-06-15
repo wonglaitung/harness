@@ -45,6 +45,21 @@
 ## 注意事项
 
 ### 港股分析
+- **港股通资金流向 - 21亿净流入右侧确认**
+
+### 港股分析
+- **港股科技板块 - 半导体+AI双轮驱动**
+
+### 新范式/工具
+- **aisuite** - https://github.com/trending/python
+
+### 新范式/工具
+- **TencentDB-Agent-Memory** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Agent-Reach** - https://github.com/trending/python
+
+### 港股分析
 - **港股科技板块 - 估值重估右侧信号**
 - **2026-06-15 港股市场全景 - 多板块联动异动**
 - **智谱AI (02513.HK) - Anthropic退场国产替代** - http://finance.eastmoney.com/a/202606153771267791.html
