@@ -86,47 +86,97 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 ### load_skill 函数
 
+使用 SDK 的 `Skill.from_file()` 解析技能文件（含 frontmatter）：
+
 ```python
-def load_skill(skill_name: str) -> str | None:
-    """从 ~/.harness/skills/{skill_name}.md 加载技能"""
-    skill_path = SKILL_DIR / f"{skill_name}.md"
-    if skill_path.exists():
-        return skill_path.read_text(encoding="utf-8")
+from harness.skills.base import Skill
+
+def load_skill(skill_name: str) -> Skill | None:
+    """从 packages/scraper/skills/{skill_name}.md 加载技能"""
+    repo_skill_path = REPO_SKILL_DIR / f"{skill_name}.md"
+    if repo_skill_path.exists():
+        return Skill.from_file(repo_skill_path)  # 解析 YAML frontmatter
     return None
+```
+
+**返回 `Skill` 对象**：
+
+```python
+skill = load_skill("ai-intelligence")
+skill.name           # "ai-intelligence"
+skill.description    # "AI 行业情报提取..."
+skill.tools.allowed  # ["fetch_rss", "fetch_hn", ...]
+skill.content        # 技能 Markdown 内容
 ```
 
 ### 技能注入流程
 
 ```python
 def __init__(self, ..., skill: str | None = None):
-    system_prompt = BASE_SYSTEM_PROMPT
-
+    # 1. 加载技能
     if skill:
-        skill_content = load_skill(skill)
-        if skill_content:
-            system_prompt += f"\n\n---\n\n# 已加载技能：{skill}\n\n{skill_content}"
-            logger.info(f"Loaded skill: {skill}")
+        self._skill = load_skill(skill)
+        if not self._skill:
+            raise ValueError(f"Skill not found: {skill}")
+
+    # 2. 根据 skill.tools.allowed 自动选择工具
+    if tools is None:
+        if self._skill and self._skill.tools.allowed:
+            tools = get_tools_by_names(self._skill.tools.allowed)
         else:
-            logger.warning(f"Skill not found: {skill}")
+            tools = get_tools_by_names(["fetch_url"])  # 最小默认
+
+    # 3. 拼接 system prompt
+    system_prompt = BASE_SYSTEM_PROMPT
+    if self._skill:
+        system_prompt += f"\n\n---\n\n# 已加载技能：{self._skill.name}\n\n{self._skill.content}"
 ```
 
 ## 工具配置
 
-### 工具由 Skill 指定
+### 工具自动选择（推荐）
+
+skill 的 `tools.allowed` frontmatter 驱动工具选择：
 
 ```python
-# 必须传入 tools，skill 文件定义了工具清单
+# 只需指定 skill，工具自动选择
+agent = IntelAgent(config, skill="ai-intelligence")
+# 自动加载: fetch_rss, fetch_hn, fetch_show_hn, fetch_github_trending, fetch_url, save_one_pager
+
+agent = IntelAgent(config, skill="hk-stocks-alpha")
+# 自动加载: fetch_hkex, fetch_financial_news, fetch_url, save_one_pager
+```
+
+**skill 文件示例**：
+
+```markdown
+---
+name: ai-intelligence
+description: AI 行业情报提取
+tools:
+  allowed:
+    - fetch_rss
+    - fetch_hn
+    - fetch_show_hn
+    - fetch_github_trending
+    - fetch_url
+    - save_one_pager
+---
+
+# AI 情报提取技能
+...
+```
+
+### 自定义工具（可选）
+
+显式传入 `tools` 参数覆盖自动选择：
+
+```python
+# 只用 RSS 和 URL 工具
 agent = IntelAgent(
     config,
     skill="ai-intelligence",
-    tools=[
-        FetchRSSTool(),
-        FetchHNTool(),
-        FetchShowHNTool(),
-        FetchGitHubTrendingTool(),
-        FetchURLTool(),
-        SaveOnePagerTool(),
-    ],
+    tools=[FetchRSSTool(), FetchURLTool()],
 )
 ```
 
@@ -173,67 +223,33 @@ def clear_session(self, session_id: str) -> None:
 
 ## 使用示例
 
-### 基本使用
+### 基本使用（工具自动选择）
 
 ```python
 from harness_scraper import IntelAgent, load_config
-from harness_scraper.tools import (
-    FetchRSSTool, FetchHNTool, FetchShowHNTool,
-    FetchGitHubTrendingTool, FetchURLTool, SaveOnePagerTool,
-)
 
 # 加载配置
 config = load_config()
 
-# 创建 Agent（技能 + 工具）
-agent = IntelAgent(
-    config,
-    skill="ai-intelligence",
-    tools=[
-        FetchRSSTool(),
-        FetchHNTool(),
-        FetchShowHNTool(),
-        FetchGitHubTrendingTool(),
-        FetchURLTool(),
-        SaveOnePagerTool(),
-    ],
-)
+# 创建 Agent（工具根据 skill.tools.allowed 自动选择）
+agent = IntelAgent(config, skill="ai-intelligence")
 
 # 运行
 result = await agent.run("提取 AI 情报")
 print(result.content)
 ```
 
-### 自定义技能
+### 不同技能
 
 ```python
-# 股票分析
-agent = IntelAgent(
-    config,
-    skill="hk-stocks-alpha",
-    tools=[
-        FetchHKEXTool(),
-        FetchFinancialNewsTool(),
-        FetchURLTool(),
-        SaveOnePagerTool(),
-    ],
-)
-result = await agent.run("提取港股 alpha 信号")
+# AI 情报（自动选择 6 个工具）
+agent = IntelAgent(config, skill="ai-intelligence")
+
+# 港股 Alpha（自动选择 4 个工具）
+agent = IntelAgent(config, skill="hk-stocks-alpha")
 
 # 无技能（通用模式，只有 fetch_url）
 agent = IntelAgent(config)
-result = await agent.run("抓取某网页内容并总结")
-```
-
-### 自定义工具
-
-```python
-# 只用 RSS 和 URL 工具
-agent = IntelAgent(
-    config,
-    tools=[FetchRSSTool(), FetchURLTool(), SaveOnePagerTool()],
-    skill="ai-intelligence",
-)
 ```
 
 ### 多轮对话
@@ -266,6 +282,14 @@ result2 = await agent.run(
 | **可扩展** | 新领域只需 Skill 文件 |
 | **可维护** | 判断标准独立于代码 |
 | **用户定制** | 用户可创建自己的 Skill |
+
+### 为什么用 frontmatter 驱动工具选择？
+
+| 原因 | 说明 |
+|------|------|
+| **声明式** | 工具清单在 skill 文件中声明，无需改代码 |
+| **一致性** | skill 文件既是工具定义，也是工作流程 |
+| **新 skill 简单** | 创建 skill 文件即可，无需注册工具 |
 
 ### 为什么使用 SDK 的 AgentHarness？
 

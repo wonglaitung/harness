@@ -32,6 +32,45 @@ from harness.types import ToolResult
 |------|------|--------|------|
 | SaveOnePagerTool | `save_one_pager` | 文件系统 | 保存 Markdown One-Pager |
 
+## 工具注册表
+
+### ALL_TOOLS
+
+工具名称到工具类的映射：
+
+```python
+from harness_scraper.tools import ALL_TOOLS, get_tools_by_names
+
+# 查看所有可用工具
+print(ALL_TOOLS.keys())
+# ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending',
+#  'fetch_url', 'save_one_pager', 'update_memory', 'fetch_hkex', 'fetch_financial_news']
+```
+
+### get_tools_by_names()
+
+根据工具名称列表获取工具实例：
+
+```python
+from harness_scraper.tools import get_tools_by_names
+
+# 获取指定工具
+tools = get_tools_by_names(["fetch_rss", "fetch_hn", "save_one_pager"])
+# [FetchRSSTool(), FetchHNTool(), SaveOnePagerTool()]
+
+# 错误处理：工具不存在时抛出 ValueError
+tools = get_tools_by_names(["unknown_tool"])
+# ValueError: Unknown tools: ['unknown_tool']. Available: [...]
+```
+
+**用途**：skill 的 `tools.allowed` frontmatter 驱动工具选择：
+
+```python
+# IntelAgent 内部实现
+if self._skill and self._skill.tools.allowed:
+    tools = get_tools_by_names(self._skill.tools.allowed)
+```
+
 ## 工具设计模式
 
 ### 基本结构

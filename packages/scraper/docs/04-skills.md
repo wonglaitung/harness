@@ -32,17 +32,13 @@ packages/scraper/skills/
 ### 加载逻辑
 
 ```python
-def load_skill(skill_name: str) -> str | None:
-    # 1. 优先查找仓库内置技能（CI/CD 场景）
+from harness.skills.base import Skill
+
+def load_skill(skill_name: str) -> Skill | None:
+    """使用 SDK 的 Skill.from_file() 解析技能文件"""
     repo_skill_path = REPO_SKILL_DIR / f"{skill_name}.md"
     if repo_skill_path.exists():
-        return repo_skill_path.read_text()
-
-    # 2. 查找用户技能目录
-    skill_path = SKILL_DIR / f"{skill_name}.md"
-    if skill_path.exists():
-        return skill_path.read_text()
-
+        return Skill.from_file(repo_skill_path)  # 解析 frontmatter
     return None
 ```
 
@@ -51,6 +47,46 @@ def load_skill(skill_name: str) -> str | None:
 - 用户可以在 `~/.harness/skills/` 覆盖或自定义技能
 
 ## 技能文件格式
+
+### Frontmatter（工具声明）
+
+技能文件使用 YAML frontmatter 声明工具清单：
+
+```markdown
+---
+name: ai-intelligence
+description: AI 行业情报提取，识别范式级技术、工具和概念
+tools:
+  allowed:
+    - fetch_rss
+    - fetch_hn
+    - fetch_show_hn
+    - fetch_github_trending
+    - fetch_url
+    - save_one_pager
+---
+
+# AI 情报提取技能
+
+简短描述技能的作用。
+...
+```
+
+**Frontmatter 字段说明**：
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `name` | string | 是 | 技能唯一标识 |
+| `description` | string | 是 | 技能描述（LLM 可见） |
+| `tools.allowed` | string[] | 是 | 工具名称列表，IntelAgent 自动选择 |
+
+**工具自动选择**：
+
+```python
+# IntelAgent 根据 tools.allowed 自动选择工具
+agent = IntelAgent(config, skill="ai-intelligence")
+# 自动加载: fetch_rss, fetch_hn, fetch_show_hn, fetch_github_trending, fetch_url, save_one_pager
+```
 
 ### 基本结构
 
@@ -333,14 +369,25 @@ IntelAgent.__init__(skill="ai-intelligence")
 load_skill("ai-intelligence")
     │
     ↓
-读取 ~/.harness/skills/ai-intelligence.md
+Skill.from_file(path) 解析 frontmatter
+    │
+    ├─ skill.name = "ai-intelligence"
+    ├─ skill.description = "..."
+    └─ skill.tools.allowed = ["fetch_rss", "fetch_hn", ...]
     │
     ↓
-拼接到 BASE_SYSTEM_PROMPT
+get_tools_by_names(skill.tools.allowed)
     │
     ↓
-传给 AgentHarness
+[FetchRSSTool(), FetchHNTool(), ...]
+    │
+    ↓
+AgentHarness(tools=tools, system_prompt=prompt)
 ```
+
+**关键改进**：
+- 工具选择由 skill frontmatter 驱动，无需硬编码
+- 新增 skill 只需创建文件，无需改代码
 
 ## 创建自定义技能
 
