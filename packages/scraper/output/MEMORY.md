@@ -44,6 +44,21 @@
 
 ## 注意事项
 
+### 港股分析
+- **港股科技板块 - 估值重估右侧信号**
+
+### 新范式/工具
+- **OpenAI 收购 Ona - 持久化 Agent 云环境** - https://openai.com/index/openai-to-acquire-ona
+
+### 新范式/工具
+- **obsidian-wiki - AI Agent 驱动的数字大脑** - https://github.com/Ar9av/obsidian-wiki
+
+### 新范式/工具
+- **Dreaming Memory - ChatGPT 记忆合成架构** - https://openai.com/index/chatgpt-memory-dreaming
+
+### 新范式/工具
+- **SkillSpector - AI Agent 技能安全扫描器** - https://github.com/NVIDIA/SkillSpector
+
 ### 新范式/工具
 - **Mellum2** - https://huggingface.co/blog/JetBrains/mellum2-launch
 
