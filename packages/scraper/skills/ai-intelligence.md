@@ -6,6 +6,24 @@ Extract AI industry intelligence from web sources, identifying paradigm-shifting
 
 AI/ML industry: models, frameworks, tools, protocols, evaluation systems.
 
+## 工具清单
+
+### AI 情报工具
+
+| 工具 | 用途 | 建议使用场景 |
+|-----|------|-------------|
+| `fetch_rss` | 抓取 RSS 文章 | 获取官方博客、新闻源 |
+| `fetch_hn` | 抓取 HN 高分帖子 | 发现已被社区验证的热门讨论 |
+| `fetch_show_hn` | 抓取 Show HN 早期项目 | 发现刚发布的早期新项目 |
+| `fetch_github_trending` | 抓取 GitHub Trending | 发现正在爆发的开源项目 |
+| `fetch_url` | 深度抓取 URL 内容 | 获取 README、技术文章全文 |
+
+### 输出工具
+
+| 工具 | 用途 | 参数说明 |
+|-----|------|---------|
+| `save_one_pager` | 保存情报一页纸（自动记录到 MEMORY.md） | domain="ai"（默认） |
+
 ## Judgment Criteria
 
 ### Three Types of New Paradigms
