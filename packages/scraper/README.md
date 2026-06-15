@@ -19,9 +19,13 @@ AI 情报抽取系统 - 自动化抓取和分析 AI 行业趋势、港股市场�
 ## 快速开始
 
 ```bash
-# 安装
+# 安装（需要 openai 依赖）
 cd packages/scraper
-uv sync
+uv sync --extra openai
+
+# 或从项目根目录安装所有包
+cd /data/harness
+uv sync --all-packages --extra openai
 
 # 创建配置文件
 uv run harness-scraper config
