@@ -20,6 +20,13 @@ from pathlib import Path
 
 from harness_scraper.config import load_config, create_default_config_file
 from harness_scraper.agent import IntelAgent, REPO_SKILL_DIR
+from harness_scraper.tools import (
+    # AI intelligence tools
+    FetchRSSTool, FetchHNTool, FetchShowHNTool,
+    FetchGitHubTrendingTool, FetchURLTool, SaveOnePagerTool,
+    # Stock/financial tools
+    FetchHKEXTool, FetchFinancialNewsTool,
+)
 
 # Default output directory for One-Pagers
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
@@ -35,6 +42,29 @@ def setup_logging(verbose: bool = False):
     )
 
 
+def get_tools_for_skill(skill: str | None):
+    """Get appropriate tools for a skill"""
+    if skill == "ai-intelligence":
+        return [
+            FetchRSSTool(),
+            FetchHNTool(),
+            FetchShowHNTool(),
+            FetchGitHubTrendingTool(),
+            FetchURLTool(),
+            SaveOnePagerTool(),
+        ]
+    elif skill == "hk-stocks-alpha":
+        return [
+            FetchHKEXTool(),
+            FetchFinancialNewsTool(),
+            FetchURLTool(),
+            SaveOnePagerTool(),
+        ]
+    else:
+        # Default: minimal set
+        return [FetchURLTool()]
+
+
 def cmd_agent(args):
     """Run SDK agent (autonomous intelligence extraction)"""
     setup_logging(args.verbose)
@@ -46,7 +76,8 @@ def cmd_agent(args):
 
     agent = IntelAgent(
         config=config,
-        skill=args.skill,  # Will be None if not specified
+        skill=args.skill,
+        tools=get_tools_for_skill(args.skill),
         memory_path=output_dir / "MEMORY.md",
     )
 

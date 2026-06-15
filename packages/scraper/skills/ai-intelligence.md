@@ -1,10 +1,10 @@
-# AI Intelligence Extraction Skill
+# AI 情报提取技能
 
-Extract AI industry intelligence from web sources, identifying paradigm-shifting technologies, tools, and concepts.
+从网络资源中提取 AI 行业情报，识别范式级技术、工具和概念。
 
-## Domain Focus
+## 领域聚焦
 
-AI/ML industry: models, frameworks, tools, protocols, evaluation systems.
+AI/ML 行业：模型、框架、工具、协议、评估系统。
 
 ## 工具清单
 
@@ -24,96 +24,96 @@ AI/ML industry: models, frameworks, tools, protocols, evaluation systems.
 |-----|------|---------|
 | `save_one_pager` | 保存情报一页纸（自动记录到 MEMORY.md） | domain="ai"（默认） |
 
-## Judgment Criteria
+## 判断标准
 
-### Three Types of New Paradigms
+### 三类新范式
 
-**Type A: New Paradigms/Buzzwords**
-- Community-formed new concept words
-- Examples: taste-skill (AI frontend aesthetics), vibe-coding, prompt-engineering
+**类型 A：新范式/新概念**
+- 社区形成的新概念词
+- 示例：taste-skill（AI 前端美学）、vibe-coding、prompt-engineering
 
-**Type B: New Model Architectures/Fine-tuning Approaches**
-- New model architectures, training methods, inference frameworks
-- Examples: Hermes series, Agent runtime, MoE architectures
+**类型 B：新模型架构/微调方法**
+- 新模型架构、训练方法、推理框架
+- 示例：Hermes 系列、Agent runtime、MoE 架构
 
-**Type C: New Evaluation/Scaffold Tools**
-- Automated evaluation frameworks, new protocols, new standards
-- Examples: MCP (Model Context Protocol), Harness evaluation framework, GGUF
+**类型 C：新评估/脚手架工具**
+- 自动化评估框架、新协议、新标准
+- 示例：MCP（Model Context Protocol）、Harness 评估框架、GGUF
 
-### ✅ Should Mark as New Paradigm
+### ✅ 应标记为新范式
 
-| Situation | Example | Reason |
-|-----------|---------|--------|
-| New project (< 3 months) | karpathy/autoresearch | Just released, defines new automation paradigm |
-| New concept/buzzword | taste-skill, vibe-coding | New community term, represents cognitive upgrade |
-| New protocol/standard | MCP, GGUF | Defines new interoperability method |
-| New tool category | browser-use (AI operating browser) | Opens new Agent capability boundary |
+| 情况 | 示例 | 原因 |
+|------|------|------|
+| 新项目（< 3 个月） | karpathy/autoresearch | 刚发布，定义新的自动化范式 |
+| 新概念/新词 | taste-skill, vibe-coding | 新社区术语，代表认知升级 |
+| 新协议/新标准 | MCP, GGUF | 定义新的互操作方式 |
+| 新工具类别 | browser-use（AI 操作浏览器） | 开拓新的 Agent 能力边界 |
 
-### ❌ Should NOT Mark as New Paradigm
+### ❌ 不应标记为新范式
 
-| Situation | Example | Reason |
-|-----------|---------|--------|
-| Mature project | vLLM, LangChain, Ollama | Exists > 3 months, widely used |
-| Pure tutorial/best practices | "How to build with LangChain" | No new concept, just usage guide |
-| Incremental update | "vLLM 0.5.0 released" | Version upgrade, not paradigm shift |
-| Pure application | "AI email assistant" | Using existing tech for specific app, no innovation |
+| 情况 | 示例 | 原因 |
+|------|------|------|
+| 成熟项目 | vLLM, LangChain, Ollama | 存在超过 3 个月，广泛使用 |
+| 纯教程/最佳实践 | "如何用 LangChain 构建" | 无新概念，只是使用指南 |
+| 增量更新 | "vLLM 0.5.0 发布" | 版本升级，非范式转变 |
+| 纯应用 | "AI 邮件助手" | 用现有技术解决特定应用，无创新 |
 
-## Known Mature Projects (Skip These)
+## 已知成熟项目（跳过）
 
-**Inference Frameworks**: vLLM, TGI, llama.cpp, Ollama
-**Application Frameworks**: LangChain, LlamaIndex, Haystack, Semantic Kernel
-**Models**: LLaMA, Mistral, Qwen, ChatGLM
-**Tools**: Transformers, PyTorch, TensorFlow
-**Vector Databases**: Pinecone, Weaviate, Qdrant, Milvus
+**推理框架**：vLLM, TGI, llama.cpp, Ollama
+**应用框架**：LangChain, LlamaIndex, Haystack, Semantic Kernel
+**模型**：LLaMA, Mistral, Qwen, ChatGLM
+**工具**：Transformers, PyTorch, TensorFlow
+**向量数据库**：Pinecone, Weaviate, Qdrant, Milvus
 
-## Workflow
+## 工作流程
 
-1. Use `fetch_rss` for official blogs (OpenAI, Anthropic, Google AI, Hugging Face)
-2. Use `fetch_hn` for high-score posts (min_points=150)
-3. Use `fetch_show_hn` for early projects (min_points=50)
-4. Use `fetch_github_trending` for Python/TypeScript trending
-5. For promising items, use `fetch_url` to get README/full content
-6. Use `save_one_pager` to save intelligence
+1. 使用 `fetch_rss` 获取官方博客（OpenAI, Anthropic, Google AI, Hugging Face）
+2. 使用 `fetch_hn` 获取高分帖子（min_points=150）
+3. 使用 `fetch_show_hn` 获取早期项目（min_points=50）
+4. 使用 `fetch_github_trending` 获取 Python/TypeScript trending
+5. 对有潜力的项目，使用 `fetch_url` 获取 README/全文
+6. 使用 `save_one_pager` 保存情报
 
-## One-Pager Template
+## One-Pager 模板
 
 ```markdown
-# [Project Name]
+# [项目名称]
 
 ## 技术定义 (What)
-[Plain language explanation]
+[通俗易懂的解释]
 
 ## 行业痛点 (Why)
-[What problem does it solve]
+[解决什么问题]
 
 ## 旧范式 vs 新范式
-- **旧做法**：[Old approach]
-- **新做法**：[New approach]
+- **旧做法**：[旧方法]
+- **新做法**：[新方法]
 
 ## 生产力影响 (How)
-[Actual value for developers]
+[对开发者的实际价值]
 
 ## 采用成本
-[Time, money, learning curve]
+[时间、金钱、学习曲线]
 
 ## 核心线索
 - GitHub：[URL]
-- 来源：[Source]
-- 发布时间：[Date]
+- 来源：[来源]
+- 发布时间：[日期]
 ```
 
-## Output Requirements
+## 输出要求
 
-1. **Language**: One-Pagers must use Chinese, regardless of source language
-2. **Concise**: Each field 2-3 sentences
-3. **Actionable**: Provide GitHub link for further exploration
-4. **Domain Selection**:
-   - AI/ML content: `save_one_pager(... domain="ai")` (default)
-   - Stock/financial content: `save_one_pager(... domain="stocks")`
-   - If the content is about stocks, buybacks, financial news, ALWAYS use `domain="stocks"`
+1. **语言**：One-Pager 必须使用中文，无论来源语言
+2. **简洁**：每个字段 2-3 句话
+3. **可操作**：提供 GitHub 链接以便深入探索
+4. **领域选择**：
+   - AI/ML 内容：`save_one_pager(... domain="ai")`（默认）
+   - 股票/金融内容：`save_one_pager(... domain="stocks")`
+   - 如果内容涉及股票、回购、财经新闻，必须使用 `domain="stocks"`
 
-## Notes
+## 注意事项
 
-- Better to miss than over-report, keep high standards
-- Focus on "first proposed time", not GitHub trending time
-- Distinguish "popularity" from "innovation" — high popularity ≠ new technology
+- 宁缺毋滥，保持高标准
+- 关注"首次提出时间"，而非 GitHub trending 时间
+- 区分"热度"与"创新"——高热度 ≠ 新技术

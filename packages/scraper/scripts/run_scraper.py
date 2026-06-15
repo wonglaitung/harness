@@ -20,6 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "packages" / "scraper" / "
 
 from harness_scraper.config import load_config
 from harness_scraper.agent import IntelAgent
+from harness_scraper.tools import (
+    # AI intelligence tools
+    FetchRSSTool, FetchHNTool, FetchShowHNTool,
+    FetchGitHubTrendingTool, FetchURLTool, SaveOnePagerTool,
+    # Stock/financial tools
+    FetchHKEXTool, FetchFinancialNewsTool,
+)
 
 # Default output directory for One-Pagers
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "output"
@@ -33,6 +40,29 @@ def setup_logging(verbose: bool = False):
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+
+
+def get_tools_for_skill(skill: str):
+    """Get appropriate tools for a skill"""
+    if skill == "ai-intelligence":
+        return [
+            FetchRSSTool(),
+            FetchHNTool(),
+            FetchShowHNTool(),
+            FetchGitHubTrendingTool(),
+            FetchURLTool(),
+            SaveOnePagerTool(),
+        ]
+    elif skill == "hk-stocks-alpha":
+        return [
+            FetchHKEXTool(),
+            FetchFinancialNewsTool(),
+            FetchURLTool(),
+            SaveOnePagerTool(),
+        ]
+    else:
+        # Default: minimal set
+        return [FetchURLTool()]
 
 
 def get_default_prompt(skill: str) -> str:
@@ -91,10 +121,11 @@ async def run_scraper(skill: str, timeout: int, verbose: bool = False) -> bool:
     # Load config
     config = load_config()
 
-    # Create agent with skill
+    # Create agent with skill and tools
     agent = IntelAgent(
         config=config,
         skill=skill,
+        tools=get_tools_for_skill(skill),
         memory_path=output_dir / "MEMORY.md",
     )
 

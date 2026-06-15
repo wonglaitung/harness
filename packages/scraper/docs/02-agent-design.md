@@ -72,31 +72,15 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 
 你是一个专业的信息提取代理，负责从海量内容中识别高价值信息。
 
-## 工具清单
-
-| 工具 | 用途 |
-|-----|------|
-| fetch_rss | 抓取 RSS 文章 |
-| fetch_hn | 抓取 HN 高分帖子 |
-| fetch_show_hn | 抓取 Show HN 早期项目 |
-| fetch_github_trending | 抓取 GitHub Trending |
-| fetch_url | 深度抓取 URL 内容 |
-| save_one_pager | 保存情报一页纸 |
-
-## 通用工作流程
-
-1. 广撒网：选择合适的数据源
-2. 精准筛选：根据技能文件判断高价值内容
-3. 深度挖掘：fetch_url 获取详细信息
-4. 结构化输出：save_one_pager 保存
-
 ## 通用判断原则
 
-- 宁缺毋滥：宁可漏掉也不要误报
-- 时效性：关注首次出现时间
-- 可操作性：读者能从情报中获得价值
+1. **宁缺毋滥**：宁可漏掉也不要误报
+2. **时效性**：关注首次出现时间
+3. **可操作性**：读者能从情报中获得价值
 """
 ```
+
+**注意**：工具清单、工作流程、判断标准都由 skill 文件定义，不在 base prompt 中硬编码。
 
 ## 技能加载
 
@@ -126,17 +110,33 @@ def __init__(self, ..., skill: str | None = None):
             logger.warning(f"Skill not found: {skill}")
 ```
 
-## 默认工具
+## 工具配置
+
+### 工具由 Skill 指定
 
 ```python
-DEFAULT_TOOLS = [
-    FetchRSSTool(),
-    FetchHNTool(),
-    FetchShowHNTool(),
-    FetchGitHubTrendingTool(),
-    FetchURLTool(),
-    SaveOnePagerTool(),
-]
+# 必须传入 tools，skill 文件定义了工具清单
+agent = IntelAgent(
+    config,
+    skill="ai-intelligence",
+    tools=[
+        FetchRSSTool(),
+        FetchHNTool(),
+        FetchShowHNTool(),
+        FetchGitHubTrendingTool(),
+        FetchURLTool(),
+        SaveOnePagerTool(),
+    ],
+)
+```
+
+### 最小工具集
+
+不传 skill 时，默认只有 `FetchURLTool`：
+
+```python
+agent = IntelAgent(config)
+# 只有 fetch_url 工具可用
 ```
 
 ## 运行方法
@@ -146,33 +146,17 @@ DEFAULT_TOOLS = [
 ```python
 async def run(
     self,
-    prompt: str = "运行信息提取...",
+    prompt: str,
     session_id: str | None = None,
     verbose: bool = False,
 ) -> LoopResult:
-    """运行 Agent"""
+    """运行 Agent，prompt 必须指定任务"""
     result = await self._agent.run(
         prompt=prompt,
         session_id=session_id,
         verbose=verbose,
     )
     return result
-```
-
-### run_with_sources()
-
-```python
-async def run_with_sources(
-    self,
-    rss_feeds: list[str] | None = None,
-    hn_min_points: int = 150,
-    show_hn_min_points: int = 50,
-    github_language: str = "python",
-    verbose: bool = False,
-) -> LoopResult:
-    """指定数据源运行"""
-    prompt = build_prompt_from_sources(...)
-    return await self.run(prompt, verbose=verbose)
 ```
 
 ## 会话管理
@@ -193,12 +177,27 @@ def clear_session(self, session_id: str) -> None:
 
 ```python
 from harness_scraper import IntelAgent, load_config
+from harness_scraper.tools import (
+    FetchRSSTool, FetchHNTool, FetchShowHNTool,
+    FetchGitHubTrendingTool, FetchURLTool, SaveOnePagerTool,
+)
 
 # 加载配置
 config = load_config()
 
-# 创建 Agent（默认 AI 技能）
-agent = IntelAgent(config, skill="ai-intelligence")
+# 创建 Agent（技能 + 工具）
+agent = IntelAgent(
+    config,
+    skill="ai-intelligence",
+    tools=[
+        FetchRSSTool(),
+        FetchHNTool(),
+        FetchShowHNTool(),
+        FetchGitHubTrendingTool(),
+        FetchURLTool(),
+        SaveOnePagerTool(),
+    ],
+)
 
 # 运行
 result = await agent.run("提取 AI 情报")
@@ -209,12 +208,21 @@ print(result.content)
 
 ```python
 # 股票分析
-agent = IntelAgent(config, skill="stock-analysis")
-result = await agent.run("提取股票投资信号")
+agent = IntelAgent(
+    config,
+    skill="hk-stocks-alpha",
+    tools=[
+        FetchHKEXTool(),
+        FetchFinancialNewsTool(),
+        FetchURLTool(),
+        SaveOnePagerTool(),
+    ],
+)
+result = await agent.run("提取港股 alpha 信号")
 
-# 无技能（通用模式）
+# 无技能（通用模式，只有 fetch_url）
 agent = IntelAgent(config)
-result = await agent.run("提取热门技术话题")
+result = await agent.run("抓取某网页内容并总结")
 ```
 
 ### 自定义工具
