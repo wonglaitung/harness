@@ -135,6 +135,11 @@ class OpenAIClient(LLMClient):
             # Get result directly (already completed, non-blocking)
             response = future.result()
 
+            # Handle non-standard API responses (some APIs return string on error)
+            if isinstance(response, str):
+                logger.error(f"OpenAI API returned string instead of response object: {response[:200]}")
+                raise ValueError(f"API returned non-standard response: {response[:200]}")
+
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
         except Exception as e:
             logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
