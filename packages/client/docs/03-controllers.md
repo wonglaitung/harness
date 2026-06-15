@@ -225,6 +225,89 @@ class ClientSession:
     updated_at: datetime = field(default_factory=datetime.now)
     token_usage: dict = field(default_factory=lambda: {"input": 0, "output": 0})
     trusted_commands: set[str] = field(default_factory=set)  # 会话级信任缓存
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为字典（用于 JSON 存储）"""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ClientSession":
+        """从字典反序列化"""
+```
+
+### 会话持久化
+
+SessionManager 支持将会话持久化到磁盘，应用重启后自动恢复历史会话。
+
+#### 存储位置
+
+会话存储在 `~/.harness/sessions/` 目录，每个会话一个 JSON 文件：
+
+```
+~/.harness/sessions/
+├── abc12345.json
+├── def67890.json
+└── ...
+```
+
+#### 存储格式
+
+```json
+{
+  "id": "abc12345",
+  "name": "Hello, this is a tes...",
+  "messages": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ],
+  "created_at": "2026-06-15T11:35:00",
+  "updated_at": "2026-06-15T11:36:00",
+  "token_usage": {"input": 100, "output": 50},
+  "trusted_commands": []
+}
+```
+
+#### 持久化机制
+
+```python
+class SessionManager:
+    def __init__(self, max_sessions: int = 50, storage_dir: Path | None = None):
+        self._sessions: OrderedDict[str, ClientSession] = OrderedDict()
+        self._current_id: str | None = None
+        self._max_sessions = max_sessions
+        self._storage_dir = storage_dir or get_config_dir() / "sessions"
+        self._loaded = False  # 延迟加载标记
+
+    def _ensure_loaded(self) -> None:
+        """延迟加载：首次访问时从磁盘加载历史会话"""
+
+    def _load_sessions(self) -> None:
+        """按修改时间倒序加载所有会话文件"""
+
+    def _save_session(self, session: ClientSession) -> None:
+        """保存会话到 JSON 文件"""
+
+    def _delete_session_file(self, session_id: str) -> None:
+        """删除会话文件"""
+```
+
+#### 自动保存时机
+
+- `add_message_to_current()` - 添加消息后自动保存
+- `archive_current()` - 切换会话时保存当前会话
+- `update_token_usage()` - 更新 token 使用量后保存
+- `delete()` - 删除会话时同步删除文件
+
+#### 会话数量限制
+
+默认最多保存 50 个会话，超过限制时自动清理最旧的会话：
+
+```python
+# archive_current() 中的清理逻辑
+while len(self._sessions) > self._max_sessions:
+    oldest_id = next(iter(self._sessions))
+    if oldest_id != self._current_id:
+        self._delete_session_file(oldest_id)
+        del self._sessions[oldest_id]
 ```
 
 ### 会话信任管理
@@ -249,10 +332,11 @@ session.clear_trust()  # 清空信任缓存
 
 ```python
 class SessionManager:
-    def __init__(self, max_sessions: int = 50):
+    def __init__(self, max_sessions: int = 50, storage_dir: Path | None = None):
         self._sessions: OrderedDict[str, ClientSession] = OrderedDict()
         self._current_id: str | None = None
         self._max_sessions = max_sessions
+        self._storage_dir = storage_dir  # 持久化存储目录
     
     def create(self, session_id: str = None) -> ClientSession:
         """创建新会话"""
@@ -260,20 +344,29 @@ class SessionManager:
     def get_current(self) -> ClientSession | None:
         """获取当前会话"""
         
+    def get(self, session_id: str) -> ClientSession | None:
+        """获取指定会话"""
+        
     def switch_to(self, session_id: str) -> bool:
         """切换到指定会话"""
         
     def delete(self, session_id: str) -> bool:
-        """删除会话"""
+        """删除会话（同时删除磁盘文件）"""
         
     def archive_current(self) -> None:
-        """归档当前会话（不删除，只是取消选中）"""
+        """归档当前会话（保存到磁盘）"""
         
     def add_message_to_current(self, role: str, content: str):
-        """向当前会话添加消息"""
+        """向当前会话添加消息（自动保存）"""
         
     def update_token_usage(self, input_tokens: int, output_tokens: int):
-        """更新 token 使用统计"""
+        """更新 token 使用统计（自动保存）"""
+        
+    def save_current(self) -> bool:
+        """手动保存当前会话"""
+        
+    def get_history_list(self) -> list[ClientSession]:
+        """获取历史会话列表（按更新时间倒序）"""
 ```
 
 ### 数据流

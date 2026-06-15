@@ -16,6 +16,7 @@ Harness SDK 提供了强大的 AI Agent 能力，但作为纯 Python SDK，用�
 - 技能系统可视化管理
 - 全局记忆管理
 - 多会话支持
+- **会话持久化**：自动保存会话历史，重启后恢复
 
 ## 核心公式
 
@@ -157,8 +158,13 @@ SessionManager (单一数据源)
     │
     ├── create() → 新建会话
     ├── switch_to() → 切换会话
-    ├── delete() → 删除会话
-    └── get_current() → 获取当前会话
+    ├── delete() → 删除会话（同步删除磁盘文件）
+    ├── get_current() → 获取当前会话
+    │
+    └── 持久化操作
+        ├── _load_sessions() → 启动时加载历史会话
+        ├── _save_session() → 自动保存到 ~/.harness/sessions/
+        └── _delete_session_file() → 删除时同步删除文件
     │
     ↓
 MainWindow._refresh_session_list()
@@ -263,6 +269,9 @@ self.message_sent.emit(message)
 ├── settings.json     # 应用设置（API Key、模型等）
 ├── mcp.json          # MCP 服务器配置
 ├── MEMORY.md         # 全局记忆文件
+├── sessions/         # 会话持久化目录
+│   ├── abc12345.json # 单个会话文件
+│   └── ...
 ├── skills/           # 全局技能目录
 │   └── my-skill/
 │       └── skill.md

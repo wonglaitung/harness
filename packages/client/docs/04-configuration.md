@@ -13,6 +13,10 @@
 ├── settings.json        # 应用设置（API Key、模型等）
 ├── mcp.json             # MCP 服务器配置
 ├── MEMORY.md            # 全局记忆文件
+├── sessions/            # 会话持久化目录
+│   ├── abc12345.json    # 单个会话文件
+│   ├── def67890.json
+│   └── ...
 ├── skills/              # 全局技能目录
 │   ├── code-review/
 │   │   └── skill.md
@@ -26,11 +30,12 @@
 
 ### 配置文件说明
 
-| 文件 | 格式 | 说明 | 管理 UI |
-|------|------|------|---------|
+| 文件/目录 | 格式 | 说明 | 管理 UI |
+|-----------|------|------|---------|
 | `settings.json` | JSON | 应用设置 | SettingsDialog |
 | `mcp.json` | JSON | MCP 服务器列表 | RightPanel MCP Section |
 | `MEMORY.md` | Markdown | 全局记忆 | RightPanel Memory Section |
+| `sessions/*.json` | JSON | 会话历史（自动持久化） | Sidebar Session List |
 | `skills/*.md` | Markdown | 技能定义 | RightPanel Skills Section |
 
 ## settings.json
