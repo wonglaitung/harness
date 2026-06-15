@@ -46,6 +46,24 @@
 
 ## 注意事项
 
+### 港股分析
+- **医药板块回购潮 - 左侧机会信号**
+
+### 港股分析
+- **港股通大额流入 - 右侧确认信号**
+
+### 新范式/工具
+- **TencentDB Agent Memory** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **OpenRouter Fusion** - https://openrouter.ai/docs/guides/features/plugins/fusion
+
+### 新范式/工具
+- **Ona Acquisition** - https://openai.com/index/openai-to-acquire-ona
+
+### 新范式/工具
+- **Dreaming Memory** - https://openai.com/index/chatgpt-memory-dreaming
+
 ### 新范式/工具
 - **OpenRouter Fusion API - 多模型审议架构** - https://openrouter.ai/docs/guides/features/plugins/fusion
 
