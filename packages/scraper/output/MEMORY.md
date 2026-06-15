@@ -46,30 +46,14 @@
 
 ### 港股分析
 - **港股科技板块 - 估值重估右侧信号**
+- **2026-06-15 港股市场全景 - 多板块联动异动**
+- **智谱AI (02513.HK) - Anthropic退场国产替代** - http://finance.eastmoney.com/a/202606153771267791.html
 
 ### 新范式/工具
 - **OpenAI 收购 Ona - 持久化 Agent 云环境** - https://openai.com/index/openai-to-acquire-ona
-
-### 新范式/工具
 - **obsidian-wiki - AI Agent 驱动的数字大脑** - https://github.com/Ar9av/obsidian-wiki
-
-### 新范式/工具
 - **Dreaming Memory - ChatGPT 记忆合成架构** - https://openai.com/index/chatgpt-memory-dreaming
-
-### 新范式/工具
 - **SkillSpector - AI Agent 技能安全扫描器** - https://github.com/NVIDIA/SkillSpector
-
-### 新范式/工具
-- **Mellum2** - https://huggingface.co/blog/JetBrains/mellum2-launch
-
-### 港股分析
-- **立讯精密H股上市 - IPO事件跟踪**
-
-### 港股分析
-- **港股半导体板块 - 板块联动异动**
-
-### 港股分析
-- **港股互联网指数 - 估值洼地左侧信号**
 
 - 成熟项目（vLLM、LangChain、Ollama 等）已通过技能文件排除
 - 新范式项目优先级：概念 > 架构 > 工具
