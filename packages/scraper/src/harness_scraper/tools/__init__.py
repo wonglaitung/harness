@@ -30,6 +30,8 @@ from harness_scraper.tools.update_memory import UpdateMemoryTool
 from harness_scraper.tools.fetch_hkex import FetchHKEXTool
 from harness_scraper.tools.fetch_financial_news import FetchFinancialNewsTool
 
+from harness.tools.base import Tool
+
 __all__ = [
     # AI Intelligence Tools
     "FetchRSSTool",
@@ -42,4 +44,49 @@ __all__ = [
     # Stock/Financial Tools
     "FetchHKEXTool",
     "FetchFinancialNewsTool",
+    # Tool registry
+    "ALL_TOOLS",
+    "get_tools_by_names",
 ]
+
+# Tool registry: name -> class (not instance)
+ALL_TOOLS: dict[str, type[Tool]] = {
+    "fetch_rss": FetchRSSTool,
+    "fetch_hn": FetchHNTool,
+    "fetch_show_hn": FetchShowHNTool,
+    "fetch_github_trending": FetchGitHubTrendingTool,
+    "fetch_url": FetchURLTool,
+    "save_one_pager": SaveOnePagerTool,
+    "update_memory": UpdateMemoryTool,
+    "fetch_hkex": FetchHKEXTool,
+    "fetch_financial_news": FetchFinancialNewsTool,
+}
+
+
+def get_tools_by_names(tool_names: list[str]) -> list[Tool]:
+    """
+    Get tool instances by their names.
+
+    Args:
+        tool_names: List of tool names (e.g., ["fetch_rss", "fetch_hn"])
+
+    Returns:
+        List of Tool instances
+
+    Raises:
+        ValueError: If any tool name is not found in ALL_TOOLS
+    """
+    tools: list[Tool] = []
+    missing: list[str] = []
+
+    for name in tool_names:
+        tool_class = ALL_TOOLS.get(name)
+        if tool_class:
+            tools.append(tool_class())
+        else:
+            missing.append(name)
+
+    if missing:
+        raise ValueError(f"Unknown tools: {missing}. Available: {list(ALL_TOOLS.keys())}")
+
+    return tools

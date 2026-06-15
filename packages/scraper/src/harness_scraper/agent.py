@@ -18,19 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from harness import AgentHarness
+from harness.skills.base import Skill
 from harness.tools.base import Tool
 
 from harness_scraper.models import ScraperConfig
-from harness_scraper.tools import (
-    FetchRSSTool,
-    FetchHNTool,
-    FetchShowHNTool,
-    FetchGitHubTrendingTool,
-    FetchURLTool,
-    SaveOnePagerTool,
-    FetchHKEXTool,
-    FetchFinancialNewsTool,
-)
+from harness_scraper.tools import get_tools_by_names
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +46,9 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 """
 
 
-def load_skill(skill_name: str) -> str | None:
+def load_skill(skill_name: str) -> Skill | None:
     """
-    Load skill content from skills directories.
+    Load skill from skills directories using SDK's Skill.from_file.
 
     Priority:
     1. Repo-local skills (./skills/ in the repository)
@@ -65,13 +57,13 @@ def load_skill(skill_name: str) -> str | None:
         skill_name: Skill file name (without .md extension)
 
     Returns:
-        Skill content or None if not found
+        Skill object or None if not found
     """
     # Try repo-local skills first (for CI/CD)
     repo_skill_path = REPO_SKILL_DIR / f"{skill_name}.md"
     if repo_skill_path.exists():
         logger.info(f"Loaded skill from repo: {repo_skill_path}")
-        return repo_skill_path.read_text(encoding="utf-8")
+        return Skill.from_file(repo_skill_path)
 
     return None
 
@@ -85,20 +77,22 @@ class IntelAgent:
     - Stock market analysis
     - Custom domains
 
+    Tools are selected based on skill's tools.allowed frontmatter.
+
     Example:
         ```python
         from harness_scraper.agent import IntelAgent
         from harness_scraper.config import load_config
 
-        # With AI intelligence skill
+        # With AI intelligence skill (tools auto-selected from skill file)
         agent = IntelAgent(load_config(), skill="ai-intelligence")
         result = await agent.run("Extract AI intelligence from RSS and HN")
 
-        # With stock analysis skill
-        agent = IntelAgent(load_config(), skill="stock-analysis")
+        # With stock analysis skill (tools auto-selected from skill file)
+        agent = IntelAgent(load_config(), skill="hk-stocks-alpha")
         result = await agent.run("Extract stock market signals")
 
-        # Without skill (generic mode)
+        # Without skill (generic mode, minimal tools)
         agent = IntelAgent(load_config())
         result = await agent.run("Extract trending tech topics")
         ```
@@ -116,35 +110,39 @@ class IntelAgent:
 
         Args:
             config: Scraper configuration with LLM settings
-            tools: Optional custom tools (defaults to all intel tools)
+            tools: Optional custom tools (if None, auto-selected from skill's tools.allowed)
             skill: Optional skill name (e.g., "ai-intelligence", "hk-stocks-alpha")
                    Loads from packages/scraper/skills/{skill}.md
             memory_path: Optional memory file path for known entities
         """
         self.config = config
-        self.skill = skill
+        self.skill_name = skill
+        self._skill: Skill | None = None
 
-        # Tools: require skill to specify tools, otherwise minimal set
+        # Load skill if specified
+        if skill:
+            self._skill = load_skill(skill)
+            if not self._skill:
+                raise ValueError(f"Skill not found: {skill} (checked {REPO_SKILL_DIR})")
+            logger.info(f"Loaded skill: {self._skill.name} with tools: {self._skill.tools.allowed}")
+
+        # Tools selection: use provided tools, or auto-select from skill
         if tools is None:
-            if skill:
-                raise ValueError(
-                    "tools must be provided when skill is specified. "
-                    "The skill file should define which tools to use."
-                )
-            # Minimal default: only URL fetching
-            tools = [FetchURLTool()]
+            if self._skill and self._skill.tools.allowed:
+                # Auto-select tools from skill's tools.allowed
+                tools = get_tools_by_names(self._skill.tools.allowed)
+                logger.info(f"Auto-selected tools: {[t.name for t in tools]}")
+            else:
+                # Minimal default: only URL fetching
+                tools = get_tools_by_names(["fetch_url"])
+                logger.info("Using minimal default tools: [fetch_url]")
 
         # Build system prompt
         system_prompt = BASE_SYSTEM_PROMPT
 
-        # Load and inject skill if specified
-        if skill:
-            skill_content = load_skill(skill)
-            if skill_content:
-                system_prompt += f"\n\n---\n\n# 已加载技能：{skill}\n\n{skill_content}"
-                logger.info(f"Loaded skill: {skill}")
-            else:
-                logger.warning(f"Skill not found: {skill} (checked {REPO_SKILL_DIR})")
+        # Inject skill content if loaded
+        if self._skill:
+            system_prompt += f"\n\n---\n\n# 已加载技能：{self._skill.name}\n\n{self._skill.content}"
 
         # Convert memory_path to Path if string
         if memory_path:

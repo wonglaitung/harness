@@ -1,3 +1,14 @@
+---
+name: hk-stocks-alpha
+description: 港股 Alpha 事件捕获，捕捉政策驱动、资金流向、投行评级等信号
+tools:
+  allowed:
+    - fetch_hkex
+    - fetch_financial_news
+    - fetch_url
+    - save_one_pager
+---
+
 # 港股 Alpha 事件捕获技能
 
 捕捉港股市场的 alpha 事件：政策驱动、资金流向、投行评级、衍生品异动。

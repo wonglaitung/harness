@@ -4,7 +4,7 @@ Harness Scraper CLI.
 
 Usage:
     harness-scraper                           # Run with ai-intelligence skill (default)
-    harness-scraper --skill stock-analysis    # Run with stock analysis skill
+    harness-scraper --skill hk-stocks-alpha   # Run with HK stocks skill
     harness-scraper --skill custom            # Run with custom skill
     harness-scraper agent "prompt"            # Run agent with custom prompt
     harness-scraper config                    # Create default config
@@ -20,13 +20,6 @@ from pathlib import Path
 
 from harness_scraper.config import load_config, create_default_config_file
 from harness_scraper.agent import IntelAgent, REPO_SKILL_DIR
-from harness_scraper.tools import (
-    # AI intelligence tools
-    FetchRSSTool, FetchHNTool, FetchShowHNTool,
-    FetchGitHubTrendingTool, FetchURLTool, SaveOnePagerTool,
-    # Stock/financial tools
-    FetchHKEXTool, FetchFinancialNewsTool,
-)
 
 # Default output directory for One-Pagers
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
@@ -42,29 +35,6 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def get_tools_for_skill(skill: str | None):
-    """Get appropriate tools for a skill"""
-    if skill == "ai-intelligence":
-        return [
-            FetchRSSTool(),
-            FetchHNTool(),
-            FetchShowHNTool(),
-            FetchGitHubTrendingTool(),
-            FetchURLTool(),
-            SaveOnePagerTool(),
-        ]
-    elif skill == "hk-stocks-alpha":
-        return [
-            FetchHKEXTool(),
-            FetchFinancialNewsTool(),
-            FetchURLTool(),
-            SaveOnePagerTool(),
-        ]
-    else:
-        # Default: minimal set
-        return [FetchURLTool()]
-
-
 def cmd_agent(args):
     """Run SDK agent (autonomous intelligence extraction)"""
     setup_logging(args.verbose)
@@ -74,10 +44,10 @@ def cmd_agent(args):
     output_dir = DEFAULT_OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Tools are now auto-selected from skill's tools.allowed frontmatter
     agent = IntelAgent(
         config=config,
         skill=args.skill,
-        tools=get_tools_for_skill(args.skill),
         memory_path=output_dir / "MEMORY.md",
     )
 
@@ -86,20 +56,17 @@ def cmd_agent(args):
         prompt = args.prompt
     else:
         # Default prompts based on skill
-        if args.skill == "stock-analysis":
-            prompt = """运行股票情报抽取：
+        if args.skill == "hk-stocks-alpha":
+            prompt = """运行港股 Alpha 捕获：
 
-1. 使用 fetch_rss 抓取财经新闻源
-2. 使用 fetch_hn 关注 fintech 讨论
-3. 使用 fetch_github_trending 发现交易/分析工具
+1. 使用 fetch_hkex 抓取港交所公告（回购、减持）
+2. 使用 fetch_financial_news 获取财经快讯
 
-识别投资信号，生成 One-Pager"""
+识别左侧信号（回购潮、政策事件），生成交易快报"""
         elif args.skill:
             prompt = f"""运行情报抽取（技能：{args.skill}）：
 
-1. 使用 fetch_rss 抓取相关 RSS 源
-2. 使用 fetch_hn 和 fetch_show_hn 获取讨论
-3. 使用 fetch_github_trending 发现相关项目
+根据技能文件定义的工作流程执行，使用技能指定的工具。
 
 识别高价值信息，生成 One-Pager"""
         else:
@@ -174,7 +141,7 @@ def main():
         "--skill",
         type=str,
         default=None,
-        help="Skill to load (e.g., ai-intelligence, stock-analysis). Default: ai-intelligence",
+        help="Skill to load (e.g., ai-intelligence, hk-stocks-alpha). Default: ai-intelligence",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")

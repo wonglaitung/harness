@@ -1,3 +1,16 @@
+---
+name: ai-intelligence
+description: AI 行业情报提取，识别范式级技术、工具和概念
+tools:
+  allowed:
+    - fetch_rss
+    - fetch_hn
+    - fetch_show_hn
+    - fetch_github_trending
+    - fetch_url
+    - save_one_pager
+---
+
 # AI 情报提取技能
 
 从网络资源中提取 AI 行业情报，识别范式级技术、工具和概念。
