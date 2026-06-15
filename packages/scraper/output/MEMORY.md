@@ -42,7 +42,12 @@
 
 ## 2026-06-15 提取
 
+## 2026-06-16 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **OpenRouter Fusion API - 多模型审议架构** - https://openrouter.ai/docs/guides/features/plugins/fusion
 
 ### 港股分析
 - **港股通资金流向 - 21亿净流入右侧确认**
