@@ -15,9 +15,10 @@ pip install "harness-ai[openai]"        # OpenAI 支持
 pip install "harness-ai[observability]" # OpenTelemetry 可观测性
 pip install "harness-ai[sqlite]"        # SQLite 会话存储
 pip install "harness-ai[web]"           # Web 抓取工具
+pip install "harness-ai[guardrails]"    # PII 检测和内容安全
 
 # 安装多个扩展
-pip install "harness-ai[openai,sqlite,web]"
+pip install "harness-ai[openai,sqlite,web,guardrails]"
 ```
 
 ### 开发模式
@@ -362,6 +363,128 @@ result = await agent.run("测试问题")
 assert result.content == "这是模拟响应"
 ```
 
+## Guardrails (PII 检测和内容安全)
+
+Guardrails 提供两层安全防护：
+
+- **Layer 1: PII 规则检测** - 快速（<1ms），使用正则表达式 + 姓氏库
+- **Layer 2: LLM Judge** - 语义检测（~100ms），可选
+
+### 快速开始
+
+```python
+from harness import AgentHarness, ReadTool
+from harness.guardrails import GuardrailConfig
+
+# 只启用 Layer 1（PII 过滤）
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[ReadTool()],
+    guardrails=GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=False,
+    ),
+)
+
+result = await agent.run("我的手机号是13812345678")
+# PII 被脱敏为: "我的手机号是<手机号>"
+```
+
+### 支持的 PII 类型
+
+| 类型 | 正则示例 | 占位符 |
+|------|---------|--------|
+| 中国大陆手机号 | 13812345678 | `<手机号>` |
+| 中国身份证号 | 110101199001011234 | `<身份证号>` |
+| 银行卡号 | 6222021234567890123 | `<银行卡号>` |
+| 护照号码 | G12345678 | `<护照号>` |
+| 统一社会信用代码 | 91110000000000000X | `<信用代码>` |
+| 车牌号码 | 京A12345 | `<车牌号>` |
+| 电子邮件 | test@example.com | `<邮箱>` |
+| IP 地址 | 192.168.1.1 | `<IP地址>` |
+| 香港手机号 | 5123 4567 | `<香港手机号>` |
+| 香港身份证 | A123456(7) | `<香港身份证>` |
+| 中文姓名 | 张三、欧阳锋 | `<姓名>` |
+
+### 多语言支持
+
+```python
+# 简体中文（默认）
+agent = AgentHarness(
+    guardrails=GuardrailConfig(
+        enabled=True,
+        language="zh",
+        placeholders={"手机号": "[REDACTED_PHONE]"},
+    ),
+)
+
+# 繁体中文
+agent = AgentHarness(
+    guardrails=GuardrailConfig(
+        enabled=True,
+        language="zh-tw",
+        placeholders={"手機號": "[REDACTED_PHONE]"},
+    ),
+)
+
+# 英文
+agent = AgentHarness(
+    guardrails=GuardrailConfig(
+        enabled=True,
+        language="en",
+        placeholders={"手机号": "[PHONE]"},
+    ),
+)
+```
+
+### Layer 2: LLM Judge
+
+启用语义层面的安全检测（需要外部 Judge 服务）：
+
+```python
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    guardrails=GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=True,
+        judge_endpoint="http://localhost:8001/v1/chat/completions",
+        judge_timeout=5.0,
+    ),
+)
+```
+
+### 依赖安装
+
+```bash
+# 只需要这两个包，不需要 spaCy 中文模型
+pip install presidio-analyzer>=2.2.0
+pip install presidio-anonymizer>=2.2.0
+
+# 或使用可选依赖
+pip install "harness-ai[guardrails]"
+```
+
+**注意**：不需要安装 `zh_core_web_sm` 或其他 spaCy 中文模型。中文 PII 使用正则表达式 + 姓氏库实现，更精准且无额外依赖。
+
+### 直接使用 PII 过滤
+
+```python
+from harness.guardrails import UniversalPIIGuardrail, redact_pii
+
+# 快速过滤
+text = "我叫张三，手机号13812345678，身份证110101199001011234"
+redacted = redact_pii(text)
+# "我叫<姓名>，手机号<手机号>，身份证<身份证号>"
+
+# 使用完整 API
+guardrail = UniversalPIIGuardrail(min_score=0.5)
+result = guardrail.detect(text)
+print(result.entities)  # 检测到的 PII 实体
+print(result.redacted)  # 脱敏后的文本
+```
+
 ## Features
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
@@ -370,6 +493,7 @@ assert result.content == "这是模拟响应"
 - **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
 - **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
 - **Memory**: 会话管理、SQLite 持久化存储、异步 WAL 模式
+- **Guardrails**: PII 检测 + LLM Judge 内容安全（简/繁/英文）
 - **Cost Control**: 多层级预算控制（会话级、用户级、全局级）
 - **Observability**: OpenTelemetry 集成，支持 Jaeger、Datadog、Langfuse
 - **Testing**: MockHarness + RecordingHarness 完整测试工具链
