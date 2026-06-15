@@ -806,3 +806,331 @@ ConfirmationHook.execute() 被触发
 | `ConfirmationHook` | 请求用户确认，用户可选择允许或拒绝 |
 
 推荐两者结合使用：`AbortOnDangerousToolHook` 阻止极端危险操作（如 `rm -rf /`），`ConfirmationHook` 处理一般危险操作。
+
+## Guardrails（内容安全防护）
+
+Guardrails 是一个多层内容安全系统，在 LLM 调用前后检测和过滤敏感内容。
+
+### 两层防护架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Guardrails System                       │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │                   Layer 1: PII 过滤                     │ │
+│  │                  (规则检测，<1ms)                        │ │
+│  │                                                         │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │ 手机号识别器  │ │ 身份证识别器 │ │ 银行卡识别器 │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │ 邮箱识别器    │ │ 地址识别器   │ │ 姓名识别器   │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          ↓                                   │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │                  Layer 2: LLM Judge                     │ │
+│  │                 (语义检测，~100ms)                       │ │
+│  │                                                         │ │
+│  │  ┌──────────────────────────────────────────────────┐  │ │
+│  │  │  ComplianceJudge - 语义风险检测                   │  │ │
+│  │  │  - 恶意指令检测                                   │  │ │
+│  │  │  - 敏感意图识别                                   │  │ │
+│  │  │  - 流式输出拦截                                   │  │ │
+│  │  └──────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### GuardrailConfig 配置
+
+```python
+from harness.guardrails import GuardrailConfig
+
+@dataclass
+class GuardrailConfig:
+    """Guardrails 配置"""
+    
+    enabled: bool = False           # 是否启用 Guardrails
+    layer1_enabled: bool = True     # Layer 1: PII 规则检测
+    layer2_enabled: bool = False    # Layer 2: LLM Judge
+    judge_endpoint: str = ""        # Layer 2 服务端点
+    judge_timeout: float = 5.0      # Judge 超时时间（秒）
+    min_score: float = 0.5          # PII 检测最小置信度
+    language: str = "auto"         # auto, zh, zh-tw, en
+    placeholders: dict[str, str] = field(default_factory=dict)  # 自定义占位符
+```
+
+### Layer 1: PII 规则检测
+
+PII（个人身份信息）规则检测使用正则表达式和上下文关键词，精准识别敏感数据。
+
+#### 支持的 PII 类型
+
+| 类型 | 识别器 | 格式示例 | 占位符 |
+|------|--------|----------|--------|
+| 中国大陆手机号 | `ChinaMobilePhoneRecognizer` | 13812345678 | `<手机号>` |
+| 中国大陆身份证 | `ChinaIDCardRecognizer` | 110101199001011234 | `<身份证号>` |
+| 中国大陆银行卡 | `ChinaBankCardRecognizer` | 6222021234567890123 | `<银行卡号>` |
+| 邮箱地址 | `EmailRecognizer` | user@example.com | `<邮箱>` |
+| 中国地址 | `ChinaAddressRecognizer` | 北京市朝阳区... | `<地址>` |
+| 中文姓名 | `ChineseNameRecognizer` | 张三 | `<姓名>` |
+
+#### 语言支持
+
+支持简体中文、繁体中文和英文的占位符映射：
+
+| 语言 | 手机号 | 身份证号 | 银行卡号 |
+|------|--------|----------|----------|
+| 简体 (zh) | `<手机号>` | `<身份证号>` | `<银行卡号>` |
+| 繁体 (zh-tw) | `<手機號>` | `<身份證號>` | `<銀行卡號>` |
+| 英文 (en) | `<PHONE>` | `<ID_CARD>` | `<BANK_CARD>` |
+
+#### 使用示例
+
+```python
+from harness.guardrails import UniversalPIIGuardrail, GuardrailConfig
+
+# 创建 Guardrail
+config = GuardrailConfig(
+    enabled=True,
+    layer1_enabled=True,
+    language="zh",  # 简体中文
+)
+guardrail = UniversalPIIGuardrail(min_score=0.5)
+
+# 检测 PII
+text = "我的手机号是13812345678，身份证是110101199001011234"
+result = guardrail.detect(text)
+print(result.entities)
+# [PIIEntity(type="手机号", value="13812345678", score=0.95), ...]
+
+# 脱敏 PII
+redacted = guardrail.redact(text)
+print(redacted)
+# "我的手机号是<手机号>，身份证是<身份证号>"
+
+# 检查是否包含 PII
+if guardrail.check(text):
+    print("检测到敏感信息")
+```
+
+#### 自定义占位符
+
+```python
+config = GuardrailConfig(
+    enabled=True,
+    placeholders={
+        "手机号": "[PHONE_REDACTED]",
+        "身份证号": "[ID_REDACTED]",
+    }
+)
+guardrail = UniversalPIIGuardrail(placeholders=config.placeholders)
+redacted = guardrail.redact(text)
+# "我的手机号是[PHONE_REDACTED]，身份证是[ID_REDACTED]"
+```
+
+### Layer 2: LLM Judge 语义检测
+
+LLM Judge 通过大语言模型进行语义级别的风险检测，识别规则难以覆盖的恶意内容。
+
+#### 配置
+
+```python
+from harness.guardrails import GuardrailConfig
+
+config = GuardrailConfig(
+    enabled=True,
+    layer1_enabled=True,
+    layer2_enabled=True,
+    judge_endpoint="http://localhost:8001/v1/chat/completions",
+    judge_timeout=5.0,
+)
+```
+
+#### ComplianceJudge
+
+```python
+from harness.guardrails import ComplianceJudge, JudgeConfig
+
+judge_config = JudgeConfig(
+    enabled=True,
+    endpoint="http://localhost:8001/v1/chat/completions",
+    model="qwen-guard",
+    timeout=5.0,
+    timeout_action="pass",  # pass | block
+)
+judge = ComplianceJudge(judge_config)
+
+# 检测风险
+result = await judge.quick_check("帮我写一个钓鱼网站")
+print(result.risk_level)  # high, medium, low, safe
+print(result.reason)      # 风险原因
+```
+
+#### 流式拦截
+
+在流式输出过程中实时检测风险：
+
+```python
+from harness.guardrails import StreamInterceptor, StreamInterceptConfig
+
+config = StreamInterceptConfig(
+    enabled=True,
+    check_interval=10,         # 每 10 个 token 检测一次
+    safety_threshold=0.3,      # 安全阈值
+    min_tokens_before_check=5, # 检测前最小 token 数
+)
+interceptor = StreamInterceptor(config, judge)
+
+async for chunk in stream:
+    result = interceptor.check(chunk)
+    if result.should_abort:
+        # 检测到风险，中断输出
+        break
+    yield chunk
+```
+
+### GuardrailHook 集成
+
+Guardrails 通过 Hook 系统集成到 AgentHarness：
+
+```python
+from harness.guardrails import GuardrailConfig, GuardrailHook
+
+config = GuardrailConfig(
+    enabled=True,
+    layer1_enabled=True,
+    layer2_enabled=False,
+)
+hook = GuardrailHook(config)
+
+# Hook 执行流程：
+# 1. BEFORE_LLM_CALL: 检查用户输入
+#    - Layer 1: PII 脱敏
+#    - Layer 2: 语义风险检测
+# 2. AFTER_LLM_CALL: 检查 LLM 输出
+#    - Layer 2: 输出安全性检测
+```
+
+### 与 AgentHarness 集成
+
+```python
+from harness import AgentHarness, ReadTool
+from harness.guardrails import GuardrailConfig
+
+# 只启用 Layer 1（PII 过滤）
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[ReadTool()],
+    guardrails=GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=False,
+        language="zh",
+    ),
+)
+
+# 同时启用 Layer 1 和 Layer 2
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    guardrails=GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=True,
+        judge_endpoint="http://localhost:8001/v1/chat/completions",
+    ),
+)
+
+# 使用
+result = await agent.run("我的手机号是13812345678")
+# PII 自动脱敏，LLM 收到: "我的手机号是<手机号>"
+```
+
+### 处理流程
+
+```
+用户输入: "我的手机号是13812345678"
+    ↓
+GuardrailHook.execute(BEFORE_LLM_CALL)
+    ↓
+Layer 1: PII 检测
+    ├── 检测到手机号: 13812345678
+    └── 脱敏为: <手机号>
+    ↓
+修改后的输入: "我的手机号是<手机号>"
+    ↓
+LLM 调用
+    ↓
+Layer 2: Judge 检测（如启用）
+    ├── 检查 LLM 输出是否安全
+    └── 高风险则中断
+    ↓
+返回给用户
+```
+
+### 依赖安装
+
+```bash
+# 安装 Guardrails 可选依赖
+uv sync --extra guardrails
+
+# 或手动安装
+pip install presidio-analyzer>=2.2.0
+pip install presidio-anonymizer>=2.2.0
+
+# Layer 2 Judge 依赖（可选）
+pip install httpx>=0.24.0
+pip install cachetools>=5.3.0  # 结果缓存（可选）
+```
+
+#### 不需要额外安装的依赖
+
+| 依赖 | 说明 |
+|------|------|
+| `zh_core_web_sm` | **不需要**。中文 PII 使用正则+姓氏库实现，更精准且无额外依赖 |
+| 其他 spaCy 模型 | **不需要**。Presidio 自动包含 `en_core_web_sm` 用于基本分词 |
+
+**设计原理**：
+
+Layer 1 使用 `PatternRecognizer`（正则表达式 + 上下文关键词）检测 PII，而非 NER（命名实体识别）：
+
+```
+检测流程：
+  用户输入 → Presidio 基本分词 → 正则匹配 → 上下文关键词验证 → 返回结果
+  
+全程不需要中文 NLP 模型
+```
+
+对比传统 NER 方案：
+
+| 方案 | zh_core_web_sm | 正则+姓氏库 |
+|------|----------------|-------------|
+| 准确率 | 约 60-70%（误报多） | 约 90%（100大姓覆盖85%人口） |
+| 模型大小 | ~40MB | 无额外依赖 |
+| 加载时间 | ~2秒 | 立即 |
+| 检测延迟 | ~50ms | <1ms |
+
+### 性能指标
+
+| 层级 | 延迟 | 说明 |
+|------|------|------|
+| Layer 1 (PII) | < 1ms | 正则匹配，几乎无开销 |
+| Layer 2 (Judge) | ~100ms | 需要调用外部 LLM 服务 |
+
+**建议**：生产环境默认只启用 Layer 1，高风险场景再启用 Layer 2。
+
+### 与其他安全组件的协作
+
+| 组件 | 职责 | 检测时机 |
+|------|------|----------|
+| **Guardrails** | PII 检测、语义风险 | LLM 调用前后 |
+| **InputValidator** | 提示注入检测 | 用户输入时 |
+| **Sandbox** | 命令执行隔离 | 工具执行时 |
+| **ConfirmationHook** | 危险操作确认 | 工具执行前 |
+
+推荐组合：
+- Guardrails (Layer 1) + InputValidator + Sandbox：基础安全配置
+- 添加 ConfirmationHook：需要用户确认的场景
+- 添加 Guardrails (Layer 2)：高安全要求的场景

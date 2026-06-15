@@ -265,6 +265,7 @@ You are a code reviewer. Your task is to:
 | Context Rot Defense | ✅ | 渐进式技能加载 + 上下文压缩 |
 | Long-Horizon Execution | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
 | Error Handling | ✅ | 熔断器 + 成本控制 + 卡住检测（语义相似度） |
+| Guardrails | ✅ | Layer 1 PII 检测 + Layer 2 LLM Judge（可选依赖） |
 | Serving Layer | ❌ | SDK 不包含（client 层职责） |
 
 详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
@@ -284,6 +285,7 @@ You are a code reviewer. Your task is to:
 | 9 | **动态系统提示组装** | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
 | 10 | **步骤预算** | ✅ | StepBudgetController 迭代/工具调用限制 |
 | 11 | **语义卡住检测** | ✅ | StuckDetector 基于 embedding 检测重复输出模式 |
+| 12 | **Guardrails** | ✅ | Layer 1 PII 检测 + Layer 2 LLM Judge，通过 Hook 系统集成 |
 
 ## 数据流
 

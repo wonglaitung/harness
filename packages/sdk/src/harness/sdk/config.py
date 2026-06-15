@@ -212,6 +212,9 @@ class HarnessConfig:
     # Step budget settings (限制迭代和工具调用次数)
     step_budget: StepBudgetConfig | None = None
 
+    # Guardrails settings (PII 检测和内容安全)
+    guardrails: Any = None  # GuardrailConfig from harness.guardrails
+
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)
     _max_tokens: int = field(default=0, repr=False)

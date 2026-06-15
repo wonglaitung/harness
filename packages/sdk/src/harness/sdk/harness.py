@@ -171,6 +171,9 @@ class AgentHarness:
         self._skill_injector = SkillInjector(self._skill_registry)
         self._load_skills()
 
+        # Initialize guardrails if configured
+        self._init_guardrails()
+
     def _create_session_store(self):
         """Create session store based on storage config."""
         storage_config = self.config.storage
@@ -286,6 +289,30 @@ class AgentHarness:
     def _load_skills(self) -> None:
         """Load skills from default directories."""
         self._skill_loader.load_defaults()
+
+    def _init_guardrails(self) -> None:
+        """Initialize guardrails hook if configured."""
+        guardrails_config = self.config.guardrails
+        if guardrails_config is None:
+            return
+
+        # Check if guardrails is enabled
+        if not getattr(guardrails_config, "enabled", False):
+            return
+
+        try:
+            from harness.guardrails import GuardrailHook
+
+            hook = GuardrailHook(guardrails_config)
+            self.add_hook(hook)
+
+        except ImportError as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Guardrails not available (missing dependencies): {e}. "
+                "Install with: pip install presidio-analyzer presidio-anonymizer"
+            )
 
     def load_skills_from_dir(self, directory: Path) -> int:
         """
