@@ -10,12 +10,14 @@ Agent = Model + Harness
 
 ## 项目结构
 
-这是一个 **Monorepo** 项目，包含两个包：
+这是一个 **Monorepo** 项目，包含四个包：
 
 | 包 | 说明 |
 |---|------|
 | [packages/sdk/](packages/sdk/) | **harness-sdk** - 可内嵌的 Python AI Agent SDK（跨平台） |
 | [packages/client/](packages/client/) | **harness-client** - Windows 桌面客户端（PyQt6） |
+| [packages/cloud/](packages/cloud/) | **harness-cloud** - Docker 沙箱云服务 |
+| [packages/scraper/](packages/scraper/) | **harness-scraper** - 智能文档爬取工具 |
 
 ## 快速开始
 
@@ -76,6 +78,22 @@ uv run python -m harness_client
 - 多模型支持
 - 统一配置目录（`~/.harness/`）
 
+## Cloud 功能
+
+- Docker 容器隔离
+- JWT 认证 + API Key 双层认证
+- 请求速率限制（Redis）
+- WebSocket 实时通信
+- 多模型支持（OpenAI/Claude/自定义）
+
+## Scraper 功能
+
+- 智能文档爬取（自动发现链接）
+- 多格式输出（Markdown/JSON）
+- 增量更新（检测内容变化）
+- 自定义抓取规则
+- CLI 命令行工具
+
 ## 开发
 
 ```bash
@@ -91,6 +109,8 @@ uv run ruff format packages/sdk/src/
 
 - [SDK 详细文档](packages/sdk/docs/)
 - [客户端使用指南](packages/client/README.md)
+- [Cloud 部署指南](packages/cloud/README.md)
+- [Scraper 使用指南](packages/scraper/README.md)
 - [编程规范](packages/sdk/docs/programmer_skill.md)
 
 ## 许可证
