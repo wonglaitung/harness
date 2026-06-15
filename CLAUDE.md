@@ -32,6 +32,7 @@ Harness 是一个 **Monorepo** 项目，包含：
 | `harness-sdk` | `packages/sdk/` | 可内嵌的 Python AI Agent SDK（跨平台） |
 | `harness-client` | `packages/client/` | Windows 桌面客户端（PyQt6） |
 | `harness-cloud` | `packages/cloud/` | Docker 沙箱云服务 |
+| `harness-scraper` | `packages/scraper/` | AI 情报/港股 Alpha 提取系统 |
 
 **核心公式**：`Agent = Model + Harness`
 
@@ -147,6 +148,28 @@ uv run uvicorn harness_cloud.gateway.main:app --reload --port 8080
 
 **重要**：修改代码后必须重新运行 `./scripts/build.sh` 重建镜像。
 
+### Scraper 开发
+
+```bash
+# 运行 AI 情报抽取
+cd packages/scraper
+uv run harness-scraper --skill ai-intelligence
+
+# 运行港股 Alpha 监控
+uv run harness-scraper --skill hk-stocks-alpha
+
+# 创建配置文件
+uv run harness-scraper config
+
+# 自定义 prompt
+uv run harness-scraper agent "抓取 HN 上关于 MCP 的讨论"
+```
+
+**技能驱动设计**：
+- 工具选择、判断标准、输出模板全部由 `skills/*.md` 定义
+- Agent 是通用的，base prompt 不包含具体工作流程
+- 新领域只需创建 skill 文件，无需改代码
+
 ---
 
 ## 架构
@@ -176,7 +199,18 @@ harness/
 │       │   └── common/           # 共享消息定义
 │       ├── docker/               # Dockerfile
 │       ├── scripts/              # 构建脚本
+│       ├── frontend/             # Vue 前端
 │       └── docker-compose.yml
+│
+│   └── scraper/                  # harness-scraper 包
+│       ├── src/harness_scraper/
+│       │   ├── agent.py          # IntelAgent（通用信息提取代理）
+│       │   ├── tools/            # 数据源工具
+│       │   └── cli.py            # CLI 入口
+│       ├── skills/               # 技能文件（领域知识）
+│       │   ├── ai-intelligence.md
+│       │   └── hk-stocks-alpha.md
+│       └── output/               # One-Pager 输出
 │
 ├── pyproject.toml                # Workspace 根配置
 ├── uv.lock                       # 锁定依赖
@@ -263,6 +297,25 @@ SidebarPanel.update_sessions() (纯渲染)
     ↓
 返回 LoopResult
 ```
+
+### Scraper 架构（技能驱动）
+
+```
+IntelAgent（通用代理）
+    ↓ 加载 Skill 文件
+    ↓ Skill 定义：工具清单、判断标准、输出模板
+    ↓
+AgentHarness.run(prompt)
+    ↓
+LLM 根据 Skill 自主决策工具调用
+    ↓
+One-Pager 输出 + MEMORY.md 自动更新
+```
+
+**核心设计**：
+- Agent 不硬编码控制流，遵循 Bitter Lesson
+- Skill 文件定义一切：工具选择、判断标准、工作流程
+- 新领域只需创建 skill 文件（`skills/*.md`）
 
 ### Cloud 架构
 
@@ -410,4 +463,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-13.
+Today's date is 2026-06-15.
