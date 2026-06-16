@@ -82,7 +82,7 @@ a = Analysis(
         'encodings.idna',
         'encodings.utf_8',
     ],
-    hookspath=[],
+    hookspath=['.'],  # Include local hooks (hook-tiktoken.py)
     hooksconfig={},
     runtime_hooks=[],
     excludes=[

@@ -20,7 +20,7 @@ ENCODINGS = {
     },
     "o200k_base": {
         "url": "https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken",
-        "hash": "a45e2446f0a60e51d2d46bce78a0a17af0a37b2013a7c6f504c14c61a53c8c65",
+        "hash": "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d",
     },
 }
 
