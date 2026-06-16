@@ -25,8 +25,8 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QWidget {
         background-color: """ + theme.APP_BACKGROUND + """;
         color: """ + theme.TEXT + """;
-        font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
-        font-size: 13px;
+        font-family: """ + theme.FONT_FAMILY + """;
+        font-size: """ + theme.FONT_SIZE_BASE + """;
     }
 
     QMainWindow {
@@ -50,7 +50,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QMenuBar::item {
         background-color: transparent;
         padding: 4px 12px;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QMenuBar::item:selected {
@@ -60,14 +60,14 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QMenu {
         background-color: """ + theme.MENU_BACKGROUND + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_MD + """;
         padding: 4px;
     }
 
     QMenu::item {
         background-color: transparent;
         padding: 6px 20px;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
         color: """ + theme.TEXT + """;
     }
 
@@ -86,7 +86,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QStatusBar {
         background-color: """ + theme.ACCENT + """;
         color: white;
-        font-size: 12px;
+        font-size: """ + theme.FONT_SIZE_SM + """;
         padding: 2px 8px;
         min-height: 24px;
     }
@@ -100,10 +100,10 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QPushButton {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_MD + """;
         padding: 6px 14px;
         color: """ + theme.TEXT + """;
-        font-size: 13px;
+        font-size: """ + theme.FONT_SIZE_BASE + """;
     }
 
     QPushButton:hover {
@@ -166,7 +166,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QLineEdit {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding: 6px 10px;
         color: """ + theme.TEXT + """;
         selection-background-color: """ + theme.SELECTION_ACTIVE + """;
@@ -188,7 +188,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QTextEdit {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding: 6px 10px;
         color: """ + theme.TEXT + """;
         selection-background-color: """ + theme.SELECTION_ACTIVE + """;
@@ -230,12 +230,12 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background: transparent;
         width: 12px;
         margin: 4px;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QScrollBar::handle:vertical {
         background: """ + theme.SCROLL_THUMB + """;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
         min-height: 32px;
     }
 
@@ -258,12 +258,12 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background: transparent;
         height: 12px;
         margin: 4px;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QScrollBar::handle:horizontal {
         background: """ + theme.SCROLL_THUMB + """;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
         min-width: 32px;
     }
 
@@ -310,7 +310,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QListView::item {
         background-color: transparent;
         padding: 6px 10px;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QListView::item:hover {
@@ -325,14 +325,14 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QTreeView {
         background-color: """ + theme.PANEL + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         color: """ + theme.TEXT + """;
     }
 
     QTreeView::item {
         background-color: transparent;
         padding: 4px 8px;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QTreeView::item:hover {
@@ -353,7 +353,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QComboBox {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding: 6px 10px;
         color: """ + theme.TEXT + """;
     }
@@ -378,7 +378,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QComboBox QAbstractItemView {
         background-color: """ + theme.MENU_BACKGROUND + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         selection-background-color: """ + theme.HOVER_NEUTRAL + """;
     }
 
@@ -387,7 +387,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QSpinBox {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding: 6px 10px;
         color: """ + theme.TEXT + """;
     }
@@ -418,7 +418,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QCheckBox::indicator {
         width: 16px;
         height: 16px;
-        border-radius: 3px;
+        border-radius: """ + theme.RADIUS_SM + """;
         border: 2px solid """ + theme.BORDER + """;
         background-color: transparent;
     }
@@ -437,7 +437,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QGroupBox {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding-top: 12px;
         color: """ + theme.TEXT + """;
     }
@@ -455,13 +455,13 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QTabWidget::pane {
         background-color: """ + theme.PANEL + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     QTabBar::tab {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 6px 6px 0 0;
+        border-radius: """ + theme.RADIUS_SM + """ """ + theme.RADIUS_SM + """ 0 0;
         padding: 6px 14px;
         color: """ + theme.TEXT_SUBTLE + """;
     }
@@ -481,14 +481,14 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QProgressBar {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 4px;
+        border-radius: """ + theme.RADIUS_SM + """;
         height: 6px;
         text-align: center;
     }
 
     QProgressBar::chunk {
         background-color: """ + theme.ACCENT + """;
-        border-radius: 3px;
+        border-radius: """ + theme.RADIUS_SM + """;
     }
 
     /* === Tool Tip === */
@@ -496,7 +496,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QToolTip {
         background-color: """ + theme.TOAST_BACKGROUND + """;
         border: 1px solid """ + theme.TOAST_BORDER + """;
-        border-radius: 6px;
+        border-radius: """ + theme.RADIUS_SM + """;
         padding: 6px 10px;
         color: """ + theme.TEXT + """;
     }

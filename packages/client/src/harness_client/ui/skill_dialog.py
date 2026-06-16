@@ -16,6 +16,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from harness_client.themes import get_theme
+
 
 class SkillEditDialog(QDialog):
     """Dialog for creating and editing skill files."""
@@ -32,6 +34,7 @@ class SkillEditDialog(QDialog):
 
     def _setup_ui(self):
         """Setup UI components."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
 
         # Basic info
@@ -98,12 +101,12 @@ class SkillEditDialog(QDialog):
 
         # Preset save location info
         self.save_location_label = QLabel()
-        self.save_location_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
-                font-size: 11px;
+        self.save_location_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_MUTED};
+                font-size: {theme.FONT_SIZE_XS};
                 padding: 4px;
-            }
+            }}
         """)
         self.save_location_label.setWordWrap(True)
         layout.addWidget(self.save_location_label)

@@ -20,6 +20,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from harness_client.themes import get_theme
+
 
 class TestConnectionThread(QThread):
     """Thread for testing MCP server connection."""
@@ -111,6 +113,7 @@ class MCPServerDialog(QDialog):
 
     def _setup_ui(self):
         """Setup UI components."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
@@ -185,28 +188,28 @@ class MCPServerDialog(QDialog):
                 desc = tool.description or ""
                 desc_preview = desc[:60] + "..." if len(desc) > 60 else desc
                 tool_label = QLabel(f"• {tool.original_name}")
-                tool_label.setStyleSheet("font-weight: bold; color: #4fc1ff;")
+                tool_label.setStyleSheet(f"font-weight: bold; color: {theme.ACCENT_LIGHT};")
                 tools_layout.addWidget(tool_label)
                 if desc_preview:
                     desc_label = QLabel(f"  {desc_preview}")
-                    desc_label.setStyleSheet("color: #808080; font-size: 11px;")
+                    desc_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
                     desc_label.setWordWrap(True)
                     tools_layout.addWidget(desc_label)
         else:
             no_tools_label = QLabel("未连接或无工具")
-            no_tools_label.setStyleSheet("color: #808080;")
+            no_tools_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
             tools_layout.addWidget(no_tools_label)
 
         layout.addWidget(self.tools_group)
 
         # Config save location info
         self.save_location_label = QLabel()
-        self.save_location_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
-                font-size: 11px;
+        self.save_location_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_MUTED};
+                font-size: {theme.FONT_SIZE_XS};
                 padding: 4px;
-            }
+            }}
         """)
         self._update_save_location()
         layout.addWidget(self.save_location_label)

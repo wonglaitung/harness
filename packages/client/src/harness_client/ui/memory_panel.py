@@ -51,7 +51,7 @@ class CategorySection(QWidget):
         name_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
-                font-size: 12px;
+                font-size: """ + theme.FONT_SIZE_SM + """;
                 font-weight: bold;
             }}
         """)
@@ -70,7 +70,7 @@ class CategorySection(QWidget):
                 min-height: 20px;
                 max-height: 20px;
                 color: {theme.TEXT};
-                font-size: 12px;
+                font-size: """ + theme.FONT_SIZE_SM + """;
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -96,7 +96,7 @@ class CategorySection(QWidget):
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
                 padding: 4px;
             }}
         """)
@@ -145,7 +145,7 @@ class CategorySection(QWidget):
         content_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
             }}
         """)
         content_label.setWordWrap(True)
@@ -158,7 +158,7 @@ class CategorySection(QWidget):
                 background-color: transparent;
                 border: none;
                 color: {theme.TEXT_SUBTLE};
-                font-size: 14px;
+                font-size: """ + theme.FONT_SIZE_MD + """;
                 min-width: 20px;
                 max-width: 20px;
             }}
@@ -237,7 +237,7 @@ class MemorySection(CollapsibleSection):
         info_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
                 padding: 4px;
             }}
         """)

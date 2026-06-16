@@ -74,7 +74,7 @@ class SidebarPanel(QWidget):
                 border-radius: {theme.RADIUS_MD};
                 padding: 10px 16px;
                 color: {theme.TEXT};
-                font-size: 13px;
+                font-size: """ + theme.FONT_SIZE_MD + """;
                 text-align: left;
             }}
             QPushButton:hover {{
@@ -126,7 +126,7 @@ class SidebarPanel(QWidget):
         sessions_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
                 font-weight: bold;
                 padding: 8px 0 4px 0;
             }}
@@ -143,7 +143,7 @@ class SidebarPanel(QWidget):
                 border: 1px solid {theme.BORDER};
                 border-radius: 8px;
                 color: {theme.TEXT};
-                font-size: 12px;
+                font-size: """ + theme.FONT_SIZE_SM + """;
             }}
             QListWidget::item {{
                 padding: 8px 12px;

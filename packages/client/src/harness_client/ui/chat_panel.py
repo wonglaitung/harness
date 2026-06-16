@@ -737,7 +737,7 @@ class ChatPanel(QWidget):
                 border-radius: 6px;
                 padding: 4px 10px;
                 color: {theme.TEXT_SUBTLE};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
@@ -853,7 +853,7 @@ class ChatPanel(QWidget):
         self.token_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 11px;
+                font-size: """ + theme.FONT_SIZE_XS + """;
                 padding: 0px;
             }}
         """)

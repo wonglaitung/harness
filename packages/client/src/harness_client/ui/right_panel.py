@@ -86,7 +86,7 @@ class CollapsibleSection(QWidget):
                 text-align: left;
                 color: {theme.TEXT};
                 font-weight: bold;
-                font-size: 13px;
+                font-size: """ + theme.FONT_SIZE_MD + """;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
@@ -136,7 +136,7 @@ class CollapsibleSection(QWidget):
                 min-height: 24px;
                 max-height: 24px;
                 color: {theme.TEXT};
-                font-size: 12px;
+                font-size: """ + theme.FONT_SIZE_SM + """;
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -265,7 +265,7 @@ class SkillsSection(CollapsibleSection):
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
+                font-size: {theme.FONT_SIZE_SM};
                 padding: 4px;
             }}
         """)
@@ -321,12 +321,12 @@ class SkillsSection(CollapsibleSection):
         # Status indicator
         indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
         indicator = QLabel("●")
-        indicator.setStyleSheet(f"color: {indicator_color}; font-size: 12px;")
+        indicator.setStyleSheet(f"color: {indicator_color}; font-size: {theme.FONT_SIZE_SM};")
         layout.addWidget(indicator)
 
         # Skill name
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: 12px;")
+        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
         layout.addWidget(name_label)
 
         layout.addStretch()
@@ -369,7 +369,7 @@ class MCPServersSection(CollapsibleSection):
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
+                font-size: {theme.FONT_SIZE_SM};
                 padding: 4px;
             }}
         """)
@@ -443,7 +443,7 @@ class MCPServersSection(CollapsibleSection):
 
         # Server name
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: 12px;")
+        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
         layout.addWidget(name_label)
 
         # Status text
@@ -461,7 +461,7 @@ class MCPServersSection(CollapsibleSection):
             status_color = theme.STATUS_DISCONNECTED
 
         status_label = QLabel(status_text)
-        status_label.setStyleSheet(f"color: {status_color}; font-size: 11px;")
+        status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
         layout.addWidget(status_label)
 
         layout.addStretch()
@@ -480,7 +480,7 @@ class MCPServersSection(CollapsibleSection):
                     border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
                     color: {theme.MCP_DISCONNECT_TEXT};
-                    font-size: 11px;
+                    font-size: """ + theme.FONT_SIZE_XS + """;
                 }}
                 QPushButton:hover {{
                     background-color: {theme.MCP_DISCONNECT_BG_HOVER};
@@ -496,7 +496,7 @@ class MCPServersSection(CollapsibleSection):
                     border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
                     color: {theme.MCP_CONNECT_TEXT};
-                    font-size: 11px;
+                    font-size: """ + theme.FONT_SIZE_XS + """;
                 }}
                 QPushButton:hover {{
                     background-color: {theme.MCP_CONNECT_BG_HOVER};
@@ -543,7 +543,7 @@ class FileTreeSection(CollapsibleSection):
         self.work_dir_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
-                font-size: 12px;
+                font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
                 padding: 4px;
             }}

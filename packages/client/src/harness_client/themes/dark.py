@@ -165,3 +165,38 @@ class DarkTheme:
     STATUS_CONNECTING = "#D29922"
     STATUS_ERROR = "#DA3633"
     STATUS_DISCONNECTED = "#6E7681"
+
+    # ============================================================
+    # Typography System
+    # ============================================================
+    # Font family stack - optimized for clarity and professionalism
+    FONT_FAMILY = '"Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif'
+    FONT_FAMILY_MONO = '"Consolas", "Courier New", monospace'
+
+    # Font sizes (in px for QSS, pt for rich text)
+    FONT_SIZE_XS = "11px"      # Captions, hints, timestamps
+    FONT_SIZE_SM = "12px"      # Secondary text, labels
+    FONT_SIZE_BASE = "13px"    # Body text (default)
+    FONT_SIZE_MD = "14px"      # Emphasized body
+    FONT_SIZE_LG = "16px"      # Section headers
+    FONT_SIZE_XL = "18px"      # Page titles
+    FONT_SIZE_2XL = "24px"     # Major headings
+
+    # Font sizes for rich text (pt)
+    FONT_SIZE_PT_XS = 9
+    FONT_SIZE_PT_SM = 10
+    FONT_SIZE_PT_BASE = 11
+    FONT_SIZE_PT_MD = 12
+    FONT_SIZE_PT_LG = 14
+    FONT_SIZE_PT_XL = 16
+
+    # Line heights (multiplier)
+    LINE_HEIGHT_TIGHT = 1.25
+    LINE_HEIGHT_NORMAL = 1.5
+    LINE_HEIGHT_RELAXED = 1.75
+
+    # Font weights
+    FONT_WEIGHT_NORMAL = "normal"
+    FONT_WEIGHT_MEDIUM = "500"
+    FONT_WEIGHT_BOLD = "bold"
+    FONT_WEIGHT_SEMIBOLD = "600"

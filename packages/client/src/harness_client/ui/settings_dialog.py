@@ -23,6 +23,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from harness_client.themes import get_theme
+
 
 class SettingsDialog(QDialog):
     """Settings dialog for configuring the client."""
@@ -35,6 +37,7 @@ class SettingsDialog(QDialog):
 
     def _setup_ui(self):
         """Setup UI components."""
+        theme = get_theme()
         layout = QVBoxLayout(self)
 
         # Tabs
@@ -110,7 +113,7 @@ class SettingsDialog(QDialog):
             "• tool: Anthropic 原生格式\n"
             "• user: 兼容模式（代理 API 不支持 tool role 时使用）"
         )
-        self.tool_role_help.setStyleSheet("color: #808080; font-size: 11px; margin-left: 20px;")
+        self.tool_role_help.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS}; margin-left: 20px;")
         self.tool_role_help.setWordWrap(True)
         self.tool_role_help_row = api_layout.addRow(self.tool_role_help)
 
@@ -145,7 +148,7 @@ class SettingsDialog(QDialog):
         temp_layout = QVBoxLayout()
         temp_layout.addWidget(self.temperature_slider)
         temp_help = QLabel("低值(0.1-0.3)更稳定，高值(0.7-1.0)更有创造性")
-        temp_help.setStyleSheet("color: #808080; font-size: 11px;")
+        temp_help.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
         temp_layout.addWidget(temp_help)
         general_layout.addRow(self.temperature_label, temp_layout)
 
@@ -174,12 +177,12 @@ class SettingsDialog(QDialog):
 
         # Config save location info
         self.save_location_label = QLabel()
-        self.save_location_label.setStyleSheet("""
-            QLabel {
-                color: #808080;
-                font-size: 11px;
+        self.save_location_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_MUTED};
+                font-size: {theme.FONT_SIZE_XS};
                 padding: 4px;
-            }
+            }}
         """)
         self._update_save_location()
         layout.addWidget(self.save_location_label)
