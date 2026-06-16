@@ -8,14 +8,14 @@
 
 ## 支持的部署拓扑
 
-### 拓扑 A：单进程脚本 ✅ MVP 支持
+### 拓扑 A：单进程脚本 ✅ 支持
 
 ```python
 # script.py
 from harness import AgentHarness
 
 agent = AgentHarness(model="claude-sonnet-4-6")
-result = agent.run_sync("分析代码")
+result = await agent.run("分析代码")
 ```
 
 **特点**：
@@ -25,16 +25,18 @@ result = agent.run_sync("分析代码")
 
 **推荐配置**：
 ```python
-agent = (HarnessBuilder()
-    .with_llm("claude-sonnet-4-6")
-    .with_memory("file", path="./sessions")
-    .build()
+from harness import HarnessConfig
+
+config = HarnessConfig(
+    model="claude-sonnet-4-6",
+    memory_dir="./sessions",
 )
+agent = AgentHarness(config=config)
 ```
 
 ---
 
-### 拓扑 B：FastAPI + 单 Worker ✅ MVP 支持
+### 拓扑 B：FastAPI + 单 Worker ✅ 支持
 
 ```python
 # app.py
@@ -57,47 +59,47 @@ async def chat(message: str, session_id: str = None):
 - SQLite WAL 模式可支持一定并发
 - Cron Trigger 进程内运行
 
-**推荐配置**：
-```python
-agent = (HarnessBuilder()
-    .with_llm("claude-sonnet-4-6")
-    .with_memory("sqlite", db_path="harness.db", pool_size=5)
-    .with_security("sandbox")
-    .build()
-)
-```
-
 ---
 
-### 拓扑 C：FastAPI + Gunicorn（多 Worker）⚠️ Phase 2
+### 拓扑 C：FastAPI + Gunicorn（多 Worker）✅ 支持
+
+多 Worker 模式需要使用 Redis 作为共享存储：
 
 ```python
-# 需要 Redis/PostgreSQL 后端
-agent = (HarnessBuilder()
-    .with_llm("claude-sonnet-4-6")
-    .with_memory("redis", url="redis://localhost:6379")
-    .with_triggers(mode="leader_election")  # Leader 选举
-    .build()
-)
+from harness import AgentHarness, HarnessConfig
+from harness.service.store_redis import RedisSessionStore
+
+# 配置 Redis 存储
+store = RedisSessionStore("redis://localhost:6379")
+agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
+
+# 或使用 harness.service 完整服务
+# 见 14-spring-cloud-integration.md
 ```
 
-**关键问题**：
+**关键问题及解决方案**：
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
-| Trigger 重复执行 | 每个 Worker 都启动 CronTrigger | Leader 选举或独立 Trigger Worker |
+| Trigger 重复执行 | 每个 Worker 都启动 CronTrigger | 独立 Trigger Worker 或 Celery Beat |
 | Session 缓存不一致 | Worker A 的缓存，Worker B 无法访问 | Redis 共享存储 |
-| SQLite 锁竞争 | 多进程写入冲突 | PostgreSQL 或 Redis |
+| SQLite 锁竞争 | 多进程写入冲突 | 使用 PostgreSQL 或 Redis |
 
-**解决方案**：
+**推荐方案**：
 
 ```python
-# 方案 1：独立 Trigger Worker
+# 方案 1：使用 harness.service（推荐）
+# 完整的 FastAPI 服务，支持多 Worker
+from harness.service import app
+
+# 启动：gunicorn -w 4 -k uvicorn.workers.UvicornWorker harness.service:app
+
+# 方案 2：独立 Trigger Worker
 # trigger_worker.py
 agent = AgentHarness(...)
 agent.start_trigger_worker()  # 独立进程
 
-# 方案 2：Celery Beat 集成
+# 方案 3：Celery Beat 集成
 from celery import Celery
 from celery.schedules import crontab
 
@@ -119,7 +121,7 @@ app.conf.beat_schedule = {
 
 ---
 
-### 拓扑 D：Kubernetes 多副本 ⚠️ Phase 2
+### 拓扑 D：Kubernetes 多副本 ✅ 支持
 
 ```yaml
 # deployment.yaml
@@ -133,30 +135,33 @@ spec:
     spec:
       containers:
       - name: agent
+        image: harness-agent:latest
+        ports:
+        - containerPort: 8000
         env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: REDIS_URL
           value: "redis://redis-service:6379"
----
-# 独立 Trigger Deployment
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: harness-trigger
-spec:
-  replicas: 1  # 单副本
-  template:
-    spec:
-      containers:
-      - name: trigger
-        env:
-        - name: TRIGGER_MODE
-          value: "singleton"
+        - name: NACOS_SERVER
+          value: "nacos-service:8848"  # 可选
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
 ```
 
 **关键配置**：
 - 使用 Redis 作为 Session 和 Lock 存储
-- Trigger 作为独立 Deployment（单副本）
-- 或使用 K8s CronJob 替代内置 Trigger
+- `POD_IP` 环境变量用于服务注册
+- 健康检查端点 `/health`
+- 可选：Nacos/Eureka 服务发现
 
 ---
 
@@ -196,7 +201,7 @@ result = agent.run_sync("hello")  # 现在可以工作
 # 开发环境热重载会重置内存状态
 # 解决：使用持久化存储
 agent = AgentHarness(
-    memory_dir="./persistent_memory"  # 久化到磁盘
+    memory_dir="./persistent_memory"  # 持久化到磁盘
 )
 ```
 
@@ -270,7 +275,7 @@ groups:
 
 ---
 
-## 拓扑 E：Spring Cloud 微服务架构
+## 拓扑 E：Spring Cloud 微服务架构 ✅ 支持
 
 适用场景：将 Agent 集成到 Spring Cloud 微服务生态。
 
@@ -299,25 +304,20 @@ groups:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 关键要求对比
+### 已实现功能
 
-| 要求 | SDK 现状 | 需要新增 |
-|-----|---------|---------|
-| HTTP 服务 | ❌ SDK 是库 | FastAPI 包装层 |
-| 健康检查 `/health` | ❌ | 需要添加 |
-| 服务注册/发现 | ❌ | Nacos/Eureka 注册 |
-| 链路追踪 | ⚠️ 有 OpenTelemetry | TraceID 提取中间件 |
-| 指标导出 `/metrics` | ⚠️ 有 OTel | Prometheus exporter |
-| 分布式状态 | ⚠️ SQLite 本地 | Redis/PostgreSQL |
-
-### 实施路径
-
-| Phase | 内容 | 代码量 | 优先级 |
-|-------|------|--------|--------|
-| 1 | HTTP 服务包装 + Health Check + TraceID 提取 | ~220 行 | **必需** |
-| 2 | Prometheus 指标导出 | ~50 行 | 推荐 |
-| 3 | Redis 分布式状态 | ~170 行 | 按需 |
-| 4 | Nacos/Eureka 服务注册 | ~80 行 | 可选 |
+| 功能 | 模块 | 状态 |
+|-----|------|------|
+| HTTP 服务包装 | `harness.service` | ✅ |
+| 健康检查 `/health` | `harness.service` | ✅ |
+| Prometheus 指标 `/metrics` | `harness.service.metrics` | ✅ |
+| TraceID 传播 | `harness.service.tracing` | ✅ |
+| WebSocket 流式执行 | `harness.service` | ✅ |
+| Redis 分布式会话 | `harness.service.store_redis` | ✅ |
+| Redis 分布式锁 | `harness.service.store_redis` | ✅ |
+| Nacos 服务注册 | `harness.service.discovery` | ✅ |
+| Eureka 服务注册 | `harness.service.discovery` | ✅ |
+| 统一错误响应 | `harness.service.error_handler` | ✅ |
 
 ### 长时任务处理
 
