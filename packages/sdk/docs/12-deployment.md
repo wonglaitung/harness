@@ -267,3 +267,75 @@ groups:
 3. **热重载**: 开发环境热重载会丢失内存状态，需要持久化存储
 4. **Windows**: 部分信号处理和沙箱功能（如 `setrlimit`）受限
 5. **MCP 进程组**: `preexec_fn` 在 Windows 上不可用
+
+---
+
+## 拓扑 E：Spring Cloud 微服务架构
+
+适用场景：将 Agent 集成到 Spring Cloud 微服务生态。
+
+### 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Spring Cloud Gateway                      │
+│  (路由、熔断、限流、JWT 认证、链路追踪、服务发现)             │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ HTTP/WebSocket
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Harness Agent Service (Python)               │
+│  - FastAPI 服务包装                                          │
+│  - 健康检查 /health                                          │
+│  - TraceID 提取                                              │
+│  - AgentHarness 核心                                         │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  外部存储 (Redis/PostgreSQL)                                 │
+│  - Session 状态                                               │
+│  - 分布式锁                                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 关键要求对比
+
+| 要求 | SDK 现状 | 需要新增 |
+|-----|---------|---------|
+| HTTP 服务 | ❌ SDK 是库 | FastAPI 包装层 |
+| 健康检查 `/health` | ❌ | 需要添加 |
+| 服务注册/发现 | ❌ | Nacos/Eureka 注册 |
+| 链路追踪 | ⚠️ 有 OpenTelemetry | TraceID 提取中间件 |
+| 指标导出 `/metrics` | ⚠️ 有 OTel | Prometheus exporter |
+| 分布式状态 | ⚠️ SQLite 本地 | Redis/PostgreSQL |
+
+### 实施路径
+
+| Phase | 内容 | 代码量 | 优先级 |
+|-------|------|--------|--------|
+| 1 | HTTP 服务包装 + Health Check + TraceID 提取 | ~220 行 | **必需** |
+| 2 | Prometheus 指标导出 | ~50 行 | 推荐 |
+| 3 | Redis 分布式状态 | ~170 行 | 按需 |
+| 4 | Nacos/Eureka 服务注册 | ~80 行 | 可选 |
+
+### 长时任务处理
+
+Agent 的 ReAct 循环可能耗时较长，推荐使用 **WebSocket 流式模式**：
+
+```
+Java Client -> WebSocket /ws/run
+              <- ProgressEvent (LOOP_START)
+              <- ProgressEvent (LLM_CALL)
+              <- ProgressEvent (TOOL_CALL)
+              ...
+              <- ProgressEvent (LOOP_END) + 最终结果
+```
+
+SDK 已有 `ProgressEvent` 机制，天然支持 WebSocket 推送。
+
+### 详细设计
+
+完整的实施指南（含 Java 客户端示例、K8s 配置、安全设计等）见：
+
+**👉 [14-spring-cloud-integration.md](./14-spring-cloud-integration.md)**

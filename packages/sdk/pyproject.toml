@@ -65,6 +65,20 @@ guardrails = [
     "httpx>=0.24.0",
     "cachetools>=5.3.0",
 ]
+# Spring Cloud / Service integration
+service = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
+prometheus = [
+    "prometheus-client>=0.17.0",
+]
+redis = [
+    "redis>=4.5.0",
+]
+nacos = [
+    "nacos-sdk-python>=0.1.12",
+]
 
 [build-system]
 requires = ["hatchling"]
