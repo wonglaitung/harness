@@ -127,9 +127,17 @@ class MainWindow(QMainWindow):
 
     def _set_window_icon(self):
         """Set window icon from SVG file."""
+        import sys
         from PyQt6.QtGui import QPixmap, QPainter
 
-        icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
+        # In PyInstaller bundle, resources are in sys._MEIPASS
+        if getattr(sys, 'frozen', False):
+            base_path = Path(sys._MEIPASS)
+            icon_path = base_path / "resources" / "icons" / "icon.svg"
+        else:
+            # In development, use relative path from this file
+            icon_path = Path(__file__).parent.parent.parent.parent / "resources" / "icons" / "icon.svg"
+
         if icon_path.exists():
             renderer = QSvgRenderer(str(icon_path))
             if renderer.isValid():
@@ -524,6 +532,8 @@ class MainWindow(QMainWindow):
 
         if settings.work_dir:
             self.work_dir = Path(settings.work_dir)
+            self.chat_controller.work_dir = self.work_dir
+            self.chat_panel.set_work_dir(self.work_dir)
             self.right_panel.set_work_dir(self.work_dir)
 
     def _on_about(self):
