@@ -316,51 +316,6 @@ class HarnessConfig:
             sandbox_workspace=os.getenv("HARNESS_SANDBOX_WORKSPACE"),
         )
 
-    @classmethod
-    def from_custom_api(
-        cls,
-        api_key: str,
-        base_url: str,
-        model: str,
-        provider: str = "openai",
-        **kwargs,
-    ) -> "HarnessConfig":
-        """
-        Create configuration for custom OpenAI-compatible API.
-
-        This is useful for:
-        - Custom LLM endpoints (e.g., xfyun, aliyun, local LLM)
-        - Proxy services
-        - Self-hosted models
-
-        Args:
-            api_key: API key for authentication
-            base_url: Base URL for the API endpoint
-            model: Model name to use
-            provider: Provider type (default: "openai" for compatibility)
-            **kwargs: Additional config options (max_iterations, etc.)
-
-        Returns:
-            HarnessConfig configured for custom API
-
-        Example:
-            >>> config = HarnessConfig.from_custom_api(
-            ...     api_key="your-api-key",
-            ...     base_url="https://api.example.com/v1",
-            ...     model="gpt-4",
-            ... )
-            >>> agent = AgentHarness(config=config)
-        """
-        return cls(
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            provider=provider,
-            max_iterations=kwargs.get("max_iterations", 10),
-            system_prompt=kwargs.get("system_prompt", ""),
-            **{k: v for k, v in kwargs.items() if k not in ["max_iterations", "system_prompt"]},
-        )
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
