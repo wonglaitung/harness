@@ -420,16 +420,26 @@ class TestFastAPIIntegration:
 # =============================================================================
 
 
-@pytest.mark.skip(reason="Requires Redis server")
+@pytest.mark.redis
 class TestRedisSessionStore:
-    """Tests for Redis session storage."""
+    """Tests for Redis session storage.
+
+    Requires Redis server. Run with:
+        docker run -d --name redis-test -p 6379:6379 redis:7-alpine
+        pytest packages/sdk/tests/test_spring_cloud.py -v -m redis
+    """
 
     @pytest.fixture
-    def redis_store(self):
+    async def redis_store(self):
         """Create Redis session store."""
         from harness.service.store_redis import RedisSessionStore
 
-        return RedisSessionStore("redis://localhost:6379/15")
+        store = RedisSessionStore("redis://localhost:6379/15")
+
+        yield store
+
+        # Cleanup: close connection
+        await store.close()
 
     @pytest.mark.asyncio
     async def test_save_and_load_session(self, redis_store):
@@ -470,14 +480,166 @@ class TestRedisSessionStore:
 
         await redis_store.save(session)
 
-        # Check TTL is set
-        ttl = await redis_store._get_redis().ttl(
-            redis_store._session_key("ttl-test-session")
-        )
+        # Check TTL is set (need to await _get_redis)
+        redis = await redis_store._get_redis()
+        ttl = await redis.ttl(redis_store._session_key("ttl-test-session"))
 
         assert ttl > 0
 
         await redis_store.delete("ttl-test-session")
+
+    @pytest.mark.asyncio
+    async def test_exists(self, redis_store):
+        """Test session exists check."""
+        from harness.types import Session
+
+        # Non-existent session
+        assert await redis_store.exists("nonexistent") is False
+
+        # Create session
+        session = Session(id="exists-test-session")
+        await redis_store.save(session)
+
+        assert await redis_store.exists("exists-test-session") is True
+
+        await redis_store.delete("exists-test-session")
+
+    @pytest.mark.asyncio
+    async def test_touch(self, redis_store):
+        """Test TTL refresh."""
+        from harness.types import Session
+        import asyncio
+
+        session = Session(id="touch-test-session")
+        await redis_store.save(session)
+
+        # Wait a bit
+        await asyncio.sleep(1)
+
+        # Get initial TTL
+        redis = await redis_store._get_redis()
+        initial_ttl = await redis.ttl(redis_store._session_key("touch-test-session"))
+
+        # Touch to refresh
+        result = await redis_store.touch("touch-test-session")
+        assert result is True
+
+        # Check TTL was refreshed
+        new_ttl = await redis.ttl(redis_store._session_key("touch-test-session"))
+        assert new_ttl >= initial_ttl
+
+        await redis_store.delete("touch-test-session")
+
+    @pytest.mark.asyncio
+    async def test_session_roundtrip_with_multiple_messages(self, redis_store):
+        """Test session with multiple messages."""
+        from harness.types import Session, Message
+
+        session = Session(id="multi-msg-session")
+
+        for i in range(5):
+            session.messages.append(Message(
+                role="user" if i % 2 == 0 else "assistant",
+                content=f"Message {i}",
+                timestamp=datetime.now(),
+            ))
+
+        await redis_store.save(session)
+
+        loaded = await redis_store.load("multi-msg-session")
+
+        assert loaded is not None
+        assert len(loaded.messages) == 5
+        assert loaded.messages[0].role == "user"
+        assert loaded.messages[1].role == "assistant"
+        assert loaded.messages[2].content == "Message 2"
+
+        await redis_store.delete("multi-msg-session")
+
+
+class TestRedisDistributedLock:
+    """Tests for Redis distributed lock.
+
+    Requires Redis server. Run with:
+        docker run -d --name redis-test -p 6379:6379 redis:7-alpine
+        pytest packages/sdk/tests/test_spring_cloud.py -v -m redis
+    """
+
+    @pytest.fixture
+    async def lock(self):
+        """Create Redis distributed lock."""
+        from harness.service.store_redis import RedisDistributedLock
+
+        lock = RedisDistributedLock("redis://localhost:6379/15")
+
+        yield lock
+
+        await lock.close()
+
+    @pytest.mark.asyncio
+    async def test_acquire_and_release(self, lock):
+        """Test basic lock acquire and release."""
+        token = await lock.acquire("test-resource", timeout=10)
+
+        assert token is not None
+        assert isinstance(token, str)
+
+        released = await lock.release("test-resource", token)
+        assert released is True
+
+    @pytest.mark.asyncio
+    async def test_lock_conflict(self, lock):
+        """Test that second acquire fails while lock is held."""
+        token1 = await lock.acquire("conflict-resource", timeout=10)
+        assert token1 is not None
+
+        # Second acquire should fail
+        token2 = await lock.acquire("conflict-resource", timeout=10)
+        assert token2 is None
+
+        # Release first lock
+        await lock.release("conflict-resource", token1)
+
+        # Now should succeed
+        token3 = await lock.acquire("conflict-resource", timeout=10)
+        assert token3 is not None
+
+        await lock.release("conflict-resource", token3)
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_release(self, lock):
+        """Test that release with wrong token fails."""
+        token = await lock.acquire("wrong-token-resource", timeout=10)
+        assert token is not None
+
+        # Try to release with wrong token
+        released = await lock.release("wrong-token-resource", "wrong-token")
+        assert released is False
+
+        # Lock should still be held
+        token2 = await lock.acquire("wrong-token-resource", timeout=10)
+        assert token2 is None
+
+        # Cleanup with correct token
+        await lock.release("wrong-token-resource", token)
+
+    @pytest.mark.asyncio
+    async def test_lock_auto_expiry(self, lock):
+        """Test that lock auto-expires after timeout."""
+        import asyncio
+
+        # Acquire with short timeout
+        token = await lock.acquire("expiry-resource", timeout=1)
+        assert token is not None
+
+        # Wait for expiry
+        await asyncio.sleep(1.5)
+
+        # Should be able to acquire now
+        token2 = await lock.acquire("expiry-resource", timeout=10)
+        assert token2 is not None
+
+        await lock.release("expiry-resource", token2)
 
 
 # =============================================================================
