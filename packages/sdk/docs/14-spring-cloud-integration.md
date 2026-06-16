@@ -1322,3 +1322,823 @@ async def tracing_middleware(request: Request, call_next):
 ---
 
 > 本报告可作为项目的 **Technical Design Document (TDD)**，指导实施工作。
+
+---
+
+## 十二、快速整合示例
+
+本章节提供一个完整的端到端示例，展示如何将 Harness SDK 整合到 Spring Cloud 微服务架构中。
+
+### 12.1 整体架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Spring Cloud Gateway                           │
+│                      (端口 8080，统一入口)                               │
+│  - JWT 认证                                                              │
+│  - 路由分发                                                              │
+│  - 熔断限流                                                              │
+│  - 链路追踪                                                              │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │
+          ┌─────────────────────────┼─────────────────────────┐
+          ▼                         ▼                         ▼
+┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+│  Java 服务 A        │   │  Java 服务 B        │   │  Python 服务        │
+│  :8081              │   │  :8082              │   │  Harness Agent      │
+│                     │   │                     │   │  :8000              │
+└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
+                                                              │
+                                                              ▼
+                                                    ┌─────────────────────┐
+                                                    │  Redis              │
+                                                    │  (分布式 Session)   │
+                                                    └─────────────────────┘
+```
+
+### 12.2 Python 服务端实现
+
+#### 步骤 1：安装依赖
+
+```bash
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate
+
+# 安装 Harness SDK + 服务依赖
+pip install harness-sdk[service,prometheus,redis]
+```
+
+#### 步骤 2：创建服务入口
+
+```python
+# agent_service.py
+"""
+Harness Agent Service - Spring Cloud 微服务节点
+
+启动方式:
+    # 开发模式
+    uvicorn agent_service:app --reload --port 8000
+
+    # 生产模式
+    gunicorn -w 4 -k uvicorn.workers.UvicornWorker agent_service:app --bind 0.0.0.0:8000
+"""
+
+import logging
+import os
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
+
+# Harness SDK
+from harness import AgentHarness, HarnessConfig, ProgressEvent
+from harness.service import (
+    TracingMiddleware,
+    ErrorCode,
+    create_error_response,
+    get_metrics_collector,
+    PROMETHEUS_AVAILABLE,
+    RedisSessionStore,
+    RedisDistributedLock,
+    get_service_instance,
+    NacosServiceRegistry,
+    REDIS_AVAILABLE,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# 配置
+# =============================================================================
+
+# 从环境变量读取配置
+SERVICE_NAME = os.getenv("SERVICE_NAME", "harness-agent")
+SERVICE_PORT = int(os.getenv("SERVICE_PORT", "8000"))
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+NACOS_SERVER = os.getenv("NACOS_SERVER", "")  # 可选
+
+
+# =============================================================================
+# 应用状态
+# =============================================================================
+
+class AppState:
+    def __init__(self):
+        self.config: HarnessConfig | None = None
+        self.session_store: RedisSessionStore | None = None
+        self.registry: NacosServiceRegistry | None = None
+        self.service_instance = None
+
+app_state = AppState()
+
+
+# =============================================================================
+# 生命周期管理
+# =============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """服务启动和关闭时的初始化/清理"""
+    logger.info(f"Starting {SERVICE_NAME}...")
+
+    # 1. 初始化配置
+    app_state.config = HarnessConfig.from_env()
+
+    # 2. 初始化 Redis Session Store
+    if REDIS_AVAILABLE and REDIS_URL:
+        app_state.session_store = RedisSessionStore(REDIS_URL)
+        logger.info("Redis session store initialized")
+
+    # 3. 初始化 Prometheus 指标
+    if PROMETHEUS_AVAILABLE:
+        get_metrics_collector().setup()
+        logger.info("Prometheus metrics enabled")
+
+    # 4. 注册到 Nacos（可选）
+    if NACOS_SERVER:
+        app_state.registry = NacosServiceRegistry(NACOS_SERVER)
+        app_state.service_instance = get_service_instance(SERVICE_NAME, SERVICE_PORT)
+        await app_state.registry.register(app_state.service_instance)
+        logger.info(f"Registered to Nacos: {SERVICE_NAME}")
+
+    yield
+
+    # 清理：从 Nacos 注销
+    if app_state.registry and app_state.service_instance:
+        await app_state.registry.deregister(app_state.service_instance)
+        logger.info(f"Deregistered from Nacos: {SERVICE_NAME}")
+
+    logger.info(f"Shutting down {SERVICE_NAME}...")
+
+
+# =============================================================================
+# FastAPI 应用
+# =============================================================================
+
+app = FastAPI(
+    title="Harness Agent Service",
+    description="AI Agent 服务，供 Spring Cloud 微服务调用",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS（生产环境应限制允许的域名）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# TraceID 提取中间件
+app.add_middleware(TracingMiddleware)
+
+
+# =============================================================================
+# 请求/响应模型
+# =============================================================================
+
+class RunRequest(BaseModel):
+    prompt: str
+    session_id: str | None = None
+    model: str | None = None
+    max_iterations: int | None = None
+
+
+class RunResponse(BaseModel):
+    status: str
+    content: str
+    session_id: str
+    iterations: int
+    token_usage: dict[str, int]
+
+
+# =============================================================================
+# 端点：健康检查
+# =============================================================================
+
+@app.get("/health")
+async def health_check(request: Request):
+    """
+    健康检查端点。
+
+    Spring Cloud Gateway / K8s 会定期调用此端点判断服务是否存活。
+    """
+    checks = {
+        "service": True,
+    }
+
+    # 检查 Redis 连接（如果配置了）
+    if app_state.session_store:
+        try:
+            # 简单的 ping 测试
+            await app_state.session_store._get_redis().ping()
+            checks["redis"] = True
+        except Exception as e:
+            checks["redis"] = False
+            logger.warning(f"Redis health check failed: {e}")
+
+    all_healthy = all(checks.values())
+
+    return JSONResponse(
+        status_code=200 if all_healthy else 503,
+        content={
+            "status": "healthy" if all_healthy else "unhealthy",
+            "checks": checks,
+        },
+    )
+
+
+# =============================================================================
+# 端点：Prometheus 指标
+# =============================================================================
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus 指标导出端点。"""
+    if not PROMETHEUS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Prometheus not available"},
+        )
+
+    collector = get_metrics_collector()
+    return Response(
+        content=collector.export(),
+        media_type=collector.get_content_type(),
+    )
+
+
+# =============================================================================
+# 端点：REST API
+# =============================================================================
+
+@app.post("/api/run", response_model=RunResponse)
+async def run_agent(request: Request, body: RunRequest):
+    """
+    同步执行 Agent（适合短任务，< 30s）。
+
+    注意：对于长时间运行的任务，请使用 WebSocket 端点。
+    """
+    # 从 Gateway 传递的头部获取用户上下文
+    user_id = request.headers.get("X-User-Id")
+    tenant_id = request.headers.get("X-Tenant-Id")
+    trace_id = request.headers.get("X-Trace-Id")
+
+    try:
+        agent = AgentHarness(config=app_state.config)
+
+        # 执行 Agent
+        result = await agent.run(
+            prompt=body.prompt,
+            session_id=body.session_id,
+        )
+
+        return RunResponse(
+            status=result.status.value,
+            content=result.content,
+            session_id=result.session.id,
+            iterations=result.iterations,
+            token_usage={
+                "input": result.token_usage.input_tokens,
+                "output": result.token_usage.output_tokens,
+            },
+        )
+
+    except Exception as e:
+        logger.exception(f"Agent execution failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                ErrorCode.INTERNAL_ERROR,
+                str(e),
+                trace_id,
+            ).model_dump(),
+        )
+
+
+# =============================================================================
+# 端点：WebSocket（长任务）
+# =============================================================================
+
+@app.websocket("/ws/run")
+async def run_agent_ws(websocket: WebSocket):
+    """
+    WebSocket 流式执行（适合长任务）。
+
+    协议:
+    1. 客户端发送: {"prompt": "...", "session_id": "可选"}
+    2. 服务端流式返回 ProgressEvent
+    3. 服务端最终返回: {"type": "done", "result": {...}}
+    """
+    await websocket.accept()
+
+    try:
+        # 接收请求
+        data = await websocket.receive_json()
+        request = RunRequest(**data)
+
+        agent = AgentHarness(config=app_state.config)
+
+        # 进度回调
+        async def on_progress(event: ProgressEvent):
+            await websocket.send_json({
+                "type": "progress",
+                "event_type": event.type.value,
+                "message": event.message,
+                "data": event.data,
+            })
+
+        # 执行 Agent
+        result = await agent.run(
+            prompt=request.prompt,
+            session_id=request.session_id,
+            on_progress=on_progress,
+        )
+
+        # 返回最终结果
+        await websocket.send_json({
+            "type": "done",
+            "result": {
+                "status": result.status.value,
+                "content": result.content,
+                "session_id": result.session.id,
+                "iterations": result.iterations,
+            },
+        })
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
+
+    except Exception as e:
+        logger.exception(f"WebSocket error: {e}")
+        await websocket.send_json({
+            "type": "error",
+            "error": str(e),
+        })
+
+
+# =============================================================================
+# 启动入口
+# =============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=SERVICE_PORT)
+```
+
+#### 步骤 3：创建 requirements.txt
+
+```txt
+# requirements.txt
+harness-sdk[service,prometheus,redis]>=0.1.0
+uvicorn>=0.23.0
+gunicorn>=21.0.0
+```
+
+#### 步骤 4：创建 Dockerfile
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制代码
+COPY agent_service.py .
+
+# 环境变量
+ENV SERVICE_NAME=harness-agent
+ENV SERVICE_PORT=8000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 启动命令
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", \
+     "agent_service:app", "--bind", "0.0.0.0:8000"]
+```
+
+### 12.3 Spring Cloud Gateway 配置
+
+#### application.yml
+
+```yaml
+# Spring Cloud Gateway 配置
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      # 全局跨域配置
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+      # 路由配置
+      routes:
+        # Harness Agent Service
+        - id: harness-agent
+          uri: http://harness-agent:8000
+          predicates:
+            - Path=/api/agent/**, /ws/agent/**
+          filters:
+            - StripPrefix=1
+            - AuthFilter  # 自定义鉴权过滤器
+
+      # 默认过滤器
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 10
+            redis-rate-limiter.burstCapacity: 20
+
+# Nacos 服务发现（可选）
+nacos:
+  discovery:
+    server-addr: nacos:8848
+```
+
+#### AuthFilter.java（网关鉴权）
+
+```java
+// src/main/java/com/example/gateway/AuthFilter.java
+package com.example.gateway;
+
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+@Component
+public class AuthFilter implements GlobalFilter {
+
+    private final JwtUtil jwtUtil;
+
+    public AuthFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String token = exchange.getRequest().getHeaders().getFirst("Authorization");
+
+        if (token == null || !token.startsWith("Bearer ")) {
+            exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
+        }
+
+        // 验证 JWT
+        Claims claims = jwtUtil.validateToken(token.substring(7));
+
+        // 注入用户上下文到请求头（传递给 Python 服务）
+        ServerHttpRequest request = exchange.getRequest().mutate()
+            .header("X-User-Id", claims.get("userId", String.class))
+            .header("X-Tenant-Id", claims.get("tenantId", String.class))
+            .header("X-Trace-Id", exchange.getRequest().getId())
+            .build();
+
+        return chain.filter(exchange.mutate().request(request).build());
+    }
+}
+```
+
+### 12.4 Java 客户端调用示例
+
+#### HTTP 同步调用
+
+```java
+// src/main/java/com/example/service/AgentClient.java
+package com.example.service;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+@Service
+public class AgentClient {
+
+    private final WebClient webClient;
+
+    public AgentClient(WebClient.Builder builder) {
+        this.webClient = builder
+            .baseUrl("http://api-gateway:8080")
+            .build();
+    }
+
+    /**
+     * 同步执行 Agent（适合短任务）
+     */
+    public Mono<AgentResponse> runAgent(String prompt, String sessionId) {
+        return webClient.post()
+            .uri("/api/agent/api/run")
+            .header("Authorization", "Bearer " + getCurrentToken())
+            .bodyValue(new AgentRequest(prompt, sessionId))
+            .retrieve()
+            .bodyToMono(AgentResponse.class);
+    }
+
+    private String getCurrentToken() {
+        // 从 SecurityContext 获取当前用户的 token
+        return SecurityContextHolder.getContext().getAuthentication().getCredentials().toString();
+    }
+}
+
+// 请求/响应模型
+record AgentRequest(String prompt, String sessionId) {}
+record AgentResponse(String status, String content, String sessionId, 
+                     int iterations, Map<String, Integer> tokenUsage) {}
+```
+
+#### WebSocket 流式调用
+
+```java
+// src/main/java/com/example/service/AgentWebSocketClient.java
+package com.example.service;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.socket.WebSocketMessage;
+import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+@Service
+public class AgentWebSocketClient {
+
+    private final ReactorNettyWebSocketClient webSocketClient;
+    private final String gatewayUrl = "ws://api-gateway:8080";
+
+    public AgentWebSocketClient() {
+        this.webSocketClient = new ReactorNettyWebSocketClient();
+    }
+
+    /**
+     * 流式执行 Agent（适合长任务）
+     */
+    public Flux<ProgressEvent> runAgentStreaming(String prompt, String sessionId) {
+        return Flux.create(emitter -> {
+            String uri = gatewayUrl + "/ws/agent/ws/run";
+
+            webSocketClient.execute(
+                java.net.URI.create(uri),
+                session -> {
+                    // 1. 发送请求
+                    String request = String.format(
+                        "{\"prompt\": \"%s\", \"session_id\": \"%s\"}",
+                        prompt, sessionId
+                    );
+                    Mono<Void> sendRequest = session.send(
+                        Mono.just(session.textMessage(request))
+                    );
+
+                    // 2. 接收响应
+                    Flux<Void> receiveResponses = session.receive()
+                        .map(WebSocketMessage::getPayloadAsText)
+                        .doOnNext(payload -> {
+                            JSONObject event = new JSONObject(payload);
+                            String type = event.getString("type");
+
+                            if ("done".equals(type)) {
+                                emitter.complete();
+                            } else if ("error".equals(type)) {
+                                emitter.error(new AgentException(event.getString("error")));
+                            } else {
+                                emitter.next(new ProgressEvent(
+                                    type,
+                                    event.optString("message", ""),
+                                    event.optJSONObject("data")
+                                ));
+                            }
+                        })
+                        .then();
+
+                    return sendRequest.then(receiveResponses);
+                }
+            ).subscribe();
+        });
+    }
+}
+
+// 进度事件
+record ProgressEvent(String type, String message, JSONObject data) {}
+```
+
+#### Controller 使用示例
+
+```java
+// src/main/java/com/example/controller/AgentController.java
+package com.example.controller;
+
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+@RestController
+@RequestMapping("/api/chat")
+public class ChatController {
+
+    private final AgentClient agentClient;
+    private final AgentWebSocketClient wsClient;
+
+    public ChatController(AgentClient agentClient, AgentWebSocketClient wsClient) {
+        this.agentClient = agentClient;
+        this.wsClient = wsClient;
+    }
+
+    /**
+     * 简单对话（同步，适合短任务）
+     */
+    @PostMapping("/simple")
+    public Mono<AgentResponse> simpleChat(@RequestBody ChatRequest request) {
+        return agentClient.runAgent(request.message(), null);
+    }
+
+    /**
+     * 复杂任务（流式，适合长任务）
+     */
+    @GetMapping("/stream")
+    public Flux<ProgressEvent> streamChat(@RequestParam String message) {
+        return wsClient.runAgentStreaming(message, null);
+    }
+}
+
+record ChatRequest(String message) {}
+```
+
+### 12.5 Kubernetes 部署配置
+
+#### Deployment
+
+```yaml
+# k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness-agent
+  labels:
+    app: harness-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: harness-agent
+  template:
+    metadata:
+      labels:
+        app: harness-agent
+    spec:
+      containers:
+        - name: agent
+          image: harness-agent:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SERVICE_NAME
+              value: "harness-agent"
+            - name: SERVICE_PORT
+              value: "8000"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: REDIS_URL
+              value: "redis://redis-service:6379"
+            - name: NACOS_SERVER
+              value: "nacos-service:8848"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: harness-secrets
+                  key: anthropic-api-key
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harness-agent
+spec:
+  selector:
+    app: harness-agent
+  ports:
+    - port: 8000
+      targetPort: 8000
+```
+
+#### HPA（自动扩缩容）
+
+```yaml
+# k8s/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: harness-agent-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: harness-agent
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+```
+
+### 12.6 快速启动清单
+
+#### 本地开发环境
+
+```bash
+# 1. 启动 Redis（可选，用于分布式 Session）
+docker run -d --name redis -p 6379:6379 redis:alpine
+
+# 2. 启动 Nacos（可选，用于服务发现）
+docker run -d --name nacos -p 8848:8848 nacos/nacos-server:latest
+
+# 3. 启动 Harness Agent Service
+cd packages/sdk
+PYTHONPATH=src uv run uvicorn harness.service:app --reload --port 8000
+
+# 4. 测试健康检查
+curl http://localhost:8000/health
+
+# 5. 测试 Agent 执行
+curl -X POST http://localhost:8000/api/run \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Hello, who are you?"}'
+```
+
+#### 生产部署
+
+```bash
+# 1. 构建 Docker 镜像
+docker build -t harness-agent:latest .
+
+# 2. 推送到镜像仓库
+docker push your-registry/harness-agent:latest
+
+# 3. 部署到 Kubernetes
+kubectl apply -f k8s/
+
+# 4. 验证部署
+kubectl get pods -l app=harness-agent
+kubectl logs -f deployment/harness-agent
+```
+
+### 12.7 常见问题排查
+
+| 问题 | 可能原因 | 解决方案 |
+|-----|---------|---------|
+| 健康检查失败 | Redis 连接问题 | 检查 REDIS_URL 配置 |
+| 请求超时 | Agent 执行时间过长 | 改用 WebSocket 端点 |
+| JWT 认证失败 | Gateway 未正确注入头部 | 检查 AuthFilter 配置 |
+| 服务未注册到 Nacos | NACOS_SERVER 未配置 | 设置环境变量 |
+| 内存溢出 | 请求量过大 | 调整 K8s 资源限制 |
