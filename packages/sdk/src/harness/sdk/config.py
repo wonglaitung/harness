@@ -271,6 +271,51 @@ class HarnessConfig:
 
         return cls(**data)
 
+    @classmethod
+    def from_env(cls) -> "HarnessConfig":
+        """
+        Load configuration from environment variables.
+
+        Supported environment variables:
+        - ANTHROPIC_API_KEY / OPENAI_API_KEY: API key
+        - HARNESS_MODEL: Model name (default: claude-sonnet-4-6)
+        - HARNESS_PROVIDER: Provider (anthropic/openai/auto)
+        - HARNESS_BASE_URL: Custom API endpoint
+        - HARNESS_MAX_ITERATIONS: Max loop iterations
+        - HARNESS_SYSTEM_PROMPT: System prompt
+        - HARNESS_MEMORY_DIR: Memory directory
+        - HARNESS_SANDBOX_WORKSPACE: Sandbox workspace path
+
+        Returns:
+            HarnessConfig with values from environment
+        """
+        import os
+
+        # Detect API key
+        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
+
+        # Detect provider from API key
+        if os.getenv("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
+        elif os.getenv("OPENAI_API_KEY"):
+            provider = "openai"
+        else:
+            provider = "auto"
+
+        # Override provider if explicitly set
+        provider = os.getenv("HARNESS_PROVIDER", provider)
+
+        return cls(
+            api_key=api_key,
+            model=os.getenv("HARNESS_MODEL", "claude-sonnet-4-6"),
+            provider=provider,
+            base_url=os.getenv("HARNESS_BASE_URL"),
+            max_iterations=int(os.getenv("HARNESS_MAX_ITERATIONS", "10")),
+            system_prompt=os.getenv("HARNESS_SYSTEM_PROMPT", ""),
+            memory_dir=os.getenv("HARNESS_MEMORY_DIR", ".harness/memory"),
+            sandbox_workspace=os.getenv("HARNESS_SANDBOX_WORKSPACE"),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {

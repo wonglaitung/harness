@@ -1,0 +1,62 @@
+# Spring Cloud Integration Test Environment
+#
+# This Docker Compose setup simulates a Spring Cloud environment
+# for testing the Harness Agent Service integration.
+#
+# Services:
+# - redis: Session storage and distributed lock
+# - harness-agent: The Python Agent Service
+#
+# Usage:
+#   # Start services
+#   docker-compose -f docker-compose.test.yml up -d
+#
+#   # Run tests
+#   pytest packages/sdk/tests/integration/test_spring_cloud_e2e.py -v
+#
+#   # Stop services
+#   docker-compose -f docker-compose.test.yml down -v
+
+version: '3.8'
+
+services:
+  # Redis for distributed session storage
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Harness Agent Service
+  harness-agent:
+    build:
+      context: ../../..
+      dockerfile: packages/sdk/docker/Dockerfile.test
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM Configuration (set these before running)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - HARNESS_MODEL=${HARNESS_MODEL:-claude-sonnet-4-6}
+      - HARNESS_PROVIDER=${HARNESS_PROVIDER:-auto}
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:
