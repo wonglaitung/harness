@@ -60,6 +60,8 @@ a = Analysis(
         'pydantic_core',
         'aiohttp',
         'tiktoken',
+        'tiktoken_ext',
+        'tiktoken_ext.openai_public',
         'jsonschema',
         'yaml',
         'markdown',
