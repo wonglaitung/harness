@@ -32,6 +32,7 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 23: MEMORY.md 标准 - 持久记忆文件管理 (P2)
     演示 24: 向量检索 - 语义搜索历史对话 (P2)
     演示 25: 语义卡住检测 - 基于相似度检测重复输出 (P2)
+    演示 26: Guardrails - PII 检测和内容安全 (P2)
 
 作者: Harness Team
 """
@@ -3256,6 +3257,204 @@ async def demo_semantic_stuck_detection():
 
 
 # ============================================================================
+# 演示 26: Guardrails PII 检测和内容安全 (P2)
+# ============================================================================
+
+async def demo_guardrails():
+    """
+    演示 26: Guardrails PII 检测和内容安全 (P2)
+
+    功能:
+    - Layer 1: PII 规则检测（手机号、身份证、银行卡等）
+    - Layer 2: LLM Judge 语义检测（可选）
+    - 流式输出拦截和 PII 过滤
+    - 与 AgentHarness 集成
+
+    学习要点:
+    - 两级检测策略：规则检测（<1ms）+ 语义检测（~100ms）
+    - 中文 PII 使用正则表达式 + 姓氏库，无额外依赖
+    - 支持多种 PII 类型：手机、身份证、银行卡、护照等
+    - 流式拦截器实时过滤输出中的 PII
+    """
+    print("\n" + "=" * 70)
+    print("演示 26: Guardrails PII 检测和内容安全 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 基础 PII 检测
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 基础 PII 检测 ---")
+
+    from harness.guardrails import (
+        GuardrailConfig,
+        check_pii,
+        redact_pii,
+        scan_pii,
+    )
+
+    # 测试文本（包含多种 PII）
+    test_text = """
+    用户张三的手机号是 13812345678，身份证号是 110101199001011234。
+    银行卡号：6222021234567890123
+    邮箱：zhangsan@example.com
+    """
+
+    # 检测 PII
+    pii_result = check_pii(test_text)
+    print(f"检测到 PII: {pii_result.has_pii}")
+    print(f"PII 类型: {[e.type for e in pii_result.entities]}")
+
+    # 扫描 PII（返回详细信息）
+    entities = scan_pii(test_text)
+    print(f"\nPII 实体详情:")
+    for entity in entities:
+        print(f"  - 类型: {entity.type}, 值: {entity.value}, 位置: {entity.start}-{entity.end}")
+
+    # -------------------------------------------------------------------------
+    # 2. PII 脱敏
+    # -------------------------------------------------------------------------
+    print("\n--- 2. PII 脱敏 ---")
+
+    # 传统脱敏（替换为星号）
+    redacted = redact_pii_traditional(test_text)
+    print(f"脱敏后文本:\n{redacted}")
+
+    # 智能脱敏（替换为占位符）
+    redacted_smart = redact_pii(test_text)
+    print(f"\n智能脱敏后:\n{redacted_smart}")
+
+    # -------------------------------------------------------------------------
+    # 3. GuardrailConfig 配置
+    # -------------------------------------------------------------------------
+    print("\n--- 3. GuardrailConfig 配置 ---")
+
+    # 仅 Layer 1（PII 规则检测）
+    config_layer1 = GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=False,
+    )
+    print(f"Layer 1 配置: {config_layer1}")
+
+    # Layer 1 + Layer 2（PII + LLM Judge）
+    config_full = GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,
+        layer2_enabled=True,
+        judge_endpoint="http://localhost:8001/v1/chat/completions",
+        judge_model="gpt-4",
+        judge_timeout_ms=500,
+    )
+    print(f"完整配置: Layer 1 + Layer 2")
+
+    # -------------------------------------------------------------------------
+    # 4. 与 AgentHarness 集成
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 与 AgentHarness 集成 ---")
+
+    print("""
+    集成流程：
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  AgentHarness(                                              │
+    │      model="claude-sonnet-4-6",                            │
+    │      guardrails=GuardrailConfig(                           │
+    │          enabled=True,                                     │
+    │          layer1_enabled=True,                              │
+    │          layer2_enabled=False,  # 仅规则检测               │
+    │      ),                                                    │
+    │  )                                                         │
+    │    ↓                                                        │
+    │  用户输入 → PII 检测 → 脱敏 → Agent 处理                    │
+    │    ↓                                                        │
+    │  Agent 输出 → PII 检测 → 脱敏 → 返回用户                    │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 创建带 Guardrails 的 Agent
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        guardrails=config_layer1,
+    )
+
+    print(f"已创建带 PII 检测的 Agent")
+
+    # -------------------------------------------------------------------------
+    # 5. 流式拦截器
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 流式拦截器 ---")
+
+    from harness.guardrails import StreamInterceptor, StreamInterceptConfig
+
+    # 创建拦截器
+    interceptor_config = StreamInterceptConfig(
+        enabled=True,
+        buffer_size=100,  # 缓冲区大小
+        check_pii=True,   # 检测 PII
+        redact_pii=True,  # 脱敏 PII
+    )
+
+    interceptor = StreamInterceptor(config=interceptor_config)
+    print(f"已创建流式拦截器")
+
+    # 模拟流式输出
+    stream_chunks = ["用户", "的手机号是", " 13812345678"]
+    print(f"\n模拟流式输出:")
+    for chunk in stream_chunks:
+        result = interceptor.process(chunk)
+        print(f"  输入: {chunk!r} → 输出: {result.content!r}")
+
+    # -------------------------------------------------------------------------
+    # 6. 支持的 PII 类型
+    # -------------------------------------------------------------------------
+    print("\n--- 6. 支持的 PII 类型 ---")
+
+    print("""
+    中国大陆：
+    - 手机号（11位）
+    - 身份证号（18位）
+    - 银行卡号（16-19位）
+    - 护照号
+    - 统一社会信用代码
+    - 车牌号
+    - 邮箱
+    - IP 地址
+
+    香港地区：
+    - 手机号（8位）
+    - 身份证号
+    - 英文姓名
+
+    特点：
+    - 中文姓名识别：基于姓氏库 + N-gram
+    - 无需安装 zh_core_web_sm 等 spaCy 中文模型
+    - 检测速度 < 1ms
+    """)
+
+    # -------------------------------------------------------------------------
+    # 7. 安装依赖
+    # -------------------------------------------------------------------------
+    print("\n--- 7. 安装依赖 ---")
+    print("""
+    # 方式一：安装可选依赖（推荐）
+    pip install harness-ai[guardrails]
+
+    # 方式二：手动安装
+    pip install presidio-analyzer>=2.2.0
+    pip install presidio-anonymizer>=2.2.0
+
+    # Layer 2 (Judge) - 如果启用
+    pip install httpx>=0.24.0
+    pip install cachetools>=5.3.0  # 可选，用于结果缓存
+    """)
+
+    print("\n✅ Guardrails PII 检测演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -3343,6 +3542,9 @@ async def main():
 
         # 语义卡住检测 (P2)
         await demo_semantic_stuck_detection()
+
+        # Guardrails PII 检测 (P2)
+        await demo_guardrails()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")
