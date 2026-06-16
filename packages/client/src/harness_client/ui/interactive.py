@@ -94,7 +94,9 @@ class GlowButton(QPushButton):
 
     def __init__(self, glow_color: QColor = None, glow_radius: int = 8, parent=None):
         super().__init__(parent)
-        self._glow_color = glow_color or QColor("#2563EB")  # Default accent blue
+        from harness_client.themes import get_theme
+        theme = get_theme()
+        self._glow_color = glow_color or QColor(theme.ACCENT)  # Default Trust Blue
         self._glow_radius = glow_radius
         self._shadow_effect = None
         self._hover = False

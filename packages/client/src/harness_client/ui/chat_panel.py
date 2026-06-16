@@ -878,7 +878,7 @@ class ChatPanel(QWidget):
                 background-color: {theme.DANGER_HOVER};
             }}
             QPushButton:pressed {{
-                background-color: #a02015;
+                background-color: {theme.DANGER_HOVER};
             }}
             QPushButton:disabled {{
                 background-color: {theme.CHROME};
@@ -904,7 +904,7 @@ class ChatPanel(QWidget):
                 background-color: {theme.ACCENT_HOVER};
             }}
             QPushButton:pressed {{
-                background-color: #1a47b8;
+                background-color: {theme.ACCENT};
             }}
             QPushButton:disabled {{
                 background-color: {theme.CHROME};

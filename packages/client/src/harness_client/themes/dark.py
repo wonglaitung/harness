@@ -1,145 +1,167 @@
 """
-Dark theme color palette - inspired by Athlon Agent design.
+Banking-grade dark theme color palette.
+
+Designed for trust, professionalism, and clarity in financial contexts.
+Moves away from "AI Blue" toward a deeper "Trust Blue" aesthetic.
 
 All colors are defined as hex strings for easy use in QSS and HTML.
 """
 
 
 class DarkTheme:
-    """Dark theme color palette with semantic naming."""
+    """Banking-grade dark theme with semantic naming."""
 
-    # Background hierarchy (darkest to lighter)
-    APP_BACKGROUND = "#101012"  # Main window background
-    CHROME = "#18181B"  # Title bar, sidebar background
-    PANEL = "#262628"  # Panel background
-    PANEL_ALT = "#2A2A2D"  # Alternate panel background
-    COMPOSER = "#2A2A2D"  # Input area background
+    # === Background Hierarchy ===
+    # More depth and contrast than typical dark themes
+    APP_BACKGROUND = "#0D1117"  # Main window - deepest
+    CHROME = "#161B22"  # Title bar, sidebar
+    PANEL = "#21262D"  # Panel background
+    PANEL_ALT = "#292E36"  # Alternate panel
+    COMPOSER = "#1C2128"  # Input area
 
-    # Chat background gradient (top to bottom)
-    CHAT_BACKGROUND_TOP = "#141416"
-    CHAT_BACKGROUND_BOTTOM = "#101012"
+    # Chat background gradient
+    CHAT_BACKGROUND_TOP = "#0F1419"
+    CHAT_BACKGROUND_BOTTOM = "#0D1117"
 
-    # Borders
-    BORDER = "#3F3F46"
-    BORDER_LIGHT = "#505050"
+    # === Border System ===
+    BORDER = "#30363D"  # Primary border
+    BORDER_LIGHT = "#444C56"  # Hover/lighter border
+    BORDER_FOCUS = "#58A6FF"  # Focus ring
 
-    # Text colors
-    TEXT = "#F4F4F5"  # Primary text
-    TEXT_SUBTLE = "#A1A1AA"  # Secondary/hint text
-    TEXT_DISABLED = "#71717A"  # Disabled state
+    # === Text Colors ===
+    TEXT = "#E6EDF3"  # Primary text
+    TEXT_SUBTLE = "#8B949E"  # Secondary text
+    TEXT_MUTED = "#6E7681"  # Muted/disabled hint
+    TEXT_DISABLED = "#484F58"  # Disabled state
 
-    # Accent colors (blue)
-    ACCENT = "#2563EB"
-    ACCENT_HOVER = "#1D4ED8"
-    ACCENT_LIGHT = "#93C5FD"  # Light accent for text
+    # === Trust Blue (Not AI Blue) ===
+    # Deeper, more authoritative blue for financial trust
+    ACCENT = "#1F6FEB"  # Trust blue - primary accent
+    ACCENT_HOVER = "#388BFD"  # Hover state
+    ACCENT_LIGHT = "#58A6FF"  # Light accent for highlights
+    ACCENT_SUBTLE = "#1C3A5E"  # Subtle accent background
 
-    # Status colors
-    SUCCESS = "#10B981"
-    SUCCESS_HOVER = "#059669"
-    DANGER = "#E11D48"
-    DANGER_HOVER = "#BE123C"
-    WARNING = "#FBBF24"
+    # === Semantic Colors ===
+    # Success (green)
+    SUCCESS = "#2EA043"
+    SUCCESS_HOVER = "#3FB950"
+    SUCCESS_BG = "#1A2F23"
+    SUCCESS_TEXT = "#6EE7B7"
 
-    # Message bubble colors - ChatGPT style
-    # User: deep blue that's readable on dark background
-    USER_BUBBLE = "#2B5B8A"  # Medium blue, readable
+    # Warning (amber)
+    WARNING = "#D29922"
+    WARNING_HOVER = "#E3B341"
+    WARNING_BG = "#2E2518"
+    WARNING_TEXT = "#F0C674"
+
+    # Danger (red)
+    DANGER = "#DA3633"
+    DANGER_HOVER = "#F85149"
+    DANGER_BG = "#3D1F20"
+    DANGER_TEXT = "#FDA4AF"
+
+    # Info (blue)
+    INFO = "#58A6FF"
+    INFO_BG = "#1C2B3E"
+    INFO_TEXT = "#93C5FD"
+
+    # === Message Bubbles ===
+    USER_BUBBLE = "#1C3A5E"  # Trust blue user message
     USER_BUBBLE_OPACITY = 1.0
-    # Assistant: subtle gray, no border
-    ASSISTANT_BUBBLE = "#2F2F2F"  # Slightly lighter than background
+    ASSISTANT_BUBBLE = "#21262D"  # Neutral assistant message
 
-    # Avatar colors
-    AVATAR_ASSISTANT_BG = "#4B5563"  # Gray for assistant avatar
+    # === Avatar Colors ===
+    AVATAR_ASSISTANT_BG = "#444C56"
 
-    # Navigation active state
-    NAV_ACTIVE_BG = "#1E3A5F"
-    NAV_ACTIVE_TEXT = "#93C5FD"
-    NAV_ACTIVE_BORDER = "#3B82F6"  # Bright blue for active indicator
+    # === Navigation ===
+    NAV_ACTIVE_BG = "#1C3A5E"
+    NAV_ACTIVE_TEXT = "#58A6FF"
+    NAV_ACTIVE_BORDER = "#1F6FEB"
 
-    # Tool call states - Thinking (purple)
-    TOOL_THINKING_BORDER = "#6D28D9"
-    TOOL_THINKING_BG = "#1E1B2E"
-    TOOL_THINKING_TEXT = "#DDD6FE"
-    TOOL_THINKING_LIGHT = "#C4B5FD"
+    # === Tool Call States ===
+    # Thinking (neutral)
+    TOOL_THINKING_BORDER = "#6E7681"
+    TOOL_THINKING_BG = "#161B22"
+    TOOL_THINKING_TEXT = "#8B949E"
+    TOOL_THINKING_LIGHT = "#A5A5A5"
 
-    # Tool call states - Success (green)
-    TOOL_SUCCESS_BORDER = "#059669"
-    TOOL_SUCCESS_BG = "#142A22"
+    # Success (green)
+    TOOL_SUCCESS_BORDER = "#2EA043"
+    TOOL_SUCCESS_BG = "#1A2F23"
     TOOL_SUCCESS_TEXT = "#6EE7B7"
     TOOL_SUCCESS_LIGHT = "#86EFAC"
 
-    # Tool call states - Failure (red)
-    TOOL_FAILURE_BORDER = "#E11D48"
-    TOOL_FAILURE_BG = "#2A1418"
+    # Failure (red)
+    TOOL_FAILURE_BORDER = "#DA3633"
+    TOOL_FAILURE_BG = "#3D1F20"
     TOOL_FAILURE_TEXT = "#FDA4AF"
 
-    # Hover states (different contexts)
-    HOVER_NEUTRAL = "#27272A"  # Neutral hover (gray)
-    HOVER_NEUTRAL_ALT = "#2F2F34"  # Alternate neutral
-    HOVER_ACTIVE = "#254766"  # Active item hover (blue tint)
-    HOVER_TOOL = "#242237"  # Tool card hover (purple tint)
-    HOVER_TOOL_PRESSED = "#2C2942"
-    HOVER_SURFACE = "#2A2A2D"  # Surface hover
-    HOVER_SURFACE_PRESSED = "#33333A"
+    # === Hover States ===
+    HOVER_NEUTRAL = "#21262D"
+    HOVER_NEUTRAL_ALT = "#292E36"
+    HOVER_ACTIVE = "#1C3A5E"
+    HOVER_TOOL = "#1C2128"
+    HOVER_TOOL_PRESSED = "#292E36"
+    HOVER_SURFACE = "#292E36"
+    HOVER_SURFACE_PRESSED = "#30363D"
 
-    # Selection states
-    SELECTION_ACTIVE = "#1E3A5F"
-    SELECTION_INACTIVE = "#243A55"
-    SELECTION_BORDER = "#2F5C8E"
+    # === Selection States ===
+    SELECTION_ACTIVE = "#1C3A5E"
+    SELECTION_INACTIVE = "#21262D"
+    SELECTION_BORDER = "#388BFD"
 
-    # Scrollbar
-    SCROLL_THUMB = "#9494A8"
+    # === Scrollbar ===
+    SCROLL_THUMB = "#6E7681"
     SCROLL_THUMB_OPACITY = 0.55
 
-    # Code/block background
-    CODE_BACKGROUND = "#202023"
-    CODE_BACKGROUND_ALT = "#27272A"
-    CODE_FOREGROUND = "#F1F5F9"
-    CODE_BORDER = "#1E293B"
-    CODE_HIGHLIGHT_BLUE = "#93C5FD"
+    # === Code Blocks ===
+    CODE_BACKGROUND = "#161B22"
+    CODE_BACKGROUND_ALT = "#1C2128"
+    CODE_FOREGROUND = "#E6EDF3"
+    CODE_BORDER = "#30363D"
+    CODE_HIGHLIGHT_BLUE = "#58A6FF"
 
-    # Table
-    TABLE_BORDER = "#52525B"
+    # === Table ===
+    TABLE_BORDER = "#444C56"
 
-    # Menu
-    MENU_BACKGROUND = "#27272A"
-    MENU_HOVER = "#3F3F46"
+    # === Menu ===
+    MENU_BACKGROUND = "#21262D"
+    MENU_HOVER = "#30363D"
 
-    # Toast/notification
-    TOAST_BACKGROUND = "#0F172A"
-    TOAST_BORDER = "#334155"
+    # === Toast/Notification ===
+    TOAST_BACKGROUND = "#161B22"
+    TOAST_BORDER = "#30363D"
 
-    # Icon badge gradient
+    # === Icon Badges ===
     ICON_BADGE_START = "#E0F2FE"
-    ICON_BADGE_END = "#0284C7"
+    ICON_BADGE_END = "#1F6FEB"
 
-    # @ completion badges
-    AT_SKILL_BADGE_BG = "#1E1B2E"
-    AT_SKILL_BADGE_BORDER = "#6D28D9"
-    AT_SKILL_BADGE_TEXT = "#DDD6FE"
-    AT_FILE_BADGE_BG = "#2A2A2D"
-    AT_FILE_BADGE_BORDER = "#3F3F46"
-    AT_FILE_BADGE_TEXT = "#A1A1AA"
+    # === @ Completion Badges ===
+    AT_SKILL_BADGE_BG = "#2E2518"
+    AT_SKILL_BADGE_BORDER = "#D29922"
+    AT_SKILL_BADGE_TEXT = "#F0C674"
+    AT_FILE_BADGE_BG = "#21262D"
+    AT_FILE_BADGE_BORDER = "#30363D"
+    AT_FILE_BADGE_TEXT = "#8B949E"
 
-    # Disabled state
-    DISABLED_BACKGROUND = "#3F3F46"
+    # === Disabled State ===
+    DISABLED_BACKGROUND = "#30363D"
 
-    # Shape system - corner radius values
-    # Use these constants consistently across all components
-    RADIUS_SM = "4px"  # Small elements: tags, mini buttons, inline indicators
-    RADIUS_MD = "8px"  # Standard: buttons, inputs, list items, panels
-    RADIUS_LG = "16px"  # Large: message bubbles, cards, section headers
+    # === Shape System (Banking prefers sharper edges) ===
+    RADIUS_SM = "3px"  # Small: tags, mini buttons
+    RADIUS_MD = "6px"  # Standard: buttons, inputs, panels
+    RADIUS_LG = "8px"  # Large: message bubbles, cards
 
-    # MCP Server item button colors
-    # Connect button (blue accent)
-    MCP_CONNECT_BG = "#1d3a5a"
-    MCP_CONNECT_BG_HOVER = "#2d4a6a"
-    MCP_CONNECT_TEXT = "#4fc1ff"
-    # Disconnect button (danger style)
-    MCP_DISCONNECT_BG = "#5a1d1d"
-    MCP_DISCONNECT_BG_HOVER = "#6a2d2d"
-    MCP_DISCONNECT_TEXT = "#f14c4c"
-    # Status indicator
-    STATUS_CONNECTED = "#50c878"
-    STATUS_CONNECTING = "#dcdcaa"
-    STATUS_ERROR = "#f14c4c"
-    STATUS_DISCONNECTED = "#808080"
+    # === MCP Server Buttons ===
+    MCP_CONNECT_BG = "#1C3A5E"
+    MCP_CONNECT_BG_HOVER = "#254766"
+    MCP_CONNECT_TEXT = "#58A6FF"
+    MCP_DISCONNECT_BG = "#3D1F20"
+    MCP_DISCONNECT_BG_HOVER = "#4D2F30"
+    MCP_DISCONNECT_TEXT = "#FDA4AF"
+
+    # === Status Indicators ===
+    STATUS_CONNECTED = "#2EA043"
+    STATUS_CONNECTING = "#D29922"
+    STATUS_ERROR = "#DA3633"
+    STATUS_DISCONNECTED = "#6E7681"

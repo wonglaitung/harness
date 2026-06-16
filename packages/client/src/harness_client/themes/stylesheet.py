@@ -2,6 +2,7 @@
 QSS stylesheet generator for Harness Client.
 
 Generates PyQt6 stylesheet strings from theme color palettes.
+Optimized for banking/professional use cases.
 """
 
 from harness_client.themes.dark import DarkTheme
@@ -24,7 +25,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QWidget {
         background-color: """ + theme.APP_BACKGROUND + """;
         color: """ + theme.TEXT + """;
-        font-family: "Segoe UI", "Microsoft YaHei", "SimHei", sans-serif;
+        font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
         font-size: 13px;
     }
 
@@ -42,12 +43,13 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.CHROME + """;
         border-bottom: 1px solid """ + theme.BORDER + """;
         color: """ + theme.TEXT + """;
-        padding: 4px 8px;
+        padding: 2px 4px;
+        max-height: 32px;
     }
 
     QMenuBar::item {
         background-color: transparent;
-        padding: 6px 12px;
+        padding: 4px 12px;
         border-radius: 4px;
     }
 
@@ -58,13 +60,13 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QMenu {
         background-color: """ + theme.MENU_BACKGROUND + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px;
+        border-radius: 6px;
         padding: 4px;
     }
 
     QMenu::item {
         background-color: transparent;
-        padding: 8px 24px;
+        padding: 6px 20px;
         border-radius: 4px;
         color: """ + theme.TEXT + """;
     }
@@ -85,7 +87,8 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.ACCENT + """;
         color: white;
         font-size: 12px;
-        padding: 4px 8px;
+        padding: 2px 8px;
+        min-height: 24px;
     }
 
     QStatusBar::item {
@@ -97,8 +100,8 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QPushButton {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px;
-        padding: 8px 16px;
+        border-radius: 6px;
+        padding: 6px 14px;
         color: """ + theme.TEXT + """;
         font-size: 13px;
     }
@@ -118,12 +121,12 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         border-color: """ + theme.DISABLED_BACKGROUND + """;
     }
 
-    /* Primary button (accent color) */
+    /* Primary button (Trust Blue) */
     QPushButton[primary="true"] {
         background-color: """ + theme.ACCENT + """;
         border: none;
         color: white;
-        font-weight: bold;
+        font-weight: 500;
     }
 
     QPushButton[primary="true"]:hover {
@@ -131,24 +134,25 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     }
 
     QPushButton[primary="true"]:pressed {
-        background-color: #1a47b8;
+        background-color: #1a4a9e;
     }
 
     /* Danger button */
     QPushButton[danger="true"] {
-        background-color: """ + theme.DANGER + """;
-        border: none;
-        color: white;
+        background-color: transparent;
+        border: 1px solid """ + theme.DANGER + """;
+        color: """ + theme.DANGER + """;
     }
 
     QPushButton[danger="true"]:hover {
-        background-color: """ + theme.DANGER_HOVER + """;
+        background-color: """ + theme.DANGER_BG + """;
+        border-color: """ + theme.DANGER_HOVER + """;
     }
 
     /* Ghost button (minimal style) */
     QPushButton[ghost="true"] {
         background-color: transparent;
-        border: 1px solid """ + theme.BORDER + """;
+        border: none;
         color: """ + theme.TEXT_SUBTLE + """;
     }
 
@@ -163,13 +167,13 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
         border-radius: 6px;
-        padding: 8px 12px;
+        padding: 6px 10px;
         color: """ + theme.TEXT + """;
         selection-background-color: """ + theme.SELECTION_ACTIVE + """;
     }
 
     QLineEdit:focus {
-        border-color: """ + theme.ACCENT + """;
+        border-color: """ + theme.BORDER_FOCUS + """;
     }
 
     QLineEdit:disabled {
@@ -178,20 +182,20 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     }
 
     QLineEdit::placeholder {
-        color: """ + theme.TEXT_SUBTLE + """;
+        color: """ + theme.TEXT_MUTED + """;
     }
 
     QTextEdit {
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
         border-radius: 6px;
-        padding: 8px 12px;
+        padding: 6px 10px;
         color: """ + theme.TEXT + """;
         selection-background-color: """ + theme.SELECTION_ACTIVE + """;
     }
 
     QTextEdit:focus {
-        border-color: """ + theme.ACCENT + """;
+        border-color: """ + theme.BORDER_FOCUS + """;
     }
 
     /* === Labels === */
@@ -203,6 +207,10 @@ def generate_stylesheet(theme: DarkTheme) -> str:
 
     QLabel[subtle="true"] {
         color: """ + theme.TEXT_SUBTLE + """;
+    }
+
+    QLabel[muted="true"] {
+        color: """ + theme.TEXT_MUTED + """;
     }
 
     /* === Scroll Areas === */
@@ -221,7 +229,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QScrollBar:vertical {
         background: transparent;
         width: 12px;
-        margin: 4px 4px 4px 4px;
+        margin: 4px;
         border-radius: 4px;
     }
 
@@ -249,7 +257,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QScrollBar:horizontal {
         background: transparent;
         height: 12px;
-        margin: 4px 4px 4px 4px;
+        margin: 4px;
         border-radius: 4px;
     }
 
@@ -301,8 +309,8 @@ def generate_stylesheet(theme: DarkTheme) -> str:
 
     QListView::item {
         background-color: transparent;
-        padding: 8px 12px;
-        border-radius: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
     }
 
     QListView::item:hover {
@@ -317,14 +325,14 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QTreeView {
         background-color: """ + theme.PANEL + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px;
+        border-radius: 6px;
         color: """ + theme.TEXT + """;
     }
 
     QTreeView::item {
         background-color: transparent;
         padding: 4px 8px;
-        border-radius: 6px;
+        border-radius: 4px;
     }
 
     QTreeView::item:hover {
@@ -346,7 +354,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
         border-radius: 6px;
-        padding: 6px 12px;
+        padding: 6px 10px;
         color: """ + theme.TEXT + """;
     }
 
@@ -355,7 +363,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     }
 
     QComboBox:focus {
-        border-color: """ + theme.ACCENT + """;
+        border-color: """ + theme.BORDER_FOCUS + """;
     }
 
     QComboBox::drop-down {
@@ -380,12 +388,12 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
         border-radius: 6px;
-        padding: 6px 12px;
+        padding: 6px 10px;
         color: """ + theme.TEXT + """;
     }
 
     QSpinBox:focus {
-        border-color: """ + theme.ACCENT + """;
+        border-color: """ + theme.BORDER_FOCUS + """;
     }
 
     QSpinBox::up-button,
@@ -408,9 +416,9 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     }
 
     QCheckBox::indicator {
-        width: 18px;
-        height: 18px;
-        border-radius: 4px;
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
         border: 2px solid """ + theme.BORDER + """;
         background-color: transparent;
     }
@@ -421,7 +429,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     }
 
     QCheckBox::indicator:hover {
-        border-color: """ + theme.ACCENT + """;
+        border-color: """ + theme.ACCENT_LIGHT + """;
     }
 
     /* === GroupBox === */
@@ -429,8 +437,8 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QGroupBox {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px;
-        padding-top: 16px;
+        border-radius: 6px;
+        padding-top: 12px;
         color: """ + theme.TEXT + """;
     }
 
@@ -439,7 +447,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         subcontrol-position: top left;
         padding: 0 8px;
         color: """ + theme.TEXT + """;
-        font-weight: bold;
+        font-weight: 500;
     }
 
     /* === Tab Widget === */
@@ -447,14 +455,14 @@ def generate_stylesheet(theme: DarkTheme) -> str:
     QTabWidget::pane {
         background-color: """ + theme.PANEL + """;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px;
+        border-radius: 6px;
     }
 
     QTabBar::tab {
         background-color: transparent;
         border: 1px solid """ + theme.BORDER + """;
-        border-radius: 8px 8px 0 0;
-        padding: 8px 16px;
+        border-radius: 6px 6px 0 0;
+        padding: 6px 14px;
         color: """ + theme.TEXT_SUBTLE + """;
     }
 
@@ -474,7 +482,7 @@ def generate_stylesheet(theme: DarkTheme) -> str:
         background-color: """ + theme.CHROME + """;
         border: 1px solid """ + theme.BORDER + """;
         border-radius: 4px;
-        height: 8px;
+        height: 6px;
         text-align: center;
     }
 

@@ -161,14 +161,17 @@ class MainWindow(QMainWindow):
 
     def _setup_menubar(self):
         """Setup minimal menu bar."""
+        from harness_client.themes import get_theme
+        theme = get_theme()
+
         menubar = self.menuBar()
-        menubar.setStyleSheet("""
-            QMenuBar {
-                background-color: #2d2d30;
-                border-bottom: 1px solid #3e3e42;
-                color: #d4d4d4;
+        menubar.setStyleSheet(f"""
+            QMenuBar {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+                color: {theme.TEXT};
                 padding: 2px;
-            }
+            }}
         """)
 
         file_menu = menubar.addMenu("文件(&F)")
@@ -193,6 +196,9 @@ class MainWindow(QMainWindow):
 
     def _setup_central_widget(self):
         """Setup central widget with 3-column splitter layout."""
+        from harness_client.themes import get_theme
+        theme = get_theme()
+
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -200,17 +206,17 @@ class MainWindow(QMainWindow):
 
         # Create 3-column splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setStyleSheet("""
-            QSplitter {
-                background-color: #1e1e1e;
-            }
-            QSplitter::handle {
-                background-color: #3e3e42;
+        splitter.setStyleSheet(f"""
+            QSplitter {{
+                background-color: {theme.APP_BACKGROUND};
+            }}
+            QSplitter::handle {{
+                background-color: {theme.BORDER};
                 width: 1px;
-            }
-            QSplitter::handle:hover {
-                background-color: #007acc;
-            }
+            }}
+            QSplitter::handle:hover {{
+                background-color: {theme.ACCENT};
+            }}
         """)
 
         # Left sidebar (collapsible navigation)
@@ -238,12 +244,15 @@ class MainWindow(QMainWindow):
 
     def _setup_statusbar(self):
         """Setup status bar."""
+        from harness_client.themes import get_theme
+        theme = get_theme()
+
         self.statusbar = QStatusBar()
-        self.statusbar.setStyleSheet("""
-            QStatusBar {
-                background-color: #007acc;
-                color: #ffffff;
-            }
+        self.statusbar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {theme.ACCENT};
+                color: white;
+            }}
         """)
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("就绪")
