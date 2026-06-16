@@ -22,7 +22,7 @@
 | **Context Rot Defense** | ✅ | 渐进式技能加载 + 上下文压缩 |
 | **Long-Horizon Execution** | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
 | **Error Handling** | ✅ | 熔断器 + 成本控制 + 卡住检测 |
-| **Serving Layer** | ❌ | SDK 不包含（client 层职责） |
+| **Serving Layer** | ✅ | `harness.service` 模块：FastAPI 服务、健康检查、Prometheus 指标、WebSocket |
 
 ### 功能实现状态
 
@@ -229,4 +229,4 @@ def my_tool(param: str) -> str:
 | Context Management | ✅ 动态组装 | ✅ 优先级栈 | ✅ |
 | Long-Horizon | ✅ Hooks + Ralph + Sub-Agent | ✅ Ralph + 自验证 | ✅ |
 | Error Handling | ✅ 熔断 + 成本控制 | ✅ 步骤预算 | ✅ |
-| Serving Layer | ❌ SDK 不含 | ✅ CLI + Web + API | ✅ |
+| Serving Layer | ✅ harness.service | ✅ CLI + Web + API | ✅ |

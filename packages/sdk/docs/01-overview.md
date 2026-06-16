@@ -266,7 +266,7 @@ You are a code reviewer. Your task is to:
 | Long-Horizon Execution | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
 | Error Handling | ✅ | 熔断器 + 成本控制 + 卡住检测（语义相似度） |
 | Guardrails | ✅ | Layer 1 PII 检测 + Layer 2 LLM Judge（可选依赖） |
-| Serving Layer | ❌ | SDK 不包含（client 层职责） |
+| Serving Layer | ✅ | `harness.service` 模块，支持 FastAPI 服务、健康检查、Prometheus 指标、WebSocket |
 
 详细实现状态见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
 

@@ -396,7 +396,7 @@ AI 开发范式的演进：
 | **Context Rot Defense** | ✅ 渐进加载 + 压缩器 | ✅ 工具卸载 + 渐进加载 | ✅ Compaction | 工具输出卸载待实现 |
 | **Long-Horizon** | ✅ Hooks + Ralph Loop + 自验证 + Sub-Agent | ✅ Ralph Loop + 自验证 | ✅ | 无 |
 | **Error Handling** | ✅ 熔断 + 卡住检测 + 成本控制 | ✅ 步骤预算 | ✅ | 步骤预算待实现 |
-| **Serving Layer** | ❌ SDK 不含 | ✅ CLI + Web + API | ✅ | Client 层职责 |
+| **Serving Layer** | ✅ harness.service | ✅ CLI + Web + API | ✅ | 微服务部署可选 |
 
 ### 优先级路线图（完整版）
 
