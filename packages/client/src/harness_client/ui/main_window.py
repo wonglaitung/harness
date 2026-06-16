@@ -88,6 +88,9 @@ class MainWindow(QMainWindow):
         # Update chat panel work dir for file completer
         self.chat_panel.set_work_dir(self.work_dir)
 
+        # Update right panel file tree work dir
+        self.right_panel.set_work_dir(self.work_dir)
+
         # Connect signals
         self.chat_panel.message_sent.connect(self._on_message_sent)
         self.chat_panel.stop_requested.connect(self._on_stop_requested)
@@ -538,8 +541,15 @@ class MainWindow(QMainWindow):
         """Handle work directory change from right panel."""
         self.work_dir = path
         self.chat_controller.work_dir = path
+        self.chat_controller.agent = None  # Force re-initialization with new sandbox_workspace
         self.chat_panel.set_work_dir(path)
         self.statusbar.showMessage(f"工作目录已更改: {path}", 3000)
+
+        # Save work_dir to settings if remember_dir is enabled
+        settings = self.settings_manager.get()
+        if settings.remember_dir:
+            settings.work_dir = str(path)
+            self.settings_manager.save(settings)
 
     def _on_mcp_changed(self):
         """Handle MCP server list change."""
