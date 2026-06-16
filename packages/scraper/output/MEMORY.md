@@ -49,6 +49,12 @@
 ## 注意事项
 
 ### 港股分析
+- **港股市场 - 回购潮左侧信号**
+
+### 新范式/工具
+- **Understand-Anything** - https://github.com/trending/typescript
+
+### 港股分析
 - **港股科技板块 - 半导体AI双轮驱动右侧信号**
 
 ### 港股分析
