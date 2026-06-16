@@ -833,3 +833,216 @@ class ToolCallRecord:
     error: str | None       # 错误信息
     duration_ms: int        # 执行耗时
 ```
+
+## Service 模块 (Spring Cloud 集成)
+
+`harness.service` 模块提供 FastAPI 服务包装，用于 Spring Cloud 微服务集成。
+
+### 安装
+
+```bash
+# 基础服务
+pip install harness-sdk[service]
+
+# Prometheus 指标
+pip install harness-sdk[prometheus]
+
+# Redis 分布式存储
+pip install harness-sdk[redis]
+
+# Nacos 服务发现
+pip install harness-sdk[nacos]
+```
+
+### 快速启动
+
+```python
+from harness.service import app
+
+# 使用 uvicorn 运行
+# uvicorn harness.service:app --port 8000
+```
+
+### FastAPI 应用
+
+```python
+from harness.service import app
+
+# 可用端点：
+# GET  /health              - 健康检查
+# GET  /metrics             - Prometheus 指标
+# POST /api/run             - 同步执行 Agent
+# GET  /api/sessions/{id}   - 获取会话
+# DELETE /api/sessions/{id} - 清除会话
+# WebSocket /ws/run         - 流式执行
+```
+
+### TracingMiddleware
+
+从 Spring Cloud Gateway 提取 W3C TraceContext：
+
+```python
+from harness.service import TracingMiddleware
+from fastapi import FastAPI
+
+app = FastAPI()
+app.add_middleware(TracingMiddleware)
+```
+
+**支持的 Header 格式**：
+- `traceparent` (W3C TraceContext)
+- `X-B3-TraceId` (Zipkin/Sleuth)
+- `X-Trace-Id` (自定义)
+
+### MetricsCollector
+
+Prometheus 指标收集器：
+
+```python
+from harness.service import MetricsCollector, MetricsConfig, get_metrics_collector
+
+# 使用全局收集器
+collector = get_metrics_collector()
+collector.setup()
+
+# 记录指标
+collector.record_iteration()
+collector.record_tool_call("bash", success=True, duration_seconds=0.5)
+collector.record_token_usage(usage)
+
+# 导出 Prometheus 格式
+metrics_data = collector.export()
+```
+
+**导出的指标**：
+
+| 指标名 | 类型 | 说明 |
+|-------|------|------|
+| `harness_loop_iterations_total` | Counter | 总循环迭代次数 |
+| `harness_tool_calls_total` | Counter | 工具调用次数 |
+| `harness_llm_tokens_total` | Counter | Token 使用量 |
+| `harness_session_duration_seconds` | Histogram | 会话持续时间 |
+| `harness_active_sessions` | Gauge | 当前活跃会话数 |
+
+### RedisSessionStore
+
+分布式会话存储：
+
+```python
+from harness.service import RedisSessionStore, RedisSessionConfig
+
+# 创建存储
+store = RedisSessionStore("redis://localhost:6379")
+
+# 或使用配置对象
+config = RedisSessionConfig(
+    redis_url="redis://localhost:6379",
+    key_prefix="harness:session",
+    ttl_seconds=3600,
+)
+store = RedisSessionStore(config=config)
+
+# 操作
+await store.save(session)
+session = await store.load("session-123")
+await store.delete("session-123")
+```
+
+**特点**：
+- JSON 序列化（非 pickle），跨语言兼容
+- Schema 版本管理
+- TTL 自动清理
+
+### RedisDistributedLock
+
+分布式锁：
+
+```python
+from harness.service import RedisDistributedLock
+
+lock = RedisDistributedLock("redis://localhost:6379")
+
+# 获取锁
+token = await lock.acquire("my-resource", timeout=30)
+if token:
+    try:
+        # 执行需要锁保护的操作
+        pass
+    finally:
+        await lock.release("my-resource", token)
+```
+
+### 服务发现
+
+```python
+from harness.service import (
+    NacosServiceRegistry,
+    EurekaServiceRegistry,
+    ServiceInstance,
+    get_service_instance,
+    get_pod_ip,
+)
+
+# 创建服务实例（自动检测 IP）
+instance = get_service_instance("harness-agent", 8000)
+
+# Nacos 注册
+registry = NacosServiceRegistry("nacos:8848")
+await registry.register(instance)
+await registry.deregister(instance)
+
+# Eureka 注册
+registry = EurekaServiceRegistry("http://eureka:8761")
+await registry.register(instance)
+```
+
+### 错误处理
+
+统一错误响应格式：
+
+```python
+from harness.service import ErrorCode, create_error_response
+
+# 创建错误响应
+error = create_error_response(
+    ErrorCode.INVALID_INPUT,
+    "Invalid parameter value",
+    trace_id="abc123",
+)
+
+# 返回 JSON
+# {
+#     "errorCode": "AGENT_400_001",
+#     "errorMessage": "Invalid parameter value",
+#     "traceId": "abc123",
+#     "timestamp": "2026-06-16T10:00:00Z"
+# }
+```
+
+**错误码定义**：
+
+| 错误码 | HTTP 状态 | 说明 |
+|-------|----------|------|
+| `AGENT_400_001` | 400 | 输入参数无效 |
+| `AGENT_401_001` | 401 | 未授权 |
+| `AGENT_403_001` | 403 | 禁止访问 |
+| `AGENT_404_001` | 404 | 资源不存在 |
+| `AGENT_500_001` | 500 | 内部错误 |
+| `AGENT_502_001` | 502 | LLM 服务错误 |
+| `AGENT_502_002` | 502 | 工具执行错误 |
+| `AGENT_400_002` | 400 | 预算超限 |
+| `AGENT_400_003` | 400 | 迭代次数超限 |
+| `AGENT_400_004` | 400 | 检测到死循环 |
+
+### 可选依赖状态
+
+运行时检测可选依赖是否可用：
+
+```python
+from harness.service import (
+    PROMETHEUS_AVAILABLE,  # prometheus-client
+    REDIS_AVAILABLE,       # redis
+    NACOS_AVAILABLE,       # nacos-sdk-python
+    EUREKA_AVAILABLE,      # 始终 True (HTTP API)
+)
+```

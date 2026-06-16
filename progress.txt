@@ -958,3 +958,99 @@ cd packages/cloud
 #### 提交记录
 
 - feat(cloud): Add Vue frontend MVP with WebSocket chat functionality
+
+## 2026-06-16
+
+### Spring Cloud 集成 ✅ 完成
+
+#### 实现内容
+
+**Phase 1: W3C TraceContext 追踪**
+- TracingMiddleware (service/tracing.py) - W3C traceparent 解析和生成
+- extract_trace_context() - 从请求头提取追踪信息
+- inject_trace_context() - 注入追踪信息到响应头
+- 自动生成 trace_id 用于日志关联
+
+**Phase 2: 统一错误响应**
+- ErrorCode 枚举 (service/error_handler.py) - 标准错误码
+- ErrorResponse 模型 - 统一响应格式 (errorCode, errorMessage, traceId, timestamp)
+- GlobalExceptionHandler - 异常统一处理
+- 自定义异常类 (SessionNotFoundError, ToolExecutionError 等)
+
+**Phase 3: Prometheus 指标**
+- MetricsCollector (service/metrics.py) - 指标收集器
+- 请求计数 (request_count_total)
+- 请求延迟 (request_latency_seconds)
+- Token 使用量 (token_usage_total)
+- 活跃会话数 (active_sessions)
+- Prometheus 格式导出端点 (/metrics)
+
+**Phase 4: Redis 分布式存储**
+- RedisSessionStore (service/store_redis.py) - JSON 序列化会话存储
+  - Schema 版本控制（向后兼容）
+  - TTL 自动过期
+  - 连接池
+- RedisDistributedLock - 分布式锁
+  - SET NX EX 原子获取
+  - Lua 脚本原子释放
+
+**Phase 4 (续): 服务发现**
+- ServiceRegistry 协议 (service/discovery.py) - 统一接口
+- NacosServiceRegistry - Nacos 服务注册
+  - 心跳保活
+  - 自动注销
+  - POD_IP 环境变量支持
+- EurekaServiceRegistry - Eureka 服务注册
+  - 心跳续约
+  - 自动注销
+
+#### 新增可选依赖
+
+```toml
+[project.optional-dependencies]
+service = ["fastapi>=0.100.0", "uvicorn>=0.23.0"]
+prometheus = ["prometheus-client>=0.17.0"]
+redis = ["redis>=4.5.0"]
+nacos = ["nacos-sdk-python>=0.1.11"]
+```
+
+#### 文档更新
+
+- `docs/12-deployment.md`: 新增"拓扑 E：Spring Cloud 微服务架构"章节
+- `docs/14-spring-cloud-integration.md`: 完整集成指南
+  - 关键要求对比表
+  - W3C TraceContext 追踪
+  - Prometheus 指标
+  - Redis 分布式存储
+  - 服务发现
+  - Gateway 路由配置
+  - 快速整合示例
+  - 改造现有应用为微服务指南
+- `docs/07-sdk-api.md`: 新增 Service 模块 API 文档
+
+#### 提交记录
+
+- feat(sdk): Add Spring Cloud integration (Phase 1-4) with tracing, metrics, redis, discovery
+- docs(sdk): Add Spring Cloud integration documentation and quick start guide
+
+---
+
+## 当前状态总结
+
+### Harness SDK 功能状态
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+| - | Spring Cloud 集成 | ✅ |
+
+**所有 P0-P3 功能 + Spring Cloud 集成已完成！**
