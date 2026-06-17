@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-✅ **Phase 6 完成** - Security 模块已实现
+✅ **Phase 3 完成** - MCP 集成已实现
 
 ## 模块结构
 
@@ -12,7 +12,7 @@
 harness-sdk-java/
 ├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop）
 ├── harness-sdk-llm/       # LLM 客户端（Anthropic、OpenAI）
-├── harness-sdk-mcp/       # MCP 协议集成
+├── harness-sdk-mcp/       # MCP 协议集成（STDIO、SSE）
 ├── harness-sdk-tools/     # 内置工具（Read, Write, Edit, Bash, Glob, Grep）
 ├── harness-sdk-memory/    # 记忆系统（MEMORY.md 管理）
 ├── harness-sdk-skills/    # 技能系统（Skill 加载）
@@ -31,6 +31,12 @@ harness-sdk-java/
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl
 - **OpenAIClient**: OpenAI/兼容 API 客户端
+
+### harness-sdk-mcp
+- **McpManager**: MCP 服务器管理器，支持多服务器连接
+- **McpServerConfig**: 服务器配置（STDIO/SSE 传输）
+- **McpToolWrapper**: MCP 工具包装器，适配 Harness Tool 接口
+- **McpToolInfo**: MCP 工具元数据
 
 ### harness-sdk-tools
 - **ReadTool**: 文件读取，支持行号、图片
