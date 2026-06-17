@@ -2,26 +2,20 @@ plugins {
     `java-library`
 }
 
-val jacksonVersion: String by extra
-val slf4jVersion: String by extra
+val jtokkitVersion: String by extra
 val junitVersion: String by extra
-val mockitoVersion: String by extra
-val caffeineVersion: String by extra
 
 dependencies {
-    // JSON 处理
-    api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
-    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion")
+    api(project(":harness-sdk-core"))
 
-    // 日志接口
-    api("org.slf4j:slf4j-api:$slf4jVersion")
-
-    // 缓存
-    api("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
+    // Token 计数
+    api("com.knuddelsgmbh:jtokkit:$jtokkitVersion")
 
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
-    testImplementation("org.mockito:mockito-core:$mockitoVersion")
-    testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
