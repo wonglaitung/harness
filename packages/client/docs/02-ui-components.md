@@ -382,41 +382,181 @@ def accept(self):
 
 ## 样式系统
 
-### 样式定义
+客户端使用 **Banking-grade Dark Theme**（金融级深色主题），专为信任、专业和清晰设计。
 
-使用 QSS (Qt Style Sheet) 定义应用样式：
+### 主题架构
 
-```python
-STYLES = """
-QMainWindow {
-    background-color: #1a1a2e;
-}
+主题系统由两个核心模块组成：
 
-QPushButton {
-    background-color: #4a4a6a;
-    color: white;
-    border-radius: 4px;
-    padding: 8px 16px;
-}
-
-QPushButton:hover {
-    background-color: #5a5a7a;
-}
-
-/* ... 更多样式 */
-"""
+```
+themes/
+├── dark.py          # DarkTheme 类 - 颜色和字体常量定义
+└── stylesheet.py    # generate_stylesheet() - QSS 样式生成器
 ```
 
-### 主题色
+### DarkTheme 类
 
-| 用途 | 颜色 | 说明 |
+所有颜色、字体、尺寸常量定义在 `DarkTheme` 类中：
+
+```python
+from harness_client.themes.dark import DarkTheme
+
+class DarkTheme:
+    # === Background Hierarchy ===
+    APP_BACKGROUND = "#0D1117"  # 主窗口 - 最深层
+    CHROME = "#161B22"          # 标题栏、侧边栏
+    PANEL = "#21262D"           # 面板背景
+    PANEL_ALT = "#292E36"       # 替代面板
+    COMPOSER = "#1C2128"        # 输入区域
+
+    # === Trust Blue (Not AI Blue) ===
+    ACCENT = "#1F6FEB"          # 信任蓝 - 主强调色
+    ACCENT_HOVER = "#388BFD"    # 悬停状态
+    ACCENT_LIGHT = "#58A6FF"    # 高亮色
+
+    # === Typography System ===
+    FONT_FAMILY = '"Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif'
+    FONT_FAMILY_MONO = '"Consolas", "Courier New", monospace'
+    FONT_SIZE_BASE = "13px"
+
+    # === Border Radius Scale ===
+    RADIUS_SM = "3px"   # 小型：标签、迷你按钮
+    RADIUS_MD = "6px"   # 标准：按钮、输入框、面板
+    RADIUS_LG = "8px"   # 大型：消息气泡、卡片
+```
+
+### Trust Blue 设计理念
+
+从 "AI Blue" (#2563EB) 迁移到更深沉的 "Trust Blue" (#1F6FEB)，为金融/专业场景建立信任感：
+
+| 设计维度 | AI Blue | Trust Blue |
+|---------|---------|------------|
+| 主色调 | #2563EB (亮蓝) | #1F6FEB (深蓝) |
+| 视感 | 科技感、年轻化 | 专业、权威、可信赖 |
+| 适用场景 | AI 产品、消费级应用 | 金融、企业级应用 |
+
+### 颜色系统
+
+#### 背景层次
+
+| 层级 | 颜色 | 用途 |
 |------|------|------|
-| 背景色 | `#1a1a2e` | 深色背景 |
-| 前景色 | `#ffffff` | 白色文字 |
-| 强调色 | `#6c5ce7` | 紫色 |
-| 成功色 | `#00b894` | 绿色 |
-| 警告色 | `#fdcb6e` | 黄色 |
-| 错误色 | `#e74c3c` | 红色 |
+| `APP_BACKGROUND` | `#0D1117` | 主窗口背景（最深） |
+| `CHROME` | `#161B22` | 标题栏、侧边栏、边框区域 |
+| `PANEL` | `#21262D` | 面板背景 |
+| `PANEL_ALT` | `#292E36` | 替代面板、悬停状态 |
+| `COMPOSER` | `#1C2128` | 输入区域 |
+
+#### 文本颜色
+
+| 层级 | 颜色 | 用途 |
+|------|------|------|
+| `TEXT` | `#E6EDF3` | 主文本（高对比） |
+| `TEXT_SUBTLE` | `#8B949E` | 次级文本 |
+| `TEXT_MUTED` | `#6E7681` | 提示文本、占位符 |
+| `TEXT_DISABLED` | `#484F58` | 禁用状态 |
+
+#### 语义颜色
+
+| 状态 | 主色 | 背景色 | 文本色 |
+|------|------|--------|--------|
+| Success | `#2EA043` | `#1A2F23` | `#6EE7B7` |
+| Warning | `#D29922` | `#2E2518` | `#F0C674` |
+| Danger | `#DA3633` | `#3D1F20` | `#FDA4AF` |
+| Info | `#58A6FF` | `#1C2B3E` | `#93C5FD` |
+
+### 字体系统
+
+#### 字体族
+
+```python
+# 主字体堆栈（优化清晰度和专业性）
+FONT_FAMILY = '"Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif'
+
+# 等宽字体（代码显示）
+FONT_FAMILY_MONO = '"Consolas", "Courier New", monospace'
+```
+
+#### 字号层级
+
+| 常量 | 尺寸 | 用途 |
+|------|------|------|
+| `FONT_SIZE_XS` | 11px | 时间戳、提示文本 |
+| `FONT_SIZE_SM` | 12px | 次级文本、标签 |
+| `FONT_SIZE_BASE` | 13px | 正文（默认） |
+| `FONT_SIZE_MD` | 14px | 强调文本 |
+| `FONT_SIZE_LG` | 16px | 区块标题 |
+| `FONT_SIZE_XL` | 18px | 页面标题 |
+| `FONT_SIZE_2XL` | 24px | 大标题 |
+
+#### 行高与字重
+
+```python
+# 行高倍数
+LINE_HEIGHT_TIGHT = 1.25     # 紧凑（标题）
+LINE_HEIGHT_NORMAL = 1.5     # 标准（正文）
+LINE_HEIGHT_RELAXED = 1.75   # 舒适（长文本）
+
+# 字重
+FONT_WEIGHT_NORMAL = "normal"
+FONT_WEIGHT_MEDIUM = "500"
+FONT_WEIGHT_BOLD = "bold"
+FONT_WEIGHT_SEMIBOLD = "600"
+```
+
+### 圆角系统
+
+金融场景偏好更锐利的边缘，建立专业感：
+
+| 常量 | 尺寸 | 用途 |
+|------|------|------|
+| `RADIUS_SM` | 3px | 标签、迷你按钮、复选框 |
+| `RADIUS_MD` | 6px | 按钮、输入框、面板 |
+| `RADIUS_LG` | 8px | 消息气泡、卡片、对话框 |
+
+### 样式生成器
+
+使用 `generate_stylesheet()` 生成完整 QSS：
+
+```python
+from harness_client.themes.dark import DarkTheme
+from harness_client.themes.stylesheet import generate_stylesheet
+
+theme = DarkTheme()
+stylesheet = generate_stylesheet(theme)
+app.setStyleSheet(stylesheet)
+```
+
+样式生成器使用主题常量，避免硬编码颜色值：
+
+```python
+# stylesheet.py 示例
+def generate_stylesheet(theme: DarkTheme) -> str:
+    return """
+    QWidget {
+        background-color: """ + theme.APP_BACKGROUND + """;
+        color: """ + theme.TEXT + """;
+        font-family: """ + theme.FONT_FAMILY + """;
+        font-size: """ + theme.FONT_SIZE_BASE + """;
+    }
+
+    QPushButton {
+        border-radius: """ + theme.RADIUS_MD + """;
+    }
+    """
+```
+
+### 主题色总览
+
+| 用途 | 颜色 | 常量 | 说明 |
+|------|------|------|------|
+| 主背景 | `#0D1117` | `APP_BACKGROUND` | 最深层背景 |
+| 面板背景 | `#21262D` | `PANEL` | 面板区域 |
+| 主文本 | `#E6EDF3` | `TEXT` | 高对比文本 |
+| 强调色 | `#1F6FEB` | `ACCENT` | Trust Blue |
+| 成功色 | `#2EA043` | `SUCCESS` | 绿色 |
+| 警告色 | `#D29922` | `WARNING` | 琥珀色 |
+| 错误色 | `#DA3633` | `DANGER` | 红色 |
 
 ## 最佳实践
 
