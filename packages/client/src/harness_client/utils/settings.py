@@ -73,6 +73,7 @@ class AppSettings:
     max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
     work_dir: str = ""
     remember_dir: bool = True
+    theme_mode: str = "auto"  # "auto", "light", "dark"
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -94,6 +95,7 @@ class AppSettings:
             max_iterations=data.get("max_iterations", 10),
             work_dir=data.get("work_dir", ""),
             remember_dir=data.get("remember_dir", True),
+            theme_mode=data.get("theme_mode", "auto"),
         )
 
 

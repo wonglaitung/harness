@@ -477,6 +477,7 @@ class MainWindow(QMainWindow):
         if current.work_dir:
             dialog.work_dir_edit.setText(current.work_dir)
         dialog.remember_dir_check.setChecked(current.remember_dir)
+        dialog._set_theme_mode(current.theme_mode)
 
         if dialog.exec():
             settings = dialog.get_settings()
@@ -486,6 +487,7 @@ class MainWindow(QMainWindow):
     def _apply_settings(self, settings: dict):
         """Apply settings to controllers and save to disk."""
         from harness_client.controllers.chat_controller import ChatConfig
+        from harness_client.themes import set_theme_mode
         from harness_client.utils.settings import AppSettings
 
         app_settings = AppSettings(
@@ -500,6 +502,7 @@ class MainWindow(QMainWindow):
             max_iterations=settings.get("max_iterations", 20),
             work_dir=settings.get("work_dir", ""),
             remember_dir=settings.get("remember_dir", True),
+            theme_mode=settings.get("theme_mode", "auto"),
         )
         self.settings_manager.save(app_settings)
 
@@ -519,6 +522,12 @@ class MainWindow(QMainWindow):
         if settings.get("work_dir"):
             self.work_dir = Path(settings["work_dir"])
             self.right_panel.set_work_dir(self.work_dir)
+
+        # Apply theme change if needed
+        theme_mode = settings.get("theme_mode", "auto")
+        from harness_client.themes import set_theme_mode
+
+        set_theme_mode(theme_mode)
 
     def _load_saved_settings(self):
         """Load and apply saved settings on startup."""

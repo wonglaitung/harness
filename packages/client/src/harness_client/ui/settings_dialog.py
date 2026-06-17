@@ -23,11 +23,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme
+from harness_client.themes import get_theme, ThemeMode
 
 
 class SettingsDialog(QDialog):
     """Settings dialog for configuring the client."""
+
+    # Signal to notify theme change
+    theme_changed = None  # Will be connected in main_window
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -133,6 +136,14 @@ class SettingsDialog(QDialog):
         self.stream_check = QCheckBox("启用流式输出")
         self.stream_check.setChecked(True)
         general_layout.addRow(self.stream_check)
+
+        # Theme selection
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["自动", "亮色", "深色"])
+        self.theme_combo.setToolTip(
+            "自动: 跟随系统设置\n亮色: 强制使用亮色主题\n深色: 强制使用深色主题"
+        )
+        general_layout.addRow("主题:", self.theme_combo)
 
         self.max_iterations_spin = QSpinBox()
         self.max_iterations_spin.setRange(1, 100)
@@ -247,7 +258,20 @@ class SettingsDialog(QDialog):
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
             "work_dir": self.work_dir_edit.text(),
+            "theme_mode": self._get_theme_mode(),
         }
+
+    def _get_theme_mode(self) -> str:
+        """Get theme mode from combo selection."""
+        index = self.theme_combo.currentIndex()
+        modes = ["auto", "light", "dark"]
+        return modes[index] if 0 <= index < len(modes) else "auto"
+
+    def _set_theme_mode(self, mode: str):
+        """Set combo selection from theme mode."""
+        modes = ["auto", "light", "dark"]
+        if mode in modes:
+            self.theme_combo.setCurrentIndex(modes.index(mode))
 
     def set_settings(self, settings: dict):
         """Set dialog settings from saved values."""
@@ -274,6 +298,8 @@ class SettingsDialog(QDialog):
             self.max_iterations_spin.setValue(settings["max_iterations"])
         if "work_dir" in settings:
             self.work_dir_edit.setText(settings["work_dir"])
+        if "theme_mode" in settings:
+            self._set_theme_mode(settings["theme_mode"])
 
         # Update UI visibility based on provider
         self._on_provider_changed(self.provider_combo.currentText())

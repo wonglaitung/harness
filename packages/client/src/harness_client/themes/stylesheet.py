@@ -5,10 +5,10 @@ Generates PyQt6 stylesheet strings from theme color palettes.
 Optimized for banking/professional use cases.
 """
 
-from harness_client.themes.dark import DarkTheme
+from harness_client.themes import Theme
 
 
-def generate_stylesheet(theme: DarkTheme) -> str:
+def generate_stylesheet(theme: Theme) -> str:
     """
     Generate a complete QSS stylesheet from the theme.
 
