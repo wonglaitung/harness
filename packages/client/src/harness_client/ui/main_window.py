@@ -479,10 +479,17 @@ class MainWindow(QMainWindow):
         dialog.remember_dir_check.setChecked(current.remember_dir)
         dialog._set_theme_mode(current.theme_mode)
 
-        if dialog.exec():
+        result = dialog.exec()
+        if result == QDialog.DialogCode.Accepted:
             settings = dialog.get_settings()
             self._apply_settings(settings)
             self.statusbar.showMessage("设置已保存", 3000)
+        elif result == 2:  # Apply clicked
+            settings = dialog.get_settings()
+            self._apply_settings(settings)
+            self.statusbar.showMessage("设置已应用", 3000)
+            # Reopen dialog with updated settings
+            self._on_preferences()
 
     def _apply_settings(self, settings: dict):
         """Apply settings to controllers and save to disk."""

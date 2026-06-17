@@ -206,7 +206,25 @@ class SettingsDialog(QDialog):
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        buttons.clicked.connect(self._on_button_clicked)
         layout.addWidget(buttons)
+
+    def _on_button_clicked(self, button):
+        """Handle button clicks including Apply."""
+        from PyQt6.QtWidgets import QDialogButtonBox
+
+        dialog_buttons = self.findChild(QDialogButtonBox)
+        if dialog_buttons and button == dialog_buttons.button(QDialogButtonBox.StandardButton.Apply):
+            # Apply button clicked - emit signal with current settings
+            self._apply_clicked()
+
+    def _apply_clicked(self):
+        """Handle Apply button click - notify parent to apply settings."""
+        # Store settings temporarily so parent can read them
+        self._pending_settings = self.get_settings()
+        # Accept the dialog temporarily to trigger parent's apply logic
+        # Then reopen the dialog
+        self.done(2)  # Custom result for Apply
 
     def _browse_work_dir(self):
         """Browse for work directory."""
