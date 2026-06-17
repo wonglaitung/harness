@@ -1,0 +1,11 @@
+rootProject.name = "harness-sdk-java"
+
+// 多模块项目
+include("harness-sdk-core")
+include("harness-sdk-llm")
+include("harness-sdk-mcp")
+include("harness-sdk-tools")
+include("harness-sdk-memory")
+include("harness-sdk-skills")
+include("harness-sdk-security")
+include("harness-sdk-all")

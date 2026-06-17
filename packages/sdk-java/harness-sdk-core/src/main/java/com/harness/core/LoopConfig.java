@@ -1,0 +1,134 @@
+package com.harness.core;
+
+/**
+ * Configuration for agent loop.
+ *
+ * @param maxIterations Maximum number of iterations (LLM calls).
+ *                      - Simple tasks (read files, answer questions): 2-3
+ *                      - Medium tasks (code analysis, multi-step reasoning): 5-7
+ *                      - Complex tasks (code generation, research): 10-15
+ *                      Default is 10 (industry standard: OpenAI Agents SDK, LangChain).
+ * @param timeoutPerTool Timeout in seconds for each tool execution.
+ * @param enableParallelTools Whether to execute tools in parallel when possible.
+ * @param retryOnError Number of retries on LLM API errors.
+ * @param enableProgress Whether to emit progress events.
+ * @param enableCircuitBreaker Whether to enable circuit breaker for tool failures.
+ * @param enableCostControl Whether to enable token/cost tracking.
+ * @param workingDirectory Working directory for tool execution.
+ * @param maxStuckFeedbacks Maximum stuck feedback injection attempts.
+ * @param stuckMinIterations Minimum iterations before stuck detection.
+ * @param stuckConsecutiveFailures Consecutive failures to trigger stuck detection.
+ */
+public record LoopConfig(
+    int maxIterations,
+    long timeoutPerTool,
+    boolean enableParallelTools,
+    int retryOnError,
+    boolean enableProgress,
+    boolean enableCircuitBreaker,
+    boolean enableCostControl,
+    String workingDirectory,
+    int maxStuckFeedbacks,
+    int stuckMinIterations,
+    int stuckConsecutiveFailures
+) {
+
+    public static final int DEFAULT_MAX_ITERATIONS = 10;
+    public static final long DEFAULT_TIMEOUT_PER_TOOL = 30_000L; // 30 seconds in millis
+
+    public LoopConfig() {
+        this(DEFAULT_MAX_ITERATIONS, DEFAULT_TIMEOUT_PER_TOOL, true, 3, true, true, true,
+             System.getProperty("user.dir"), 2, 3, 3);
+    }
+
+    /**
+     * Create default configuration.
+     */
+    public static LoopConfig defaults() {
+        return new LoopConfig();
+    }
+
+    /**
+     * Create builder.
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private int maxIterations = DEFAULT_MAX_ITERATIONS;
+        private long timeoutPerTool = DEFAULT_TIMEOUT_PER_TOOL;
+        private boolean enableParallelTools = true;
+        private int retryOnError = 3;
+        private boolean enableProgress = true;
+        private boolean enableCircuitBreaker = true;
+        private boolean enableCostControl = true;
+        private String workingDirectory = System.getProperty("user.dir");
+        private int maxStuckFeedbacks = 2;
+        private int stuckMinIterations = 3;
+        private int stuckConsecutiveFailures = 3;
+
+        public Builder maxIterations(int maxIterations) {
+            this.maxIterations = maxIterations;
+            return this;
+        }
+
+        public Builder timeoutPerTool(long timeoutPerTool) {
+            this.timeoutPerTool = timeoutPerTool;
+            return this;
+        }
+
+        public Builder enableParallelTools(boolean enableParallelTools) {
+            this.enableParallelTools = enableParallelTools;
+            return this;
+        }
+
+        public Builder retryOnError(int retryOnError) {
+            this.retryOnError = retryOnError;
+            return this;
+        }
+
+        public Builder enableProgress(boolean enableProgress) {
+            this.enableProgress = enableProgress;
+            return this;
+        }
+
+        public Builder enableCircuitBreaker(boolean enableCircuitBreaker) {
+            this.enableCircuitBreaker = enableCircuitBreaker;
+            return this;
+        }
+
+        public Builder enableCostControl(boolean enableCostControl) {
+            this.enableCostControl = enableCostControl;
+            return this;
+        }
+
+        public Builder workingDirectory(String workingDirectory) {
+            this.workingDirectory = workingDirectory;
+            return this;
+        }
+
+        public Builder maxStuckFeedbacks(int maxStuckFeedbacks) {
+            this.maxStuckFeedbacks = maxStuckFeedbacks;
+            return this;
+        }
+
+        public Builder stuckMinIterations(int stuckMinIterations) {
+            this.stuckMinIterations = stuckMinIterations;
+            return this;
+        }
+
+        public Builder stuckConsecutiveFailures(int stuckConsecutiveFailures) {
+            this.stuckConsecutiveFailures = stuckConsecutiveFailures;
+            return this;
+        }
+
+        public LoopConfig build() {
+            return new LoopConfig(
+                maxIterations, timeoutPerTool, enableParallelTools, retryOnError,
+                enableProgress, enableCircuitBreaker, enableCostControl, workingDirectory,
+                maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures
+            );
+        }
+    }
+}

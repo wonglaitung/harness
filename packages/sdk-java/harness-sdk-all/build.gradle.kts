@@ -1,0 +1,48 @@
+plugins {
+    `java-library`
+    id("com.github.johnrengelman.shadow") version "8.1.7"
+}
+
+val junitVersion: String by extra
+
+dependencies {
+    api(project(":harness-sdk-core"))
+    api(project(":harness-sdk-llm"))
+    api(project(":harness-sdk-mcp"))
+    api(project(":harness-sdk-tools"))
+    api(project(":harness-sdk-memory"))
+    api(project(":harness-sdk-skills"))
+    api(project(":harness-sdk-security"))
+
+    // 测试
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("")
+    mergeServiceFiles()
+
+    // 排除签名文件
+    exclude("META-INF/*.SF")
+    exclude("META-INF/*.DSA")
+    exclude("META-INF/*.RSA")
+
+    // 最小化依赖
+    minimize()
+}
+
+tasks.build {
+    dependsOn(tasks.shadowJar)
+}
+
+tasks.jar {
+    archiveClassifier.set("thin")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("shadow") {
+            project.shadow.component(this)
+        }
+    }
+}
