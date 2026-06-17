@@ -1736,6 +1736,7 @@ dependencies = [
     { name = "mcp" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "tiktoken" },
@@ -1762,9 +1763,6 @@ observability = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-sdk" },
-]
-openai = [
-    { name = "openai" },
 ]
 prometheus = [
     { name = "prometheus-client" },
@@ -1806,7 +1804,7 @@ requires-dist = [
     { name = "nacos-sdk-python", marker = "extra == 'nacos'", specifier = ">=0.1.12" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "numpy", marker = "extra == 'stuck'", specifier = ">=1.24.0" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0.0" },
+    { name = "openai", specifier = ">=1.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'observability'", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'observability'", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = ">=1.20.0" },
@@ -1825,7 +1823,7 @@ requires-dist = [
     { name = "tiktoken", marker = "extra == 'vector'", specifier = ">=0.5.0" },
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.23.0" },
 ]
-provides-extras = ["dev", "openai", "vector", "observability", "sqlite", "web", "stuck", "guardrails", "service", "prometheus", "redis", "nacos"]
+provides-extras = ["dev", "vector", "observability", "sqlite", "web", "stuck", "guardrails", "service", "prometheus", "redis", "nacos"]
 
 [[package]]
 name = "hf-xet"
