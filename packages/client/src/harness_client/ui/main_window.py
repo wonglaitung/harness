@@ -896,27 +896,14 @@ class MainWindow(QMainWindow):
         # Stop any ongoing chat
         self.chat_controller.stop()
 
-        # Disconnect all MCP servers
-        async def cleanup():
-            for name in list(self.mcp_controller.servers.keys()):
-                try:
-                    await self.mcp_controller.disconnect_server(name)
-                except Exception:
-                    pass  # Ignore errors during cleanup
-
-        # Run cleanup synchronously if there's a running loop
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Schedule cleanup and wait briefly
-                future = asyncio.ensure_future(cleanup())
-                # Give it a short timeout to complete
-                try:
-                    loop.run_until_complete(asyncio.wait_for(future, timeout=2.0))
-                except asyncio.TimeoutError:
-                    pass  # Cleanup timed out, proceed anyway
-        except RuntimeError:
-            pass  # No event loop running
+        # Disconnect all MCP servers synchronously (best effort)
+        for name in list(self.mcp_controller.servers.keys()):
+            try:
+                # Try synchronous disconnect if available
+                if hasattr(self.mcp_controller, 'disconnect_server_sync'):
+                    self.mcp_controller.disconnect_server_sync(name)
+            except Exception:
+                pass  # Ignore errors during cleanup
 
         event.accept()
 
