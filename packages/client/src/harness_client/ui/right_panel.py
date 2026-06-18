@@ -75,18 +75,18 @@ class CollapsibleSection(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
 
-        # Header button (fold/unfold) - Athlon style with 16px border-radius
+        # Header button (fold/unfold)
         self.header_btn = QPushButton(f"▼ {self._title}")
         self.header_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.CHROME};
                 border: none;
-                border-radius: 16px;
-                padding: 10px 16px;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
                 text-align: left;
                 color: {theme.TEXT};
                 font-weight: bold;
-                font-size: """ + theme.FONT_SIZE_MD + """;
+                font-size: {theme.FONT_SIZE_MD};
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
@@ -114,29 +114,20 @@ class CollapsibleSection(QWidget):
         layout.addWidget(self.content_widget)  # No stretch so collapsed sections don't take space
 
     def add_header_button(self, text: str, callback, tooltip: str = "") -> QPushButton:
-        """Add a button to the header row.
-
-        Args:
-            text: Button text (e.g., "+")
-            callback: Function to call on click
-            tooltip: Optional tooltip text
-
-        Returns:
-            The created QPushButton
-        """
+        """Add a button to the header row."""
         theme = get_theme()
         btn = QPushButton(text)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border: 1px solid {theme.BORDER};
-                border-radius: 8px;
-                min-width: 24px;
-                max-width: 24px;
-                min-height: 24px;
-                max-height: 24px;
+                border-radius: {theme.RADIUS_SM};
+                min-width: 26px;
+                max-width: 26px;
+                min-height: 26px;
+                max-height: 26px;
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_SM + """;
+                font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -310,13 +301,13 @@ class SkillsSection(CollapsibleSection):
         widget = QWidget()
         widget.setStyleSheet(f"""
             QWidget {{
-                background-color: {theme.PANEL};
-                border-radius: 8px;
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_SM};
             }}
         """)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(10)
 
         # Status indicator
         indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
@@ -415,13 +406,13 @@ class MCPServersSection(CollapsibleSection):
         widget = QWidget()
         widget.setStyleSheet(f"""
             QWidget {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border-radius: {theme.RADIUS_SM};
             }}
         """)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(10)
 
         # Status indicator with animation
         from harness_client.ui.interactive import StatusDot
@@ -538,19 +529,19 @@ class FileTreeSection(CollapsibleSection):
         from PyQt6.QtCore import QDir
         theme = get_theme()
 
-        # Work directory name (editable)
+        # Work directory name
         self.work_dir_label = QLabel(str(self._work_dir.name))
         self.work_dir_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
-                padding: 4px;
+                padding: 6px;
             }}
         """)
         self.add_widget(self.work_dir_label)
 
-        # File tree view with QFileSystemModel
+        # File tree view
         self.tree_view = QTreeView()
         self.fs_model = QFileSystemModel()
         self.fs_model.setIconProvider(CustomFileIconProvider())
@@ -560,20 +551,19 @@ class FileTreeSection(CollapsibleSection):
         self.tree_view.setModel(self.fs_model)
         self.tree_view.setRootIndex(self.fs_model.index(str(self._work_dir)))
 
-        # Hide size, type, date columns - only show name
         for col in [1, 2, 3]:
             self.tree_view.setColumnHidden(col, True)
 
         self.tree_view.setHeaderHidden(True)
         self.tree_view.setStyleSheet(f"""
             QTreeView {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_SM};
                 color: {theme.TEXT};
             }}
             QTreeView::item {{
-                padding: 4px;
+                padding: 6px;
             }}
             QTreeView::item:selected {{
                 background-color: {theme.SELECTION_ACTIVE};
@@ -582,19 +572,11 @@ class FileTreeSection(CollapsibleSection):
                 background-color: {theme.HOVER_NEUTRAL};
             }}
             QTreeView::branch {{
-                background-color: {theme.PANEL};
-            }}
-            QTreeView::branch:has-children:!has-siblings:closed,
-            QTreeView::branch:closed:has-children:has-siblings {{
-                background-color: {theme.PANEL};
-            }}
-            QTreeView::branch:open:has-children:!has-siblings,
-            QTreeView::branch:open:has-children:has-siblings {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
             }}
         """)
         self.tree_view.doubleClicked.connect(self._on_item_double_clicked)
-        self.add_widget(self.tree_view, 1)  # stretch=1 to fill space
+        self.add_widget(self.tree_view, 1)
 
     def set_work_dir(self, path: Path):
         """Set the work directory."""
@@ -632,9 +614,9 @@ class RightPanel(QWidget):
     """Right panel with collapsible sections for memory, skills, MCP, and files."""
 
     # Signals
-    memory_add_requested = pyqtSignal(str)  # category name
-    memory_edit_requested = pyqtSignal(str, int)  # category, index
-    memory_remove_requested = pyqtSignal(str, int)  # category, index
+    memory_add_requested = pyqtSignal(str)
+    memory_edit_requested = pyqtSignal(str, int)
+    memory_remove_requested = pyqtSignal(str, int)
     skill_double_clicked = pyqtSignal(str)
     add_skill_requested = pyqtSignal()
     server_double_clicked = pyqtSignal(str)
@@ -645,15 +627,23 @@ class RightPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(200)
-        self.setMaximumWidth(400)
+        self.setMinimumWidth(220)
+        self.setMaximumWidth(380)
         self._setup_ui()
 
     def _setup_ui(self):
         """Setup the right panel UI."""
+        theme = get_theme()
+
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+            }}
+        """)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 0, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         # Memory section (first, before Skills)
         from harness_client.ui.memory_panel import MemorySection

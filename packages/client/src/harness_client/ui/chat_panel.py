@@ -124,8 +124,7 @@ class MessageBubble(QWidget):
     """
     Message bubble with rounded corners and selectable text.
 
-    Uses QLabel for user messages (simple text).
-    Uses QTextBrowser for assistant messages (Markdown with scrolling).
+    Uses custom QPainter for background, QLabel/QTextBrowser for content.
     """
 
     def __init__(
@@ -137,10 +136,10 @@ class MessageBubble(QWidget):
         super().__init__(parent)
         self._content = content
         self._role = role
-        self._border_radius = 12.0
-        self._padding_h = 14
-        self._padding_v = 10
-        self._max_width = 800  # Increased for better code display
+        self._border_radius = 14.0
+        self._padding_h = 16
+        self._padding_v = 12
+        self._max_width = 800
 
         self._setup_ui()
 
@@ -155,11 +154,8 @@ class MessageBubble(QWidget):
 
         if self._role == "assistant":
             # Use QScrollArea + QLabel for assistant messages with horizontal scrolling
-            # QTextBrowser's horizontal scrollbar doesn't work reliably for long lines
-
-            # Create scroll area
             self._scroll_area = QScrollArea()
-            self._scroll_area.setWidgetResizable(False)  # Important: allow widget to expand
+            self._scroll_area.setWidgetResizable(True)
             self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self._scroll_area.setStyleSheet(f"""
@@ -169,13 +165,16 @@ class MessageBubble(QWidget):
                 }}
                 QScrollBar:horizontal {{
                     background-color: {theme.CHROME};
-                    height: 8px;
-                    border-radius: 4px;
+                    height: 6px;
+                    border-radius: 3px;
                 }}
                 QScrollBar::handle:horizontal {{
                     background-color: {theme.BORDER};
-                    border-radius: 4px;
+                    border-radius: 3px;
                     min-width: 20px;
+                }}
+                QScrollBar::handle:horizontal:hover {{
+                    background-color: {theme.TEXT_SUBTLE};
                 }}
                 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                     width: 0px;
@@ -195,19 +194,6 @@ class MessageBubble(QWidget):
             html = self._render_markdown(self._content)
             self._content_label.setTextFormat(Qt.TextFormat.RichText)
             self._content_label.setText(html)
-
-            # Calculate content size
-            self._content_label.adjustSize()
-            content_width = self._content_label.width()
-            content_height = self._content_label.height()
-
-            # Set scroll area viewport size
-            viewport_width = min(content_width, self._max_width)
-            self._scroll_area.setMinimumWidth(viewport_width)
-            self._scroll_area.setMaximumWidth(self._max_width)
-
-            # Important: set fixed height on scroll area to match content
-            self._scroll_area.setFixedHeight(content_height)
 
             self._scroll_area.setWidget(self._content_label)
 
@@ -242,11 +228,7 @@ class MessageBubble(QWidget):
 
         # Size policy: width should not expand, height should follow content
         if self._role == "assistant":
-            # Assistant messages: height follows scroll area content
-            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-            # Calculate total height: scroll area height + vertical padding
-            total_height = self._scroll_area.height() + 2 * self._padding_v
-            self.setFixedHeight(total_height)
+            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         else:
             # User messages: allow some vertical expansion for word wrap
             self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
@@ -391,7 +373,7 @@ class MessageBubble(QWidget):
         return "".join(parser.result)
 
     def paintEvent(self, event):
-        """Paint the rounded background."""
+        """Paint the rounded background with subtle border."""
         theme = get_theme()
 
         painter = QPainter(self)
@@ -400,12 +382,16 @@ class MessageBubble(QWidget):
         # Bubble colors
         if self._role == "user":
             bg_color = QColor(theme.USER_BUBBLE)
+            border_color = QColor(theme.ACCENT)
+            border_alpha = 60
         else:
             bg_color = QColor(theme.ASSISTANT_BUBBLE)
+            border_color = QColor(theme.BORDER)
+            border_alpha = 255
 
         # Draw rounded rectangle background
-        rect = QRectF(0, 0, self.width() - 1, self.height() - 1)
-        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        rect = QRectF(0, 0, self.width(), self.height())
+        painter.setPen(QPen(border_color, 1))
         painter.setBrush(QBrush(bg_color))
         painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
 
@@ -426,13 +412,13 @@ class AvatarWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Draw rounded background
-        rect = QRectF(0, 0, self._size - 1, self._size - 1)
+        rect = QRectF(0, 0, self._size, self._size)
         painter.setPen(QPen(Qt.PenStyle.NoPen))
         painter.setBrush(QBrush(QColor(theme.AVATAR_ASSISTANT_BG)))
-        painter.drawRoundedRect(rect, 6.0, 6.0)
+        painter.drawRoundedRect(rect, 8.0, 8.0)
 
         # Draw "A" letter
-        painter.setPen(QColor("#ffffff"))
+        painter.setPen(QColor(theme.TEXT))
         font = QFont()
         font.setPointSize(10)
         font.setWeight(QFont.Weight.DemiBold)
@@ -459,8 +445,8 @@ class MessageRow(QWidget):
     def _setup_ui(self):
         theme = get_theme()
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 4, 16, 4)
-        layout.setSpacing(0)
+        layout.setContentsMargins(24, 8, 24, 8)
+        layout.setSpacing(10)
 
         # Create bubble
         bubble = MessageBubble(self._content, self._role)
@@ -471,12 +457,10 @@ class MessageRow(QWidget):
             # Right-aligned: stretch on left, bubble on right
             layout.addStretch()
             layout.addWidget(bubble)
-            layout.addSpacing(4)
         else:
             # Left-aligned: avatar, bubble, stretch
-            avatar = AvatarWidget(24)
+            avatar = AvatarWidget(28)
             layout.addWidget(avatar)
-            layout.addSpacing(6)
             layout.addWidget(bubble)
             layout.addStretch()
 
@@ -535,20 +519,20 @@ class ToolCallIndicator(ToolIndicator):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Background
-        rect = QRectF(32, 0, self.width() - 33, 27)
+        rect = QRectF(34, 0, self.width() - 35, 27)
         painter.setPen(QPen(Qt.PenStyle.NoPen))
         painter.setBrush(QBrush(QColor(theme.TOOL_THINKING_BG)))
         painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
 
-        # Left border
-        painter.setPen(QPen(QColor(theme.TOOL_THINKING_BORDER), 3))
-        painter.drawLine(32, 2, 32, 26)
+        # Left accent bar
+        painter.setPen(QPen(QColor(theme.TOOL_THINKING_BORDER), 2))
+        painter.drawLine(34, 4, 34, 24)
 
         # Text
-        text = f"▶ {self._tool_name} {self._args_preview}"
+        text = f"▸ {self._tool_name} {self._args_preview}"
         painter.setPen(QColor(theme.TEXT_SUBTLE))
         painter.setFont(self._get_font())
-        painter.drawText(44, 18, text)
+        painter.drawText(46, 18, text)
 
         painter.end()
 
@@ -578,25 +562,25 @@ class ToolResultIndicator(ToolIndicator):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Background
-        bg_color = "transparent" if self._success else theme.TOOL_FAILURE_BG
+        # Background color based on success
+        bg_color = theme.TOOL_SUCCESS_BG if self._success else theme.TOOL_FAILURE_BG
         border_color = theme.TOOL_SUCCESS_BORDER if self._success else theme.TOOL_FAILURE_BORDER
 
-        rect = QRectF(32, 0, self.width() - 33, 27)
-        if bg_color != "transparent":
-            painter.setPen(QPen(Qt.PenStyle.NoPen))
-            painter.setBrush(QBrush(QColor(bg_color)))
-            painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+        rect = QRectF(34, 0, self.width() - 35, 27)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(bg_color)))
+        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
 
-        # Left border
-        painter.setPen(QPen(QColor(border_color), 3))
-        painter.drawLine(32, 2, 32, 26)
+        # Left accent bar
+        painter.setPen(QPen(QColor(border_color), 2))
+        painter.drawLine(34, 4, 34, 24)
 
         # Icon and text
         icon = "✓" if self._success else "✗"
-        painter.setPen(QColor(border_color))
+        text_color = theme.TOOL_SUCCESS_TEXT if self._success else theme.TOOL_FAILURE_TEXT
+        painter.setPen(QColor(text_color))
         painter.setFont(self._get_font())
-        painter.drawText(44, 18, f"{icon} {self._tool_name}")
+        painter.drawText(46, 18, f"{icon} {self._tool_name}")
 
         painter.end()
 
@@ -623,10 +607,17 @@ class ThinkingIndicator(QWidget):
     def paintEvent(self, event):
         theme = get_theme()
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        # Subtle background
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.CHROME)))
+        painter.drawRoundedRect(32, 0, self.width() - 33, 22, 6, 6)
+
+        # Text
         painter.setFont(self._get_font())
         painter.setPen(QColor(theme.TEXT_SUBTLE))
-        painter.drawText(32, 16, self._message)
+        painter.drawText(42, 16, self._message)
 
         painter.end()
 
@@ -644,7 +635,7 @@ class MessagesContainer(QWidget):
         self._layout.addStretch(1)
 
         theme = get_theme()
-        self.setStyleSheet(f"background-color: {theme.PANEL};")
+        self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
 
     def add_message(self, content: str, role: str):
         """Add a message bubble."""
@@ -713,41 +704,11 @@ class ChatPanel(QWidget):
         return font
 
     def _setup_ui(self):
-        """Setup UI components with dark theme."""
+        """Setup UI components with theme-aware styling."""
         theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        # Chat header bar with clear button
-        header_bar = QWidget()
-        header_bar_layout = QHBoxLayout(header_bar)
-        header_bar_layout.setContentsMargins(16, 12, 16, 8)
-        header_bar_layout.setSpacing(0)
-        header_bar_layout.addStretch()
-
-        # Clear context button
-        clear_btn = QPushButton("清空上下文")
-        clear_btn.setIcon(create_clear_icon(16, QColor(theme.TEXT_SUBTLE)))
-        clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        clear_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: 1px solid {theme.BORDER};
-                border-radius: 6px;
-                padding: 4px 10px;
-                color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_XS + """;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.TEXT_SUBTLE};
-            }}
-        """)
-        clear_btn.clicked.connect(lambda: self.clear_chat_requested.emit())
-        header_bar_layout.addWidget(clear_btn)
-
-        layout.addWidget(header_bar)
 
         # Chat display area with scroll
         scroll_area = QScrollArea()
@@ -756,17 +717,17 @@ class ChatPanel(QWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet(f"""
             QScrollArea {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border: none;
             }}
             QScrollBar:vertical {{
                 background-color: transparent;
-                width: 10px;
-                margin: 2px;
+                width: 8px;
+                margin: 4px;
             }}
             QScrollBar::handle:vertical {{
                 background-color: {theme.BORDER};
-                border-radius: 5px;
+                border-radius: 4px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
@@ -788,27 +749,27 @@ class ChatPanel(QWidget):
         input_bar = QWidget()
         input_bar.setStyleSheet(f"""
             QWidget {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border-top: 1px solid {theme.BORDER};
             }}
         """)
         input_layout = QHBoxLayout(input_bar)
-        input_layout.setContentsMargins(16, 8, 16, 8)
-        input_layout.setSpacing(10)
+        input_layout.setContentsMargins(24, 12, 24, 12)
+        input_layout.setSpacing(12)
 
         # Multi-line input field (QTextEdit)
         self.input_field = QTextEdit()
         self.input_field.setPlaceholderText("输入消息…  (Enter 发送, Shift+Enter 换行)")
         self.input_field.setFont(self._get_font())
-        self.input_field.setMinimumHeight(40)
-        self.input_field.setMaximumHeight(72)  # ~3 lines
+        self.input_field.setMinimumHeight(44)
+        self.input_field.setMaximumHeight(80)
         self.input_field.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.input_field.setStyleSheet(f"""
             QTextEdit {{
                 background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
-                border-radius: 12px;
-                padding: 8px 12px;
+                border-radius: 14px;
+                padding: 10px 14px;
                 color: {theme.TEXT};
             }}
             QTextEdit:focus {{
@@ -853,18 +814,16 @@ class ChatPanel(QWidget):
         self.token_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_XS + """;
-                padding: 0px;
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 0px 8px;
             }}
         """)
 
-        # Stop button
+        # Stop button (circular, danger color)
         self.stop_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
         self.stop_btn.setIcon(create_stop_icon(18, QColor("white")))
         self.stop_btn.setIconSize(QSize(18, 18))
-        self.stop_btn.setMinimumHeight(38)
-        self.stop_btn.setMinimumWidth(38)
-        self.stop_btn.setMaximumWidth(38)
+        self.stop_btn.setFixedSize(40, 40)
         self.stop_btn.setVisible(False)
         self.stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.stop_btn.clicked.connect(self._on_stop)
@@ -872,33 +831,31 @@ class ChatPanel(QWidget):
             QPushButton {{
                 background-color: {theme.DANGER};
                 border: none;
-                border-radius: 19px;
+                border-radius: 20px;
             }}
             QPushButton:hover {{
                 background-color: {theme.DANGER_HOVER};
             }}
             QPushButton:pressed {{
-                background-color: {theme.DANGER_HOVER};
+                background-color: {theme.DANGER};
             }}
             QPushButton:disabled {{
-                background-color: {theme.CHROME};
+                background-color: {theme.DISABLED_BACKGROUND};
             }}
         """)
 
-        # Send button
+        # Send button (circular, accent color)
         self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
         self.send_btn.setIcon(create_play_icon(18, QColor("white")))
         self.send_btn.setIconSize(QSize(18, 18))
-        self.send_btn.setMinimumHeight(38)
-        self.send_btn.setMinimumWidth(38)
-        self.send_btn.setMaximumWidth(38)
+        self.send_btn.setFixedSize(40, 40)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.clicked.connect(self._on_send)
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.ACCENT};
                 border: none;
-                border-radius: 19px;
+                border-radius: 20px;
             }}
             QPushButton:hover {{
                 background-color: {theme.ACCENT_HOVER};
@@ -907,7 +864,7 @@ class ChatPanel(QWidget):
                 background-color: {theme.ACCENT};
             }}
             QPushButton:disabled {{
-                background-color: {theme.CHROME};
+                background-color: {theme.DISABLED_BACKGROUND};
             }}
         """)
 

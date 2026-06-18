@@ -1,5 +1,5 @@
 """
-Sidebar panel with navigation buttons and session list - Athlon-inspired dark theme style.
+Sidebar panel with navigation buttons and session list - Modern theme-aware style.
 """
 
 from pathlib import Path
@@ -42,8 +42,8 @@ class SidebarPanel(QWidget):
     session_new_requested = pyqtSignal()
     settings_requested = pyqtSignal()
 
-    # Fixed width (200 * 0.8 = 160)
-    FIXED_WIDTH = 160
+    # Fixed width
+    FIXED_WIDTH = 180
 
     def __init__(self):
         super().__init__()
@@ -72,16 +72,16 @@ class SidebarPanel(QWidget):
             QPushButton {{
                 background-color: transparent;
                 border-radius: {theme.RADIUS_MD};
-                padding: 10px 16px;
+                padding: 12px 16px;
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_MD + """;
+                font-size: {theme.FONT_SIZE_MD};
                 text-align: left;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
-        btn.setFixedHeight(40)
+        btn.setFixedHeight(44)
         return btn
 
     def _setup_ui(self):
@@ -90,8 +90,15 @@ class SidebarPanel(QWidget):
 
         # Main layout
         self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(8, 8, 8, 8)
+        self._main_layout.setContentsMargins(12, 12, 12, 12)
         self._main_layout.setSpacing(4)
+
+        # Set panel background
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+            }}
+        """)
 
         # Navigation buttons
         nav_widget = QWidget()
@@ -126,9 +133,9 @@ class SidebarPanel(QWidget):
         sessions_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_XS + """;
+                font-size: {theme.FONT_SIZE_XS};
                 font-weight: bold;
-                padding: 8px 0 4px 0;
+                padding: 12px 0 6px 0;
             }}
         """)
         self._main_layout.addWidget(sessions_label)
@@ -139,27 +146,27 @@ class SidebarPanel(QWidget):
         self.session_list.itemClicked.connect(self._on_session_clicked)
         self.session_list.setStyleSheet(f"""
             QListWidget {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border: 1px solid {theme.BORDER};
-                border-radius: 8px;
+                border-radius: {theme.RADIUS_MD};
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_SM + """;
+                font-size: {theme.FONT_SIZE_SM};
             }}
             QListWidget::item {{
-                padding: 8px 12px;
-                border-radius: 8px;
+                padding: 10px 12px;
+                border-radius: {theme.RADIUS_SM};
                 margin: 2px 4px;
             }}
-            QListWidget::item:selected {{
-                background-color: {theme.NAV_ACTIVE_BG};
-                border: 1px solid {theme.NAV_ACTIVE_BORDER};
-                color: {theme.NAV_ACTIVE_TEXT};
+            QListList::item:selected {{
+                background-color: {theme.SELECTION_ACTIVE};
+                border: 1px solid {theme.SELECTION_BORDER};
+                color: {theme.TEXT};
             }}
             QListWidget::item:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
-        self._main_layout.addWidget(self.session_list, 1)  # stretch=1 to fill space
+        self._main_layout.addWidget(self.session_list, 1)
 
         # Set fixed size
         self.setFixedWidth(self.FIXED_WIDTH)

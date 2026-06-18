@@ -6,8 +6,9 @@ Supports both light and dark themes with automatic system detection.
 """
 
 from enum import Enum
-from typing import Union
+from typing import Callable, Union
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QGuiApplication
 
 from harness_client.themes.dark import DarkTheme
@@ -34,6 +35,9 @@ _current_theme: Theme = DarkTheme()
 # Application reference for theme updates
 _app = None
 
+# Theme change listeners
+_listeners: list[Callable] = []
+
 
 def get_system_theme() -> str:
     """Detect system color scheme preference."""
@@ -53,6 +57,25 @@ def get_system_theme() -> str:
 def get_theme() -> Theme:
     """Get the current active theme."""
     return _current_theme
+
+
+def register_theme_listener(callback: Callable) -> None:
+    """Register a callback to be notified when the theme changes.
+
+    Args:
+        callback: Callable that takes no arguments, invoked on theme change
+    """
+    _listeners.append(callback)
+
+
+def unregister_theme_listener(callback: Callable) -> None:
+    """Remove a previously registered theme change listener.
+
+    Args:
+        callback: The callback to remove
+    """
+    if callback in _listeners:
+        _listeners.remove(callback)
 
 
 def set_theme_mode(mode: str | ThemeMode, app=None) -> None:
@@ -87,10 +110,23 @@ def set_theme_mode(mode: str | ThemeMode, app=None) -> None:
     if _app:
         apply_theme(_app)
 
+    # Notify all listeners of theme change
+    _notify_theme_changed()
+
 
 def get_theme_mode() -> ThemeMode:
     """Get the current theme mode setting."""
     return _current_mode
+
+
+def _notify_theme_changed() -> None:
+    """Notify all registered listeners that the theme changed."""
+    for callback in _listeners:
+        try:
+            callback()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Theme listener error: {e}")
 
 
 def apply_theme(app) -> None:

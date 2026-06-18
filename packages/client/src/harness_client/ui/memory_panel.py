@@ -39,19 +39,19 @@ class CategorySection(QWidget):
         theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
 
         # Header with category name and add button
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
+        header_layout.setSpacing(6)
 
         name_label = QLabel(self._display_name)
         name_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_SM + """;
+                font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
             }}
         """)
@@ -62,19 +62,19 @@ class CategorySection(QWidget):
         add_btn = QPushButton("+")
         add_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.PANEL_ALT};
+                background-color: {theme.APP_BACKGROUND};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_SM};
-                min-width: 20px;
-                max-width: 20px;
-                min-height: 20px;
-                max-height: 20px;
+                min-width: 22px;
+                max-width: 22px;
+                min-height: 22px;
+                max-height: 22px;
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_SM + """;
+                font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {theme.BORDER};
+                background-color: {theme.HOVER_NEUTRAL};
                 border-color: {theme.ACCENT};
             }}
         """)
@@ -87,8 +87,8 @@ class CategorySection(QWidget):
         # Entries container
         self.entries_widget = QWidget()
         self.entries_layout = QVBoxLayout(self.entries_widget)
-        self.entries_layout.setContentsMargins(4, 4, 4, 4)
-        self.entries_layout.setSpacing(2)
+        self.entries_layout.setContentsMargins(6, 6, 6, 6)
+        self.entries_layout.setSpacing(4)
         layout.addWidget(self.entries_widget)
 
         # Placeholder label
@@ -96,8 +96,8 @@ class CategorySection(QWidget):
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_XS + """;
-                padding: 4px;
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 6px;
             }}
         """)
         self.entries_layout.addWidget(self.placeholder_label)
@@ -132,20 +132,20 @@ class CategorySection(QWidget):
         widget = QWidget()
         widget.setStyleSheet(f"""
             QWidget {{
-                background-color: {theme.PANEL};
+                background-color: {theme.APP_BACKGROUND};
                 border-radius: {theme.RADIUS_SM};
             }}
         """)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(10)
 
         # Content label
         content_label = QLabel(content)
         content_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
-                font-size: """ + theme.FONT_SIZE_XS + """;
+                font-size: {theme.FONT_SIZE_XS};
             }}
         """)
         content_label.setWordWrap(True)
@@ -158,9 +158,9 @@ class CategorySection(QWidget):
                 background-color: transparent;
                 border: none;
                 color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_MD + """;
-                min-width: 20px;
-                max-width: 20px;
+                font-size: {theme.FONT_SIZE_MD};
+                min-width: 22px;
+                max-width: 22px;
             }}
             QPushButton:hover {{
                 color: {theme.DANGER};
@@ -215,12 +215,12 @@ class MemorySection(CollapsibleSection):
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: {theme.PANEL};
-                width: 8px;
+                background-color: transparent;
+                width: 6px;
             }}
             QScrollBar::handle:vertical {{
                 background-color: {theme.BORDER};
-                border-radius: {theme.RADIUS_SM};
+                border-radius: 3px;
             }}
         """)
         self.add_widget(scroll, 1)
@@ -229,7 +229,7 @@ class MemorySection(CollapsibleSection):
         container = QWidget()
         self._container_layout = QVBoxLayout(container)
         self._container_layout.setContentsMargins(0, 0, 0, 0)
-        self._container_layout.setSpacing(8)
+        self._container_layout.setSpacing(10)
         scroll.setWidget(container)
 
         # Info label
@@ -237,8 +237,8 @@ class MemorySection(CollapsibleSection):
         info_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: """ + theme.FONT_SIZE_XS + """;
-                padding: 4px;
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 6px;
             }}
         """)
         self._container_layout.addWidget(info_label)
@@ -311,17 +311,14 @@ class AddEntryDialog(QMessageBox):
         self._input = QLineEdit()
         self._input.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {theme.PANEL};
+                background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_SM};
-                padding: 8px;
+                padding: 10px;
                 color: {theme.TEXT};
+                min-width: 300px;
             }}
         """)
-        self._input.setMinimumWidth(300)
-        # QMessageBox uses QGridLayout; add input below the text label
-        # The default layout has: row 0 = text, row 1 = buttons
-        # We insert our input at row 1, shifting buttons to row 2
         layout = self.layout()
         layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
 
