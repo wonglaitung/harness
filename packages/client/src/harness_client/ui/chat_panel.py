@@ -637,6 +637,21 @@ class MessagesContainer(QWidget):
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
 
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
+
+    def _on_theme_changed(self):
+        """Handle theme change."""
+        theme = get_theme()
+        self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
+        self.update()
+
     def add_message(self, content: str, role: str):
         """Add a message bubble."""
         row = MessageRow(content, role)
@@ -1311,6 +1326,25 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Force repaint
+        # Force repaint all message bubbles
+        self._repaint_messages()
+
+    def _repaint_messages(self):
+        """Repaint all message widgets to apply new theme colors."""
+        # Update messages container
         self.messages_container.update()
-        self.update()
+
+        # Iterate through all child widgets and trigger repaint
+        layout = self.messages_container._layout
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                # Recursively update all child widgets
+                self._update_widget_recursive(widget)
+
+    def _update_widget_recursive(self, widget):
+        """Recursively update a widget and all its children."""
+        widget.update()
+        for child in widget.findChildren(QWidget):
+            child.update()
