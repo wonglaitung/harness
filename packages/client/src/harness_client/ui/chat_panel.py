@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.ui.interactive import GlowButton
-from harness_client.themes import get_theme
+from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.skill_completer import SkillCompleter
 from harness_client.ui.file_completer import FileCompleter
 
@@ -692,6 +692,14 @@ class ChatPanel(QWidget):
         self._streaming_text = ""
         self._is_streaming = False
         self._setup_ui()
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
@@ -1195,3 +1203,114 @@ class ChatPanel(QWidget):
 
         # Clean format: "4.3k / 200k"
         self.token_label.setText(f"{fmt(total)} / {fmt(limit)}")
+
+    def _on_theme_changed(self):
+        """Handle theme change - update all styles."""
+        theme = get_theme()
+
+        # Update scroll area
+        self._scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {theme.APP_BACKGROUND};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 8px;
+                margin: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 4px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {theme.TEXT_SUBTLE};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+        """)
+
+        # Update messages container background
+        self.messages_container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+            }}
+        """)
+
+        # Update input field
+        self.input_field.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {theme.COMPOSER};
+                border: 1px solid {theme.BORDER};
+                border-radius: 14px;
+                padding: 10px 14px;
+                color: {theme.TEXT};
+            }}
+            QTextEdit:focus {{
+                border-color: {theme.ACCENT};
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 3px;
+                min-height: 20px;
+            }}
+        """)
+
+        # Update token label
+        self.token_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 0px 8px;
+            }}
+        """)
+
+        # Update send button
+        self.send_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.ACCENT};
+                border: none;
+                border-radius: 20px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.ACCENT_HOVER};
+            }}
+            QPushButton:pressed {{
+                background-color: {theme.ACCENT};
+            }}
+            QPushButton:disabled {{
+                background-color: {theme.DISABLED_BACKGROUND};
+            }}
+        """)
+
+        # Update stop button
+        self.stop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.DANGER};
+                border: none;
+                border-radius: 20px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.DANGER_HOVER};
+            }}
+            QPushButton:pressed {{
+                background-color: {theme.DANGER};
+            }}
+            QPushButton:disabled {{
+                background-color: {theme.DISABLED_BACKGROUND};
+            }}
+        """)
+
+        # Force repaint
+        self.messages_container.update()
+        self.update()

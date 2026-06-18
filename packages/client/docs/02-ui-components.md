@@ -382,26 +382,92 @@ def accept(self):
 
 ## 样式系统
 
-客户端使用 **Banking-grade Dark Theme**（金融级深色主题），专为信任、专业和清晰设计。
+客户端支持 **亮色/暗色双主题**，使用 Banking-grade 调色板设计，专为信任、专业和清晰设计。
 
 ### 主题架构
 
-主题系统由两个核心模块组成：
+主题系统由核心模块组成：
 
 ```
 themes/
-├── dark.py          # DarkTheme 类 - 颜色和字体常量定义
-└── stylesheet.py    # generate_stylesheet() - QSS 样式生成器
+├── __init__.py       # 主题管理器 - 切换、监听、通知
+├── dark.py           # DarkTheme 类 - 暗色调色板
+├── light.py          # LightTheme 类 - 亮色调色板
+├── stylesheet.py     # generate_stylesheet() - QSS 生成器
+└── theme_aware.py    # ThemeAwareWidget - 主题感知基类
 ```
 
-### DarkTheme 类
+### 主题模式
 
-所有颜色、字体、尺寸常量定义在 `DarkTheme` 类中：
+支持三种主题模式：
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 自动跟随系统主题（Windows/macOS/Linux） |
+| `light` | 强制使用亮色主题 |
+| `dark` | 强制使用暗色主题 |
 
 ```python
-from harness_client.themes.dark import DarkTheme
+from harness_client.themes import set_theme_mode, ThemeMode
 
-class DarkTheme:
+# 自动跟随系统
+set_theme_mode("auto", app)
+
+# 强制亮色主题
+set_theme_mode("light", app)
+
+# 强制暗色主题
+set_theme_mode("dark", app)
+```
+
+### 主题感知组件
+
+所有 UI 组件应继承 `ThemeAwareWidget` 或使用 `get_theme()` 获取当前主题：
+
+```python
+from harness_client.ui.theme_aware import ThemeAwareWidget
+from harness_client.themes import get_theme
+
+class MyCustomWidget(ThemeAwareWidget):
+    def _apply_theme_style(self):
+        """主题切换时自动调用"""
+        theme = self.theme()  # 或 get_theme()
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                color: {theme.TEXT};
+            }}
+        """)
+```
+
+#### paintEvent 主题适配
+
+在 `paintEvent` 中动态获取主题颜色：
+
+```python
+def paintEvent(self, event):
+    theme = get_theme()
+    painter = QPainter(self)
+    painter.setBrush(QBrush(QColor(theme.ASSISTANT_BUBBLE)))
+    # ...
+```
+
+### 主题监听器
+
+可注册自定义监听器响应主题切换：
+
+```python
+from harness_client.themes import register_theme_listener, unregister_theme_listener
+
+def on_theme_changed():
+    """主题切换时调用"""
+    theme = get_theme()
+    print(f"主题已切换为: {type(theme).__name__}")
+
+register_theme_listener(on_theme_changed)
+```
+
+### DarkTheme 调色板
     # === Background Hierarchy ===
     APP_BACKGROUND = "#0D1117"  # 主窗口 - 最深层
     CHROME = "#161B22"          # 标题栏、侧边栏

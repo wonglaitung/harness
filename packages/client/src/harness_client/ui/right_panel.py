@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme
+from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 
 
 class CustomFileIconProvider(QFileIconProvider):
@@ -228,6 +228,48 @@ class CollapsibleSection(QWidget):
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
 
+    def _on_theme_changed(self):
+        """Handle theme change - update header styles."""
+        theme = get_theme()
+
+        # Update header button
+        self.header_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.CHROME};
+                border: none;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                text-align: left;
+                color: {theme.TEXT};
+                font-weight: bold;
+                font-size: {theme.FONT_SIZE_MD};
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        # Update header buttons
+        for btn in self._header_buttons:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.APP_BACKGROUND};
+                    border: 1px solid {theme.BORDER};
+                    border-radius: {theme.RADIUS_SM};
+                    min-width: 26px;
+                    max-width: 26px;
+                    min-height: 26px;
+                    max-height: 26px;
+                    color: {theme.TEXT};
+                    font-size: {theme.FONT_SIZE_SM};
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.HOVER_NEUTRAL};
+                    border-color: {theme.ACCENT};
+                }}
+            """)
+
 
 class SkillsSection(CollapsibleSection):
     """Section displaying loaded skills."""
@@ -330,6 +372,29 @@ class SkillsSection(CollapsibleSection):
     def _on_double_click(self, name: str):
         """Handle double-click on skill item."""
         self.skill_double_clicked.emit(name)
+
+    def _on_theme_changed(self):
+        """Handle theme change - update content styles."""
+        super()._on_theme_changed()
+        theme = get_theme()
+
+        # Update placeholder
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_SM};
+                padding: 4px;
+            }}
+        """)
+
+        # Update skill items
+        for name, item in self._skill_items.items():
+            item.setStyleSheet(f"""
+                QWidget {{
+                    background-color: {theme.APP_BACKGROUND};
+                    border-radius: {theme.RADIUS_SM};
+                }}
+            """)
 
 
 class MCPServersSection(CollapsibleSection):
@@ -510,6 +575,20 @@ class MCPServersSection(CollapsibleSection):
         """Handle double-click on server item."""
         self.server_double_clicked.emit(name)
 
+    def _on_theme_changed(self):
+        """Handle theme change - update content styles."""
+        super()._on_theme_changed()
+        theme = get_theme()
+
+        # Update placeholder
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_SM};
+                padding: 4px;
+            }}
+        """)
+
 
 class FileTreeSection(CollapsibleSection):
     """Section displaying workspace file tree using QFileSystemModel."""
@@ -609,6 +688,43 @@ class FileTreeSection(CollapsibleSection):
         self.fs_model.setRootPath(str(self._work_dir))
         self.tree_view.setRootIndex(self.fs_model.index(str(self._work_dir)))
 
+    def _on_theme_changed(self):
+        """Handle theme change - update content styles."""
+        super()._on_theme_changed()
+        theme = get_theme()
+
+        # Update work directory label
+        self.work_dir_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: bold;
+                padding: 6px;
+            }}
+        """)
+
+        # Update tree view
+        self.tree_view.setStyleSheet(f"""
+            QTreeView {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+                color: {theme.TEXT};
+            }}
+            QTreeView::item {{
+                padding: 6px;
+            }}
+            QTreeView::item:selected {{
+                background-color: {theme.SELECTION_ACTIVE};
+            }}
+            QTreeView::item:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+            QTreeView::branch {{
+                background-color: {theme.APP_BACKGROUND};
+            }}
+        """)
+
 
 class RightPanel(QWidget):
     """Right panel with collapsible sections for memory, skills, MCP, and files."""
@@ -630,6 +746,14 @@ class RightPanel(QWidget):
         self.setMinimumWidth(220)
         self.setMaximumWidth(380)
         self._setup_ui()
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
 
     def _setup_ui(self):
         """Setup the right panel UI."""
@@ -696,3 +820,26 @@ class RightPanel(QWidget):
     def refresh_files(self):
         """Refresh file tree."""
         self.file_section.refresh()
+
+    def _on_theme_changed(self):
+        """Handle theme change - update all styles."""
+        theme = get_theme()
+
+        # Update panel background
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+            }}
+        """)
+
+        # Notify sections to update their styles
+        if hasattr(self.memory_section, '_on_theme_changed'):
+            self.memory_section._on_theme_changed()
+        if hasattr(self.skills_section, '_on_theme_changed'):
+            self.skills_section._on_theme_changed()
+        if hasattr(self.mcp_section, '_on_theme_changed'):
+            self.mcp_section._on_theme_changed()
+        if hasattr(self.file_section, '_on_theme_changed'):
+            self.file_section._on_theme_changed()
+
+        self.update()

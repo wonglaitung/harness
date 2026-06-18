@@ -31,6 +31,7 @@ from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.right_panel import RightPanel
 from harness_client.ui.sidebar import SidebarPanel
 from harness_client.utils.settings import SettingsManager
+from harness_client.themes import register_theme_listener, unregister_theme_listener, get_theme
 
 # Configure logging
 logging.basicConfig(
@@ -125,6 +126,10 @@ class MainWindow(QMainWindow):
         self.chat_controller.new_session()
         self._refresh_session_list()
 
+        # Register theme listener for dynamic theme updates
+        self._theme_callback = self._on_theme_changed
+        register_theme_listener(self._theme_callback)
+
     def _set_window_icon(self):
         """Set window icon from SVG file."""
         import sys
@@ -196,7 +201,6 @@ class MainWindow(QMainWindow):
 
     def _setup_central_widget(self):
         """Setup central widget with 3-column splitter layout."""
-        from harness_client.themes import get_theme
         theme = get_theme()
 
         central = QWidget()
@@ -205,8 +209,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         # Create 3-column splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setStyleSheet(f"""
+        self._central_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._central_splitter.setStyleSheet(f"""
             QSplitter {{
                 background-color: {theme.APP_BACKGROUND};
             }}
@@ -221,25 +225,25 @@ class MainWindow(QMainWindow):
 
         # Left sidebar (collapsible navigation)
         self.sidebar = SidebarPanel()
-        splitter.addWidget(self.sidebar)
+        self._central_splitter.addWidget(self.sidebar)
 
         # Center chat panel
         self.chat_panel = ChatPanel()
-        splitter.addWidget(self.chat_panel)
+        self._central_splitter.addWidget(self.chat_panel)
 
         # Right panel (skills, MCP, files)
         self.right_panel = RightPanel()
-        splitter.addWidget(self.right_panel)
+        self._central_splitter.addWidget(self.right_panel)
 
         # Set initial sizes: sidebar (160), chat (640), right (200)
-        splitter.setSizes([160, 640, 200])
+        self._central_splitter.setSizes([160, 640, 200])
 
         # Set stretch factors: sidebar doesn't stretch, chat gets most space, right gets some
-        splitter.setStretchFactor(0, 0)  # Sidebar fixed width
-        splitter.setStretchFactor(1, 1)  # Chat stretches
-        splitter.setStretchFactor(2, 0)  # Right panel fixed width
+        self._central_splitter.setStretchFactor(0, 0)  # Sidebar fixed width
+        self._central_splitter.setStretchFactor(1, 1)  # Chat stretches
+        self._central_splitter.setStretchFactor(2, 0)  # Right panel fixed width
 
-        layout.addWidget(splitter)
+        layout.addWidget(self._central_splitter)
         self.setCentralWidget(central)
 
     def _setup_statusbar(self):
@@ -883,6 +887,12 @@ class MainWindow(QMainWindow):
         """Handle window close - cleanup resources properly."""
         import asyncio
 
+        # Unregister theme listener
+        try:
+            unregister_theme_listener(self._theme_callback)
+        except Exception:
+            pass
+
         # Stop any ongoing chat stream
         self.chat_controller.stop_streaming()
 
@@ -909,3 +919,50 @@ class MainWindow(QMainWindow):
             pass  # No event loop running
 
         event.accept()
+
+    def _on_theme_changed(self):
+        """Handle theme change - reapply styles to all components."""
+        theme = get_theme()
+
+        # Update menubar style
+        self.menuBar().setStyleSheet(f"""
+            QMenuBar {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+                color: {theme.TEXT};
+                padding: 2px;
+            }}
+        """)
+
+        # Update splitter style
+        self._central_splitter.setStyleSheet(f"""
+            QSplitter {{
+                background-color: {theme.APP_BACKGROUND};
+            }}
+            QSplitter::handle {{
+                background-color: {theme.BORDER};
+                width: 1px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: {theme.ACCENT};
+            }}
+        """)
+
+        # Update statusbar style
+        self.statusbar.setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {theme.ACCENT};
+                color: white;
+            }}
+        """)
+
+        # Notify child panels to update their styles
+        if hasattr(self.sidebar, '_on_theme_changed'):
+            self.sidebar._on_theme_changed()
+        if hasattr(self.chat_panel, '_on_theme_changed'):
+            self.chat_panel._on_theme_changed()
+        if hasattr(self.right_panel, '_on_theme_changed'):
+            self.right_panel._on_theme_changed()
+
+        # Force repaint of all widgets
+        self.update()

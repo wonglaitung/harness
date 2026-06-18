@@ -1790,3 +1790,139 @@ RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 | 文件 | 改动 |
 |------|------|
 | `packages/cloud/docker/agent.Dockerfile` | 预下载 tiktoken 编码文件 |
+
+---
+
+## 2026-06-17: PyQt6 主题系统动态切换设计
+
+### 问题
+
+客户端亮色/暗色主题切换时，paintEvent 中绘制的颜色没有随主题变化，导致亮色主题下仍显示大面积黑色背景。
+
+### 原因
+
+1. **paintEvent 使用硬编码颜色**：`painter.setBrush(QBrush(QColor("#161B22")))` 直接使用暗色主题颜色
+2. **没有主题感知机制**：组件不知道主题何时变化，无法自动更新
+3. **静态 stylesheet**：初始化时设置的 stylesheet 不会随主题更新
+
+### 解决
+
+#### 1. 主题监听器机制
+
+在 `themes/__init__.py` 中添加监听器系统：
+
+```python
+# 全局监听器列表
+_listeners: list[Callable[[], None]] = []
+
+def register_theme_listener(callback: Callable[[], None]) -> None:
+    """注册主题切换监听器"""
+    _listeners.append(callback)
+
+def unregister_theme_listener(callback: Callable[[], None]) -> None:
+    """注销监听器"""
+    if callback in _listeners:
+        _listeners.remove(callback)
+
+def _notify_theme_changed() -> None:
+    """通知所有监听器"""
+    for callback in _listeners:
+        callback()
+```
+
+#### 2. ThemeAwareWidget 基类
+
+创建主题感知基类，组件继承后自动响应主题切换：
+
+```python
+# ui/theme_aware.py
+class ThemeAwareWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._theme_callback = self._apply_theme_style
+        register_theme_listener(self._theme_callback)
+        self._apply_theme_style()
+
+    def _apply_theme_style(self) -> None:
+        """子类重写此方法以应用主题样式"""
+        pass
+
+    def closeEvent(self, event):
+        unregister_theme_listener(self._theme_callback)
+        super().closeEvent(event)
+```
+
+#### 3. paintEvent 动态获取主题颜色
+
+在 `paintEvent` 中调用 `get_theme()` 获取当前主题颜色：
+
+```python
+def paintEvent(self, event):
+    theme = get_theme()  # 动态获取当前主题
+    painter = QPainter(self)
+    painter.setBrush(QBrush(QColor(theme.ASSISTANT_BUBBLE)))
+    # 使用 theme.* 颜色常量
+```
+
+### 教训
+
+1. **paintEvent 必须动态获取主题**：不能在初始化时缓存颜色，paintEvent 每次调用都要获取最新主题
+2. **监听器机制优于手动刷新**：统一的通知机制比每个组件单独处理更可靠
+3. **组件生命周期管理**：注册监听器后要在组件销毁时注销，避免内存泄漏
+4. **基类封装复用逻辑**：ThemeAwareWidget 封装了注册/注销逻辑，子类只需实现 `_apply_theme_style()`
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/themes/__init__.py` | 添加监听器机制 |
+| `packages/client/src/harness_client/ui/theme_aware.py` | 新增 ThemeAwareWidget 基类 |
+| `packages/client/src/harness_client/ui/chat_panel.py` | paintEvent 使用 get_theme() |
+| `packages/client/src/harness_client/ui/right_panel.py` | 更新样式为主题感知 |
+| `packages/client/src/harness_client/ui/memory_panel.py` | 更新样式为主题感知 |
+
+---
+
+## 2026-06-17: Banking-grade 主题调色板设计
+
+### 问题
+
+客户端主题使用亮蓝色（#2563EB，"AI Blue"），在金融/企业场景下显得过于年轻化、科技感过重，缺乏专业和信任感。
+
+### 设计决策
+
+从 "AI Blue" (#2563EB) 迁移到 "Trust Blue" (#1F6FEB)：
+
+| 设计维度 | AI Blue | Trust Blue |
+|---------|---------|------------|
+| 主色调 | #2563EB (亮蓝) | #1F6FEB (深蓝) |
+| 视感 | 科技感、年轻化 | 专业、权威、可信赖 |
+| 适用场景 | AI 产品、消费级应用 | 金融、企业级应用 |
+
+### 调色板设计原则
+
+1. **背景层次分明**：
+   - APP_BACKGROUND（最深层） → CHROME → PANEL → COMPOSER
+   - 每层有明显的颜色差异，建立视觉层次感
+
+2. **圆角适度**：
+   - 金融场景偏好锐利边缘，建立专业感
+   - RADIUS_SM=3px, RADIUS_MD=6px, RADIUS_LG=8px
+   - 比消费级应用（通常 12-16px）更保守
+
+3. **语义颜色完整**：
+   - Success/Warning/Danger/Info 各有主色、背景色、文本色
+   - 用于状态指示和反馈
+
+### 教训
+
+1. **颜色选择要考虑用户场景**：金融用户偏好稳重色彩，科技用户偏好活泼色彩
+2. **主题是品牌的一部分**：颜色传递价值观和专业度
+3. **层次感比单一颜色重要**：好的主题有清晰的视觉层次
+4. **参考成熟产品**：GitHub、Linear 等专业工具的调色板值得学习
+
+### 参考
+
+- GitHub Dark 主题调色板
+- Linear 应用设计
+- 金融机构 UI 设计规范

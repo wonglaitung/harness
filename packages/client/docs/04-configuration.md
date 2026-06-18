@@ -53,7 +53,8 @@
   "temperature": 0.3,
   "tool_result_role": "tool",
   "system_prompt": "你是一个有帮助的 AI 助手...",
-  "stream_enabled": true
+  "stream_enabled": true,
+  "theme_mode": "auto"
 }
 ```
 
@@ -71,6 +72,7 @@
 | `tool_result_role` | string | `"tool"` | 工具结果角色 |
 | `system_prompt` | string | `""` | 系统提示 |
 | `stream_enabled` | bool | `true` | 是否启用流式输出 |
+| `theme_mode` | string | `"auto"` | 主题模式：`auto`/`light`/`dark` |
 
 
 ### 使用第三方 API

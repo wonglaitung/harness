@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme
+from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.icons import (
     create_chat_icon,
     create_settings_icon,
@@ -49,6 +49,14 @@ class SidebarPanel(QWidget):
         super().__init__()
         self.work_dir = Path.cwd()
         self._setup_ui()
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
@@ -279,3 +287,86 @@ class SidebarPanel(QWidget):
 
         if reply == QMessageBox.StandardButton.Yes:
             self.session_delete_requested.emit(session_id)
+
+    def _on_theme_changed(self):
+        """Handle theme change - update all styles."""
+        theme = get_theme()
+
+        # Update panel background
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+            }}
+        """)
+
+        # Update navigation buttons
+        self.chat_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_MD};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        self.chat_btn.setIcon(create_chat_icon(18, QColor(theme.TEXT)))
+
+        self.settings_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_MD};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        self.settings_btn.setIcon(create_settings_icon(18, QColor(theme.TEXT)))
+
+        self.new_session_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_MD};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        self.new_session_btn.setIcon(create_add_icon(18, QColor(theme.TEXT)))
+
+        # Update session list
+        self.session_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD};
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+            }}
+            QListWidget::item {{
+                padding: 10px 12px;
+                border-radius: {theme.RADIUS_SM};
+                margin: 2px 4px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {theme.SELECTION_ACTIVE};
+                border: 1px solid {theme.SELECTION_BORDER};
+                color: {theme.TEXT};
+            }}
+            QListWidget::item:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        self.update()
