@@ -1,6 +1,6 @@
 # Harness
 
-**可内嵌的 Python AI Agent SDK**
+**可内嵌的 AI Agent SDK — Python & Java**
 
 ```
 Agent = Model + Harness
@@ -12,6 +12,7 @@ Agent = Model + Harness
 
 ## 特性
 
+- **多语言支持** — Python SDK 和 Java SDK，API 设计一致
 - **多 LLM 支持** — Anthropic Claude、OpenAI 及兼容 API
 - **工具系统** — 内置文件操作、Web 搜索，支持自定义工具
 - **MCP 协议** — 连接外部 MCP 工具服务器扩展能力
@@ -23,7 +24,9 @@ Agent = Model + Harness
 
 ---
 
-## 安装
+## Python SDK
+
+### 安装
 
 ```bash
 pip install harness-sdk
@@ -31,34 +34,25 @@ pip install harness-sdk
 
 需要 Python 3.10+。
 
----
-
-## 快速开始
+### 快速开始
 
 ```python
 from harness import AgentHarness
 from harness.tools import ReadTool, WriteTool
 
-# 创建 Agent
 agent = AgentHarness(
     model="claude-sonnet-4-6",
     tools=[ReadTool(), WriteTool()],
 )
 
-# 运行
 import asyncio
 result = asyncio.run(agent.run("读取 README.md 并总结"))
 print(result.content)
 ```
 
----
-
-## 使用 OpenAI
+### 使用 OpenAI
 
 ```python
-from harness import AgentHarness
-from harness.tools import ReadTool
-
 agent = AgentHarness(
     model="gpt-4o",
     provider="openai",
@@ -68,23 +62,7 @@ agent = AgentHarness(
 result = asyncio.run(agent.run("分析当前目录结构"))
 ```
 
----
-
-## 使用第三方 API
-
-```python
-agent = AgentHarness(
-    model="deepseek-chat",
-    provider="openai",
-    base_url="https://api.deepseek.com/v1",
-    api_key="your-api-key",
-    tools=[ReadTool()],
-)
-```
-
----
-
-## 自定义工具
+### 自定义工具
 
 ```python
 from harness import Tool, ToolResult
@@ -109,22 +87,16 @@ class SearchTool(Tool):
         }
 
     async def execute(self, args: dict, ctx) -> ToolResult:
-        query = args["query"]
-        # 实现搜索逻辑
-        return ToolResult(content=f"搜索结果: {query}")
+        return ToolResult(content=f"搜索结果: {args['query']}")
 
-# 使用
 agent = AgentHarness(model="claude-sonnet-4-6", tools=[SearchTool()])
 ```
 
----
-
-## MCP 集成
+### MCP 集成
 
 ```python
 from harness import AgentHarness, MCPServerConfig
 
-# 连接 MCP 服务器
 agent = AgentHarness(
     model="claude-sonnet-4-6",
     mcp_servers=[
@@ -136,10 +108,141 @@ agent = AgentHarness(
         )
     ],
 )
-
-# MCP 工具自动可用
-result = asyncio.run(agent.run("列出 /workspace 目录内容"))
 ```
+
+---
+
+## Java SDK
+
+专为银行环境设计：以 JAR 包形式交付，支持离线部署。
+
+### 安装
+
+```xml
+<!-- Maven -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-all</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+或直接使用 Shadow JAR：
+
+```bash
+# 下载 harness-sdk-all.jar 并放入项目
+```
+
+需要 Java 17+。
+
+### 快速开始
+
+```java
+import com.harness.*;
+import com.harness.tools.*;
+
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .tools(List.of(new ReadTool(), new GlobTool()))
+    .maxIterations(10)
+    .build();
+
+Harness agent = new Harness(config);
+LoopResult result = agent.run("分析当前项目的代码结构");
+
+if (result.isCompleted()) {
+    System.out.println(result.content());
+}
+```
+
+### 使用 OpenAI 兼容 API
+
+```java
+HarnessConfig config = HarnessConfig.builder()
+    .provider("openai")
+    .model("gpt-4o")
+    .apiKey(System.getenv("OPENAI_API_KEY"))
+    .baseUrl("https://api.your-company.com/v1")  // 可选：自定义端点
+    .tools(List.of(new ReadTool()))
+    .build();
+
+Harness agent = new Harness(config);
+LoopResult result = agent.run("读取配置文件");
+```
+
+### 自定义工具
+
+```java
+import com.harness.tools.*;
+import java.util.concurrent.CompletableFuture;
+
+public class SearchTool implements Tool {
+    
+    @Override
+    public String name() {
+        return "search";
+    }
+    
+    @Override
+    public String description() {
+        return "搜索网络信息";
+    }
+    
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of(
+                "query", Map.of("type", "string", "description", "搜索关键词")
+            ),
+            "required", List.of("query")
+        );
+    }
+    
+    @Override
+    public CompletableFuture<ToolResult> execute(
+        Map<String, Object> args, 
+        ToolContext context
+    ) {
+        String query = (String) args.get("query");
+        return CompletableFuture.completedFuture(
+            new ToolResult("搜索结果: " + query, true)
+        );
+    }
+}
+```
+
+### MCP 集成
+
+```java
+import com.harness.mcp.*;
+
+McpConfig mcpConfig = McpConfig.builder()
+    .transport(McpTransport.STDIO)
+    .command("mcp-server-filesystem")
+    .args(List.of("--root", "/workspace"))
+    .build();
+
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .mcpServers(Map.of("filesystem", mcpConfig))
+    .build();
+
+Harness agent = new Harness(config);
+LoopResult result = agent.run("列出 /workspace 目录内容");
+```
+
+### Java SDK 特性
+
+| 特性 | 说明 |
+|---|---|
+| JAR 包交付 | 单一 JAR 包含所有依赖，可直接复制到银行环境 |
+| 离线部署 | 无需网络访问，支持银行合规要求 |
+| 审计日志 | 内置审计系统，支持 SIEM 集成 |
+| 安全沙箱 | 工具默认沙箱模式，显式开启危险权限 |
+| Shadow JAR | 使用 Gradle Shadow 插件打包，解决依赖冲突 |
 
 ---
 
@@ -147,7 +250,8 @@ result = asyncio.run(agent.run("列出 /workspace 目录内容"))
 
 | 包 | 说明 |
 |---|------|
-| [packages/sdk/](packages/sdk/) | harness-sdk — 核心 Python SDK |
+| [packages/sdk/](packages/sdk/) | harness-sdk — Python SDK |
+| [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK |
 | [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
 | [packages/scraper/](packages/scraper/) | harness-scraper — 智能文档爬取工具 |
@@ -161,22 +265,22 @@ result = asyncio.run(agent.run("列出 /workspace 目录内容"))
 git clone https://github.com/wonglaitung/harness.git
 cd harness
 
-# 安装依赖
+# Python SDK 开发
 uv sync --all-packages
-
-# 运行测试
 PYTHONPATH=packages/sdk/src uv run pytest packages/sdk/tests/ -v
 
-# 代码检查
-uv run ruff check packages/sdk/src/
-uv run ruff format packages/sdk/src/
+# Java SDK 构建
+cd packages/sdk-java
+./gradlew build
+./gradlew :harness-sdk-all:shadowJar
 ```
 
 ---
 
 ## 文档
 
-- [SDK 详细文档](packages/sdk/docs/)
+- [Python SDK 详细文档](packages/sdk/docs/)
+- [Java SDK 详细文档](packages/sdk-java/docs/)
 - [编程规范](packages/sdk/docs/programmer_skill.md)
 - [经验教训](lessons.md)
 
