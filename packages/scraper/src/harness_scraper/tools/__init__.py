@@ -17,6 +17,7 @@ Stock/Financial Tools:
 Output Tools:
 - SaveOnePagerTool: Save intelligence One-Pager
 - UpdateMemoryTool: Record processed items to MEMORY.md
+- ReadHistoryReportTool: Read historical One-Pager reports for trend analysis
 """
 
 from harness_scraper.tools.fetch_rss import FetchRSSTool
@@ -25,6 +26,7 @@ from harness_scraper.tools.fetch_github_trending import FetchGitHubTrendingTool
 from harness_scraper.tools.fetch_url import FetchURLTool
 from harness_scraper.tools.save_one_pager import SaveOnePagerTool
 from harness_scraper.tools.update_memory import UpdateMemoryTool
+from harness_scraper.tools.read_history_report import ReadHistoryReportTool
 
 # Stock/Financial Tools
 from harness_scraper.tools.fetch_hkex import FetchHKEXTool
@@ -41,6 +43,7 @@ __all__ = [
     "FetchURLTool",
     "SaveOnePagerTool",
     "UpdateMemoryTool",
+    "ReadHistoryReportTool",
     # Stock/Financial Tools
     "FetchHKEXTool",
     "FetchFinancialNewsTool",
@@ -58,6 +61,7 @@ ALL_TOOLS: dict[str, type[Tool]] = {
     "fetch_url": FetchURLTool,
     "save_one_pager": SaveOnePagerTool,
     "update_memory": UpdateMemoryTool,
+    "read_history_report": ReadHistoryReportTool,
     "fetch_hkex": FetchHKEXTool,
     "fetch_financial_news": FetchFinancialNewsTool,
 }
