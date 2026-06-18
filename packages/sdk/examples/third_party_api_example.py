@@ -232,20 +232,21 @@ from harness.core import (
 # ============================================================================
 
 # 方式 1: 使用第三方 OpenAI 兼容 API（如智谱 GLM）
-BASE_URL = "http://47.115.141.152:8080/v2/coding"
-API_KEY = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
-MODEL = "glm-5"
+# 设置环境变量: OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL
+BASE_URL = os.environ.get("OPENAI_BASE_URL")
+API_KEY = os.environ.get("OPENAI_API_KEY")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 PROVIDER = "openai"  # 第三方 API 使用 openai 协议
 
 # 方式 2: 使用官方 Anthropic API
 # BASE_URL = None
-# API_KEY = "your-anthropic-api-key"  # 或设置 ANTHROPIC_API_KEY 环境变量
+# API_KEY = os.environ.get("ANTHROPIC_API_KEY")  # 或设置 ANTHROPIC_API_KEY 环境变量
 # MODEL = "claude-sonnet-4-6"
 # PROVIDER = "anthropic"
 
 # 方式 3: 使用官方 OpenAI API
 # BASE_URL = None
-# API_KEY = "your-openai-api-key"  # 或设置 OPENAI_API_KEY 环境变量
+# API_KEY = os.environ.get("OPENAI_API_KEY")  # 或设置 OPENAI_API_KEY 环境变量
 # MODEL = "gpt-4o"
 # PROVIDER = "openai"
 

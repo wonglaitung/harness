@@ -26,9 +26,9 @@ from harness.sdk.config import HarnessConfig, StepBudgetConfig
 from harness.types import ProgressEvent, ProgressEventType
 
 # 配置 - 使用第三方 OpenAI 兼容 API
-BASE_URL = "https://qianfan.baidubce.com/v2/coding"
-API_KEY = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
-MODEL = "glm-5"
+BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+API_KEY = os.environ.get("OPENAI_API_KEY", "")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 
 def on_progress(event: ProgressEvent):

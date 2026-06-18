@@ -13,9 +13,9 @@ if sdk_path not in sys.path:
 from harness import AgentHarness, ReadTool, GlobTool
 from harness.types import ProgressEvent, ProgressEventType
 
-BASE_URL = "http://47.115.141.152:8080/v2/coding"
-API_KEY = "bce-v3/ALTAKSP-SVgAJ9aJuetewQXvUZLtt/608fe88fd13b29ffff4cb6aa0dfe8a6440e7e8d8"
-MODEL = "glm-5"
+BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+API_KEY = os.environ.get("OPENAI_API_KEY", "")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 
 def on_progress(event: ProgressEvent):
