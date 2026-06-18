@@ -1,6 +1,6 @@
 # Harness
 
-可内嵌的 Python AI Agent SDK + Windows 桌面客户端。
+**可内嵌的 Python AI Agent SDK**
 
 ```
 Agent = Model + Harness
@@ -8,95 +8,162 @@ Agent = Model + Harness
 
 让 LLM 从"回答问题"变成能自主操作的智能体。
 
-## 项目结构
+---
 
-这是一个 **Monorepo** 项目，包含四个包：
+## 特性
 
-| 包 | 说明 |
-|---|------|
-| [packages/sdk/](packages/sdk/) | **harness-sdk** - 可内嵌的 Python AI Agent SDK（跨平台） |
-| [packages/client/](packages/client/) | **harness-client** - Windows 桌面客户端（PyQt6） |
-| [packages/cloud/](packages/cloud/) | **harness-cloud** - Docker 沙箱云服务 |
-| [packages/scraper/](packages/scraper/) | **harness-scraper** - 智能文档爬取工具 |
+- **多 LLM 支持** — Anthropic Claude、OpenAI 及兼容 API
+- **工具系统** — 内置文件操作、Web 搜索，支持自定义工具
+- **MCP 协议** — 连接外部 MCP 工具服务器扩展能力
+- **技能注入** — 根据上下文自动注入专业技能
+- **安全沙箱** — 命令验证、注入检测、审计日志
+- **成本控制** — Token 预算管理、熔断机制
+- **中断恢复** — 保存快照、断点续传
+- **可观测性** — OpenTelemetry 集成
+
+---
+
+## 安装
+
+```bash
+pip install harness-sdk
+```
+
+需要 Python 3.10+。
+
+---
 
 ## 快速开始
 
-### 安装
-
-```bash
-# 需要 Python 3.10+
-git clone https://github.com/wonglaitung/harness.git
-cd harness
-
-# 安装所有包
-uv sync --all-packages
-```
-
-### SDK 使用
-
 ```python
-from harness import AgentHarness, ReadTool
+from harness import AgentHarness
+from harness.tools import ReadTool, WriteTool
 
 # 创建 Agent
 agent = AgentHarness(
     model="claude-sonnet-4-6",
-    tools=[ReadTool()],
+    tools=[ReadTool(), WriteTool()],
 )
 
-# 运行（异步）
+# 运行
 import asyncio
-result = asyncio.run(agent.run("读取 pyproject.toml 文件"))
+result = asyncio.run(agent.run("读取 README.md 并总结"))
 print(result.content)
 ```
 
-### 运行客户端
+---
 
-```powershell
-cd packages\client
-uv run python -m harness_client
+## 使用 OpenAI
+
+```python
+from harness import AgentHarness
+from harness.tools import ReadTool
+
+agent = AgentHarness(
+    model="gpt-4o",
+    provider="openai",
+    tools=[ReadTool()],
+)
+
+result = asyncio.run(agent.run("分析当前目录结构"))
 ```
 
-## SDK 功能
+---
 
-- **多 LLM 支持** - Anthropic、OpenAI 及兼容 API
-- **工具系统** - 内置文件操作、Web 搜索等工具，支持自定义
-- **技能注入** - 根据用户输入自动注入专业技能
-- **MCP 协议** - 连接外部 MCP 工具服务器
-- **Guardrails** - PII 检测和内容安全（简/繁/英文）
-- **安全沙箱** - 命令验证、注入检测、审计日志
-- **成本控制** - Token 预算管理、熔断机制
-- **中断恢复** - 保存快照、断点续传
-- **可观测性** - OpenTelemetry 集成
+## 使用第三方 API
 
-## 客户端功能
+```python
+agent = AgentHarness(
+    model="deepseek-chat",
+    provider="openai",
+    base_url="https://api.deepseek.com/v1",
+    api_key="your-api-key",
+    tools=[ReadTool()],
+)
+```
 
-- 对话界面（支持流式输出）
-- 三栏布局（可折叠侧边栏 + 右侧面板）
-- MCP 服务器管理
-- 技能系统（支持 `/` 自动补全）
-- 多会话管理
-- 多模型支持
-- 统一配置目录（`~/.harness/`）
+---
 
-## Cloud 功能
+## 自定义工具
 
-- Docker 容器隔离
-- JWT 认证 + API Key 双层认证
-- 请求速率限制（Redis）
-- WebSocket 实时通信
-- 多模型支持（OpenAI/Claude/自定义）
+```python
+from harness import Tool, ToolResult
 
-## Scraper 功能
+class SearchTool(Tool):
+    @property
+    def name(self) -> str:
+        return "search"
 
-- 智能文档爬取（自动发现链接）
-- 多格式输出（Markdown/JSON）
-- 增量更新（检测内容变化）
-- 自定义抓取规则
-- CLI 命令行工具
+    @property
+    def description(self) -> str:
+        return "搜索网络信息"
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜索关键词"}
+            },
+            "required": ["query"]
+        }
+
+    async def execute(self, args: dict, ctx) -> ToolResult:
+        query = args["query"]
+        # 实现搜索逻辑
+        return ToolResult(content=f"搜索结果: {query}")
+
+# 使用
+agent = AgentHarness(model="claude-sonnet-4-6", tools=[SearchTool()])
+```
+
+---
+
+## MCP 集成
+
+```python
+from harness import AgentHarness, MCPServerConfig
+
+# 连接 MCP 服务器
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    mcp_servers=[
+        MCPServerConfig(
+            name="filesystem",
+            transport="stdio",
+            command="mcp-server-filesystem",
+            args=["--root", "/workspace"],
+        )
+    ],
+)
+
+# MCP 工具自动可用
+result = asyncio.run(agent.run("列出 /workspace 目录内容"))
+```
+
+---
+
+## 项目结构
+
+| 包 | 说明 |
+|---|------|
+| [packages/sdk/](packages/sdk/) | harness-sdk — 核心 Python SDK |
+| [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
+| [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
+| [packages/scraper/](packages/scraper/) | harness-scraper — 智能文档爬取工具 |
+
+---
 
 ## 开发
 
 ```bash
+# 克隆仓库
+git clone https://github.com/wonglaitung/harness.git
+cd harness
+
+# 安装依赖
+uv sync --all-packages
+
 # 运行测试
 PYTHONPATH=packages/sdk/src uv run pytest packages/sdk/tests/ -v
 
@@ -105,13 +172,15 @@ uv run ruff check packages/sdk/src/
 uv run ruff format packages/sdk/src/
 ```
 
+---
+
 ## 文档
 
 - [SDK 详细文档](packages/sdk/docs/)
-- [客户端使用指南](packages/client/README.md)
-- [Cloud 部署指南](packages/cloud/README.md)
-- [Scraper 使用指南](packages/scraper/README.md)
 - [编程规范](packages/sdk/docs/programmer_skill.md)
+- [经验教训](lessons.md)
+
+---
 
 ## 许可证
 
