@@ -893,8 +893,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # Stop any ongoing chat stream
-        self.chat_controller.stop_streaming()
+        # Stop any ongoing chat
+        self.chat_controller.stop()
 
         # Disconnect all MCP servers
         async def cleanup():
