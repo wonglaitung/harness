@@ -48,7 +48,24 @@
 
 ## 2026-06-18 提取
 
+## 2026-06-19 提取
+
 ## 注意事项
+
+### 港股分析
+- **Momenta港股IPO - 物理AI第一股政策松绑信号**
+
+### 港股分析
+- **智谱AI (02513.HK) - 政策松绑+回A上市提速左侧信号**
+
+### 新范式/工具
+- **Deployment Simulation** - https://openai.com/index/deployment-simulation
+
+### 新范式/工具
+- **Flue** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **OpenMontage** - https://github.com/trending/python
 
 ### 港股分析
 - **港股AI板块 - 政策松绑+机器人异动双信号**
