@@ -46,7 +46,24 @@
 
 ## 2026-06-17 提取
 
+## 2026-06-18 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股AI板块 - 政策松绑+机器人异动双信号**
+
+### 新范式/工具
+- **OpenAI 收购 Ona - 持久化 Agent 环境** - https://openai.com/index/openai-to-acquire-ona
+
+### 新范式/工具
+- **Understand-Anything - 代码知识图谱** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **OpenMontage - Agentic Video Production** - https://github.com/trending/python
+
+### 新范式/工具
+- **Flue - Sandbox Agent Framework** - https://github.com/trending/typescript
 
 ### 港股分析
 - **港股市场 - 回购潮左侧信号**
