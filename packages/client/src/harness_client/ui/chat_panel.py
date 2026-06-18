@@ -397,6 +397,51 @@ class MessageBubble(QWidget):
 
         painter.end()
 
+    def _on_theme_changed(self):
+        """Update styles when theme changes."""
+        theme = get_theme()
+
+        if self._role == "assistant":
+            # Update scroll area stylesheet
+            self._scroll_area.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: transparent;
+                    border: none;
+                }}
+                QScrollBar:horizontal {{
+                    background-color: {theme.CHROME};
+                    height: 6px;
+                    border-radius: 3px;
+                }}
+                QScrollBar::handle:horizontal {{
+                    background-color: {theme.BORDER};
+                    border-radius: 3px;
+                    min-width: 20px;
+                }}
+                QScrollBar::handle:horizontal:hover {{
+                    background-color: {theme.TEXT_SUBTLE};
+                }}
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                    width: 0px;
+                }}
+            """)
+
+            # Re-render markdown with new theme colors
+            html = self._render_markdown(self._content)
+            self._content_label.setText(html)
+        else:
+            # User message - update label stylesheet
+            self._label.setStyleSheet(f"""
+                QLabel {{
+                    background-color: transparent;
+                    color: #ffffff;
+                    border: none;
+                }}
+            """)
+
+        # Trigger repaint
+        self.update()
+
 
 class AvatarWidget(QWidget):
     """Simple avatar widget with rounded corners."""
@@ -1345,6 +1390,15 @@ class ChatPanel(QWidget):
 
     def _update_widget_recursive(self, widget):
         """Recursively update a widget and all its children."""
-        widget.update()
+        # If widget has _on_theme_changed method, call it
+        if hasattr(widget, '_on_theme_changed'):
+            widget._on_theme_changed()
+        else:
+            widget.update()
+
+        # Update all child widgets
         for child in widget.findChildren(QWidget):
-            child.update()
+            if hasattr(child, '_on_theme_changed'):
+                child._on_theme_changed()
+            else:
+                child.update()
