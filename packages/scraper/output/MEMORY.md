@@ -53,6 +53,18 @@
 ## 注意事项
 
 ### 港股分析
+- **智谱AI (02513.HK) - 回A上市提速政策松绑信号**
+
+### 新范式/工具
+- **MosaicLeaks / PA-DR** - https://huggingface.co/blog/ServiceNow/mosaicleaks
+
+### 新范式/工具
+- **Enterprise-Managed Authorization (EMA) for MCP** - https://blog.modelcontextprotocol.io/posts/enterprise-managed-auth/
+
+### 新范式/工具
+- **Headroom** - https://github.com/trending/python
+
+### 港股分析
 - **Momenta港股IPO - 物理AI第一股政策松绑信号**
 
 ### 港股分析
