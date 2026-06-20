@@ -52,7 +52,12 @@
 
 ## 2026-06-20 提取
 
+## 2026-06-21 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **agent-native** - https://github.com/trending/typescript
 
 ### 港股分析
 - **Momenta港股IPO获批 - 物理AI第一股政策松绑信号**
