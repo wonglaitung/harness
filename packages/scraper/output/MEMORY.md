@@ -50,7 +50,21 @@
 
 ## 2026-06-19 提取
 
+## 2026-06-20 提取
+
 ## 注意事项
+
+### 港股分析
+- **Momenta港股IPO获批 - 物理AI第一股政策松绑信号**
+
+### 新范式/工具
+- **cuTile Rust** - https://github.com/nvlabs/cutile-rs
+
+### 新范式/工具
+- **slime** - https://github.com/THUDM/slime
+
+### 新范式/工具
+- **TimesFM** - https://github.com/google-research/timesfm
 
 ### 港股分析
 - **智谱AI (02513.HK) - 回A上市提速政策松绑信号**
