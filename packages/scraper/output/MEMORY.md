@@ -54,7 +54,18 @@
 
 ## 2026-06-21 提取
 
+## 2026-06-22 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股市场观察 - 无重大异动**
+
+### 新范式/工具
+- **Hermes Agent** - https://github.com/trending/python
+
+### 新范式/工具
+- **DeerFlow 2.0** - https://github.com/trending/python
 
 ### 新范式/工具
 - **agent-native** - https://github.com/trending/typescript
