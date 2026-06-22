@@ -33,11 +33,13 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 24: 向量检索 - 语义搜索历史对话 (P2)
     演示 25: 语义卡住检测 - 基于相似度检测重复输出 (P2)
     演示 26: Guardrails - PII 检测和内容安全 (P2)
+    演示 27: CPU Router - 成本优化的请求路由 (P2)
 
 作者: Harness Team
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -3456,6 +3458,142 @@ async def demo_guardrails():
 
 
 # ============================================================================
+# 演示 27: CPU Router - 成本优化的请求路由 (P2)
+# ============================================================================
+
+async def demo_cpu_router():
+    """
+    演示 27: CPU Router - 成本优化的请求路由
+
+    功能:
+    - 使用轻量级 CPU 模型 (如 Qwen3.5-0.8B) 作为路由器
+    - 根据请求复杂度路由到不同的下游模型
+    - 支持 provider/api_key/base_url 独立配置
+    - 复用 model_presets.py 自动检测 provider
+
+    适用场景:
+    - 高/低档模型混合使用，降低成本
+    - 简单请求走低成本模型，复杂请求走高性能模型
+    """
+    print("\n" + "=" * 70)
+    print("演示 27: CPU Router - 成本优化的请求路由 (P2)")
+    print("=" * 70)
+
+    from harness.sdk.config import RoutingConfig
+
+    # -------------------------------------------------------------------------
+    # 1. RoutingConfig 基础配置
+    # -------------------------------------------------------------------------
+    print("\n--- 1. RoutingConfig 基础配置 ---")
+
+    print("""
+    RoutingConfig 支持以下配置:
+
+    下游模型配置:
+    - high_model: 高性能模型 (复杂任务)
+    - high_provider: "auto" 或显式指定 ("anthropic"/"openai")
+    - high_api_key: 可选，覆盖全局 api_key
+    - high_base_url: 可选，覆盖全局 base_url
+
+    - low_model: 低成本模型 (简单任务)
+    - low_provider: "auto" 或显式指定
+    - low_api_key: 可选
+    - low_base_url: 可选
+
+    路由器配置:
+    - router_model_path: GGUF 文件路径 (嵌入式)
+    - router_url: 或使用 HTTP 服务
+    - router_context_window: 上下文大小，支持 "auto" 或整数
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. 使用示例
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 使用示例 ---")
+
+    print("""
+    # 示例 1: 自动检测 provider
+    routing = RoutingConfig(
+        high_model="claude-sonnet-4-6",  # 自动检测 → anthropic
+        low_model="qwen-plus",           # 自动检测 → openai
+        router_model_path="models/qwen3.5-0.8b.gguf",
+    )
+
+    # 示例 2: 不同服务商
+    routing = RoutingConfig(
+        high_model="gpt-4o",
+        high_api_key="sk-openai-xxx",
+        low_model="deepseek-chat",
+        low_api_key="sk-deepseek-xxx",
+        low_base_url="https://api.deepseek.com/v1",
+        router_model_path="models/qwen3.5-0.8b.gguf",
+    )
+
+    # 示例 3: 自定义路由器上下文
+    routing = RoutingConfig(
+        high_model="gpt-4o",
+        low_model="gpt-4o-mini",
+        router_model_path="models/qwen3.5-0.8b.gguf",
+        router_context_window=4096,  # 或 "auto"
+    )
+
+    # 完整 Agent 配置
+    agent = AgentHarness(
+        routing=routing,
+        tools=[ReadTool()],
+    )
+    """)
+
+    # -------------------------------------------------------------------------
+    # 3. provider 自动检测
+    # -------------------------------------------------------------------------
+    print("\n--- 3. provider 自动检测 ---")
+
+    from harness.model_presets import get_model_preset
+
+    models = ["claude-sonnet-4-6", "gpt-4o", "qwen-plus", "deepseek-chat"]
+    print("模型名 → provider 检测结果:")
+    for model in models:
+        preset = get_model_preset(model)
+        print(f"  {model} → {preset.provider}")
+
+    # -------------------------------------------------------------------------
+    # 4. context_window 自动检测
+    # -------------------------------------------------------------------------
+    print("\n--- 4. context_window 自动检测 ---")
+
+    from harness.model_presets import parse_context_window
+
+    print("""
+    EmbeddedLlamaClient 支持从 GGUF 文件名推断模型:
+
+    文件名 → 模型名推断:
+      qwen3.5-0.8b-instruct-q4_k_m.gguf → qwen3.5-0.8b
+      qwen2.5-1.5b-chat-q5_k_m.gguf → qwen2.5-1.5b
+
+    未知模型默认使用 2048 (路由任务足够)
+    """)
+
+    # -------------------------------------------------------------------------
+    # 5. 路由判断逻辑
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 路由判断逻辑 ---")
+
+    print("""
+    默认路由判断标准:
+    - 需要多步推理 → high
+    - 需要调用多个工具 → high
+    - 需要代码生成或修改 → high
+    - 需要深度分析或报告 → high
+    - 简单问答、查询、翻译 → low
+
+    重要: 当不确定时，选择 high。宁可浪费也不要牺牲质量。
+    """)
+
+    print("\n✅ CPU Router 演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -3546,6 +3684,9 @@ async def main():
 
         # Guardrails PII 检测 (P2)
         await demo_guardrails()
+
+        # CPU Router 成本优化 (P2)
+        await demo_cpu_router()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")
