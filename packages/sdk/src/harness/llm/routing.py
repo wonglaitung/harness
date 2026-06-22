@@ -13,10 +13,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
-from harness.sdk.config import RoutingConfig
 from harness.types import (
     Chunk,
     ChunkType,
@@ -26,6 +25,9 @@ from harness.types import (
     StopReason,
     TokenUsage,
 )
+
+if TYPE_CHECKING:
+    from harness.sdk.config import RoutingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +127,7 @@ class RoutingLLMClient(LLMClient):
 
             self._router_client = EmbeddedLlamaClient(
                 model_path=self.routing_config.router_model_path,
-                n_ctx=2048,
+                context_window=self.routing_config.router_context_window,
             )
             logger.info(f"Router initialized (embedded): {self.routing_config.router_model_path}")
 

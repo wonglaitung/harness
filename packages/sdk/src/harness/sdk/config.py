@@ -21,22 +21,36 @@ class RoutingConfig:
     Supports two deployment modes:
     - Embedded (default): Load GGUF model directly via llama-cpp-python
     - HTTP: Connect to external llama-server
+
+    Design pattern follows HarnessConfig:
+    - provider defaults to "auto", uses model_presets for detection
+    - context_window supports "auto" or explicit values
+    - api_key/base_url can be overridden per model
     """
+
+    # Downstream model configuration (high-capability model)
+    high_model: str = ""
+    high_provider: str = "auto"  # "auto" uses model_presets detection
+    high_api_key: str | None = None  # Override global api_key
+    high_base_url: str | None = None  # Override global base_url
+    high_description: str = "高级模型，适合复杂任务（多步推理、代码生成、深度分析）"
+
+    # Downstream model configuration (low-cost model)
+    low_model: str = ""
+    low_provider: str = "auto"  # "auto" uses model_presets detection
+    low_api_key: str | None = None  # Override global api_key
+    low_base_url: str | None = None  # Override global base_url
+    low_description: str = "基础模型，适合简单任务（问答、查询、翻译）"
 
     # Router deployment (choose one)
     router_model_path: str | None = None  # Embedded: path to GGUF file
-    router_url: str | None = None  # HTTP: llama-server URL, e.g., "http://localhost:8080"
+    router_url: str | None = None  # HTTP: llama-server URL
+    router_context_window: int | str = "auto"  # Context window for router (auto or int)
 
     # Routing behavior
     default_route: Literal["high", "low"] = "high"  # Fallback when router fails
     router_timeout: float = 0.2  # Timeout in seconds (200ms)
     history_window: int = 5  # Number of recent messages to consider
-
-    # Downstream models (must configure both)
-    high_model: str = ""  # High-capability model, e.g., "gpt-4o"
-    high_description: str = "高级模型，适合复杂任务（多步推理、代码生成、深度分析）"
-    low_model: str = ""  # Low-cost model, e.g., "gpt-4o-mini"
-    low_description: str = "基础模型，适合简单任务（问答、查询、翻译）"
 
     # Optional: custom routing prompt template
     route_prompt_template: str | None = None

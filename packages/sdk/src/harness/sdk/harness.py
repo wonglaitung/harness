@@ -262,37 +262,64 @@ class AgentHarness:
             preview_length=offload.preview_length,
         )
 
-    def _create_llm_client(self) -> LLMClient:
-        """Create the LLM client based on config."""
-        # If routing is configured, create routing client
-        if self.config.routing:
+    def _create_llm_client(
+        self,
+        model: str | None = None,
+        provider: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> LLMClient:
+        """
+        Create an LLM client based on config.
+
+        This is the unified method for creating LLM clients, used by both
+        standard agent creation and routing downstream clients.
+
+        Reuses model_presets.py for provider auto-detection when provider="auto".
+
+        Args:
+            model: Model name (defaults to config.model)
+            provider: Provider type - "anthropic", "openai", or "auto" (uses model_presets)
+            api_key: API key (defaults to config.api_key)
+            base_url: API base URL (defaults to config.base_url)
+
+        Returns:
+            LLMClient instance (AnthropicClient or OpenAIClient)
+        """
+        # If routing is configured and no override, create routing client
+        if self.config.routing and model is None:
             return self._create_routing_client()
 
-        # Standard client creation
-        provider = self.config.provider.lower()
+        # Resolve effective values (override or fallback to config)
+        effective_model = model or self.config.model
+        effective_provider = provider or self.config.provider
+        effective_api_key = api_key or self.config.api_key
+        effective_base_url = base_url or self.config.base_url
         max_tokens = self.config.get_max_tokens()
 
-        # Detect provider from model name if not explicitly set
-        if provider == "anthropic" or self.config.model.startswith("claude"):
+        # Use model_presets for provider auto-detection
+        if effective_provider == "auto":
+            from harness.model_presets import get_model_preset
+            preset = get_model_preset(effective_model)
+            effective_provider = preset.provider
+
+        # Create client based on provider
+        if effective_provider == "anthropic":
             return AnthropicClient(
-                api_key=self.config.api_key,
-                model=self.config.model,
+                api_key=effective_api_key,
+                model=effective_model,
                 max_tokens=max_tokens,
                 temperature=self.config.temperature,
                 tool_result_role=self.config.tool_result_role,
             )
-        elif provider == "openai" or self.config.model.startswith("gpt"):
+        else:
+            # OpenAI format (including third-party compatible APIs)
             return OpenAIClient(
-                api_key=self.config.api_key,
-                model=self.config.model,
-                base_url=self.config.base_url,
+                api_key=effective_api_key,
+                model=effective_model,
+                base_url=effective_base_url,
                 max_tokens=max_tokens,
                 temperature=self.config.temperature,
-            )
-        else:
-            raise ValueError(
-                f"Unknown provider: {provider}. "
-                "Use 'anthropic', 'openai', or provide a custom llm_client."
             )
 
     def _create_routing_client(self) -> LLMClient:
@@ -301,46 +328,25 @@ class AgentHarness:
 
         routing_config = self.config.routing
 
-        # Create downstream clients for high and low
-        high_client = self._create_client_for_model(routing_config.high_model)
-        low_client = self._create_client_for_model(routing_config.low_model)
+        # Create downstream clients using unified _create_llm_client
+        high_client = self._create_llm_client(
+            model=routing_config.high_model,
+            provider=routing_config.high_provider,
+            api_key=routing_config.high_api_key,
+            base_url=routing_config.high_base_url,
+        )
+        low_client = self._create_llm_client(
+            model=routing_config.low_model,
+            provider=routing_config.low_provider,
+            api_key=routing_config.low_api_key,
+            base_url=routing_config.low_base_url,
+        )
 
         return RoutingLLMClient(
             config=routing_config,
             high_client=high_client,
             low_client=low_client,
         )
-
-    def _create_client_for_model(self, model: str) -> LLMClient:
-        """Create an LLM client for a specific model."""
-        max_tokens = self.config.get_max_tokens()
-
-        # Detect provider from model name
-        if model.startswith("claude"):
-            return AnthropicClient(
-                api_key=self.config.api_key,
-                model=model,
-                max_tokens=max_tokens,
-                temperature=self.config.temperature,
-                tool_result_role=self.config.tool_result_role,
-            )
-        elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
-            return OpenAIClient(
-                api_key=self.config.api_key,
-                model=model,
-                base_url=self.config.base_url,
-                max_tokens=max_tokens,
-                temperature=self.config.temperature,
-            )
-        else:
-            # Try OpenAI-compatible for other models
-            return OpenAIClient(
-                api_key=self.config.api_key,
-                model=model,
-                base_url=self.config.base_url,
-                max_tokens=max_tokens,
-                temperature=self.config.temperature,
-            )
 
     def _load_skills(self) -> None:
         """Load skills from default directories."""
