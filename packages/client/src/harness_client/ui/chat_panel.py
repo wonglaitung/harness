@@ -190,6 +190,14 @@ class MessageBubble(QWidget):
             font = self._get_font()
             self._content_label.setFont(font)
 
+            # Ensure label has transparent background and correct text color
+            self._content_label.setStyleSheet(f"""
+                QLabel {{
+                    background-color: transparent;
+                    color: {theme.TEXT};
+                }}
+            """)
+
             # Render Markdown to HTML
             html = self._render_markdown(self._content)
             self._content_label.setTextFormat(Qt.TextFormat.RichText)
@@ -213,10 +221,16 @@ class MessageBubble(QWidget):
             self._label.setText(self._content)
 
             # Set text color via stylesheet
+            # Use white for dark theme, but for light theme use dark text
+            # since user bubble in light theme is light blue (#E0F2FE)
+            if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
+                text_color = "#1E293B"  # slate-800
+            else:  # Dark theme
+                text_color = "#ffffff"
             self._label.setStyleSheet(f"""
                 QLabel {{
                     background-color: transparent;
-                    color: #ffffff;
+                    color: {text_color};
                     border: none;
                 }}
             """)
@@ -426,15 +440,31 @@ class MessageBubble(QWidget):
                 }}
             """)
 
+            # Update content label stylesheet with new theme colors
+            self._content_label.setStyleSheet(f"""
+                QLabel {{
+                    background-color: transparent;
+                    color: {theme.TEXT};
+                }}
+            """)
+
             # Re-render markdown with new theme colors
             html = self._render_markdown(self._content)
             self._content_label.setText(html)
+            # Force the label to update with new text
+            self._content_label.update()
         else:
             # User message - update label stylesheet
+            # Use white for dark theme, but for light theme use dark text
+            # since user bubble in light theme is light blue (#E0F2FE)
+            if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
+                text_color = "#1E293B"  # slate-800
+            else:  # Dark theme
+                text_color = "#ffffff"
             self._label.setStyleSheet(f"""
                 QLabel {{
                     background-color: transparent;
-                    color: #ffffff;
+                    color: {text_color};
                     border: none;
                 }}
             """)
@@ -472,6 +502,10 @@ class AvatarWidget(QWidget):
 
         painter.end()
 
+    def _on_theme_changed(self):
+        """Update when theme changes - just trigger repaint."""
+        self.update()
+
 
 class MessageRow(QWidget):
     """A row containing a message bubble with proper alignment."""
@@ -493,23 +527,34 @@ class MessageRow(QWidget):
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(10)
 
-        # Create bubble
-        bubble = MessageBubble(self._content, self._role)
-        bubble.setMaximumWidth(800 if self._role == "assistant" else 450)
-        bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        # Create bubble and save as instance variable for theme updates
+        self._bubble = MessageBubble(self._content, self._role)
+        self._bubble.setMaximumWidth(800 if self._role == "assistant" else 450)
+        self._bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         if self._role == "user":
             # Right-aligned: stretch on left, bubble on right
             layout.addStretch()
-            layout.addWidget(bubble)
+            layout.addWidget(self._bubble)
         else:
             # Left-aligned: avatar, bubble, stretch
-            avatar = AvatarWidget(28)
-            layout.addWidget(avatar)
-            layout.addWidget(bubble)
+            self._avatar = AvatarWidget(28)
+            layout.addWidget(self._avatar)
+            layout.addWidget(self._bubble)
             layout.addStretch()
 
         self.setStyleSheet(f"background-color: {theme.PANEL};")
+
+    def _on_theme_changed(self):
+        """Update styles when theme changes."""
+        theme = get_theme()
+        self.setStyleSheet(f"background-color: {theme.PANEL};")
+        # Also update the bubble and avatar
+        if hasattr(self, '_bubble') and hasattr(self._bubble, '_on_theme_changed'):
+            self._bubble._on_theme_changed()
+        if hasattr(self, '_avatar') and hasattr(self._avatar, '_on_theme_changed'):
+            self._avatar._on_theme_changed()
+        self.update()
 
 
 class ToolIndicator(QWidget):
