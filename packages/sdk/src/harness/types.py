@@ -30,6 +30,7 @@ class ProgressEventType(Enum):
     ERROR = "error"                      # 错误发生
     STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压
     STUCK_DETECTED = "stuck_detected"    # 检测到停滞状态
+    ROUTER_DECISION = "router_decision"  # 路由决策（CPU Router）
 
 
 @dataclass

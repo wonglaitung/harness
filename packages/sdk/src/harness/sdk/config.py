@@ -11,6 +11,49 @@ from harness.model_presets import get_default_output_tokens, get_model_preset, p
 
 
 @dataclass
+class RoutingConfig:
+    """
+    Configuration for LLM request routing.
+
+    Routes requests to different models based on complexity,
+    using a lightweight CPU model (e.g., Qwen2.5-1.5B) as the router.
+
+    Supports two deployment modes:
+    - Embedded (default): Load GGUF model directly via llama-cpp-python
+    - HTTP: Connect to external llama-server
+    """
+
+    # Router deployment (choose one)
+    router_model_path: str | None = None  # Embedded: path to GGUF file
+    router_url: str | None = None  # HTTP: llama-server URL, e.g., "http://localhost:8080"
+
+    # Routing behavior
+    default_route: Literal["high", "low"] = "high"  # Fallback when router fails
+    router_timeout: float = 0.2  # Timeout in seconds (200ms)
+    history_window: int = 5  # Number of recent messages to consider
+
+    # Downstream models (must configure both)
+    high_model: str = ""  # High-capability model, e.g., "gpt-4o"
+    high_description: str = "高级模型，适合复杂任务（多步推理、代码生成、深度分析）"
+    low_model: str = ""  # Low-cost model, e.g., "gpt-4o-mini"
+    low_description: str = "基础模型，适合简单任务（问答、查询、翻译）"
+
+    # Optional: custom routing prompt template
+    route_prompt_template: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.high_model:
+            raise ValueError("RoutingConfig: high_model must be configured")
+        if not self.low_model:
+            raise ValueError("RoutingConfig: low_model must be configured")
+        if not self.router_model_path and not self.router_url:
+            raise ValueError(
+                "RoutingConfig: must specify either router_model_path (embedded) "
+                "or router_url (HTTP service)"
+            )
+
+
+@dataclass
 class SecurityConfig:
     """
     Security configuration for the agent.
@@ -214,6 +257,9 @@ class HarnessConfig:
 
     # Guardrails settings (PII 检测和内容安全)
     guardrails: Any = None  # GuardrailConfig from harness.guardrails
+
+    # Routing settings (CPU router for cost optimization)
+    routing: RoutingConfig | None = None
 
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)

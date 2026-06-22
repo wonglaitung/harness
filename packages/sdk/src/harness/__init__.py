@@ -39,7 +39,7 @@ from harness.core import (
     SelfVerificationConfig,
     SelfVerificationHook,
 )
-from harness.llm import AnthropicClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient
+from harness.llm import AnthropicClient, EmbeddedLlamaClient, LLMClient, LLMConfig, MockLLMClient, OpenAIClient, RoutingLLMClient
 from harness.mcp import (
     HTTPTransport,
     MCPClient,
@@ -90,6 +90,7 @@ from harness.sdk.config import (
     CostControlConfig,
     HarnessConfig,
     ObservabilityConfig,
+    RoutingConfig,
     SecurityConfig,
     StorageConfig,
 )
@@ -162,6 +163,7 @@ __all__ = [
     "CostControlConfig",
     "ObservabilityConfig",
     "StorageConfig",
+    "RoutingConfig",
     # Model presets
     "ModelPreset",
     "MODEL_PRESETS",
@@ -176,6 +178,8 @@ __all__ = [
     "AnthropicClient",
     "OpenAIClient",
     "MockLLMClient",
+    "EmbeddedLlamaClient",
+    "RoutingLLMClient",
     # Built-in tools
     "ReadTool",
     "WriteTool",

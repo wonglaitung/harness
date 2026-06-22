@@ -21,6 +21,7 @@ from harness.sdk.config import (
     CostControlConfig,
     HarnessConfig,
     ObservabilityConfig,
+    RoutingConfig,
     StorageConfig,
 )
 from harness.tools.base import Tool
@@ -84,6 +85,7 @@ class AgentHarness:
         tools: list[Tool] | None = None,
         config: HarnessConfig | None = None,
         llm_client: LLMClient | None = None,
+        routing: RoutingConfig | None = None,
         **kwargs,
     ):
         """
@@ -97,6 +99,7 @@ class AgentHarness:
             tools: List of tools to make available
             config: Full configuration object
             llm_client: Custom LLM client instance (overrides provider detection)
+            routing: Routing configuration for cost optimization (optional)
             **kwargs: Additional config options
         """
         # Merge config
@@ -108,6 +111,7 @@ class AgentHarness:
                 api_key=api_key,
                 provider=provider,
                 base_url=base_url,
+                routing=routing,
                 **kwargs,
             )
 
@@ -260,6 +264,11 @@ class AgentHarness:
 
     def _create_llm_client(self) -> LLMClient:
         """Create the LLM client based on config."""
+        # If routing is configured, create routing client
+        if self.config.routing:
+            return self._create_routing_client()
+
+        # Standard client creation
         provider = self.config.provider.lower()
         max_tokens = self.config.get_max_tokens()
 
@@ -284,6 +293,53 @@ class AgentHarness:
             raise ValueError(
                 f"Unknown provider: {provider}. "
                 "Use 'anthropic', 'openai', or provide a custom llm_client."
+            )
+
+    def _create_routing_client(self) -> LLMClient:
+        """Create a routing LLM client for cost optimization."""
+        from harness.llm.routing import RoutingLLMClient
+
+        routing_config = self.config.routing
+
+        # Create downstream clients for high and low
+        high_client = self._create_client_for_model(routing_config.high_model)
+        low_client = self._create_client_for_model(routing_config.low_model)
+
+        return RoutingLLMClient(
+            config=routing_config,
+            high_client=high_client,
+            low_client=low_client,
+        )
+
+    def _create_client_for_model(self, model: str) -> LLMClient:
+        """Create an LLM client for a specific model."""
+        max_tokens = self.config.get_max_tokens()
+
+        # Detect provider from model name
+        if model.startswith("claude"):
+            return AnthropicClient(
+                api_key=self.config.api_key,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=self.config.temperature,
+                tool_result_role=self.config.tool_result_role,
+            )
+        elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
+            return OpenAIClient(
+                api_key=self.config.api_key,
+                model=model,
+                base_url=self.config.base_url,
+                max_tokens=max_tokens,
+                temperature=self.config.temperature,
+            )
+        else:
+            # Try OpenAI-compatible for other models
+            return OpenAIClient(
+                api_key=self.config.api_key,
+                model=model,
+                base_url=self.config.base_url,
+                max_tokens=max_tokens,
+                temperature=self.config.temperature,
             )
 
     def _load_skills(self) -> None:
