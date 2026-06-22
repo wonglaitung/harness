@@ -59,6 +59,24 @@
 ## 注意事项
 
 ### 港股分析
+- **港股半导体板块 - 兆易创新破千右侧信号**
+
+### 港股分析
+- **港股AI板块异动 - 智谱涨超40%右侧信号**
+
+### 新范式/工具
+- **Agentic Resource Discovery (ARD)** - https://huggingface.co/blog/agentic-resource-discovery-launch
+
+### 新范式/工具
+- **Hindsight** - https://github.com/trending/python
+
+### 新范式/工具
+- **Cognee** - https://github.com/trending/python
+
+### 新范式/工具
+- **HyperFrames** - https://github.com/trending/typescript
+
+### 港股分析
 - **港股市场观察 - 无重大异动**
 
 ### 新范式/工具
