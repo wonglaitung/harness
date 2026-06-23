@@ -893,17 +893,18 @@ class ChatPanel(QWidget):
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: transparent;
-                width: 8px;
-                margin: 4px;
+                background-color: {theme.CHROME};
+                width: 10px;
+                margin: 2px;
+                border-radius: 5px;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.BORDER};
-                border-radius: 4px;
+                background-color: {theme.TEXT_SUBTLE};
+                border-radius: 5px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {theme.TEXT_SUBTLE};
+                background-color: {theme.ACCENT};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -1428,17 +1429,18 @@ class ChatPanel(QWidget):
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: transparent;
-                width: 8px;
-                margin: 4px;
+                background-color: {theme.CHROME};
+                width: 10px;
+                margin: 2px;
+                border-radius: 5px;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.BORDER};
-                border-radius: 4px;
+                background-color: {theme.TEXT_SUBTLE};
+                border-radius: 5px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {theme.TEXT_SUBTLE};
+                background-color: {theme.ACCENT};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
