@@ -45,9 +45,12 @@ harness-sdk-java/
 - **BashTool**: Shell 命令执行
 - **GlobTool**: 文件模式匹配
 - **GrepTool**: 内容搜索
+- **UpdateCoreMemoryTool**: Agent 自主更新 Core Memory，支持内容提炼和去重
 
 ### harness-sdk-memory
-- **MemoryFileManager**: MEMORY.md 文件管理
+- **MemoryFileManager**: MEMORY.md 文件管理，支持字符级去重检测
+- **MemoryCategory**: 记忆类别枚举，支持 `getValue()` / `fromValue()` 方法
+- **MemoryEntry**: 记忆条目
 - **SessionManager**: 会话持久化
 
 ### harness-sdk-skills

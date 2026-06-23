@@ -970,9 +970,16 @@ class UpdateCoreMemoryTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "更新用户偏好或项目约定到长期记忆。"
-            "适用场景：用户提到长期偏好（如'我使用 Windows'）、"
-            "工作环境、项目约束等。"
+            "更新用户偏好或项目约定到长期记忆。\n\n"
+            "重要规则：\n"
+            "1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述\n"
+            "   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」\n"
+            "   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」\n"
+            "2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加\n"
+            "3. **适用场景**：用户提到长期偏好、工作环境、项目约束等\n\n"
+            "示例：\n"
+            "- 用户：「我习惯用深色主题」→ category=user_profile, content=\"主题偏好：深色\"\n"
+            "- 用户：「以后回复简短一点」→ category=learned_patterns, content=\"回复风格：简洁\""
         )
 
     @property
@@ -993,6 +1000,65 @@ class UpdateCoreMemoryTool(Tool):
             "required": ["category", "content", "action"],
         }
 ```
+
+### 内容提炼规则
+
+工具的 description 引导 Agent 提炼用户原话，而不是直接存储：
+
+| 用户原话 | 提炼后的存储内容 |
+|---------|-----------------|
+| "使用 cmd，不要用 powershell" | `Shell：使用 cmd（不使用 PowerShell）` |
+| "我使用 Windows" | `操作系统：Windows` |
+| "我习惯用深色主题" | `主题偏好：深色` |
+| "以后回复简短一点" | `回复风格：简洁` |
+
+### 去重机制
+
+`MemoryFileManager.add_entry()` 使用字符级 Jaccard 相似度检测重复：
+
+```python
+def add_entry(self, entry: MemoryEntry, check_duplicate: bool = True) -> bool:
+    """
+    Add a new entry to MEMORY.md.
+
+    Returns:
+        True if entry was added, False if skipped as duplicate
+    """
+    if check_duplicate:
+        for existing in section:
+            similarity = self._calculate_similarity(entry.content, existing)
+            if similarity > 0.7:  # 70% 相似度阈值
+                logger.info(f"Skipping duplicate memory: '{entry.content}'")
+                return False
+
+    section.append(entry.content)
+    self.save(sections)
+    return True
+
+def _calculate_similarity(self, text1: str, text2: str) -> float:
+    """字符级 bigram Jaccard 相似度，支持中英文混合"""
+    ngrams1 = {text1[i:i+2] for i in range(len(text1)-1)}
+    ngrams2 = {text2[i:i+2] for i in range(len(text2)-1)}
+    intersection = ngrams1 & ngrams2
+    union = ngrams1 | ngrams2
+    return len(intersection) / len(union)
+```
+
+### Metadata 支持
+
+`ToolResult.metadata` 用于传递 UI 刷新信号：
+
+```python
+# 添加成功时返回 refresh_memory 信号
+return ToolResult(
+    tool_call_id="",
+    success=True,
+    content=f"已添加到 {category.value}: {content}",
+    metadata={"refresh_memory": True},  # UI 刷新信号
+)
+```
+
+客户端收到此信号后会刷新记忆面板显示。
 
 ### 使用方式
 

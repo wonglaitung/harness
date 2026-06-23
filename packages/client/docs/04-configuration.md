@@ -54,6 +54,7 @@
   "tool_result_role": "tool",
   "system_prompt": "你是一个有帮助的 AI 助手...",
   "stream_enabled": true,
+  "auto_update_memory": true,
   "theme_mode": "auto"
 }
 ```
@@ -72,7 +73,26 @@
 | `tool_result_role` | string | `"tool"` | 工具结果角色 |
 | `system_prompt` | string | `""` | 系统提示 |
 | `stream_enabled` | bool | `true` | 是否启用流式输出 |
+| `auto_update_memory` | bool | `true` | 允许 Agent 自主更新 Core Memory |
 | `theme_mode` | string | `"auto"` | 主题模式：`auto`/`light`/`dark` |
+
+### auto_update_memory 设置
+
+`auto_update_memory` 控制 Agent 是否能自主调用 `UpdateCoreMemoryTool` 更新 Core Memory：
+
+- **`true`（默认）**：Agent 可以在对话过程中自主判断并更新记忆
+- **`false`**：禁用 Agent 自主更新，用户需手动编辑 MEMORY.md
+
+```python
+# ChatConfig 中使用
+config = ChatConfig(
+    auto_update_memory=True,  # 允许 Agent 自主更新记忆
+)
+
+# 在 ChatController 中条件性添加工具
+if self.config.auto_update_memory:
+    tools.append(UpdateCoreMemoryTool())
+```
 
 
 ### 使用第三方 API

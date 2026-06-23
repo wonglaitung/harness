@@ -752,6 +752,198 @@ public class AsyncMemoryPersister {
 }
 ```
 
+## UpdateCoreMemoryTool
+
+允许 Agent 自主更新 Core Memory 的工具，遵循 Mem0 模式。
+
+### 使用方式
+
+```java
+import com.harness.Harness;
+import com.harness.HarnessConfig;
+import com.harness.tools.UpdateCoreMemoryTool;
+
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .build();
+
+Harness agent = new Harness(config);
+
+// 添加 UpdateCoreMemoryTool 到工具列表
+agent.addTool(new UpdateCoreMemoryTool());
+
+// Agent 现在可以自主更新记忆
+LoopResult result = agent.run("我使用 Windows 系统");
+```
+
+### 工具描述（引导内容提炼）
+
+工具的 description 引导 Agent 提炼用户原话，而不是直接存储：
+
+```
+更新用户偏好或项目约定到长期记忆。
+
+重要规则：
+1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述
+   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」
+   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」
+2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加
+3. **适用场景**：用户提到长期偏好、工作环境、项目约束等
+```
+
+### Input Schema
+
+```java
+Map<String, Object> inputSchema() {
+    return Map.of(
+        "type", "object",
+        "properties", Map.of(
+            "category", Map.of(
+                "type", "string",
+                "enum", List.of("user_profile", "key_decisions", "learned_patterns", "project_context"),
+                "description", "记忆类别"
+            ),
+            "content", Map.of(
+                "type", "string",
+                "description", "记忆内容"
+            ),
+            "action", Map.of(
+                "type", "string",
+                "enum", List.of("add", "remove"),
+                "description", "操作类型"
+            )
+        ),
+        "required", List.of("category", "content", "action")
+    );
+}
+```
+
+### Metadata 支持
+
+ToolResult 包含 `metadata` 字段，用于传递 UI 刷新信号：
+
+```java
+// 添加成功时返回 refresh_memory 信号
+return ToolResult.success(
+    "",
+    "已添加到 user_profile: 操作系统：Windows",
+    name(),
+    Map.of("refresh_memory", true)  // UI 刷新信号
+);
+```
+
+## 记忆去重机制
+
+MemoryFileManager 使用字符级 Jaccard 相似度检测重复记忆，支持中英文混合文本。
+
+### 去重算法
+
+```java
+/**
+ * Calculate text similarity using character-level Jaccard similarity.
+ * Supports both Chinese and English text without requiring word segmentation.
+ */
+private double calculateSimilarity(String text1, String text2) {
+    text1 = text1.toLowerCase();
+    text2 = text2.toLowerCase();
+
+    if (text1.isEmpty() || text2.isEmpty()) {
+        return 0.0;
+    }
+
+    // 字符级 bigram（支持中文，无需分词）
+    Set<String> ngrams1 = getNgrams(text1, 2);
+    Set<String> ngrams2 = getNgrams(text2, 2);
+
+    Set<String> intersection = new HashSet<>(ngrams1);
+    intersection.retainAll(ngrams2);
+
+    Set<String> union = new HashSet<>(ngrams1);
+    union.addAll(ngrams2);
+
+    return (double) intersection.size() / union.size();
+}
+
+private Set<String> getNgrams(String text, int n) {
+    if (text.length() < n) {
+        return Set.of(text);
+    }
+    Set<String> ngrams = new HashSet<>();
+    for (int i = 0; i <= text.length() - n; i++) {
+        ngrams.add(text.substring(i, i + n));
+    }
+    return ngrams;
+}
+```
+
+### 使用示例
+
+```java
+MemoryFileManager manager = new MemoryFileManager();
+
+// 添加第一条记忆
+MemoryEntry entry1 = new MemoryEntry(
+    MemoryCategory.USER_PROFILE,
+    "操作系统：Windows",
+    MemorySource.USER_INPUT
+);
+boolean added1 = manager.addEntry(entry1);  // 返回 true
+
+// 尝试添加相似记忆
+MemoryEntry entry2 = new MemoryEntry(
+    MemoryCategory.USER_PROFILE,
+    "操作系统：Windows 10",  // 相似内容
+    MemorySource.USER_INPUT
+);
+boolean added2 = manager.addEntry(entry2);  // 返回 false（跳过重复）
+
+// 添加不同记忆
+MemoryEntry entry3 = new MemoryEntry(
+    MemoryCategory.USER_PROFILE,
+    "主题偏好：深色",
+    MemorySource.USER_INPUT
+);
+boolean added3 = manager.addEntry(entry3);  // 返回 true
+```
+
+### 相似度阈值
+
+- 默认阈值：`0.7`（70% 相似度）
+- 阈值越高，去重越严格
+- 可通过 `addEntry(entry, false)` 跳过去重检查
+
+## MemoryCategory 扩展
+
+### getValue() 和 fromValue()
+
+支持小写字符串格式，与 Python SDK 保持一致：
+
+```java
+public enum MemoryCategory {
+    USER_PROFILE("User Profile", "user_profile"),
+    KEY_DECISIONS("Key Decisions", "key_decisions"),
+    LEARNED_PATTERNS("Learned Patterns", "learned_patterns"),
+    PROJECT_CONTEXT("Project Context", "project_context");
+
+    private final String header;
+    private final String value;
+
+    public String getValue() {
+        return value;  // 返回 "user_profile" 等小写格式
+    }
+
+    public static MemoryCategory fromValue(String value) {
+        for (MemoryCategory cat : values()) {
+            if (cat.value.equals(value)) {
+                return cat;
+            }
+        }
+        return PROJECT_CONTEXT;
+    }
+}
+```
+
 ## 下一步
 
 - [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 集成

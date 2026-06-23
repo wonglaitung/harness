@@ -713,6 +713,155 @@ public class GrepTool implements Tool {
 }
 ```
 
+### UpdateCoreMemoryTool
+
+允许 Agent 自主更新 Core Memory (MEMORY.md) 的工具，遵循 Mem0 模式。
+
+```java
+package com.harness.tools;
+
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.memory.*;
+import com.harness.types.ToolResult;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * 更新 Core Memory 工具。
+ *
+ * 功能：
+ * - 添加/移除记忆条目
+ * - 内容提炼引导
+ * - 自动去重检测
+ * - UI 刷新信号
+ */
+public class UpdateCoreMemoryTool implements Tool {
+
+    @Override
+    public String name() {
+        return "update_core_memory";
+    }
+
+    @Override
+    public String description() {
+        return """
+            更新用户偏好或项目约定到长期记忆。
+
+            重要规则：
+            1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述
+               - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」
+               - 用户说「我使用 Windows」→ 存储「操作系统：Windows」
+            2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加
+            3. **适用场景**：用户提到长期偏好、工作环境、项目约束等
+            """;
+    }
+
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of(
+                "category", Map.of(
+                    "type", "string",
+                    "enum", List.of("user_profile", "key_decisions", "learned_patterns", "project_context"),
+                    "description", "记忆类别"
+                ),
+                "content", Map.of(
+                    "type", "string",
+                    "description", "记忆内容"
+                ),
+                "action", Map.of(
+                    "type", "string",
+                    "enum", List.of("add", "remove"),
+                    "description", "操作类型"
+                )
+            ),
+            "required", List.of("category", "content", "action")
+        );
+    }
+
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
+        String categoryStr = (String) args.get("category");
+        String content = (String) args.get("content");
+        String action = (String) args.get("action");
+
+        MemoryCategory category = MemoryCategory.fromValue(categoryStr);
+        MemoryFileManager manager = new MemoryFileManager();
+
+        if ("add".equals(action)) {
+            MemoryEntry entry = new MemoryEntry(category, content, MemorySource.USER_INPUT);
+            boolean added = manager.addEntry(entry);
+
+            if (added) {
+                return CompletableFuture.completedFuture(
+                    ToolResult.success("", "已添加到 " + category.getValue() + ": " + content, name(),
+                        Map.of("refresh_memory", true))
+                );
+            } else {
+                return CompletableFuture.completedFuture(
+                    ToolResult.success("", "跳过重复记忆: 已有类似内容", name())
+                );
+            }
+
+        } else if ("remove".equals(action)) {
+            List<String> entries = manager.getEntries(category);
+            for (int i = 0; i < entries.size(); i++) {
+                if (entries.get(i).contains(content)) {
+                    manager.removeEntry(category, i);
+                    return CompletableFuture.completedFuture(
+                        ToolResult.success("", "已从 " + category.getValue() + " 移除", name(),
+                            Map.of("refresh_memory", true))
+                    );
+                }
+            }
+            return CompletableFuture.completedFuture(
+                ToolResult.failure("", "未找到匹配的记忆: " + content, name())
+            );
+        }
+
+        return CompletableFuture.completedFuture(
+            ToolResult.failure("", "Invalid action: " + action, name())
+        );
+    }
+}
+```
+
+#### 使用示例
+
+```java
+import com.harness.Harness;
+import com.harness.HarnessConfig;
+import com.harness.tools.UpdateCoreMemoryTool;
+
+// 创建 Agent 并添加 UpdateCoreMemoryTool
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .build();
+
+Harness agent = new Harness(config);
+agent.addTool(new UpdateCoreMemoryTool());
+
+// Agent 可以自主更新记忆
+LoopResult result = agent.run("我使用 Windows 系统，偏好深色主题");
+```
+
+#### Metadata 支持
+
+ToolResult 的 `metadata` 字段用于传递 UI 刷新信号：
+
+```java
+// 添加成功后返回 refresh_memory 信号
+ToolResult.success("", "已添加到 user_profile: 操作系统：Windows", name(),
+    Map.of("refresh_memory", true));
+```
+
+客户端收到此信号后会刷新记忆面板显示。
+
 ## 工具执行器
 
 ```java
