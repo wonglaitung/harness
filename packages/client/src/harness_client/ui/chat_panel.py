@@ -139,7 +139,7 @@ class MessageBubble(QWidget):
         self._role = role
         self._border_radius = 14.0
         self._padding_h = 16
-        self._padding_v = 12
+        self._padding_v = 12  # Balanced padding for text visibility
         self._max_width = 800
 
         self._setup_ui()
@@ -157,7 +157,6 @@ class MessageBubble(QWidget):
             # Use QScrollArea + QLabel for assistant messages with horizontal scrolling
             self._scroll_area = QScrollArea()
             self._scroll_area.setWidgetResizable(True)
-            self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)  # Remove default frame
             self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self._scroll_area.setStyleSheet(f"""
@@ -183,25 +182,28 @@ class MessageBubble(QWidget):
                 }}
             """)
 
+            # Important: Set frame shape to NoFrame to remove default border
+            self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
             # Create QLabel for content
             self._content_label = QLabel()
             self._content_label.setOpenExternalLinks(True)
             self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self._content_label.setWordWrap(True)  # Enable word wrap for long lines
             self._content_label.setMinimumWidth(100)  # Prevent label from being too narrow
-            self._content_label.setContentsMargins(0, 0, 0, 0)  # Remove extra margins
+            self._content_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            self._content_label.setMargin(0)  # Remove extra margin around text
 
             # Set font
             font = self._get_font()
             self._content_label.setFont(font)
 
             # Ensure label has transparent background and correct text color
+            # Note: line-height is NOT supported in Qt CSS, removed to avoid clipping
             self._content_label.setStyleSheet(f"""
                 QLabel {{
                     background-color: transparent;
                     color: {theme.TEXT};
-                    margin: 0px;
-                    padding: 0px;
                 }}
             """)
 
@@ -312,7 +314,7 @@ class MessageBubble(QWidget):
 
         # Define inline styles for each element type
         styles = {
-            "p": f"color: {theme.TEXT}; margin-top: 0px; margin-bottom: 4px;",
+            "p": f"color: {theme.TEXT}; margin-top: 4px; margin-bottom: 4px;",
             "span": f"color: {theme.TEXT};",
             "code": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 2px 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9pt;",
             "pre": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 10px; margin-top: 8px; margin-bottom: 8px;",
@@ -891,18 +893,17 @@ class ChatPanel(QWidget):
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: {theme.CHROME};
-                width: 10px;
-                margin: 2px;
-                border-radius: 5px;
+                background-color: transparent;
+                width: 8px;
+                margin: 4px;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.TEXT_SUBTLE};
-                border-radius: 5px;
+                background-color: {theme.BORDER};
+                border-radius: 4px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {theme.ACCENT};
+                background-color: {theme.TEXT_SUBTLE};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -1427,18 +1428,17 @@ class ChatPanel(QWidget):
                 border: none;
             }}
             QScrollBar:vertical {{
-                background-color: {theme.CHROME};
-                width: 10px;
-                margin: 2px;
-                border-radius: 5px;
+                background-color: transparent;
+                width: 8px;
+                margin: 4px;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.TEXT_SUBTLE};
-                border-radius: 5px;
+                background-color: {theme.BORDER};
+                border-radius: 4px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {theme.ACCENT};
+                background-color: {theme.TEXT_SUBTLE};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
