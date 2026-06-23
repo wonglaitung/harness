@@ -836,7 +836,20 @@ class ChatPanel(QWidget):
         header_layout.setContentsMargins(16, 0, 16, 0)
         header_layout.setSpacing(8)
 
-        # Left side - empty for now (future: session title/status)
+        # Session title (left side)
+        self._session_title_label = QLabel("新会话")
+        self._session_title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: 12px;
+                background: transparent;
+            }}
+        """)
+        self._session_title_label.setMaximumWidth(300)
+        self._session_title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._session_title_label.setEllipsisMode(Qt.TextElideMode.ElideRight)
+        header_layout.addWidget(self._session_title_label)
+
         header_layout.addStretch()
 
         # Clear context button (with vector icon)
@@ -1351,6 +1364,14 @@ class ChatPanel(QWidget):
         # Clean format: "4.3k / 200k"
         self.token_label.setText(f"{fmt(total)} / {fmt(limit)}")
 
+    def set_session_title(self, title: str):
+        """Update the session title in the header bar.
+
+        Args:
+            title: The session title (will be truncated if too long)
+        """
+        self._session_title_label.setText(title if title else "新会话")
+
     def _on_theme_changed(self):
         """Handle theme change - update all styles."""
         theme = get_theme()
@@ -1360,6 +1381,15 @@ class ChatPanel(QWidget):
             QWidget {{
                 background-color: {theme.CHROME};
                 border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        # Update session title label
+        self._session_title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: 12px;
+                background: transparent;
             }}
         """)
 

@@ -270,10 +270,15 @@ class MainWindow(QMainWindow):
         history = self.chat_controller.session_manager.get_history_list()
         self.sidebar.update_sessions(current, history)
 
+        # Update session title in header
+        if current:
+            self.chat_panel.set_session_title(current.name)
+
     def _on_new_session(self):
         """Create a new session."""
         self.chat_controller.new_session()
         self.chat_panel.clear_chat()
+        self.chat_panel.set_session_title("新会话")
         self._refresh_session_list()
         self.statusbar.showMessage("新会话已创建", 3000)
 
