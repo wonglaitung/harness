@@ -363,5 +363,28 @@ def _on_theme_changed(self):
 | `memory_panel.py` | `findChildren()` 用文本匹配不可靠 | 改用 `setProperty()` 标记组件 |
 | `chat_panel.py` | `input_bar` 是局部变量 | 改为 `self._input_bar` |
 | `chat_panel.py` | session_title_label 缺少主题更新逻辑 | 添加到 `_on_theme_changed()` |
+| `chat_panel.py` | CSS `line-height: 1.4` 不被 Qt 支持，导致文本截断 | 移除不支持的 CSS 属性 |
+| `chat_panel.py` | QScrollArea 默认有 frame 边框导致额外空间 | 添加 `setFrameShape(QFrame.Shape.NoFrame)` |
+| `chat_panel.py` | QLabel 文本未顶部对齐，第一行被截断 | `setAlignment(AlignTop \| AlignLeft)` + `setMargin(0)` |
+| `chat_panel.py` | QScrollBar 背景 `transparent` 不可见 | 改用 `theme.CHROME` 背景 + `theme.TEXT_SUBTLE` 手柄 |
 | `sidebar.py` | `update_sessions()` 硬编码 `Qt.GlobalColor.white` | 改为 `QColor(theme.ACCENT)` |
 | `sidebar.py` | QListWidget item 颜色只在 `_on_theme_changed` 更新，新建会话时硬编码 | 两处都改用主题颜色 |
+
+---
+
+## Qt CSS 不支持的属性
+
+**重要**：Qt 的 HTML/CSS 子集有限，以下属性不支持：
+
+| 属性 | 状态 |
+|-----|------|
+| `line-height` | ❌ 不支持 |
+| `display: flex/grid` | ❌ 不支持 |
+| `position` | ❌ 不支持 |
+| `float` | ❌ 不支持 |
+| CSS 变量 | ❌ 不支持 |
+| `box-shadow` | ❌ 不支持 |
+
+参考文档：https://doc.qt.io/qt-6/richtext-html-subset.html
+
+**如果使用了不支持的 CSS 属性，可能导致文本截断或布局异常。**
