@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
 from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QColor, QPen, QBrush, QPixmap, QPolygonF, QTextCursor
 from PyQt6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -138,7 +139,7 @@ class MessageBubble(QWidget):
         self._role = role
         self._border_radius = 14.0
         self._padding_h = 16
-        self._padding_v = 10  # Reduced for tighter spacing
+        self._padding_v = 12
         self._max_width = 800
 
         self._setup_ui()
@@ -156,6 +157,7 @@ class MessageBubble(QWidget):
             # Use QScrollArea + QLabel for assistant messages with horizontal scrolling
             self._scroll_area = QScrollArea()
             self._scroll_area.setWidgetResizable(True)
+            self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)  # Remove default frame
             self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self._scroll_area.setStyleSheet(f"""
@@ -310,7 +312,7 @@ class MessageBubble(QWidget):
 
         # Define inline styles for each element type
         styles = {
-            "p": f"color: {theme.TEXT}; margin-top: 4px; margin-bottom: 4px;",
+            "p": f"color: {theme.TEXT}; margin-top: 0px; margin-bottom: 4px;",
             "span": f"color: {theme.TEXT};",
             "code": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 2px 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9pt;",
             "pre": f"background-color: {theme.CODE_BACKGROUND}; color: {theme.CODE_FOREGROUND}; padding: 10px; margin-top: 8px; margin-bottom: 8px;",
