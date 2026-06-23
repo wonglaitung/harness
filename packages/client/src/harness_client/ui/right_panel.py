@@ -61,6 +61,14 @@ class CollapsibleSection(QWidget):
         self._content_height = 0  # Store original content height
         self._animation = None
         self._setup_ui()
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
 
     def _setup_ui(self):
         """Setup the collapsible section UI."""

@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
-from harness_client.themes import get_theme
+from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.right_panel import CollapsibleSection
 
 
@@ -191,6 +191,14 @@ class CategorySection(QWidget):
         self._entries: list[MemoryEntry] = []
         self._entry_widgets: list[QWidget] = []
         self._setup_ui()
+        # Register theme listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
 
     def _setup_ui(self):
         """Setup the category section UI."""
@@ -205,20 +213,20 @@ class CategorySection(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(6)
 
-        name_label = QLabel(self._display_name)
-        name_label.setStyleSheet(f"""
+        self._name_label = QLabel(self._display_name)
+        self._name_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
                 font-weight: bold;
             }}
         """)
-        header_layout.addWidget(name_label)
+        header_layout.addWidget(self._name_label)
 
         header_layout.addStretch()
 
-        add_btn = QPushButton("+")
-        add_btn.setStyleSheet(f"""
+        self._add_btn = QPushButton("+")
+        self._add_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.APP_BACKGROUND};
                 border: 1px solid {theme.BORDER};
@@ -236,9 +244,9 @@ class CategorySection(QWidget):
                 border-color: {theme.ACCENT};
             }}
         """)
-        add_btn.setToolTip("添加记忆条目")
-        add_btn.clicked.connect(self._on_add_clicked)
-        header_layout.addWidget(add_btn)
+        self._add_btn.setToolTip("添加记忆条目")
+        self._add_btn.clicked.connect(self._on_add_clicked)
+        header_layout.addWidget(self._add_btn)
 
         layout.addWidget(header)
 
@@ -385,7 +393,33 @@ class CategorySection(QWidget):
     def _on_theme_changed(self):
         """Handle theme change - update all child widgets."""
         theme = get_theme()
-        # Update entry widgets and their sliders
+        # Update header elements
+        self._name_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: bold;
+            }}
+        """)
+        self._add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+                min-width: 22px;
+                max-width: 22px;
+                min-height: 22px;
+                max-height: 22px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+        # Update entry widgets and their children
         for widget in self._entry_widgets:
             # Update widget background
             widget.setStyleSheet(f"""
@@ -394,6 +428,32 @@ class CategorySection(QWidget):
                     border-radius: {theme.RADIUS_SM};
                 }}
             """)
+            # Find and update child labels (content_label)
+            for label in widget.findChildren(QLabel):
+                # Skip importance indicator (colored dot) - it uses fixed color based on importance
+                if label.text() == "●":
+                    continue
+                label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {theme.TEXT};
+                        font-size: {theme.FONT_SIZE_XS};
+                    }}
+                """)
+            # Find and update remove buttons
+            for btn in widget.findChildren(QPushButton):
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        border: none;
+                        color: {theme.TEXT_SUBTLE};
+                        font-size: {theme.FONT_SIZE_MD};
+                        min-width: 22px;
+                        max-width: 22px;
+                    }}
+                    QPushButton:hover {{
+                        color: {theme.DANGER};
+                    }}
+                """)
             # Find and update ImportanceSlider
             for child in widget.findChildren(ImportanceSlider):
                 child.update()
@@ -426,6 +486,7 @@ class MemorySection(CollapsibleSection):
     def __init__(self, parent=None):
         super().__init__("记忆", parent)
         self._setup_content()
+        # Note: Theme listener is registered in CollapsibleSection.__init__
 
     def _setup_content(self):
         """Setup the memory section content."""
@@ -457,18 +518,18 @@ class MemorySection(CollapsibleSection):
         scroll.setWidget(container)
 
         # Info label with importance legend
-        info_label = QLabel(
+        self._info_label = QLabel(
             "全局记忆存储在 ~/.harness/MEMORY.md\n"
             "● 绿色=高重要 · ● 橙色=中重要 · ● 灰色=低重要"
         )
-        info_label.setStyleSheet(f"""
+        self._info_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: {theme.FONT_SIZE_XS};
                 padding: 6px;
             }}
         """)
-        self._container_layout.addWidget(info_label)
+        self._container_layout.addWidget(self._info_label)
 
         # Create category sections
         self._category_sections: dict[MemoryCategory, CategorySection] = {}
@@ -553,6 +614,17 @@ class MemorySection(CollapsibleSection):
 
     def _on_theme_changed(self):
         """Handle theme change - update all category sections."""
+        super()._on_theme_changed()  # Update CollapsibleSection header
+        theme = get_theme()
+        # Update info label
+        self._info_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 6px;
+            }}
+        """)
+        # Update all category sections
         for section in self._category_sections.values():
             section._on_theme_changed()
 
