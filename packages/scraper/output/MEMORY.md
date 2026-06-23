@@ -62,6 +62,15 @@
 
 ## 注意事项
 
+### 港股分析
+- **港股通103.71亿净流入 — 超强右侧确认信号**
+
+### 新范式/工具
+- **Argus Red — 证明式安全Agent** - https://www.argusred.com/cli
+
+### 新范式/工具
+- **Context Mode — Agent上下文沙箱化新范式** - https://github.com/mksglu/context-mode
+
 ### 新范式/工具
 - **Claude Tag - 多人协作Agent范式** - https://www.anthropic.com/news/introducing-claude-tag
 
