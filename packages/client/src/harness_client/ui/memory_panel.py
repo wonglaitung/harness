@@ -7,7 +7,8 @@ Features:
 - Add/edit/remove entries with importance support
 """
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +26,154 @@ from PyQt6.QtWidgets import (
 from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
 from harness_client.themes import get_theme
 from harness_client.ui.right_panel import CollapsibleSection
+
+
+class ImportanceSlider(QWidget):
+    """
+    Custom painted importance slider with visual feedback.
+
+    Features:
+    - Colored track based on importance level
+    - Circular handle with hover enlargement
+    - Tooltip showing current value
+    - Mouse drag interaction
+    """
+
+    valueChanged = pyqtSignal(float)  # 0.0 to 1.0
+
+    def __init__(self, initial_value: float = 0.5, parent=None):
+        super().__init__(parent)
+        self._value = initial_value
+        self._hover = False
+        self._dragging = False
+
+        # Fixed size
+        self.setFixedHeight(20)
+        self.setMinimumWidth(60)
+        self.setMaximumWidth(60)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMouseTracking(True)
+
+    def value(self) -> float:
+        """Get the current value (0.0 to 1.0)."""
+        return self._value
+
+    def setValue(self, value: float):
+        """Set the value (0.0 to 1.0)."""
+        value = max(0.0, min(1.0, value))
+        if self._value != value:
+            self._value = value
+            self.valueChanged.emit(self._value)
+            self.update()
+
+    def _get_color_for_value(self) -> str:
+        """Get color based on importance value."""
+        if self._value >= 0.8:
+            return "#22c55e"  # green - high
+        elif self._value >= 0.5:
+            return "#f59e0b"  # orange - medium
+        else:
+            return "#6b7280"  # gray - low
+
+    def _get_handle_rect(self) -> QRectF:
+        """Calculate handle rectangle based on value and hover state."""
+        handle_size = 16 if self._hover or self._dragging else 14
+        track_width = self.width() - handle_size
+        x = self._value * track_width
+
+        return QRectF(
+            x,
+            (self.height() - handle_size) / 2,
+            handle_size,
+            handle_size
+        )
+
+    def paintEvent(self, event):
+        """Paint the slider with track, fill, and handle."""
+        theme = get_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Track dimensions
+        track_height = 4
+        track_y = (self.height() - track_height) / 2
+        track_rect = QRectF(0, track_y, self.width(), track_height)
+
+        # Draw background track
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.CHROME)))
+        painter.drawRoundedRect(track_rect, 2, 2)
+
+        # Draw filled portion
+        fill_color = QColor(self._get_color_for_value())
+        fill_width = self._value * self.width()
+        fill_rect = QRectF(0, track_y, fill_width, track_height)
+        painter.setBrush(QBrush(fill_color))
+        painter.drawRoundedRect(fill_rect, 2, 2)
+
+        # Draw handle
+        handle_rect = self._get_handle_rect()
+        handle_color = QColor(theme.ACCENT)
+        painter.setBrush(QBrush(handle_color))
+        painter.drawEllipse(handle_rect)
+
+        painter.end()
+
+    def enterEvent(self, event):
+        """Handle mouse enter - enlarge handle."""
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Handle mouse leave - shrink handle."""
+        self._hover = False
+        self.update()
+        # Hide tooltip
+        QToolTip.hideText()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        """Handle mouse press - start dragging."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._update_value_from_pos(event.position().x())
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        """Handle mouse move - update value while dragging."""
+        if self._dragging:
+            self._update_value_from_pos(event.position().x())
+        else:
+            # Show tooltip on hover
+            self._show_tooltip()
+
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release - stop dragging."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+            self.update()
+
+    def _update_value_from_pos(self, x: float):
+        """Update value based on mouse position."""
+        handle_size = 14
+        track_width = self.width() - handle_size
+        value = (x - handle_size / 2) / track_width
+        self.setValue(max(0.0, min(1.0, value)))
+
+    def _show_tooltip(self):
+        """Show tooltip with current importance level."""
+        if self._value >= 0.8:
+            level = "高"
+        elif self._value >= 0.5:
+            level = "中"
+        else:
+            level = "低"
+        QToolTip.showText(
+            self.mapToGlobal(self.rect().bottomLeft()),
+            f"重要性: {level} ({self._value:.0%})",
+            self
+        )
 
 
 class CategorySection(QWidget):
@@ -189,28 +339,10 @@ class CategorySection(QWidget):
         content_label.setWordWrap(True)
         layout.addWidget(content_label, 1)
 
-        # Importance slider (0-100 mapped to 0.0-1.0)
-        importance_slider = QSlider(Qt.Orientation.Horizontal)
-        importance_slider.setMinimum(0)
-        importance_slider.setMaximum(100)
-        importance_slider.setValue(int(entry.importance * 100))
-        importance_slider.setStyleSheet(f"""
-            QSlider {{
-                min-width: 50px;
-                max-width: 50px;
-                height: 16px;
-            }}
-            QSlider::handle {{
-                background-color: {theme.ACCENT};
-                border-radius: 6px;
-                min-width: 12px;
-                max-width: 12px;
-                min-height: 12px;
-            }}
-        """)
-        importance_slider.setToolTip("调整重要性")
+        # Importance slider (custom painted)
+        importance_slider = ImportanceSlider(entry.importance)
         importance_slider.valueChanged.connect(
-            lambda value: self._on_importance_changed(index, value / 100.0)
+            lambda value: self._on_importance_changed(index, value)
         )
         layout.addWidget(importance_slider)
 

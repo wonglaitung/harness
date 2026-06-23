@@ -823,6 +823,44 @@ class ChatPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # --- Header bar ---
+        self._header_bar = QWidget()
+        self._header_bar.setFixedHeight(36)
+        self._header_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+        header_layout = QHBoxLayout(self._header_bar)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setSpacing(8)
+
+        # Left side - empty for now (future: session title/status)
+        header_layout.addStretch()
+
+        # Clear context button (with vector icon)
+        self.clear_btn = QPushButton()
+        self.clear_btn.setIcon(create_clear_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.clear_btn.setIconSize(QSize(16, 16))
+        self.clear_btn.setFixedSize(28, 28)
+        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_btn.setToolTip("清空上下文")
+        self.clear_btn.clicked.connect(self._on_clear)
+        self.clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        header_layout.addWidget(self.clear_btn)
+
+        layout.addWidget(self._header_bar)
+
         # Chat display area with scroll
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -957,24 +995,6 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Clear context button
-        self.clear_btn = QPushButton("🗑")
-        self.clear_btn.setFixedSize(32, 32)
-        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clear_btn.setToolTip("清空上下文")
-        self.clear_btn.clicked.connect(self._on_clear)
-        self.clear_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                border-radius: 16px;
-                font-size: 16px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-
         # Send button (circular, accent color)
         self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
         self.send_btn.setIcon(create_play_icon(18, QColor("white")))
@@ -1001,7 +1021,6 @@ class ChatPanel(QWidget):
 
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.token_label)
-        input_layout.addWidget(self.clear_btn)
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
@@ -1335,6 +1354,27 @@ class ChatPanel(QWidget):
     def _on_theme_changed(self):
         """Handle theme change - update all styles."""
         theme = get_theme()
+
+        # Update header bar
+        self._header_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        # Update clear button icon and style
+        self.clear_btn.setIcon(create_clear_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
 
         # Update scroll area
         self._scroll_area.setStyleSheet(f"""
