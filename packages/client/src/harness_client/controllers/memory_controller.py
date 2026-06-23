@@ -128,7 +128,8 @@ class MemoryController(QObject):
             # Rebuild and save
             sections = self._manager.load()
             section = sections.get_section(category)
-            section[index] = entry.to_markdown_line().replace("- ", "", 1).split(" <!-- ")[0]
+            # Remove "- " prefix, keep metadata (e.g., <!-- importance=0.50 -->)
+            section[index] = entry.to_markdown_line()[2:]
             self._manager.save(sections)
             self.memory_changed.emit()
             return True
