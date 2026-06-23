@@ -17,6 +17,7 @@ Agent = Model + Harness
 - **工具系统** — 内置文件操作、Web 搜索，支持自定义工具
 - **MCP 协议** — 连接外部 MCP 工具服务器扩展能力
 - **技能注入** — 根据上下文自动注入专业技能
+- **记忆系统** — 跨会话持久化记忆，支持去重和内容提炼
 - **安全沙箱** — 命令验证、注入检测、审计日志
 - **成本控制** — Token 预算管理、熔断机制
 - **中断恢复** — 保存快照、断点续传
@@ -109,6 +110,27 @@ agent = AgentHarness(
     ],
 )
 ```
+
+### 记忆系统
+
+Agent 可以跨会话保持记忆，自动提炼用户偏好：
+
+```python
+from harness.tools.builtins import UpdateCoreMemoryTool
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[UpdateCoreMemoryTool()],  # 允许 Agent 自主更新记忆
+)
+
+# 用户说"我使用 Windows"，Agent 会提炼为"操作系统：Windows"存入 MEMORY.md
+result = asyncio.run(agent.run("我使用 Windows，偏好深色主题"))
+```
+
+记忆特性：
+- **内容提炼**：自动将用户原话提炼为简洁陈述
+- **去重检测**：相似内容自动跳过，避免重复记忆
+- **分类存储**：按 User Profile、Key Decisions、Learned Patterns、Project Context 分类
 
 ---
 
@@ -234,12 +256,29 @@ Harness agent = new Harness(config);
 LoopResult result = agent.run("列出 /workspace 目录内容");
 ```
 
+### 记忆系统
+
+```java
+import com.harness.tools.UpdateCoreMemoryTool;
+
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .tools(List.of(new UpdateCoreMemoryTool()))  // 允许 Agent 自主更新记忆
+    .build();
+
+Harness agent = new Harness(config);
+// 用户说"我使用 Windows"，Agent 会提炼为"操作系统：Windows"存入 MEMORY.md
+LoopResult result = agent.run("我使用 Windows，偏好深色主题");
+```
+
 ### Java SDK 特性
 
 | 特性 | 说明 |
 |---|---|
 | JAR 包交付 | 单一 JAR 包含所有依赖，可直接复制到银行环境 |
 | 离线部署 | 无需网络访问，支持银行合规要求 |
+| 记忆系统 | 跨会话持久化，支持去重和内容提炼 |
 | 审计日志 | 内置审计系统，支持 SIEM 集成 |
 | 安全沙箱 | 工具默认沙箱模式，显式开启危险权限 |
 | Shadow JAR | 使用 Gradle Shadow 插件打包，解决依赖冲突 |
