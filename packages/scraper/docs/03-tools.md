@@ -25,6 +25,7 @@ from harness.types import ToolResult
 |------|------|--------|------|
 | FetchHKEXTool | `fetch_hkex` | AkShare (东方财富) | 港股实时行情、异动监控 |
 | FetchFinancialNewsTool | `fetch_financial_news` | AkShare + yfinance | 财经快讯、美国国债收益率 |
+| ReadHistoryReportTool | `read_history_report` | 文件系统 | 读取历史 One-Pager 报告 |
 
 ### 输出工具
 
@@ -44,7 +45,8 @@ from harness_scraper.tools import ALL_TOOLS, get_tools_by_names
 # 查看所有可用工具
 print(ALL_TOOLS.keys())
 # ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending',
-#  'fetch_url', 'save_one_pager', 'update_memory', 'fetch_hkex', 'fetch_financial_news']
+#  'fetch_url', 'save_one_pager', 'update_memory', 'fetch_hkex',
+#  'fetch_financial_news', 'read_history_report']
 ```
 
 ### get_tools_by_names()
@@ -588,6 +590,147 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
 | 港交所官网 | 网页抓取 | 低（反爬） | 已弃用 |
 
 **推荐使用 AkShare**：社区维护，API 稳定，无需处理反爬。
+
+## ReadHistoryReportTool
+
+### 用途
+
+读取历史 One-Pager 报告，用于趋势分析和历史信号关联。
+
+**使用场景**：
+- 当前数据引用过去事件（如"连续流入 3 天"、"验证早期信号"）
+- 对比历史趋势
+- 建立跟踪基线
+
+### 输入 Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "days": {
+      "type": "integer",
+      "description": "搜索过去 N 天的报告（默认 7，最大 30）"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "关键词过滤（股票名称、事件类型）。为空则返回日期范围内所有报告。"
+    },
+    "domain": {
+      "type": "string",
+      "enum": ["stocks", "ai"],
+      "description": "报告领域（默认 stocks）"
+    }
+  },
+  "required": []
+}
+```
+
+### 输出格式
+
+#### 找到报告时
+
+```markdown
+Found 3 historical report(s):
+
+---
+**Date**: 2026-06-14
+**File**: 00700-腾讯控股
+**Path**: packages/scraper/output/2026-06-14/stocks/00700-腾讯控股.md
+
+**Content**:
+# 腾讯控股 (00700.HK)
+
+## 事件概述
+...
+```
+
+#### 无匹配报告时
+
+```markdown
+未找到匹配的历史报告。
+搜索条件：days=7, keywords=['腾讯']
+已搜索目录：2026-06-08 至 2026-06-15
+
+建议：将当前信息作为首次记录，建立跟踪基线。
+```
+
+### 使用示例
+
+```python
+# 查询过去 7 天关于腾讯的报告
+{
+  "days": 7,
+  "keywords": ["腾讯", "00700"],
+  "domain": "stocks"
+}
+
+# 查询过去 30 天所有港股报告
+{
+  "days": 30,
+  "domain": "stocks"
+}
+```
+
+### 实现要点
+
+```python
+from pathlib import Path
+from datetime import datetime, timedelta
+
+class ReadHistoryReportTool(Tool):
+    @property
+    def name(self) -> str:
+        return "read_history_report"
+
+    async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+        days = min(arguments.get("days", 7), 30)  # 最多 30 天
+        keywords = arguments.get("keywords", [])
+        domain = arguments.get("domain", "stocks")
+
+        today = datetime.now().date()
+        reports = []
+
+        for i in range(days):
+            date = today - timedelta(days=i)
+            date_dir = OUTPUT_DIR / date.strftime("%Y-%m-%d") / domain
+
+            if not date_dir.exists():
+                continue
+
+            for md_file in sorted(date_dir.glob("*.md")):
+                # 关键词过滤
+                if keywords:
+                    filename = md_file.stem
+                    if not any(kw.lower() in filename.lower() for kw in keywords):
+                        continue
+
+                content = md_file.read_text(encoding="utf-8")
+                reports.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "filename": md_file.stem,
+                    "content": content,
+                })
+
+        return ToolResult_success(content=format_reports(reports))
+```
+
+### 目录结构
+
+```
+packages/scraper/output/
+├── MEMORY.md                    # 已处理项目记录
+├── 2026-06-15/
+│   ├── ai/                      # AI 情报
+│   │   └── mcp.md
+│   └── stocks/                  # 股票分析
+│       ├── 00700.md
+│       └── macro.md
+├── 2026-06-14/
+│   └── stocks/
+│       └── 00700.md
+```
 
 ## FetchFinancialNewsTool
 

@@ -62,6 +62,31 @@ async for chunk in agent.stream("帮我重构这个函数"):
     print(chunk.content, end="")
 ```
 
+### CPU Router（成本优化）
+
+使用轻量级 CPU 模型路由请求，简单任务走低成本模型，复杂任务走高性能模型：
+
+```python
+from harness import AgentHarness
+from harness.sdk.config import RoutingConfig
+
+agent = AgentHarness(
+    routing=RoutingConfig(
+        high_model="gpt-4o",           # 复杂任务
+        low_model="gpt-4o-mini",       # 简单任务
+        router_model_path="models/qwen2.5-1.5b.gguf",  # CPU 路由器
+    ),
+    tools=[ReadTool()],
+)
+
+# 路由自动决策：
+# - "帮我写一个排序算法" → high (代码生成)
+# - "今天天气怎么样" → low (简单问答)
+result = await agent.run("帮我写一个排序算法")
+```
+
+详细配置见 [07-sdk-api.md](./07-sdk-api.md#cpu-router成本优化的-llm-路由)。
+
 ### 内嵌到现有系统
 
 ```python

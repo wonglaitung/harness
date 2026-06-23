@@ -15,6 +15,7 @@ from harness import (
     CostControlConfig,
     ObservabilityConfig,
     StorageConfig,
+    RoutingConfig,  # CPU Router 配置
 
     # 模型预设
     ModelPreset,
@@ -31,6 +32,8 @@ from harness import (
     AnthropicClient,
     OpenAIClient,
     MockLLMClient,
+    EmbeddedLlamaClient,  # 嵌入式 Llama 客户端
+    RoutingLLMClient,     # 路由 LLM 客户端
 
     # 内置工具
     ReadTool,
@@ -782,6 +785,185 @@ class MyLLM(LLMClient):
 
 # 直接传入
 agent = AgentHarness(llm_client=MyLLM())
+```
+
+## CPU Router（成本优化的 LLM 路由）
+
+CPU Router 使用轻量级 CPU 模型（如 Qwen2.5-1.5B）作为路由器，根据请求复杂度路由到不同的下游模型，实现成本优化。
+
+### 架构
+
+```
+User Request → Router (CPU) → high/low label → Downstream LLM
+```
+
+### RoutingConfig
+
+```python
+from harness.sdk.config import RoutingConfig
+
+class RoutingConfig:
+    # 下游模型配置（高性能模型）
+    high_model: str = ""              # 模型名称
+    high_provider: str = "auto"       # "auto" 自动检测
+    high_api_key: str | None = None   # 可选，覆盖全局 api_key
+    high_base_url: str | None = None  # 可选，覆盖全局 base_url
+    high_description: str = "高级模型，适合复杂任务"
+
+    # 下游模型配置（低成本模型）
+    low_model: str = ""
+    low_provider: str = "auto"
+    low_api_key: str | None = None
+    low_base_url: str | None = None
+    low_description: str = "基础模型，适合简单任务"
+
+    # 路由器配置（二选一）
+    router_model_path: str | None = None  # 嵌入式：GGUF 文件路径
+    router_url: str | None = None         # HTTP：llama-server URL
+    router_context_window: int | str = "auto"  # 上下文大小
+
+    # 路由行为
+    default_route: Literal["high", "low"] = "high"  # 路由失败时的默认路由
+    router_timeout: float = 0.2                     # 路由超时（秒）
+    history_window: int = 5                         # 考虑的历史消息数
+
+    # 自定义路由 prompt
+    route_prompt_template: str | None = None
+```
+
+### 使用示例
+
+#### 基础配置
+
+```python
+from harness import AgentHarness
+from harness.sdk.config import RoutingConfig
+
+agent = AgentHarness(
+    routing=RoutingConfig(
+        high_model="gpt-4o",
+        low_model="gpt-4o-mini",
+        router_model_path="models/qwen2.5-1.5b.gguf",
+    ),
+    tools=[ReadTool()],
+)
+```
+
+#### 自动检测 provider
+
+```python
+# provider 自动检测（复用 model_presets.py）
+routing = RoutingConfig(
+    high_model="claude-sonnet-4-6",  # 自动检测 → anthropic
+    low_model="qwen-plus",           # 自动检测 → openai
+    router_model_path="models/qwen3.5-0.8b.gguf",
+)
+```
+
+#### 不同服务商
+
+```python
+routing = RoutingConfig(
+    high_model="gpt-4o",
+    high_api_key="sk-openai-xxx",
+    low_model="deepseek-chat",
+    low_api_key="sk-deepseek-xxx",
+    low_base_url="https://api.deepseek.com/v1",
+    router_model_path="models/qwen3.5-0.8b.gguf",
+)
+```
+
+### EmbeddedLlamaClient
+
+嵌入式 Llama 客户端，使用 llama-cpp-python 加载 GGUF 模型。
+
+```python
+from harness.llm.llama_cpp import EmbeddedLlamaClient
+
+client = EmbeddedLlamaClient(
+    model_path="models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    context_window="auto",  # 从文件名推断
+    n_gpu_layers=0,         # 0 = CPU only
+)
+```
+
+#### context_window 自动推断
+
+从 GGUF 文件名推断模型名称并设置上下文大小：
+
+| 文件名 | 推断模型名 | 默认 context_window |
+|--------|-----------|-------------------|
+| `qwen3.5-0.8b-instruct-q4_k_m.gguf` | `qwen3.5-0.8b` | 2048（路由任务足够） |
+| `qwen2.5-1.5b-chat-q5_k_m.gguf` | `qwen2.5-1.5b` | 2048 |
+
+未知模型默认使用 2048，足够路由任务使用。
+
+### RoutingLLMClient
+
+路由 LLM 客户端，实现请求路由逻辑。
+
+```python
+from harness.llm.routing import RoutingLLMClient
+from harness.sdk.config import RoutingConfig
+
+config = RoutingConfig(
+    high_model="gpt-4o",
+    low_model="gpt-4o-mini",
+    router_model_path="models/qwen2.5-1.5b.gguf",
+)
+
+client = RoutingLLMClient(
+    config=config,
+    high_client=OpenAIClient(model="gpt-4o"),
+    low_client=OpenAIClient(model="gpt-4o-mini"),
+)
+
+response = await client.call(messages)
+```
+
+### 路由判断逻辑
+
+默认路由判断标准：
+
+| 判断条件 | 路由目标 |
+|---------|---------|
+| 需要多步推理 | high |
+| 需要调用多个工具 | high |
+| 需要代码生成或修改 | high |
+| 需要深度分析或报告 | high |
+| 简单问答、查询、翻译 | low |
+
+**重要**：当不确定时，选择 high。宁可浪费也不要牺牲质量。
+
+### 进度事件
+
+路由决策会触发 `ProgressEventType.ROUTER_DECISION` 事件：
+
+```python
+from harness import AgentHarness, ProgressEvent, ProgressEventType
+
+def on_progress(event: ProgressEvent):
+    if event.type == ProgressEventType.ROUTER_DECISION:
+        print(f"路由到: {event.data['route']}")
+        print(f"目标模型: {event.data['target_model']}")
+        print(f"路由延迟: {event.data['router_latency_ms']:.1f}ms")
+
+agent = AgentHarness(routing=routing)
+result = await agent.run("帮我分析这段代码", on_progress=on_progress)
+```
+
+### 依赖安装
+
+```bash
+# 安装 llama-cpp-python（嵌入式模式）
+pip install llama-cpp-python
+
+# 或安装预编译版本（推荐）
+# macOS (Apple Silicon)
+CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
+
+# Linux (CUDA)
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
 ```
 
 ## 类型定义
