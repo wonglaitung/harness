@@ -25,6 +25,7 @@ from harness.tools.builtins import (
     WebSearchTool,
     WebFetchTool,
     WebToMarkdownTool,
+    UpdateCoreMemoryTool,
 )
 
 from harness_client.controllers.session_manager import SessionManager
@@ -45,6 +46,7 @@ class ChatConfig:
     max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
     temperature: float = 0.3  # Lower = more deterministic
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
+    auto_update_memory: bool = True  # Allow agent to autonomously update Core Memory
     system_prompt: str = """你是一个有帮助的 AI 助手。
 
 ## 核心规则
@@ -203,6 +205,11 @@ class ChatController:
         if self._mcp_tools:
             tools.extend(self._mcp_tools)
             logger.info(f"Added {len(self._mcp_tools)} stored MCP tools")
+
+        # Add UpdateCoreMemoryTool if auto_update_memory is enabled
+        if self.config.auto_update_memory:
+            tools.append(UpdateCoreMemoryTool())
+            logger.info("Added UpdateCoreMemoryTool (auto_update_memory enabled)")
 
         logger.info("Creating AgentHarness...")
         self.agent = AgentHarness(

@@ -479,6 +479,7 @@ class MainWindow(QMainWindow):
         dialog.auto_save_check.setChecked(current.auto_save)
         dialog.stream_check.setChecked(current.stream)
         dialog.max_iterations_spin.setValue(current.max_iterations)
+        dialog.auto_update_memory_check.setChecked(current.auto_update_memory)
         if current.work_dir:
             dialog.work_dir_edit.setText(current.work_dir)
         dialog.remember_dir_check.setChecked(current.remember_dir)
@@ -512,6 +513,7 @@ class MainWindow(QMainWindow):
             auto_save=settings.get("auto_save", True),
             stream=settings.get("stream", True),
             max_iterations=settings.get("max_iterations", 20),
+            auto_update_memory=settings.get("auto_update_memory", True),
             work_dir=settings.get("work_dir", ""),
             remember_dir=settings.get("remember_dir", True),
             theme_mode=settings.get("theme_mode", "auto"),
@@ -528,6 +530,7 @@ class MainWindow(QMainWindow):
             context_window=settings.get("context_window", "auto"),
             max_iterations=settings.get("max_iterations", 20),
             tool_result_role=settings.get("tool_result_role", "tool"),
+            auto_update_memory=settings.get("auto_update_memory", True),
         )
         self.chat_controller.configure(chat_config)
 
@@ -557,6 +560,7 @@ class MainWindow(QMainWindow):
             max_iterations=settings.max_iterations,
             temperature=settings.temperature,
             tool_result_role=settings.tool_result_role,
+            auto_update_memory=settings.auto_update_memory,
         )
         self.chat_controller.configure(chat_config)
 

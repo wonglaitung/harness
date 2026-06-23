@@ -71,6 +71,7 @@ class AppSettings:
     auto_save: bool = True
     stream: bool = True
     max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
+    auto_update_memory: bool = True  # Allow agent to autonomously update Core Memory
     work_dir: str = ""
     remember_dir: bool = True
     theme_mode: str = "auto"  # "auto", "light", "dark"
@@ -93,6 +94,7 @@ class AppSettings:
             auto_save=data.get("auto_save", True),
             stream=data.get("stream", True),
             max_iterations=data.get("max_iterations", 10),
+            auto_update_memory=data.get("auto_update_memory", True),
             work_dir=data.get("work_dir", ""),
             remember_dir=data.get("remember_dir", True),
             theme_mode=data.get("theme_mode", "auto"),

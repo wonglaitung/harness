@@ -150,6 +150,15 @@ class SettingsDialog(QDialog):
         self.max_iterations_spin.setValue(10)  # 业界标准默认值（与 SDK 一致）
         general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
 
+        # Auto update memory checkbox
+        self.auto_update_memory_check = QCheckBox("允许 Agent 自主更新记忆")
+        self.auto_update_memory_check.setChecked(True)  # Enabled by default
+        self.auto_update_memory_check.setToolTip(
+            "启用后，Agent 可以自主判断并将用户偏好、项目约定等保存到长期记忆。\n"
+            "禁用后，Agent 将无法调用 update_core_memory 工具。"
+        )
+        general_layout.addRow(self.auto_update_memory_check)
+
         # Temperature slider (0.0 - 1.0)
         self.temperature_label = QLabel("Temperature: 0.3")
         self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
@@ -275,6 +284,7 @@ class SettingsDialog(QDialog):
             "auto_save": self.auto_save_check.isChecked(),
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
+            "auto_update_memory": self.auto_update_memory_check.isChecked(),
             "work_dir": self.work_dir_edit.text(),
             "theme_mode": self._get_theme_mode(),
         }
@@ -314,6 +324,8 @@ class SettingsDialog(QDialog):
             self.stream_check.setChecked(settings["stream"])
         if "max_iterations" in settings:
             self.max_iterations_spin.setValue(settings["max_iterations"])
+        if "auto_update_memory" in settings:
+            self.auto_update_memory_check.setChecked(settings["auto_update_memory"])
         if "work_dir" in settings:
             self.work_dir_edit.setText(settings["work_dir"])
         if "theme_mode" in settings:
