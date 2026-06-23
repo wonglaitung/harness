@@ -138,7 +138,7 @@ class MessageBubble(QWidget):
         self._role = role
         self._border_radius = 14.0
         self._padding_h = 16
-        self._padding_v = 12
+        self._padding_v = 14  # Increased to ensure first line is fully visible
         self._max_width = 800
 
         self._setup_ui()
@@ -185,6 +185,8 @@ class MessageBubble(QWidget):
             self._content_label = QLabel()
             self._content_label.setOpenExternalLinks(True)
             self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self._content_label.setWordWrap(True)  # Enable word wrap for long lines
+            self._content_label.setMinimumWidth(100)  # Prevent label from being too narrow
 
             # Set font
             font = self._get_font()
@@ -195,6 +197,7 @@ class MessageBubble(QWidget):
                 QLabel {{
                     background-color: transparent;
                     color: {theme.TEXT};
+                    line-height: 1.4;
                 }}
             """)
 
@@ -204,6 +207,9 @@ class MessageBubble(QWidget):
             self._content_label.setText(html)
 
             self._scroll_area.setWidget(self._content_label)
+
+            # Set minimum height for scroll area to ensure content is visible
+            self._scroll_area.setMinimumHeight(30)
 
             layout.addWidget(self._scroll_area)
 
