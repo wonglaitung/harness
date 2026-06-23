@@ -129,15 +129,7 @@ class SettingsDialog(QDialog):
         general_tab = QWidget()
         general_layout = QFormLayout(general_tab)
 
-        self.auto_save_check = QCheckBox("自动保存对话")
-        self.auto_save_check.setChecked(True)
-        general_layout.addRow(self.auto_save_check)
-
-        self.stream_check = QCheckBox("启用流式输出")
-        self.stream_check.setChecked(True)
-        general_layout.addRow(self.stream_check)
-
-        # Theme selection
+        # Theme selection (外观 - 用户最常调整)
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["自动", "亮色", "深色"])
         self.theme_combo.setToolTip(
@@ -145,12 +137,17 @@ class SettingsDialog(QDialog):
         )
         general_layout.addRow("主题:", self.theme_combo)
 
-        self.max_iterations_spin = QSpinBox()
-        self.max_iterations_spin.setRange(1, 100)
-        self.max_iterations_spin.setValue(10)  # 业界标准默认值（与 SDK 一致）
-        general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
+        # Stream output (基础行为)
+        self.stream_check = QCheckBox("启用流式输出")
+        self.stream_check.setChecked(True)
+        general_layout.addRow(self.stream_check)
 
-        # Auto update memory checkbox
+        # Auto save (基础行为)
+        self.auto_save_check = QCheckBox("自动保存对话")
+        self.auto_save_check.setChecked(True)
+        general_layout.addRow(self.auto_save_check)
+
+        # Auto update memory (功能开关)
         self.auto_update_memory_check = QCheckBox("允许 Agent 自主更新记忆")
         self.auto_update_memory_check.setChecked(True)  # Enabled by default
         self.auto_update_memory_check.setToolTip(
@@ -159,7 +156,7 @@ class SettingsDialog(QDialog):
         )
         general_layout.addRow(self.auto_update_memory_check)
 
-        # Temperature slider (0.0 - 1.0)
+        # Temperature slider (模型参数 - 高级设置)
         self.temperature_label = QLabel("Temperature: 0.3")
         self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
         self.temperature_slider.setRange(0, 100)  # 0-100 maps to 0.0-1.0
@@ -171,6 +168,12 @@ class SettingsDialog(QDialog):
         temp_help.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
         temp_layout.addWidget(temp_help)
         general_layout.addRow(self.temperature_label, temp_layout)
+
+        # Max iterations (高级限制)
+        self.max_iterations_spin = QSpinBox()
+        self.max_iterations_spin.setRange(1, 100)
+        self.max_iterations_spin.setValue(10)  # 业界标准默认值（与 SDK 一致）
+        general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
 
         tabs.addTab(general_tab, "常规")
 

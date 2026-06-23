@@ -957,6 +957,24 @@ class ChatPanel(QWidget):
             }}
         """)
 
+        # Clear context button
+        self.clear_btn = QPushButton("🗑")
+        self.clear_btn.setFixedSize(32, 32)
+        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_btn.setToolTip("清空上下文")
+        self.clear_btn.clicked.connect(self._on_clear)
+        self.clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 16px;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
         # Send button (circular, accent color)
         self.send_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
         self.send_btn.setIcon(create_play_icon(18, QColor("white")))
@@ -983,6 +1001,7 @@ class ChatPanel(QWidget):
 
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.token_label)
+        input_layout.addWidget(self.clear_btn)
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
@@ -1012,6 +1031,10 @@ class ChatPanel(QWidget):
     def _on_stop(self):
         """Handle stop button click."""
         self.stop_requested.emit()
+
+    def _on_clear(self):
+        """Handle clear context button click."""
+        self.clear_chat_requested.emit()
 
     def eventFilter(self, obj, event):
         """Handle Enter/Shift+Enter for multi-line input and completion."""
