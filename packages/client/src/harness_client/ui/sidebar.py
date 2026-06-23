@@ -369,4 +369,16 @@ class SidebarPanel(QWidget):
             }}
         """)
 
+        # Update session list item colors
+        for i in range(self.session_list.count()):
+            item = self.session_list.item(i)
+            if item:
+                text = item.text()
+                if text.startswith("●"):
+                    # Current session - use accent color
+                    item.setForeground(QColor(theme.ACCENT))
+                else:
+                    # Historical sessions - use default text color
+                    item.setForeground(QColor(theme.TEXT))
+
         self.update()

@@ -336,7 +336,7 @@ class CategorySection(QWidget):
         importance_indicator.setToolTip(f"重要性: {self._get_importance_name(entry.importance)} ({entry.importance:.0%})")
         layout.addWidget(importance_indicator)
 
-        # Content label
+        # Content label - save as widget property for theme updates
         content_label = QLabel(entry.content)
         content_label.setStyleSheet(f"""
             QLabel {{
@@ -345,6 +345,7 @@ class CategorySection(QWidget):
             }}
         """)
         content_label.setWordWrap(True)
+        content_label.setProperty("isContentLabel", True)  # Mark for theme updates
         layout.addWidget(content_label, 1)
 
         # Importance slider (custom painted)
@@ -354,7 +355,7 @@ class CategorySection(QWidget):
         )
         layout.addWidget(importance_slider)
 
-        # Remove button
+        # Remove button - save as widget property for theme updates
         remove_btn = QPushButton("×")
         remove_btn.setStyleSheet(f"""
             QPushButton {{
@@ -370,6 +371,7 @@ class CategorySection(QWidget):
             }}
         """)
         remove_btn.setToolTip("删除此条目")
+        remove_btn.setProperty("isRemoveButton", True)  # Mark for theme updates
         remove_btn.clicked.connect(lambda checked: self._on_remove_clicked(index))
         layout.addWidget(remove_btn)
 
@@ -428,32 +430,31 @@ class CategorySection(QWidget):
                     border-radius: {theme.RADIUS_SM};
                 }}
             """)
-            # Find and update child labels (content_label)
+            # Find and update content labels using property
             for label in widget.findChildren(QLabel):
-                # Skip importance indicator (colored dot) - it uses fixed color based on importance
-                if label.text() == "●":
-                    continue
-                label.setStyleSheet(f"""
-                    QLabel {{
-                        color: {theme.TEXT};
-                        font-size: {theme.FONT_SIZE_XS};
-                    }}
-                """)
-            # Find and update remove buttons
+                if label.property("isContentLabel"):
+                    label.setStyleSheet(f"""
+                        QLabel {{
+                            color: {theme.TEXT};
+                            font-size: {theme.FONT_SIZE_XS};
+                        }}
+                    """)
+            # Find and update remove buttons using property
             for btn in widget.findChildren(QPushButton):
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: transparent;
-                        border: none;
-                        color: {theme.TEXT_SUBTLE};
-                        font-size: {theme.FONT_SIZE_MD};
-                        min-width: 22px;
-                        max-width: 22px;
-                    }}
-                    QPushButton:hover {{
-                        color: {theme.DANGER};
-                    }}
-                """)
+                if btn.property("isRemoveButton"):
+                    btn.setStyleSheet(f"""
+                        QPushButton {{
+                            background-color: transparent;
+                            border: none;
+                            color: {theme.TEXT_SUBTLE};
+                            font-size: {theme.FONT_SIZE_MD};
+                            min-width: 22px;
+                            max-width: 22px;
+                        }}
+                        QPushButton:hover {{
+                            color: {theme.DANGER};
+                        }}
+                    """)
             # Find and update ImportanceSlider
             for child in widget.findChildren(ImportanceSlider):
                 child.update()
