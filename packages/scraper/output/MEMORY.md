@@ -60,6 +60,15 @@
 
 ## 注意事项
 
+### 新范式/工具
+- **hf CLI for Agents** - https://huggingface.co/blog/hf-cli-for-agents
+
+### 新范式/工具
+- **autoresearch** - https://github.com/trending/python
+
+### 新范式/工具
+- **Agent Skills Standard** - https://github.com/trending/python
+
 ### 港股分析
 - **港股科技板块 - 半导体+AI双轮驱动右侧信号**
 
