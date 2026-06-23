@@ -125,6 +125,48 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     return QIcon(pixmap)
 ```
 
+**自定义绘制组件**：
+
+对于需要精细视觉控制的组件（如滑动条、进度条），使用 `QWidget` + `paintEvent` 自定义绘制：
+
+```python
+class ImportanceSlider(QWidget):
+    """自定义绘制的滑动条，支持颜色渐变和手柄放大效果"""
+
+    valueChanged = pyqtSignal(float)
+
+    def __init__(self, initial_value: float = 0.5, parent=None):
+        super().__init__(parent)
+        self._value = initial_value
+        self._hover = False
+        self.setFixedHeight(20)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        theme = get_theme()  # 动态获取当前主题
+        # 绘制轨道、进度、手柄...
+
+    def mousePressEvent(self, event):
+        # 处理拖拽交互
+```
+
+**主题感知组件**：
+
+继承 `ThemeAwareWidget` 确保组件响应主题切换：
+
+```python
+from harness_client.ui.theme_aware import ThemeAwareWidget
+
+class MyPanel(ThemeAwareWidget):
+    def _apply_theme_style(self) -> None:
+        """主题切换时自动调用"""
+        theme = self.theme()
+        self.setStyleSheet(f"background-color: {theme.PANEL};")
+```
+
+**paintEvent 必须动态获取主题**：在 `paintEvent` 中调用 `get_theme()` 获取当前颜色，不能在初始化时缓存。
+
 ### 安装可选依赖
 
 ```bash
@@ -340,6 +382,18 @@ Agent Container (FastAPI)
 1. Gateway: JWT Token（用户认证，测试模式接受任意 token）
 2. Agent: API Key（LLM Provider 认证）
 
+**Vue 前端**：
+- 位于 `packages/cloud/frontend/`
+- 技术栈：Vue 3.4+ + TypeScript 5.0+ + Vite 5.0+ + Pinia + TailwindCSS
+- 构建后挂载到 Gateway 容器提供静态文件服务
+
+**Spring Cloud 集成**（可选依赖）：
+- W3C TraceContext 追踪
+- Prometheus 指标导出
+- Redis 分布式会话存储
+- Nacos/Eureka 服务发现
+- 详见 `packages/sdk/docs/14-spring-cloud-integration.md`
+
 ---
 
 ## 关键开发原则
@@ -463,4 +517,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-15.
+Today's date is 2026-06-23.
