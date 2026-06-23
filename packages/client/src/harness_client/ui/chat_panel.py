@@ -154,38 +154,8 @@ class MessageBubble(QWidget):
         layout.setSpacing(0)
 
         if self._role == "assistant":
-            # Use QScrollArea + QLabel for assistant messages with horizontal scrolling
-            self._scroll_area = QScrollArea()
-            self._scroll_area.setWidgetResizable(True)
-            self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            self._scroll_area.setStyleSheet(f"""
-                QScrollArea {{
-                    background-color: transparent;
-                    border: none;
-                }}
-                QScrollBar:horizontal {{
-                    background-color: {theme.CHROME};
-                    height: 6px;
-                    border-radius: 3px;
-                }}
-                QScrollBar::handle:horizontal {{
-                    background-color: {theme.BORDER};
-                    border-radius: 3px;
-                    min-width: 20px;
-                }}
-                QScrollBar::handle:horizontal:hover {{
-                    background-color: {theme.TEXT_SUBTLE};
-                }}
-                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                    width: 0px;
-                }}
-            """)
-
-            # Important: Set frame shape to NoFrame to remove default border
-            self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-
-            # Create QLabel for content
+            # Use QLabel directly for assistant messages (no vertical scroll needed)
+            # Word wrap handles long lines, horizontal scroll naturally if needed
             self._content_label = QLabel()
             self._content_label.setOpenExternalLinks(True)
             self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -212,9 +182,7 @@ class MessageBubble(QWidget):
             self._content_label.setTextFormat(Qt.TextFormat.RichText)
             self._content_label.setText(html)
 
-            self._scroll_area.setWidget(self._content_label)
-
-            layout.addWidget(self._scroll_area)
+            layout.addWidget(self._content_label)
 
         else:
             # Use QLabel for user messages (simple text, no scrolling needed)
@@ -425,30 +393,6 @@ class MessageBubble(QWidget):
         theme = get_theme()
 
         if self._role == "assistant":
-            # Update scroll area stylesheet
-            self._scroll_area.setStyleSheet(f"""
-                QScrollArea {{
-                    background-color: transparent;
-                    border: none;
-                }}
-                QScrollBar:horizontal {{
-                    background-color: {theme.CHROME};
-                    height: 6px;
-                    border-radius: 3px;
-                }}
-                QScrollBar::handle:horizontal {{
-                    background-color: {theme.BORDER};
-                    border-radius: 3px;
-                    min-width: 20px;
-                }}
-                QScrollBar::handle:horizontal:hover {{
-                    background-color: {theme.TEXT_SUBTLE};
-                }}
-                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                    width: 0px;
-                }}
-            """)
-
             # Update content label stylesheet with new theme colors
             self._content_label.setStyleSheet(f"""
                 QLabel {{
