@@ -1,5 +1,10 @@
 """
 Memory panel for managing persistent global memory entries.
+
+Features:
+- Display memory entries with importance indicator (high/medium/low)
+- Adjust importance level via slider
+- Add/edit/remove entries with importance support
 """
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -10,11 +15,13 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSlider,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from harness.memory.memory_file import MemoryCategory
+from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
 from harness_client.themes import get_theme
 from harness_client.ui.right_panel import CollapsibleSection
 
@@ -25,12 +32,13 @@ class CategorySection(QWidget):
     add_clicked = pyqtSignal(str)  # category name
     entry_double_clicked = pyqtSignal(str, int)  # category, index
     remove_clicked = pyqtSignal(str, int)  # category, index
+    importance_changed = pyqtSignal(str, int, float)  # category, index, new_importance
 
     def __init__(self, category: MemoryCategory, display_name: str, parent=None):
         super().__init__(parent)
         self._category = category
         self._display_name = display_name
-        self._entries: list[str] = []
+        self._entries: list[MemoryEntry] = []
         self._entry_widgets: list[QWidget] = []
         self._setup_ui()
 
@@ -106,8 +114,8 @@ class CategorySection(QWidget):
         """Handle add button click."""
         self.add_clicked.emit(self._category.value)
 
-    def update_entries(self, entries: list[str]):
-        """Update the entries display."""
+    def update_entries(self, entries: list[MemoryEntry]):
+        """Update the entries display with MemoryEntry objects."""
         # Clear existing widgets
         for widget in self._entry_widgets:
             widget.deleteLater()
@@ -126,8 +134,26 @@ class CategorySection(QWidget):
             self.entries_layout.addWidget(item_widget)
             self._entry_widgets.append(item_widget)
 
-    def _create_entry_item(self, content: str, index: int) -> QWidget:
-        """Create an entry item widget."""
+    def _get_importance_color(self, importance: float) -> str:
+        """Get color for importance level."""
+        if importance >= 0.8:
+            return "#22c55e"  # green - high importance
+        elif importance >= 0.5:
+            return "#f59e0b"  # orange - medium importance
+        else:
+            return "#6b7280"  # gray - low importance
+
+    def _get_importance_name(self, importance: float) -> str:
+        """Get display name for importance level."""
+        if importance >= 0.8:
+            return "高"
+        elif importance >= 0.5:
+            return "中"
+        else:
+            return "低"
+
+    def _create_entry_item(self, entry: MemoryEntry, index: int) -> QWidget:
+        """Create an entry item widget with importance indicator."""
         theme = get_theme()
         widget = QWidget()
         widget.setStyleSheet(f"""
@@ -138,10 +164,22 @@ class CategorySection(QWidget):
         """)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
+
+        # Importance indicator (colored dot)
+        importance_color = self._get_importance_color(entry.importance)
+        importance_indicator = QLabel("●")
+        importance_indicator.setStyleSheet(f"""
+            QLabel {{
+                color: {importance_color};
+                font-size: 12px;
+            }}
+        """)
+        importance_indicator.setToolTip(f"重要性: {self._get_importance_name(entry.importance)} ({entry.importance:.0%})")
+        layout.addWidget(importance_indicator)
 
         # Content label
-        content_label = QLabel(content)
+        content_label = QLabel(entry.content)
         content_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT};
@@ -150,6 +188,31 @@ class CategorySection(QWidget):
         """)
         content_label.setWordWrap(True)
         layout.addWidget(content_label, 1)
+
+        # Importance slider (0-100 mapped to 0.0-1.0)
+        importance_slider = QSlider(Qt.Orientation.Horizontal)
+        importance_slider.setMinimum(0)
+        importance_slider.setMaximum(100)
+        importance_slider.setValue(int(entry.importance * 100))
+        importance_slider.setStyleSheet(f"""
+            QSlider {{
+                min-width: 50px;
+                max-width: 50px;
+                height: 16px;
+            }}
+            QSlider::handle {{
+                background-color: {theme.ACCENT};
+                border-radius: 6px;
+                min-width: 12px;
+                max-width: 12px;
+                min-height: 12px;
+            }}
+        """)
+        importance_slider.setToolTip("调整重要性")
+        importance_slider.valueChanged.connect(
+            lambda value: self._on_importance_changed(index, value / 100.0)
+        )
+        layout.addWidget(importance_slider)
 
         # Remove button
         remove_btn = QPushButton("×")
@@ -175,6 +238,10 @@ class CategorySection(QWidget):
 
         return widget
 
+    def _on_importance_changed(self, index: int, importance: float):
+        """Handle importance slider change."""
+        self.importance_changed.emit(self._category.value, index, importance)
+
     def _on_remove_clicked(self, index: int):
         """Handle remove button click."""
         self.remove_clicked.emit(self._category.value, index)
@@ -185,11 +252,12 @@ class CategorySection(QWidget):
 
 
 class MemorySection(CollapsibleSection):
-    """Section for managing global memory entries."""
+    """Section for managing global memory entries with importance support."""
 
     add_entry_requested = pyqtSignal(str)  # category name
     edit_entry_requested = pyqtSignal(str, int)  # category, index
     remove_entry_requested = pyqtSignal(str, int)  # category, index
+    importance_changed = pyqtSignal(str, int, float)  # category, index, importance
 
     # Category display names in Chinese
     CATEGORY_NAMES = {
@@ -232,8 +300,11 @@ class MemorySection(CollapsibleSection):
         self._container_layout.setSpacing(10)
         scroll.setWidget(container)
 
-        # Info label
-        info_label = QLabel("全局记忆存储在 ~/.harness/MEMORY.md")
+        # Info label with importance legend
+        info_label = QLabel(
+            "全局记忆存储在 ~/.harness/MEMORY.md\n"
+            "● 绿色=高重要 · ● 橙色=中重要 · ● 灰色=低重要"
+        )
         info_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
@@ -257,6 +328,7 @@ class MemorySection(CollapsibleSection):
             section.add_clicked.connect(self._on_add_clicked)
             section.entry_double_clicked.connect(self._on_edit_clicked)
             section.remove_clicked.connect(self._on_remove_clicked)
+            section.importance_changed.connect(self._on_importance_changed)
             self._container_layout.addWidget(section)
             self._category_sections[category] = section
 
@@ -275,6 +347,10 @@ class MemorySection(CollapsibleSection):
         """Handle remove button click."""
         self.remove_entry_requested.emit(category_name, index)
 
+    def _on_importance_changed(self, category_name: str, index: int, importance: float):
+        """Handle importance slider change."""
+        self.importance_changed.emit(category_name, index, importance)
+
     def update_memory(self, sections):
         """
         Update memory display from MemorySections.
@@ -282,32 +358,55 @@ class MemorySection(CollapsibleSection):
         Args:
             sections: MemorySections from MemoryController
         """
-        # Update each category
-        self._category_sections[MemoryCategory.USER_PROFILE].update_entries(
-            sections.user_profile
-        )
-        self._category_sections[MemoryCategory.KEY_DECISIONS].update_entries(
-            sections.key_decisions
-        )
-        self._category_sections[MemoryCategory.LEARNED_PATTERNS].update_entries(
-            sections.learned_patterns
-        )
-        self._category_sections[MemoryCategory.PROJECT_CONTEXT].update_entries(
-            sections.project_context
-        )
+        # Update each category with entries (need to fetch with metadata)
+        # Note: This expects the controller to provide list[MemoryEntry]
+        # For now, we'll use the string entries from sections
+        # The actual MemoryEntry list comes from controller.get_entries()
+
+        # Convert string lists to MemoryEntry (with default importance)
+        for category in [
+            MemoryCategory.USER_PROFILE,
+            MemoryCategory.KEY_DECISIONS,
+            MemoryCategory.LEARNED_PATTERNS,
+            MemoryCategory.PROJECT_CONTEXT,
+        ]:
+            section = sections.get_section(category)
+            # Create MemoryEntry from strings (backward compatible)
+            entries = []
+            for content in section:
+                entries.append(MemoryEntry(
+                    category=category,
+                    content=content,
+                    source=MemorySource.USER_INPUT,
+                ))
+            self._category_sections[category].update_entries(entries)
+
+    def update_memory_with_entries(
+        self,
+        category: MemoryCategory,
+        entries: list[MemoryEntry],
+    ):
+        """
+        Update memory display with full MemoryEntry objects.
+
+        Args:
+            category: Memory category
+            entries: List of MemoryEntry with importance metadata
+        """
+        self._category_sections[category].update_entries(entries)
 
 
 class AddEntryDialog(QMessageBox):
-    """Simple dialog for adding a new memory entry."""
+    """Dialog for adding a new memory entry with importance setting."""
 
     def __init__(self, category_name: str, parent=None):
         super().__init__(parent)
         theme = get_theme()
         self.setWindowTitle(f"添加记忆 - {category_name}")
-        self.setText("请输入记忆内容:")
+        self.setText("请输入记忆内容和重要性:")
         self.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 
-        # Add input field
+        # Content input field
         self._input = QLineEdit()
         self._input.setStyleSheet(f"""
             QLineEdit {{
@@ -322,6 +421,33 @@ class AddEntryDialog(QMessageBox):
         layout = self.layout()
         layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
 
+        # Importance slider (0-100)
+        self._importance_slider = QSlider(Qt.Orientation.Horizontal)
+        self._importance_slider.setMinimum(0)
+        self._importance_slider.setMaximum(100)
+        self._importance_slider.setValue(50)  # Default: medium importance
+        self._importance_slider.setStyleSheet(f"""
+            QSlider {{
+                background-color: {theme.COMPOSER};
+                border-radius: {theme.RADIUS_SM};
+                padding: 5px;
+            }}
+        """)
+        # Add importance label
+        importance_label = QLabel("重要性:")
+        importance_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+            }}
+        """)
+        layout.addWidget(importance_label, 2, 0)
+        layout.addWidget(self._importance_slider, 3, 0, 1, layout.columnCount())
+
     def get_content(self) -> str:
         """Get the entered content."""
         return self._input.text().strip()
+
+    def get_importance(self) -> float:
+        """Get the importance level (0.0-1.0)."""
+        return self._importance_slider.value() / 100.0

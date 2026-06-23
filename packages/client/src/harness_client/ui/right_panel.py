@@ -733,6 +733,7 @@ class RightPanel(QWidget):
     memory_add_requested = pyqtSignal(str)
     memory_edit_requested = pyqtSignal(str, int)
     memory_remove_requested = pyqtSignal(str, int)
+    memory_importance_changed = pyqtSignal(str, int, float)  # category, index, importance
     skill_double_clicked = pyqtSignal(str)
     add_skill_requested = pyqtSignal()
     server_double_clicked = pyqtSignal(str)
@@ -775,6 +776,7 @@ class RightPanel(QWidget):
         self.memory_section.add_entry_requested.connect(self.memory_add_requested)
         self.memory_section.edit_entry_requested.connect(self.memory_edit_requested)
         self.memory_section.remove_entry_requested.connect(self.memory_remove_requested)
+        self.memory_section.importance_changed.connect(self.memory_importance_changed)
         layout.addWidget(self.memory_section)
 
         # Skills section
@@ -804,6 +806,15 @@ class RightPanel(QWidget):
     def update_memory(self, sections):
         """Update memory display."""
         self.memory_section.update_memory(sections)
+
+    def update_memory_entries(self, category, entries):
+        """Update memory display with full MemoryEntry objects.
+
+        Args:
+            category: MemoryCategory enum
+            entries: List of MemoryEntry with importance metadata
+        """
+        self.memory_section.update_memory_with_entries(category, entries)
 
     def update_skills(self, skills: list):
         """Update skills list."""

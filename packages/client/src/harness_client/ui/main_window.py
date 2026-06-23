@@ -109,6 +109,7 @@ class MainWindow(QMainWindow):
         self.right_panel.memory_add_requested.connect(self._on_memory_add)
         self.right_panel.memory_edit_requested.connect(self._on_memory_edit)
         self.right_panel.memory_remove_requested.connect(self._on_memory_remove)
+        self.right_panel.memory_importance_changed.connect(self._on_memory_importance_changed)
 
         # Load saved settings
         self._load_saved_settings()
@@ -824,8 +825,15 @@ class MainWindow(QMainWindow):
 
     def _refresh_memory(self):
         """Refresh the memory display in right panel."""
+        from harness.memory.memory_file import MemoryCategory
+
         sections = self.memory_controller.get_sections()
         self.right_panel.update_memory(sections)
+
+        # Update with full MemoryEntry objects for importance display
+        for category in MemoryCategory:
+            entries = self.memory_controller.get_entries(category)
+            self.right_panel.update_memory_entries(category, entries)
 
     def _on_memory_changed(self):
         """Handle memory change event."""
@@ -844,8 +852,9 @@ class MainWindow(QMainWindow):
         dialog = AddEntryDialog(display_name, self)
         if dialog.exec() == QMessageBox.StandardButton.Ok:
             content = dialog.get_content()
+            importance = dialog.get_importance()
             if content:
-                self.memory_controller.add_entry(category, content)
+                self.memory_controller.add_entry(category, content, importance)
 
     def _on_memory_edit(self, category_name: str, index: int):
         """Handle edit memory entry request."""
@@ -856,14 +865,17 @@ class MainWindow(QMainWindow):
         entries = self.memory_controller.get_entries(category)
 
         if 0 <= index < len(entries):
+            entry = entries[index]
             display_name = self.memory_controller.get_category_display_name(category)
             dialog = AddEntryDialog(display_name, self)
-            dialog._input.setText(entries[index])
+            dialog._input.setText(entry.content)
+            dialog._importance_slider.setValue(int(entry.importance * 100))
 
             if dialog.exec() == QMessageBox.StandardButton.Ok:
                 content = dialog.get_content()
+                importance = dialog.get_importance()
                 if content:
-                    self.memory_controller.update_entry(category, index, content)
+                    self.memory_controller.update_entry(category, index, content, importance)
 
     def _on_memory_remove(self, category_name: str, index: int):
         """Handle remove memory entry request."""
@@ -876,12 +888,19 @@ class MainWindow(QMainWindow):
             reply = QMessageBox.question(
                 self,
                 "删除记忆",
-                f"确定要删除此记忆条目吗？\n\n{entries[index][:50]}...",
+                f"确定要删除此记忆条目吗？\n\n{entries[index].content[:50]}...",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.memory_controller.remove_entry(category, index)
+
+    def _on_memory_importance_changed(self, category_name: str, index: int, importance: float):
+        """Handle importance slider change."""
+        from harness.memory.memory_file import MemoryCategory
+
+        category = MemoryCategory(category_name)
+        self.memory_controller.update_importance(category, index, importance)
 
     def closeEvent(self, event):
         """Handle window close - cleanup resources properly."""
