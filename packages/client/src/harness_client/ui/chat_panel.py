@@ -847,7 +847,6 @@ class ChatPanel(QWidget):
         """)
         self._session_title_label.setMaximumWidth(300)
         self._session_title_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._session_title_label.setEllipsisMode(Qt.TextElideMode.ElideRight)
         header_layout.addWidget(self._session_title_label)
 
         header_layout.addStretch()
@@ -1370,7 +1369,14 @@ class ChatPanel(QWidget):
         Args:
             title: The session title (will be truncated if too long)
         """
-        self._session_title_label.setText(title if title else "新会话")
+        if not title:
+            title = "新会话"
+
+        # Elide text if too long for the label width
+        fm = QFontMetrics(self._session_title_label.font())
+        max_width = self._session_title_label.maximumWidth()
+        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, max_width)
+        self._session_title_label.setText(elided)
 
     def _on_theme_changed(self):
         """Handle theme change - update all styles."""
