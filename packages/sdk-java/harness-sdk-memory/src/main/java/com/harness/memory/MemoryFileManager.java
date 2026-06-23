@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -185,11 +187,86 @@ public class MemoryFileManager {
 
     /**
      * Add a new entry to MEMORY.md.
+     *
+     * @param entry The memory entry to add
+     * @return true if entry was added, false if skipped as duplicate
      */
-    public void addEntry(MemoryEntry entry) {
+    public boolean addEntry(MemoryEntry entry) {
+        return addEntry(entry, true);
+    }
+
+    /**
+     * Add a new entry to MEMORY.md.
+     *
+     * @param entry The memory entry to add
+     * @param checkDuplicate If true, check for similar existing entries and skip if duplicate
+     * @return true if entry was added, false if skipped as duplicate
+     */
+    public boolean addEntry(MemoryEntry entry, boolean checkDuplicate) {
         MemorySections sections = load();
+        List<String> section = sections.getSection(entry.category());
+
+        if (checkDuplicate) {
+            for (String existing : section) {
+                double similarity = calculateSimilarity(entry.content(), existing);
+                if (similarity > 0.7) {
+                    logger.info("Skipping duplicate memory: '{}' similar to '{}' (similarity={})",
+                        entry.content(), existing, String.format("%.2f", similarity));
+                    return false;
+                }
+            }
+        }
+
         sections.addEntry(entry.category(), entry.content());
         save(sections);
+        return true;
+    }
+
+    /**
+     * Calculate text similarity using character-level Jaccard similarity.
+     *
+     * Supports both Chinese and English text without requiring word segmentation.
+     *
+     * @param text1 First text
+     * @param text2 Second text
+     * @return Similarity score (0.0 to 1.0)
+     */
+    private double calculateSimilarity(String text1, String text2) {
+        text1 = text1.toLowerCase();
+        text2 = text2.toLowerCase();
+
+        if (text1.isEmpty() || text2.isEmpty()) {
+            return 0.0;
+        }
+
+        Set<String> ngrams1 = getNgrams(text1, 2);
+        Set<String> ngrams2 = getNgrams(text2, 2);
+
+        Set<String> intersection = new HashSet<>(ngrams1);
+        intersection.retainAll(ngrams2);
+
+        Set<String> union = new HashSet<>(ngrams1);
+        union.addAll(ngrams2);
+
+        return (double) intersection.size() / union.size();
+    }
+
+    /**
+     * Get character n-grams from text.
+     *
+     * @param text Input text
+     * @param n N-gram size
+     * @return Set of n-grams
+     */
+    private Set<String> getNgrams(String text, int n) {
+        if (text.length() < n) {
+            return Set.of(text);
+        }
+        Set<String> ngrams = new HashSet<>();
+        for (int i = 0; i <= text.length() - n; i++) {
+            ngrams.add(text.substring(i, i + n));
+        }
+        return ngrams;
     }
 
     /**
