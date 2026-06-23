@@ -363,4 +363,5 @@ def _on_theme_changed(self):
 | `memory_panel.py` | `findChildren()` 用文本匹配不可靠 | 改用 `setProperty()` 标记组件 |
 | `chat_panel.py` | `input_bar` 是局部变量 | 改为 `self._input_bar` |
 | `chat_panel.py` | session_title_label 缺少主题更新逻辑 | 添加到 `_on_theme_changed()` |
-| `sidebar.py` | QListWidget item 颜色硬编码为 white | 遍历更新 `setForeground(QColor(theme.XXX))` |
+| `sidebar.py` | `update_sessions()` 硬编码 `Qt.GlobalColor.white` | 改为 `QColor(theme.ACCENT)` |
+| `sidebar.py` | QListWidget item 颜色只在 `_on_theme_changed` 更新，新建会话时硬编码 | 两处都改用主题颜色 |
