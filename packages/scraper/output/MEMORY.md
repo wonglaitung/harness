@@ -58,7 +58,12 @@
 
 ## 2026-06-23 提取
 
+## 2026-06-24 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **Claude Tag - 多人协作Agent范式** - https://www.anthropic.com/news/introducing-claude-tag
 
 ### 港股分析
 - **港股半导体板块 - AI芯片领涨存储分化**
