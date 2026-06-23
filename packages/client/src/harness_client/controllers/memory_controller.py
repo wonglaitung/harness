@@ -125,12 +125,8 @@ class MemoryController(QObject):
             if importance is not None:
                 entry.importance = importance
 
-            # Rebuild and save
-            sections = self._manager.load()
-            section = sections.get_section(category)
-            # Remove "- " prefix, keep metadata (e.g., <!-- importance=0.50 -->)
-            section[index] = entry.to_markdown_line()[2:]
-            self._manager.save(sections)
+            # Save with metadata preserved for all entries
+            self._save_entries_with_metadata(category, entries)
             self.memory_changed.emit()
             return True
         return False
@@ -168,14 +164,46 @@ class MemoryController(QObject):
         category: MemoryCategory,
         entries: list[MemoryEntry],
     ) -> None:
-        """Save entries with full metadata."""
-        sections = self._manager.load()
-        section = sections.get_section(category)
-        section.clear()
-        for entry in entries:
-            # Store with metadata
-            section.append(entry.to_markdown_line().replace("- ", "", 1))
-        self._manager.save(sections)
+        """Save entries with full metadata for a specific category.
+
+        This preserves metadata for all other categories by loading them with metadata first.
+        """
+        # Load all categories with metadata
+        all_entries: dict[MemoryCategory, list[MemoryEntry]] = {}
+        for cat in MemoryCategory:
+            if cat == category:
+                all_entries[cat] = entries
+            else:
+                all_entries[cat] = self._manager._load_entries_with_metadata(cat)
+
+        # Build and save content
+        self._save_all_entries_with_metadata(all_entries)
+
+    def _save_all_entries_with_metadata(
+        self,
+        all_entries: dict[MemoryCategory, list[MemoryEntry]],
+    ) -> None:
+        """Save all categories with full metadata."""
+        lines = ["# MEMORY.md\n"]
+
+        # Define section order and headers
+        sections_order = [
+            (MemoryCategory.USER_PROFILE, "User Profile"),
+            (MemoryCategory.KEY_DECISIONS, "Key Decisions"),
+            (MemoryCategory.LEARNED_PATTERNS, "Learned Patterns"),
+            (MemoryCategory.PROJECT_CONTEXT, "Project Context"),
+        ]
+
+        for category, header in sections_order:
+            entries = all_entries.get(category, [])
+            if entries:
+                lines.append(f"## {header}")
+                for entry in entries:
+                    lines.append(entry.to_markdown_line())
+                lines.append("")
+
+        content = "\n".join(lines)
+        self._manager.memory_file.write_text(content, encoding="utf-8")
 
     def remove_entry(self, category: MemoryCategory, index: int) -> bool:
         """
