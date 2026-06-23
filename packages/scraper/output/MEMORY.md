@@ -60,6 +60,12 @@
 
 ## 注意事项
 
+### 港股分析
+- **港股半导体板块 - AI芯片领涨存储分化**
+
+### 港股分析
+- **港股医药板块异动 - 板块性上涨右侧信号**
+
 ### 新范式/工具
 - **hf CLI for Agents** - https://huggingface.co/blog/hf-cli-for-agents
 
