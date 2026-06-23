@@ -382,6 +382,30 @@ class CategorySection(QWidget):
         """Handle double-click on entry."""
         self.entry_double_clicked.emit(self._category.value, index)
 
+    def _on_theme_changed(self):
+        """Handle theme change - update all child widgets."""
+        theme = get_theme()
+        # Update entry widgets and their sliders
+        for widget in self._entry_widgets:
+            # Update widget background
+            widget.setStyleSheet(f"""
+                QWidget {{
+                    background-color: {theme.APP_BACKGROUND};
+                    border-radius: {theme.RADIUS_SM};
+                }}
+            """)
+            # Find and update ImportanceSlider
+            for child in widget.findChildren(ImportanceSlider):
+                child.update()
+        # Update placeholder label
+        self.placeholder_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 6px;
+            }}
+        """)
+
 
 class MemorySection(CollapsibleSection):
     """Section for managing global memory entries with importance support."""
@@ -526,6 +550,11 @@ class MemorySection(CollapsibleSection):
             entries: List of MemoryEntry with importance metadata
         """
         self._category_sections[category].update_entries(entries)
+
+    def _on_theme_changed(self):
+        """Handle theme change - update all category sections."""
+        for section in self._category_sections.values():
+            section._on_theme_changed()
 
 
 class AddEntryDialog(QMessageBox):
