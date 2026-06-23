@@ -399,9 +399,20 @@ class MainWindow(QMainWindow):
         """Handle tool call event."""
         self.chat_panel.append_tool_call(tool_name, arguments)
 
-    def _on_tool_result(self, tool_name: str, result: str, success: bool = True):
-        """Handle tool result event."""
+    def _on_tool_result(self, tool_name: str, result: str, success: bool = True, metadata: dict = None):
+        """Handle tool result event.
+
+        Args:
+            tool_name: Name of the tool
+            result: Tool result string
+            success: Whether the tool call succeeded
+            metadata: Optional metadata from tool (e.g., {"refresh_memory": True})
+        """
         self.chat_panel.append_tool_result(tool_name, result, success)
+
+        # Check if memory refresh is needed
+        if metadata and metadata.get("refresh_memory"):
+            self._refresh_memory()
 
     def _on_thinking(self, message: str):
         """Handle thinking/progress event."""

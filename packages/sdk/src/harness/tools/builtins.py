@@ -1230,9 +1230,16 @@ class UpdateCoreMemoryTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "更新用户偏好或项目约定到长期记忆。"
-            "适用场景：用户提到长期偏好（如'我使用 Windows'）、"
-            "工作环境、项目约束等。"
+            "更新用户偏好或项目约定到长期记忆。\n\n"
+            "重要规则：\n"
+            "1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述\n"
+            "   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」\n"
+            "   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」\n"
+            "2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加\n"
+            "3. **适用场景**：用户提到长期偏好、工作环境、项目约束等\n\n"
+            "示例：\n"
+            "- 用户：「我习惯用深色主题」→ category=user_profile, content=\"主题偏好：深色\"\n"
+            "- 用户：「以后回复简短一点」→ category=learned_patterns, content=\"回复风格：简洁\""
         )
 
     @property
@@ -1303,12 +1310,20 @@ class UpdateCoreMemoryTool(Tool):
                 content=content,
                 source=MemorySource.USER_INPUT,
             )
-            manager.add_entry(entry)
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                content=f"已添加到 {category.value}: {content}",
-            )
+            added = manager.add_entry(entry)
+            if added:
+                return ToolResult(
+                    tool_call_id="",
+                    success=True,
+                    content=f"已添加到 {category.value}: {content}",
+                    metadata={"refresh_memory": True},  # Signal UI to refresh
+                )
+            else:
+                return ToolResult(
+                    tool_call_id="",
+                    success=True,
+                    content=f"跳过重复记忆: 已有类似内容",
+                )
 
         elif action == "remove":
             # Find and remove matching entry
@@ -1320,6 +1335,7 @@ class UpdateCoreMemoryTool(Tool):
                         tool_call_id="",
                         success=True,
                         content=f"已从 {category.value} 移除: {entry_content}",
+                        metadata={"refresh_memory": True},  # Signal UI to refresh
                     )
 
             return ToolResult(

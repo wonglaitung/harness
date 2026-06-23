@@ -1029,6 +1029,7 @@ class AgentLoop:
                     "success": result.success,
                     "error": result.error if not result.success else None,
                     "result": result_preview,
+                    "metadata": result.metadata,  # Include tool result metadata
                 },
                 duration_ms=tool_duration,
             )

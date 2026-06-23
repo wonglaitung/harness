@@ -363,17 +363,71 @@ class MemoryFileManager:
 
         return "\n".join(lines)
 
-    def add_entry(self, entry: MemoryEntry) -> None:
+    def add_entry(self, entry: MemoryEntry, check_duplicate: bool = True) -> bool:
         """
         Add a new entry to MEMORY.md.
 
         Args:
             entry: MemoryEntry to add
+            check_duplicate: If True, check for similar existing entries and skip if duplicate
+
+        Returns:
+            True if entry was added, False if skipped as duplicate
         """
         sections = self.load()
         section = sections.get_section(entry.category)
+
+        if check_duplicate:
+            # Check for similar existing entries
+            for existing in section:
+                similarity = self._calculate_similarity(entry.content, existing)
+                if similarity > 0.7:  # Similarity threshold (0.7 = 70% similar)
+                    logger.info(
+                        f"Skipping duplicate memory: '{entry.content}' "
+                        f"similar to existing '{existing}' (similarity={similarity:.2f})"
+                    )
+                    return False
+
         section.append(entry.content)
         self.save(sections)
+        return True
+
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """
+        Calculate text similarity using character-level Jaccard similarity.
+
+        Supports both Chinese and English text without requiring word segmentation.
+
+        Args:
+            text1: First text
+            text2: Second text
+
+        Returns:
+            Similarity score (0.0 to 1.0)
+        """
+        # Normalize: lowercase
+        text1 = text1.lower()
+        text2 = text2.lower()
+
+        if not text1 or not text2:
+            return 0.0
+
+        # Use character-level comparison for mixed Chinese/English
+        # For Chinese text, use bigrams (2-character sequences)
+        def get_ngrams(text: str, n: int = 2) -> set[str]:
+            """Get character n-grams from text."""
+            if len(text) < n:
+                return {text}
+            return {text[i : i + n] for i in range(len(text) - n + 1)}
+
+        ngrams1 = get_ngrams(text1)
+        ngrams2 = get_ngrams(text2)
+
+        # Jaccard similarity: intersection / union
+        intersection = ngrams1 & ngrams2
+        union = ngrams1 | ngrams2
+
+        return len(intersection) / len(union)
 
     def remove_entry(self, category: MemoryCategory, index: int) -> bool:
         """

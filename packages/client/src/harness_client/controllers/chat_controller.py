@@ -126,8 +126,11 @@ class ChatController:
         """Set callback for tool call events."""
         self._on_tool_call = callback
 
-    def set_tool_result_callback(self, callback: Callable[[str, str, bool], None]):
-        """Set callback for tool result events."""
+    def set_tool_result_callback(self, callback: Callable[[str, str, bool, dict], None]):
+        """Set callback for tool result events.
+
+        Callback signature: (tool_name, result, success, metadata)
+        """
         self._on_tool_result = callback
 
     def set_thinking_callback(self, callback: Callable[[str], None]):
@@ -281,7 +284,8 @@ class ChatController:
                         tool_name = event.data.get("tool", "unknown")
                         result = event.data.get("result", "")
                         success = event.data.get("success", True)
-                        self._on_tool_result(tool_name, result, success)
+                        metadata = event.data.get("metadata", {})
+                        self._on_tool_result(tool_name, result, success, metadata)
 
                 elif event.type == ProgressEventType.ITERATION:
                     if self._on_thinking:
