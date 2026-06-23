@@ -205,7 +205,7 @@ class SidebarPanel(QWidget):
         if current_session:
             item = QListWidgetItem(f"● {current_session.name}")
             item.setData(Qt.ItemDataRole.UserRole, current_session.id)
-            item.setForeground(Qt.GlobalColor.white)  # Make current session stand out
+            item.setForeground(QColor(theme.ACCENT))  # Use theme accent color
             self.session_list.addItem(item)
 
         # Historical sessions
