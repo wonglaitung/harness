@@ -217,11 +217,13 @@ class MessageBubble(QWidget):
             # Calculate preferred width based on text
             self._calculate_width()
 
-        # Size policy: width should not expand, height should follow content
+        # Size policy: AI messages should expand horizontally, user messages shrink to content
         if self._role == "assistant":
-            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+            # AI messages: expand to fill available width (up to max_width)
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self._content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         else:
-            # User messages: allow some vertical expansion for word wrap
+            # User messages: shrink to content width
             self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
         self.setMaximumWidth(self._max_width)
         self.setMinimumWidth(60)
@@ -490,11 +492,10 @@ class MessageRow(QWidget):
             layout.addStretch()
             layout.addWidget(self._bubble)
         else:
-            # Left-aligned: avatar, bubble, stretch
+            # Left-aligned: avatar, bubble expands to fill
             self._avatar = AvatarWidget(28)
             layout.addWidget(self._avatar)
-            layout.addWidget(self._bubble)
-            layout.addStretch()
+            layout.addWidget(self._bubble, 1)  # Let bubble expand to fill space
 
         self.setStyleSheet(f"background-color: {theme.PANEL};")
 
