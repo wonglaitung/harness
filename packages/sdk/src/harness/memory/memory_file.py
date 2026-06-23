@@ -29,12 +29,13 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,19 @@ class MemorySource(Enum):
 
 
 @dataclass
+class MemoryScoringConfig:
+    """Memory scoring configuration for Retrieval Strength calculation."""
+    decay_lambda: float = 0.05            # Decay speed (higher = faster decay)
+    min_retrieval_strength: float = 0.3   # Minimum retrieval strength (floor)
+    max_core_memory_tokens: int = 2000    # Core Memory token limit
+    enable_llm_evaluation: bool = False   # Enable LLM importance evaluation
+    archive_fallback: Literal["file", "delete", "none"] = "file"
+    # file: Archive to MEMORY_ARCHIVE.md (default, no data loss)
+    # delete: Delete directly (not recommended)
+    # none: Disable archiving, Core Memory grows indefinitely
+
+
+@dataclass
 class MemoryEntry:
     """A single memory entry."""
 
@@ -64,12 +78,59 @@ class MemoryEntry:
     created_at: datetime = field(default_factory=datetime.now)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # New fields for scoring (backward compatible with defaults)
+    importance: float = 1.0           # Storage Strength (used for archive decision)
+    last_accessed: datetime | None = None  # Last access time
+    access_count: int = 0             # Access count
+
+    def calculate_retrieval_strength(
+        self,
+        decay_lambda: float = 0.05,
+        min_strength: float = 0.3,
+    ) -> float:
+        """
+        Calculate Retrieval Strength (only for Retrieved Memory).
+
+        Based on Bjork's New Theory of Disuse:
+        - Time decay: older memories decay but never below min_strength
+        - Access bonus: frequently accessed memories get bonus
+
+        Returns:
+            Retrieval strength value (min_strength to ~2.5)
+        """
+        # Calculate days idle
+        if self.last_accessed:
+            days_idle = (datetime.now() - self.last_accessed).days
+        else:
+            days_idle = (datetime.now() - self.created_at).days
+
+        # Time decay factor (never below min_strength)
+        time_decay = min_strength + (1 - min_strength) * math.exp(-decay_lambda * days_idle)
+
+        # Access bonus factor
+        access_bonus = 1 + 0.5 * math.log(1 + self.access_count)
+
+        return time_decay * access_bonus
+
+    def touch(self) -> None:
+        """Update access time and count."""
+        self.last_accessed = datetime.now()
+        self.access_count += 1
+
     def to_markdown_line(self) -> str:
         """Convert to markdown list item."""
         if self.category == MemoryCategory.KEY_DECISIONS:
             date_str = self.created_at.strftime("%Y-%m-%d")
-            return f"- {date_str}: {self.content}"
-        return f"- {self.content}"
+            base = f"- {date_str}: {self.content}"
+        else:
+            base = f"- {self.content}"
+
+        # Add metadata as HTML comment if non-default
+        if self.importance != 1.0 or self.access_count > 0:
+            meta = f" <!-- importance={self.importance:.2f}, accesses={self.access_count} -->"
+            return base + meta
+
+        return base
 
     @classmethod
     def from_markdown_line(
@@ -86,7 +147,17 @@ class MemoryEntry:
         # Remove leading dash
         content = line[1:].strip()
 
+        # Extract metadata from HTML comment if present
+        importance = 1.0
+        access_count = 0
+        meta_match = re.search(r"<!-- importance=(\d+\.\d+), accesses=(\d+) -->", content)
+        if meta_match:
+            importance = float(meta_match.group(1))
+            access_count = int(meta_match.group(2))
+            content = content[:meta_match.start()].strip()
+
         # Check for date prefix (YYYY-MM-DD:)
+        created_at = datetime.now()
         date_match = re.match(r"(\d{4}-\d{2}-\d{2}):\s*(.+)", content)
         if date_match:
             try:
@@ -102,6 +173,9 @@ class MemoryEntry:
             category=category,
             content=content,
             source=source,
+            created_at=created_at,
+            importance=importance,
+            access_count=access_count,
         )
 
 
@@ -136,6 +210,15 @@ class MemorySections:
         if attr_name:
             setattr(self, attr_name, entries)
 
+    def total_entries(self) -> int:
+        """Count total entries across all sections."""
+        return (
+            len(self.user_profile) +
+            len(self.key_decisions) +
+            len(self.learned_patterns) +
+            len(self.project_context)
+        )
+
 
 class MemoryFileManager:
     """
@@ -163,6 +246,7 @@ class MemoryFileManager:
     """
 
     FILE_NAME = "MEMORY.md"
+    ARCHIVE_FILE_NAME = "MEMORY_ARCHIVE.md"
 
     # Standard section headers
     SECTION_HEADERS = {
@@ -172,15 +256,22 @@ class MemoryFileManager:
         "Project Context": MemoryCategory.PROJECT_CONTEXT,
     }
 
-    def __init__(self, project_root: Path | None = None):
+    def __init__(
+        self,
+        project_root: Path | None = None,
+        scoring_config: MemoryScoringConfig | None = None,
+    ):
         """
         Initialize the memory file manager.
 
         Args:
             project_root: Project root directory. If None, uses current directory.
+            scoring_config: Memory scoring configuration.
         """
         self.project_root = project_root or Path.cwd()
         self.memory_file = self.project_root / self.FILE_NAME
+        self.archive_file = self.project_root / self.ARCHIVE_FILE_NAME
+        self.scoring_config = scoring_config or MemoryScoringConfig()
 
     def exists(self) -> bool:
         """Check if MEMORY.md exists."""
@@ -360,6 +451,216 @@ class MemoryFileManager:
         if self.exists():
             self.memory_file.unlink()
             logger.info(f"Deleted {self.memory_file}")
+
+    # ==================== Capacity Management ====================
+
+    def check_capacity(self) -> tuple[bool, int]:
+        """
+        Check if Core Memory exceeds token limit.
+
+        Returns:
+            Tuple of (is_over_limit, current_tokens)
+        """
+        content = self.to_context_string()
+        tokens = self._estimate_tokens(content)
+        return (tokens > self.scoring_config.max_core_memory_tokens, tokens)
+
+    def _estimate_tokens(self, text: str) -> int:
+        """
+        Estimate token count for text.
+
+        Simple estimation: ~4 characters per token for English text.
+        """
+        return len(text) // 4
+
+    def _load_entries_with_metadata(self, category: MemoryCategory) -> list[MemoryEntry]:
+        """
+        Load entries with full metadata for a category.
+
+        Returns:
+            List of MemoryEntry objects with importance and access_count.
+        """
+        if not self.exists():
+            return []
+
+        content = self.memory_file.read_text(encoding="utf-8")
+        entries = []
+        in_section = False
+
+        for line in content.split("\n"):
+            # Check for section header
+            if line.startswith("## "):
+                header = line[3:].strip()
+                in_section = (self.SECTION_HEADERS.get(header) == category)
+                continue
+
+            # Parse entry if in target section
+            if in_section and line.strip().startswith("-"):
+                entry = MemoryEntry.from_markdown_line(line, category)
+                if entry:
+                    entries.append(entry)
+
+        return entries
+
+    def _load_all_entries_with_metadata(self) -> list[dict[str, Any]]:
+        """
+        Load all entries with metadata across all sections.
+
+        Returns:
+            List of dicts with 'category', 'index', 'entry' keys.
+        """
+        all_entries = []
+        for category in MemoryCategory:
+            entries = self._load_entries_with_metadata(category)
+            for i, entry in enumerate(entries):
+                all_entries.append({
+                    "category": category,
+                    "index": i,
+                    "entry": entry,
+                })
+        return all_entries
+
+    async def archive_low_importance(
+        self,
+        archive_callback: Any = None,
+    ) -> int:
+        """
+        Archive low-importance entries when capacity exceeded.
+
+        Entry-level archival: only archives lowest importance entries,
+        not entire sections.
+
+        Args:
+            archive_callback: Optional async callback to archive entry to Retrieved Memory.
+                              If None, archives to MEMORY_ARCHIVE.md file.
+
+        Returns:
+            Number of entries archived.
+        """
+        is_over, current_tokens = self.check_capacity()
+        if not is_over:
+            return 0
+
+        # Collect all entries with metadata
+        all_entries = self._load_all_entries_with_metadata()
+
+        # Sort by importance (lowest first)
+        all_entries.sort(key=lambda x: x["entry"].importance)
+
+        archived_count = 0
+        for item in all_entries:
+            entry = item["entry"]
+            category = item["category"]
+
+            # Archive the entry
+            if archive_callback:
+                # Use callback (e.g., to VectorMemoryStore)
+                await archive_callback(entry)
+            else:
+                # Fallback: archive to file
+                self._archive_to_file(entry)
+
+            # Remove from Core Memory
+            self.remove_entry(category, item["index"] - archived_count)
+            archived_count += 1
+
+            # Check if we've freed enough space (keep 20% buffer)
+            is_over, new_tokens = self.check_capacity()
+            if not is_over and new_tokens <= self.scoring_config.max_core_memory_tokens * 0.8:
+                break
+
+        logger.info(f"Archived {archived_count} entries from Core Memory")
+        return archived_count
+
+    def _archive_to_file(self, entry: MemoryEntry) -> None:
+        """
+        Archive entry to MEMORY_ARCHIVE.md file.
+
+        This is the fallback when no vector store is configured.
+        """
+        # Parse existing archive file or create new
+        archive_sections = self._load_archive_sections()
+
+        # Add entry to appropriate section
+        section_map = {
+            MemoryCategory.USER_PROFILE: "user_profile",
+            MemoryCategory.KEY_DECISIONS: "key_decisions",
+            MemoryCategory.LEARNED_PATTERNS: "learned_patterns",
+            MemoryCategory.PROJECT_CONTEXT: "project_context",
+        }
+        section_name = section_map.get(entry.category, "project_context")
+        if section_name not in archive_sections:
+            archive_sections[section_name] = []
+
+        archive_sections[section_name].append({
+            "content": entry.content,
+            "importance": entry.importance,
+            "archived_at": datetime.now(),
+        })
+
+        # Save archive file
+        self._save_archive_sections(archive_sections)
+        logger.info(f"Archived entry to {self.archive_file}: {entry.content[:50]}...")
+
+    def _load_archive_sections(self) -> dict[str, list[dict[str, Any]]]:
+        """Load MEMORY_ARCHIVE.md content."""
+        sections: dict[str, list[dict[str, Any]]] = {}
+
+        if not self.archive_file.exists():
+            return sections
+
+        content = self.archive_file.read_text(encoding="utf-8")
+        current_section: str | None = None
+
+        for line in content.split("\n"):
+            if line.startswith("## "):
+                current_section = line[3:].strip().lower().replace(" ", "_")
+                sections[current_section] = []
+                continue
+
+            if current_section and line.strip().startswith("-"):
+                # Parse archive entry: - [YYYY-MM-DD, importance=X] content
+                match = re.match(r"- \[(\d{4}-\d{2}-\d{2}), importance=(\d+\.\d+)\] (.+)", line[2:])
+                if match:
+                    sections[current_section].append({
+                        "archived_at": datetime.strptime(match.group(1), "%Y-%m-%d"),
+                        "importance": float(match.group(2)),
+                        "content": match.group(3),
+                    })
+
+        return sections
+
+    def _save_archive_sections(self, sections: dict[str, list[dict[str, Any]]]) -> None:
+        """Save to MEMORY_ARCHIVE.md file."""
+        header_names = {
+            "user_profile": "User Profile",
+            "key_decisions": "Key Decisions",
+            "learned_patterns": "Learned Patterns",
+            "project_context": "Project Context",
+        }
+
+        lines = [
+            "# Archived Memory",
+            "",
+            "> 以下记忆已从 Core Memory 归档。可通过全文搜索查找。",
+            "",
+        ]
+
+        for section_key, entries in sections.items():
+            if entries:
+                section_name = header_names.get(section_key, section_key.title())
+                lines.append(f"## {section_name}")
+                for entry in entries:
+                    archived_at = entry.get("archived_at", datetime.now())
+                    if isinstance(archived_at, str):
+                        archived_at = datetime.fromisoformat(archived_at)
+                    date_str = archived_at.strftime("%Y-%m-%d")
+                    importance = entry.get("importance", 1.0)
+                    content = entry.get("content", "")
+                    lines.append(f"- [{date_str}, importance={importance:.2f}] {content}")
+                lines.append("")
+
+        self.archive_file.write_text("\n".join(lines), encoding="utf-8")
 
 
 def create_default_memory(project_root: Path | None = None) -> None:

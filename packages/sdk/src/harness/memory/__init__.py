@@ -12,10 +12,15 @@ from harness.memory.context_builder import (
     ContextBuilder,
     ContextConfig,
 )
+from harness.memory.manager import (
+    MemoryManager,
+    create_memory_manager,
+)
 from harness.memory.memory_file import (
     MemoryCategory,
     MemoryEntry,
     MemoryFileManager,
+    MemoryScoringConfig,
     MemorySections,
     MemorySource,
     create_default_memory,
@@ -35,6 +40,7 @@ from harness.memory.system_prompt import (
 )
 from harness.memory.token_counter import TokenCounter, count_tokens
 from harness.memory.vector_store import (
+    ArchivedMemoryEntry,
     MockEmbeddingModel,
     SimpleInMemoryVectorStore,
     VectorMemoryConfig,
@@ -69,11 +75,16 @@ __all__ = [
     "MemoryCategory",
     "MemorySource",
     "MemorySections",
+    "MemoryScoringConfig",
     "create_default_memory",
+    # Memory Manager (Unified Interface)
+    "MemoryManager",
+    "create_memory_manager",
     # Vector Store
     "VectorMemoryStore",
     "VectorMemoryConfig",
     "VectorSearchResult",
+    "ArchivedMemoryEntry",
     "SimpleInMemoryVectorStore",
     "MockEmbeddingModel",
 ]

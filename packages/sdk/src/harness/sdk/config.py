@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from harness.core.step_budget import StepBudgetConfig
+from harness.memory.memory_file import MemoryScoringConfig
 from harness.model_presets import get_default_output_tokens, get_model_preset, parse_context_window
 
 
@@ -274,6 +275,9 @@ class HarnessConfig:
 
     # Routing settings (CPU router for cost optimization)
     routing: RoutingConfig | None = None
+
+    # Memory scoring settings (Retrieval Strength and Archive)
+    memory_scoring: MemoryScoringConfig | None = None
 
     # Resolved values (set in __post_init__)
     _context_window: int = field(default=0, repr=False)

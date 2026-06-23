@@ -9,6 +9,7 @@ Provides:
 - Skill matching by semantic similarity
 - Document retrieval with embeddings
 - Pluggable embedding models and vector stores
+- Retrieval Strength weighting (Mem0-style decay)
 
 Usage:
     from harness.memory.vector_store import VectorMemoryStore
@@ -21,8 +22,8 @@ Usage:
     # Add documents
     await store.add("session_123", "User asked about Python async patterns")
 
-    # Search
-    results = await store.search("async programming", top_k=5)
+    # Search with Retrieval Strength weighting
+    results = await store.search("async programming", top_k=5, apply_decay=True)
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -44,6 +46,64 @@ class VectorSearchResult:
     content: str
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    # Retrieval Strength (only for Retrieved Memory entries)
+    retrieval_strength: float = 1.0
+
+
+@dataclass
+class ArchivedMemoryEntry:
+    """
+    Entry stored in VectorMemoryStore (Retrieved Memory).
+
+    Tracks access patterns for Retrieval Strength calculation.
+    """
+
+    id: str
+    content: str
+    category: str
+    importance: float = 1.0
+    created_at: datetime = field(default_factory=datetime.now)
+    last_accessed: datetime | None = None
+    access_count: int = 0
+    archived_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def calculate_retrieval_strength(
+        self,
+        decay_lambda: float = 0.05,
+        min_strength: float = 0.3,
+    ) -> float:
+        """
+        Calculate Retrieval Strength.
+
+        Based on Bjork's New Theory of Disuse:
+        - Time decay: older entries decay but never below min_strength
+        - Access bonus: frequently accessed entries get bonus
+
+        Returns:
+            Retrieval strength value (min_strength to ~2.5)
+        """
+        import math
+
+        # Calculate days idle
+        if self.last_accessed:
+            days_idle = (datetime.now() - self.last_accessed).days
+        else:
+            days_idle = (datetime.now() - self.created_at).days
+
+        # Time decay factor (never below min_strength)
+        time_decay = min_strength + (1 - min_strength) * math.exp(-decay_lambda * days_idle)
+
+        # Access bonus factor
+        access_bonus = 1 + 0.5 * math.log(1 + self.access_count)
+
+        return time_decay * access_bonus
+
+    def touch(self) -> None:
+        """Update access time and count."""
+        self.last_accessed = datetime.now()
+        self.access_count += 1
 
 
 class EmbeddingModel(Protocol):
@@ -227,14 +287,20 @@ class VectorMemoryStore:
     - Conversation history
     - Skill content
     - Documents and notes
+    - Archived memory (Retrieved Memory)
+
+    Supports Retrieval Strength weighting (Mem0-style decay):
+    - Time decay: older entries decay but never below min_strength
+    - Access bonus: frequently accessed entries get bonus
 
     Example:
         store = VectorMemoryStore()
         await store.add_document("doc1", "Python async patterns")
 
-        results = await store.search("concurrency in Python")
+        # Search with Retrieval Strength weighting
+        results = await store.search("concurrency in Python", apply_decay=True)
         for result in results:
-            print(f"{result.score}: {result.content}")
+            print(f"{result.score} (strength={result.retrieval_strength}): {result.content}")
     """
 
     def __init__(
@@ -242,6 +308,8 @@ class VectorMemoryStore:
         config: VectorMemoryConfig | None = None,
         embedding_model: EmbeddingModel | None = None,
         vector_store: VectorStore | None = None,
+        decay_lambda: float = 0.05,
+        min_retrieval_strength: float = 0.3,
     ):
         """
         Initialize the vector memory store.
@@ -250,8 +318,15 @@ class VectorMemoryStore:
             config: Configuration for the store
             embedding_model: Custom embedding model (overrides config)
             vector_store: Custom vector store (overrides config)
+            decay_lambda: Decay speed for Retrieval Strength (higher = faster decay)
+            min_retrieval_strength: Minimum retrieval strength (floor)
         """
         self.config = config or VectorMemoryConfig()
+        self.decay_lambda = decay_lambda
+        self.min_retrieval_strength = min_retrieval_strength
+
+        # Track archived entries for Retrieval Strength calculation
+        self._entries: dict[str, ArchivedMemoryEntry] = {}
 
         # Initialize embedding model
         if embedding_model:
@@ -341,7 +416,7 @@ class VectorMemoryStore:
         Args:
             id: Unique identifier
             content: Text content
-            metadata: Optional metadata
+            metadata: Optional metadata (can include 'importance', 'category', 'archived_at')
         """
         embeddings = await self._embedding.embed([content])
         await self._store.add(
@@ -350,6 +425,17 @@ class VectorMemoryStore:
             documents=[content],
             metadatas=[metadata or {}],
         )
+
+        # Track entry for Retrieval Strength if it's archived memory
+        if metadata and metadata.get("archived_from") == "core_memory":
+            self._entries[id] = ArchivedMemoryEntry(
+                id=id,
+                content=content,
+                category=metadata.get("category", "unknown"),
+                importance=metadata.get("importance", 1.0),
+                archived_at=metadata.get("archived_at"),
+                metadata=metadata,
+            )
 
     async def add_batch(
         self,
@@ -373,11 +459,25 @@ class VectorMemoryStore:
             metadatas=metadatas,
         )
 
+        # Track entries for Retrieval Strength
+        if metadatas:
+            for i, (id_, content, meta) in enumerate(zip(ids, contents, metadatas)):
+                if meta.get("archived_from") == "core_memory":
+                    self._entries[id_] = ArchivedMemoryEntry(
+                        id=id_,
+                        content=content,
+                        category=meta.get("category", "unknown"),
+                        importance=meta.get("importance", 1.0),
+                        archived_at=meta.get("archived_at"),
+                        metadata=meta,
+                    )
+
     async def search(
         self,
         query: str,
         top_k: int = 10,
         filter: dict[str, Any] | None = None,
+        apply_decay: bool = False,
     ) -> list[VectorSearchResult]:
         """
         Search for similar documents.
@@ -386,20 +486,72 @@ class VectorMemoryStore:
             query: Search query text
             top_k: Maximum results to return
             filter: Optional metadata filter
+            apply_decay: If True, apply Retrieval Strength weighting to archived entries
 
         Returns:
-            List of search results sorted by relevance
+            List of search results sorted by relevance (optionally weighted by Retrieval Strength)
         """
         # Generate embedding for query
         query_embeddings = await self._embedding.embed([query])
         query_embedding = query_embeddings[0]
 
-        # Search in store
-        return await self._store.search(
+        # Search in store (get more results for re-ranking)
+        raw_results = await self._store.search(
             query_embedding=query_embedding,
-            top_k=top_k,
+            top_k=top_k * 2 if apply_decay else top_k,
             filter=filter,
         )
+
+        if not apply_decay:
+            return raw_results[:top_k]
+
+        # Apply Retrieval Strength weighting
+        scored_results = []
+        for result in raw_results:
+            entry = self._entries.get(result.id)
+
+            if entry:
+                # Calculate Retrieval Strength
+                strength = entry.calculate_retrieval_strength(
+                    decay_lambda=self.decay_lambda,
+                    min_strength=self.min_retrieval_strength,
+                )
+                final_score = result.score * strength
+
+                scored_results.append((
+                    VectorSearchResult(
+                        id=result.id,
+                        content=result.content,
+                        score=final_score,
+                        metadata=result.metadata,
+                        retrieval_strength=strength,
+                    ),
+                    entry,
+                ))
+            else:
+                # No entry tracking, use original score
+                scored_results.append((
+                    VectorSearchResult(
+                        id=result.id,
+                        content=result.content,
+                        score=result.score,
+                        metadata=result.metadata,
+                        retrieval_strength=1.0,
+                    ),
+                    None,
+                ))
+
+        # Sort by weighted score descending
+        scored_results.sort(key=lambda x: x[0].score, reverse=True)
+
+        # Update access count for top results and return
+        results = []
+        for result, entry in scored_results[:top_k]:
+            if entry:
+                entry.touch()
+            results.append(result)
+
+        return results
 
     async def delete(self, ids: list[str]) -> None:
         """Delete documents by IDs."""
@@ -446,6 +598,7 @@ class VectorMemoryStore:
         query: str,
         session_id: str | None = None,
         top_k: int = 10,
+        apply_decay: bool = False,
     ) -> list[VectorSearchResult]:
         """
         Search conversation history.
@@ -454,6 +607,7 @@ class VectorMemoryStore:
             query: Search query
             session_id: Optional session filter
             top_k: Maximum results
+            apply_decay: If True, apply Retrieval Strength weighting
 
         Returns:
             List of matching messages
@@ -462,7 +616,7 @@ class VectorMemoryStore:
         if session_id:
             filter_dict["session_id"] = session_id
 
-        return await self.search(query, top_k=top_k, filter=filter_dict)
+        return await self.search(query, top_k=top_k, filter=filter_dict, apply_decay=apply_decay)
 
     async def add_skill(
         self,

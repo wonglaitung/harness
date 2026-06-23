@@ -1206,3 +1206,130 @@ class WebToMarkdownTool(Tool):
                 md_lines.append("| " + " | ".join(row[:len(header)]) + " |")
 
         return "\n\n" + "\n".join(md_lines) + "\n\n"
+
+
+class UpdateCoreMemoryTool(Tool):
+    """
+    Tool for Agent to update Core Memory (MEMORY.md).
+
+    Allows the Agent to persist user preferences, project conventions,
+    and important decisions to long-term memory.
+
+    This tool should be explicitly added to the tools list (Mem0 pattern).
+
+    Example:
+        agent = AgentHarness(
+            tools=[UpdateCoreMemoryTool()],
+        )
+    """
+
+    @property
+    def name(self) -> str:
+        return "update_core_memory"
+
+    @property
+    def description(self) -> str:
+        return (
+            "更新用户偏好或项目约定到长期记忆。"
+            "适用场景：用户提到长期偏好（如'我使用 Windows'）、"
+            "工作环境、项目约束等。"
+        )
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "user_profile",
+                        "key_decisions",
+                        "learned_patterns",
+                        "project_context",
+                    ],
+                    "description": "记忆类别",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "记忆内容",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "remove"],
+                    "description": "操作类型",
+                },
+            },
+            "required": ["category", "content", "action"],
+        }
+
+    async def execute(
+        self,
+        arguments: dict[str, Any],
+        context: ToolContext,
+    ) -> ToolResult:
+        from harness.memory.memory_file import (
+            MemoryCategory,
+            MemoryEntry,
+            MemoryFileManager,
+            MemorySource,
+        )
+
+        category_str = arguments["category"]
+        content = arguments["content"]
+        action = arguments["action"]
+
+        try:
+            category = MemoryCategory(category_str)
+        except ValueError:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Invalid category: {category_str}. "
+                f"Must be one of: user_profile, key_decisions, learned_patterns, project_context",
+            )
+
+        # Get MemoryFileManager from context or create one
+        manager = context.extra.get("memory_manager")
+        if not manager:
+            manager = MemoryFileManager(project_root=context.working_directory)
+
+        if action == "add":
+            entry = MemoryEntry(
+                category=category,
+                content=content,
+                source=MemorySource.USER_INPUT,
+            )
+            manager.add_entry(entry)
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=f"已添加到 {category.value}: {content}",
+            )
+
+        elif action == "remove":
+            # Find and remove matching entry
+            entries = manager.get_entries(category)
+            for i, entry_content in enumerate(entries):
+                if content in entry_content:
+                    manager.remove_entry(category, i)
+                    return ToolResult(
+                        tool_call_id="",
+                        success=True,
+                        content=f"已从 {category.value} 移除: {entry_content}",
+                    )
+
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"未找到匹配的记忆: {content}",
+            )
+
+        return ToolResult(
+            tool_call_id="",
+            success=False,
+            content="",
+            error=f"Unknown action: {action}",
+        )

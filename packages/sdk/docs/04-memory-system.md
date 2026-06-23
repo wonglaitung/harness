@@ -616,3 +616,426 @@ agent._context_builder.add_prompt_source(SystemPromptSource(
 - **跨项目知识共享**：在多个项目间共享通用的技术决策和模式
 - **客户端集成**：桌面客户端可通过 UI 管理全局记忆
 - **即时更新**：MEMORY.md 修改后在下一次 run() 调用时自动生效
+
+---
+
+## 记忆评分与衰减机制
+
+基于 Mem0 的 Recency-Aware Ranking 和 Bjork 新遗忘理论，Harness 实现了智能的记忆生命周期管理。
+
+### 核心理念
+
+**不删除记忆，只影响检索排序**。这遵循 Bjork 新遗忘理论的两个强度概念：
+
+- **Storage Strength (importance)**：创建时决定，之后不再变化，用于归档决策
+- **Retrieval Strength**：动态变化（时间衰减 + 访问恢复），用于检索排序
+
+### 分层记忆架构
+
+```
+Layer 1: Core Memory (MEMORY.md) = Agent 的 "RAM"
+- 用户偏好、项目约定
+- 始终注入系统提示（无条件可见）
+- 不需要检索，不需要 Retrieval Strength
+- 容量超限时 Archive 到 Retrieved Memory（不丢失）
+
+Layer 2: Retrieved Memory (VectorMemoryStore) = Agent 的 "Hard Drive"
+- 历史对话、特定事件、已归档记忆
+- 查询时按需检索
+- 需要 Retrieval Strength 加权排序
+```
+
+### Retrieval Strength 计算
+
+```
+检索分数 = 语义相似度 × Retrieval Strength
+
+Retrieval Strength = 时间衰减因子 × 访问奖励因子
+
+其中：
+- 时间衰减因子 = min_strength + (1 - min_strength) × e^(-λ × 未访问天数)
+  - 最近访问：≈ 1.0（接近满分）
+  - 长期未访问：→ 0.3（保底分数，默认 min_strength=0.3）
+- 访问奖励因子 = 1 + 0.5 × log(1 + access_count)
+  - 从未访问：1.0
+  - 访问 10 次：≈ 2.0
+  - 访问 100 次：≈ 2.5
+```
+
+**关键设计**：最低 0.3× 保底分数确保旧记忆仍能被检索，只是排序靠后。
+
+### MemoryEntry 增强
+
+```python
+@dataclass
+class MemoryEntry:
+    # 现有字段
+    category: MemoryCategory
+    content: str
+    source: MemorySource
+    created_at: datetime = field(default_factory=datetime.now)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    # 新增字段（向后兼容）
+    importance: float = 1.0           # Storage Strength（用于归档决策）
+    last_accessed: datetime | None = None  # 最后访问时间
+    access_count: int = 0             # 访问次数
+
+    def calculate_retrieval_strength(
+        self,
+        decay_lambda: float = 0.05,
+        min_strength: float = 0.3,
+    ) -> float:
+        """计算 Retrieval Strength（仅用于 Retrieved Memory）"""
+        ...
+
+    def touch(self) -> None:
+        """更新访问时间和计数"""
+        self.last_accessed = datetime.now()
+        self.access_count += 1
+```
+
+### MemoryScoringConfig
+
+```python
+@dataclass
+class MemoryScoringConfig:
+    """记忆评分配置"""
+    decay_lambda: float = 0.05            # 衰减速度（λ 越大衰减越快）
+    min_retrieval_strength: float = 0.3   # 最低检索强度（保底）
+    max_core_memory_tokens: int = 2000    # Core Memory 最大 token 数
+    enable_llm_evaluation: bool = False   # 是否启用 LLM 评估 importance
+    archive_fallback: Literal["file", "delete", "none"] = "file"
+    # file: 归档到 MEMORY_ARCHIVE.md（默认，不丢失数据）
+    # delete: 直接删除（不推荐）
+    # none: 禁用归档，Core Memory 无限增长
+```
+
+### 使用配置
+
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.sdk.config import MemoryScoringConfig
+
+config = HarnessConfig(
+    memory_scoring=MemoryScoringConfig(
+        decay_lambda=0.05,           # 衰减速度
+        max_core_memory_tokens=2000, # Core Memory 容量上限
+        enable_llm_evaluation=True,  # 启用 LLM 评估重要性
+        archive_fallback="file",     # 无向量数据库时归档到文件
+    ),
+)
+agent = AgentHarness(config=config)
+```
+
+---
+
+## Archive 机制
+
+当 Core Memory 超过容量限制时，自动归档低 importance 的 Entry 到 Retrieved Memory。
+
+### 触发时机
+
+**触发时机**：仅 `run()` 时检查并执行。
+
+```python
+async def run(self, prompt: str) -> LoopResult:
+    # 检查 Core Memory 容量
+    is_over, tokens = self._memory_manager.file_store.check_capacity()
+    if is_over:
+        await self._memory_manager.archive_low_importance()
+
+    # 继续执行 Agent Loop
+    ...
+```
+
+**不在 `add_entry()` 时标记**，理由：
+- 容量检查开销很小（只是计算字符串长度/token）
+- 每次都检查确保不遗漏
+- 无状态设计更可靠
+
+### 归档策略（Entry 级别）
+
+**关键设计**：归档是 Entry 级别，不是 Section 级别。即使某 Section 有 10 条 Entry，也只归档 importance 最低的那几条。
+
+```python
+async def archive_low_importance(self) -> int:
+    """
+    容量超限时，跨 section 按 importance 归档低分 Entry
+    """
+    # 收集所有 section 的所有 Entry
+    all_entries = []
+    for category in MemoryCategory:
+        entries = self._load_entries_with_metadata(category)
+        for i, entry in enumerate(entries):
+            all_entries.append({
+                "category": category,
+                "index": i,
+                "entry": entry,
+            })
+
+    # 按 importance 排序（低分优先归档）
+    all_entries.sort(key=lambda x: x["entry"].importance)
+
+    archived = 0
+    for item in all_entries:
+        # 归档到 Retrieved Memory（不丢失）
+        await self._archive_entry(item["entry"])
+
+        # 从 Core Memory 删除
+        self.remove_entry(item["category"], item["index"] - archived)
+        archived += 1
+
+        # 检查容量是否已释放足够
+        if self.check_capacity()[1] <= self.MAX_CORE_MEMORY_TOKENS * 0.8:
+            break
+
+    return archived
+```
+
+### 无向量数据库的降级方案
+
+当用户未配置 VectorMemoryStore 时，归档的 Entry 写入 `MEMORY_ARCHIVE.md` 文件：
+
+```markdown
+# Archived Memory
+
+> 以下记忆已从 Core Memory 归档。可通过全文搜索查找。
+
+## User Profile
+- [2026-01-15, importance=0.3] 旧偏好：用户曾使用 macOS
+
+## Key Decisions
+- [2025-12-01, importance=0.4] 历史决策：选择 Redis 作为缓存
+
+## Learned Patterns
+- [2025-11-15, importance=0.2] 临时模式：用户当时偏好简短回复
+
+## Project Context
+- [2025-10-01, importance=0.3] 过时信息：项目使用 Python 3.9
+```
+
+### 行为对比
+
+| 场景 | VectorMemoryStore | MEMORY_ARCHIVE.md |
+|------|-------------------|-------------------|
+| **数据丢失** | 不丢失 | 不丢失 |
+| **检索方式** | 语义搜索 | 全文搜索/手动查看 |
+| **Retrieval Strength** | 适用 | 不适用 |
+| **Agent 自动访问** | 是（通过 search()） | 否（需手动查看文件） |
+
+---
+
+## Importance 的来源与评估
+
+### Importance 的生命周期
+
+```
+1. 创建时：LLM 评估（或默认值 1.0）
+   ↓
+2. 存储后：不再变化（Storage Strength 是静态的）
+   ↓
+3. 归档决策：按 importance 排序，低分优先归档
+```
+
+### LLM 评估触发时机
+
+**异步评估**：添加 Entry 后，后台异步评估 importance，不阻塞主流程。
+
+```python
+async def add_entry_async(
+    self,
+    entry: MemoryEntry,
+    llm_client: LLMClient | None = None,
+) -> None:
+    # 先添加（importance=1.0）
+    self._entries.append(entry)
+    self._save()
+
+    # 后台评估
+    if self.config.enable_llm_evaluation and llm_client:
+        importance = await self._evaluate_importance(entry, llm_client)
+        entry.importance = importance
+        self._save()
+```
+
+### 评估示例
+
+| 记忆内容 | 类别 | LLM 评估结果 | 说明 |
+|---------|------|-------------|------|
+| "用户使用 Windows" | user_profile | 0.85 | 核心偏好，长期有效 |
+| "选择 SQLite 作为存储" | key_decisions | 0.75 | 重要决策 |
+| "用户喜欢详细的代码示例" | learned_patterns | 0.6 | 一般有用 |
+| "上次讨论了 Python 异步" | project_context | 0.4 | 可能过时 |
+| "今天天气很好" | project_context | 0.1 | 快速过时 |
+
+---
+
+## MemoryManager（统一接口）
+
+MemoryManager 是分层记忆架构的统一入口，管理 Core Memory 和 Retrieved Memory。
+
+### 核心接口
+
+```python
+class MemoryManager:
+    """统一记忆管理器"""
+
+    def __init__(
+        self,
+        file_store: MemoryFileManager,
+        vector_store: VectorMemoryStore | None = None,
+        config: MemoryScoringConfig | None = None,
+    ):
+        self.file_store = file_store
+        self.vector_store = vector_store
+        self.config = config or MemoryScoringConfig()
+
+    def get_context(self, query: str | None = None) -> str:
+        """
+        获取完整记忆上下文
+
+        1. Core Memory 永远无条件全量加载
+        2. Retrieved Memory 根据 Query 主动检索（如果提供了查询）
+        """
+        # Core Memory 全量加载
+        core_memory = self.file_store.to_context_string()
+
+        # Retrieved Memory 按需检索
+        retrieved_memory = ""
+        if query and self.vector_store:
+            results = await self.vector_store.search(
+                query,
+                top_k=5,
+                apply_decay=True,
+            )
+            retrieved_memory = self._format_retrieved(results)
+
+        return self._combine(core_memory, retrieved_memory)
+
+    async def add_memory(
+        self,
+        entry: MemoryEntry,
+        target: Literal["core", "retrieved"] = "core",
+    ) -> None:
+        """
+        添加记忆到指定层级
+
+        Args:
+            entry: 记忆条目
+            target: "core" 添加到 MEMORY.md，"retrieved" 添加到向量存储
+        """
+        if target == "core":
+            self.file_store.add_entry(entry)
+        elif target == "retrieved" and self.vector_store:
+            await self.vector_store.add(
+                id=self._generate_id(),
+                content=entry.content,
+                metadata={
+                    "category": entry.category.value,
+                    "importance": entry.importance,
+                    "created_at": entry.created_at.isoformat(),
+                },
+            )
+
+    async def archive_to_retrieved(
+        self,
+        category: MemoryCategory,
+        index: int,
+    ) -> bool:
+        """
+        将 Core Memory 条目归档到 Retrieved Memory
+
+        从 MEMORY.md 移除，存入向量存储（或文件归档），记忆不丢失
+        """
+        ...
+```
+
+---
+
+## UpdateCoreMemoryTool
+
+Agent 可通过工具更新 Core Memory（MEMORY.md）。采用 **Mem0 模式**：显式添加到工具列表。
+
+### 工具定义
+
+```python
+class UpdateCoreMemoryTool(Tool):
+    """Agent 更新用户偏好/项目约定的工具"""
+
+    @property
+    def name(self) -> str:
+        return "update_core_memory"
+
+    @property
+    def description(self) -> str:
+        return (
+            "更新用户偏好或项目约定到长期记忆。"
+            "适用场景：用户提到长期偏好（如'我使用 Windows'）、"
+            "工作环境、项目约束等。"
+        )
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["user_profile", "key_decisions", "learned_patterns", "project_context"],
+                },
+                "content": {"type": "string"},
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "remove"],
+                },
+            },
+            "required": ["category", "content", "action"],
+        }
+```
+
+### 使用方式
+
+```python
+from harness import AgentHarness
+from harness.tools.builtins import UpdateCoreMemoryTool
+
+# 显式添加工具
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[
+        UpdateCoreMemoryTool(),  # 显式添加
+    ],
+)
+```
+
+### 触发机制
+
+**主机制**：Agent 在对话过程中自主判断是否需要更新 Core Memory。
+
+```
+用户: "我使用的是 Windows"
+
+Agent 内部推理:
+1. 识别到这是长期偏好信息
+2. 判断应该存入 Core Memory
+3. 调用 update_core_memory 工具
+
+→ Tool 被触发，将 "Platform: Windows" 写入 MEMORY.md
+```
+
+**可选补充**：CoreMemoryExtractionHook 在对话结束后自动提取遗漏的记忆。
+
+---
+
+## 设计总结
+
+| 特性 | Core Memory (MEMORY.md) | Retrieved Memory (VectorMemoryStore) |
+|------|------------------------|-------------------------------------|
+| **加载方式** | 全量加载 | 按需检索 |
+| **access_count** | 不追踪 | 追踪，影响排序 |
+| **Retrieval Strength** | 不适用 | 适用（时间衰减 + 访问奖励） |
+| **容量管理** | 按 importance 归档低分 Entry | 无容量限制，检索时排序 |
+| **淘汰粒度** | Entry 级别（跨 section） | 不淘汰，只降权 |
+| **importance 来源** | LLM 评估（可选） | 从 Core Memory 归档时继承 |
+| **无向量数据库时** | 归档到 MEMORY_ARCHIVE.md | 不适用 |
