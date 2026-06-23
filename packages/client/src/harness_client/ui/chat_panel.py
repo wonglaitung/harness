@@ -909,14 +909,14 @@ class ChatPanel(QWidget):
         scroll_area.setWidget(self.messages_container)
 
         # --- Input bar ---
-        input_bar = QWidget()
-        input_bar.setStyleSheet(f"""
+        self._input_bar = QWidget()
+        self._input_bar.setStyleSheet(f"""
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
                 border-top: 1px solid {theme.BORDER};
             }}
         """)
-        input_layout = QHBoxLayout(input_bar)
+        input_layout = QHBoxLayout(self._input_bar)
         input_layout.setContentsMargins(24, 12, 24, 12)
         input_layout.setSpacing(12)
 
@@ -1037,7 +1037,7 @@ class ChatPanel(QWidget):
         input_layout.addWidget(self.send_btn)
 
         layout.addWidget(scroll_area, stretch=1)
-        layout.addWidget(input_bar)
+        layout.addWidget(self._input_bar)
 
         # Store scroll area for scrolling
         self._scroll_area = scroll_area
@@ -1443,6 +1443,14 @@ class ChatPanel(QWidget):
         self.messages_container.setStyleSheet(f"""
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
+            }}
+        """)
+
+        # Update input bar background
+        self._input_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-top: 1px solid {theme.BORDER};
             }}
         """)
 
