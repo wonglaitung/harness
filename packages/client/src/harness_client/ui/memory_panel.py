@@ -492,9 +492,9 @@ class MemorySection(CollapsibleSection):
         """Setup the memory section content."""
         theme = get_theme()
         # Scroll area for all categories
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"""
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: transparent;
                 border: none;
@@ -508,14 +508,14 @@ class MemorySection(CollapsibleSection):
                 border-radius: 3px;
             }}
         """)
-        self.add_widget(scroll, 1)
+        self.add_widget(self._scroll, 1)
 
         # Container for categories
         container = QWidget()
         self._container_layout = QVBoxLayout(container)
         self._container_layout.setContentsMargins(0, 0, 0, 0)
         self._container_layout.setSpacing(10)
-        scroll.setWidget(container)
+        self._scroll.setWidget(container)
 
         # Info label with importance legend
         self._info_label = QLabel(
@@ -616,6 +616,21 @@ class MemorySection(CollapsibleSection):
         """Handle theme change - update all category sections."""
         super()._on_theme_changed()  # Update CollapsibleSection header
         theme = get_theme()
+        # Update scroll area
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: transparent;
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 3px;
+            }}
+        """)
         # Update info label
         self._info_label.setStyleSheet(f"""
             QLabel {{
