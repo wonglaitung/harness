@@ -447,6 +447,82 @@ agent.addHook(new LoggingHook());
 
 ## 错误处理
 
+### LLM 重试策略
+
+Agent Loop 使用配置化的重试策略，支持指数退避和随机抖动：
+
+```java
+/**
+ * Call LLM with retry and exponential backoff.
+ *
+ * Retry strategy:
+ * - Max retries from config.retryOnError()
+ * - Exponential backoff: min(2^attempt, 30) seconds
+ * - Random jitter: 0-500ms to prevent thundering herd
+ */
+private LLMResponse callLLMWithRetry(Context context, List<ToolDefinition> tools) {
+    int maxRetries = config.retryOnError();
+
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return llmClient.call(context.messages(), tools, context.systemPrompt());
+        } catch (Exception e) {
+            logger.warn("LLM call failed (attempt {}/{}): {}",
+                attempt + 1, maxRetries, e.getMessage());
+
+            if (attempt < maxRetries - 1) {
+                // Calculate backoff with jitter
+                long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
+                long jitterMs = random.nextLong(500);
+                long delayMs = baseBackoffMs + jitterMs;
+
+                logger.info("Retrying in {}ms", delayMs);
+                Thread.sleep(delayMs);
+            }
+        }
+    }
+
+    logger.error("LLM call failed after {} attempts", maxRetries);
+    return null;
+}
+```
+
+**设计原则**：
+- **配置化**：重试次数可通过 `LoopConfig.retryOnError()` 调整
+- **指数退避**：避免短时间大量重试，上限 30 秒
+- **随机抖动**：防止多客户端同时重试（惊群效应）
+
+### 工具执行超时
+
+Agent Loop 使用 `CompletableFuture.orTimeout()` 强制执行工具超时：
+
+```java
+/**
+ * Execute a single tool with timeout.
+ */
+private CompletableFuture<ToolResult> executeToolWithTimeout(ToolCall call, ToolContext context) {
+    CompletableFuture<ToolResult> future = toolExecutor.execute(call, context);
+
+    return future.orTimeout(config.timeoutPerTool(), TimeUnit.MILLISECONDS)
+        .exceptionally(ex -> {
+            if (ex.getCause() instanceof TimeoutException) {
+                logger.warn("Tool {} timed out after {}ms", call.name(), config.timeoutPerTool());
+                return ToolResult.error(
+                    call.id(),
+                    call.name(),
+                    "Tool execution timed out after " + config.timeoutPerTool() + "ms"
+                );
+            }
+            return ToolResult.error(call.id(), call.name(), ex.getMessage());
+        });
+}
+```
+
+**配置**：
+- `LoopConfig.timeoutPerTool()`: 单个工具的超时时间（默认 30000 毫秒）
+
+**注意**：超时后工具执行会被取消，Agent 会收到错误信息并可以决定下一步操作。
+
 ### 错误处理器
 
 ```java
