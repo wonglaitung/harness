@@ -62,6 +62,9 @@
 
 ## 注意事项
 
+### 新范式/工具
+- **DESIGN.md — Agent设计系统规范** - https://github.com/google-labs-code/design.md
+
 ### 港股分析
 - **港股通103.71亿净流入 — 超强右侧确认信号**
 
