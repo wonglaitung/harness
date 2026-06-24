@@ -24,9 +24,13 @@ harness-sdk-java/
 
 ### harness-sdk-core
 - **类型定义**: Message, Session, ToolCall, ToolResult, LLMResponse, LoopResult
-- **AgentLoop**: ReAct 执行引擎
+- **AgentLoop**: ReAct 执行引擎，支持：
+  - LLM 重试：配置化重试次数 + 指数退避 + 随机抖动
+  - 工具超时：`timeoutPerTool` 强制超时保护
+  - 中断支持：可中断正在执行的循环
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
+- **LoopConfig**: 循环配置，支持 Builder 模式
 
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl

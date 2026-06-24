@@ -5,9 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.random.RandomGenerator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +25,16 @@ import com.harness.types.*;
  * 2. Call LLM
  * 3. Execute tools if needed
  * 4. Repeat until done
+ *
+ * Robustness features:
+ * - LLM retry with exponential backoff and jitter
+ * - Tool execution timeout protection
+ * - Configurable retry count
  */
 public class AgentLoop {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentLoop.class);
+    private static final RandomGenerator random = RandomGenerator.getDefault();
 
     private final LLMClient llmClient;
     private final ToolExecutor toolExecutor;
@@ -98,18 +107,17 @@ public class AgentLoop {
             state = LoopState.BUILDING_CONTEXT;
             ContextBuilder.Context context = contextBuilder.build(session);
 
-            // Call LLM
+            // Call LLM with retry
             state = LoopState.CALLING_LLM;
             logger.debug("Calling LLM at iteration {}", iteration.get());
 
             List<LLMClient.ToolDefinition> tools = convertTools(toolExecutor.listTools());
-            LLMResponse response;
-            try {
-                response = llmClient.call(context.messages(), tools, context.systemPrompt());
-            } catch (Exception e) {
-                logger.error("LLM call failed: {}", e.getMessage());
+            LLMResponse response = callLLMWithRetry(context, tools);
+
+            if (response == null) {
+                // All retries failed
                 state = LoopState.ERROR;
-                return LoopResult.error(session, iteration.get(), e.getMessage());
+                return LoopResult.error(session, iteration.get(), "LLM call failed after all retries");
             }
 
             logger.debug("LLM response: stopReason={}, hasToolCalls={}",
@@ -127,8 +135,8 @@ public class AgentLoop {
             if (response.isToolUse()) {
                 state = LoopState.EXECUTING_TOOLS;
 
-                // Execute tools
-                List<ToolResult> results = executeTools(response.toolCalls(), session);
+                // Execute tools with timeout
+                List<ToolResult> results = executeToolsWithTimeout(response.toolCalls(), session);
 
                 // Add tool results to session
                 for (ToolResult result : results) {
@@ -165,9 +173,58 @@ public class AgentLoop {
     }
 
     /**
-     * Execute tool calls.
+     * Call LLM with retry and exponential backoff.
+     *
+     * Retry strategy:
+     * - Max retries from config.retryOnError()
+     * - Exponential backoff: min(2^attempt, 30) seconds
+     * - Random jitter: 0-500ms to prevent thundering herd
+     *
+     * @return LLMResponse or null if all retries failed
      */
-    private List<ToolResult> executeTools(List<ToolCall> toolCalls, Session session) {
+    private LLMResponse callLLMWithRetry(ContextBuilder.Context context, List<LLMClient.ToolDefinition> tools) {
+        int maxRetries = config.retryOnError();
+        Exception lastError = null;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                return llmClient.call(context.messages(), tools, context.systemPrompt());
+            } catch (Exception e) {
+                lastError = e;
+                logger.warn("LLM call failed (attempt {}/{}): {}",
+                    attempt + 1, maxRetries, e.getMessage());
+
+                if (attempt < maxRetries - 1) {
+                    // Calculate backoff with jitter
+                    long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
+                    long jitterMs = random.nextLong(500);
+                    long delayMs = baseBackoffMs + jitterMs;
+
+                    logger.info("Retrying in {}ms (backoff={}ms, jitter={}ms)",
+                        delayMs, baseBackoffMs, jitterMs);
+
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        logger.warn("Retry sleep interrupted");
+                        break;
+                    }
+                }
+            }
+        }
+
+        logger.error("LLM call failed after {} attempts", maxRetries);
+        return null;
+    }
+
+    /**
+     * Execute tool calls with timeout protection.
+     *
+     * Each tool execution is limited by config.timeoutPerTool().
+     * If timeout is exceeded, returns a failed ToolResult.
+     */
+    private List<ToolResult> executeToolsWithTimeout(List<ToolCall> toolCalls, Session session) {
         ToolContext context = ToolContext.builder()
             .sessionId(session.id())
             .workingDirectory(config.workingDirectory())
@@ -176,7 +233,7 @@ public class AgentLoop {
 
         List<CompletableFuture<ToolResult>> futures = new ArrayList<>();
         for (ToolCall call : toolCalls) {
-            futures.add(toolExecutor.execute(call, context));
+            futures.add(executeToolWithTimeout(call, context));
         }
 
         // Wait for all tools to complete
@@ -185,6 +242,27 @@ public class AgentLoop {
         return futures.stream()
             .map(CompletableFuture::join)
             .toList();
+    }
+
+    /**
+     * Execute a single tool with timeout.
+     */
+    private CompletableFuture<ToolResult> executeToolWithTimeout(ToolCall call, ToolContext context) {
+        CompletableFuture<ToolResult> future = toolExecutor.execute(call, context);
+
+        return future.orTimeout(config.timeoutPerTool(), TimeUnit.MILLISECONDS)
+            .exceptionally(ex -> {
+                if (ex.getCause() instanceof TimeoutException) {
+                    logger.warn("Tool {} timed out after {}ms", call.name(), config.timeoutPerTool());
+                    return ToolResult.error(
+                        call.id(),
+                        call.name(),
+                        "Tool execution timed out after " + config.timeoutPerTool() + "ms"
+                    );
+                }
+                logger.error("Tool {} failed: {}", call.name(), ex.getMessage());
+                return ToolResult.error(call.id(), call.name(), ex.getMessage());
+            });
     }
 
     /**
