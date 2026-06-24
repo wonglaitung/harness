@@ -60,7 +60,12 @@
 
 ## 2026-06-24 提取
 
+## 2026-06-25 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **Daybreak Codex Security — AI驱动的安全补丁闭环** - https://openai.com/index/daybreak-securing-the-world
 
 ### 新范式/工具
 - **DESIGN.md — Agent设计系统规范** - https://github.com/google-labs-code/design.md
