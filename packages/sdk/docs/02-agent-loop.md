@@ -1054,10 +1054,36 @@ result = await agent_loop.run(messages, stream=True)
 | 错误类型 | 处理方式 |
 |----------|----------|
 | API 限流 (429) | 指数退避重试 |
-| API 错误 (5xx) | 重试最多 3 次 |
+| API 错误 (5xx) | 重试最多 `retry_on_error` 次（默认 3） |
 | 工具执行错误 | 返回错误信息给 LLM |
 | 上下文超长 | 触发压缩或截断 |
 | 成本超限 | 中断并返回结果 |
+
+### LLM 重试策略
+
+Agent Loop 使用配置化的重试策略，支持指数退避和随机抖动：
+
+```python
+# 重试次数从配置读取
+max_llm_retries = self.config.retry_on_error or 3
+
+# 重试延迟策略
+if decision.delay_seconds > 0:
+    # 优先使用 ErrorHandler 返回的延迟（如 rate limit 的 Retry-After）
+    delay = decision.delay_seconds
+else:
+    # 指数退避 + 随机抖动（防止重试风暴）
+    import random
+    base_backoff = min(2 ** llm_attempt, 30)  # 上限 30s
+    jitter = random.uniform(0, 0.5)           # 随机抖动
+    delay = base_backoff + jitter
+```
+
+**设计原则**：
+- 配置化：重试次数可通过 `LoopConfig.retry_on_error` 调整
+- ErrorHandler 优先：尊重 API 返回的重试建议（如 Retry-After header）
+- 指数退避：避免短时间大量重试
+- 随机抖动：防止多客户端同时重试（惊群效应）
 
 ### 熔断器
 
@@ -1094,6 +1120,54 @@ if cb.is_open():
 1. **简单规则**：只检测明显的重复行为
 2. **信任模型**：通过 system prompt 指导模型何时停止
 3. **避免误报**：不干预并行工具调用等正常行为
+
+### 工具执行超时
+
+Agent Loop 使用 `asyncio.wait_for` 强制执行工具超时，防止病态工具阻塞整个执行：
+
+```python
+# 工具执行超时保护
+try:
+    result = await asyncio.wait_for(
+        self.tools.execute(tool_call, context),
+        timeout=self.config.timeout_per_tool,  # 默认 30s
+    )
+except asyncio.TimeoutError:
+    # 超时后返回错误结果，而不是无限等待
+    result = ToolResult(
+        tool_call_id=tool_call.id,
+        success=False,
+        error=f"Tool execution timed out after {self.config.timeout_per_tool}s",
+    )
+```
+
+**配置**：
+- `LoopConfig.timeout_per_tool`: 单个工具的超时时间（默认 30.0 秒）
+
+**注意**：超时后工具执行会被取消，Agent 会收到错误信息并可以决定下一步操作。
+
+### Step Budget 资源清理
+
+Agent Loop 使用 `finally` 块确保 `StepBudgetController.end_task()` 总是被调用，防止资源泄漏：
+
+```python
+# 确保 step_budget 在任何情况下都被清理
+try:
+    # 主循环...
+    while iteration < self.config.max_iterations:
+        # ... 执行循环
+finally:
+    # 无论成功、失败、中断，都确保清理
+    if self._step_budget:
+        try:
+            self._step_budget.end_task()
+        except Exception:
+            logger.exception("Error while ending step budget task")
+```
+
+**设计原则**：
+- 资源清理必须放在 `finally` 块中
+- 清理操作本身需要捕获异常，避免掩盖原始错误
 
 ## 完整流程图
 

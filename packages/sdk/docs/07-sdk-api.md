@@ -217,6 +217,37 @@ async def run(
     """执行 Agent 任务，返回 LoopResult"""
 ```
 
+#### run_sync() - 同步执行
+
+```python
+def run_sync(
+    self,
+    prompt: str,
+    session_id: str | None = None,
+    **kwargs,
+) -> LoopResult:
+    """同步版本的 run()
+
+    注意：不能在 async 上下文中调用。如果需要异步执行，使用 await agent.run()
+    """
+```
+
+**事件循环检测**：使用语义化 API 检测运行中的事件循环：
+
+```python
+# 内部实现
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    # 无运行中的循环 → 安全执行
+    return asyncio.run(self.run(...))
+else:
+    # 有运行中的循环 → 禁止同步调用
+    raise RuntimeError("run_sync() cannot be called from async context")
+```
+
+**注意**：不要依赖字符串匹配检测事件循环（如检查异常消息），这在不同 Python 版本中可能不稳定。
+
 #### stream() - 流式执行
 
 ```python
