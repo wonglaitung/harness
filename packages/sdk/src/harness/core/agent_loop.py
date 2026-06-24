@@ -464,7 +464,7 @@ class AgentLoop:
                 # LLM call with error handling
                 response = None
                 llm_error = None
-                max_llm_retries = 3
+                max_llm_retries = self.config.retry_on_error or 3
                 for llm_attempt in range(max_llm_retries):
                     try:
                         # Execute BEFORE_LLM_CALL hooks
@@ -527,13 +527,22 @@ class AgentLoop:
                         decision = self._error_handler.handle(e, error_ctx)
 
                         if decision.action == ErrorAction.RETRY and llm_attempt < max_llm_retries - 1:
+                            # Use ErrorHandler's delay or fallback to exponential backoff with jitter
+                            if decision.delay_seconds > 0:
+                                delay = decision.delay_seconds
+                            else:
+                                # Exponential backoff with jitter (cap at 30s)
+                                import random
+                                base_backoff = min(2 ** llm_attempt, 30)
+                                jitter = random.uniform(0, 0.5)
+                                delay = base_backoff + jitter
+
                             self._emit_progress(
                                 ProgressEventType.ERROR,
                                 f"LLM call failed, retrying: {decision.message}",
-                                {"error": str(e), "attempt": llm_attempt + 1, "delay": decision.delay_seconds},
+                                {"error": str(e), "attempt": llm_attempt + 1, "delay": delay},
                             )
-                            if decision.delay_seconds > 0:
-                                await asyncio.sleep(decision.delay_seconds)
+                            await asyncio.sleep(delay)
                             continue
                         elif decision.action == ErrorAction.COMPRESS_CONTEXT:
                             self._emit_progress(
@@ -754,10 +763,6 @@ class AgentLoop:
                     ),
                 )
 
-                # End step budget task
-                if self._step_budget:
-                    self._step_budget.end_task()
-
                 # Reset error handler state
                 self._error_handler.reset()
 
@@ -863,6 +868,14 @@ class AgentLoop:
                 token_usage=total_usage,
             )
 
+        finally:
+            # Ensure step budget task is always ended to prevent leaks
+            if self._step_budget:
+                try:
+                    self._step_budget.end_task()
+                except Exception:
+                    logger.exception("Error while ending step budget task")
+
     async def _execute_tools(
         self,
         tool_calls: list[ToolCall],
@@ -953,7 +966,30 @@ class AgentLoop:
                 tool_call.arguments = hook_result.modified_args
 
             tool_start = time.time()
-            result = await self.tools.execute(tool_call, context)
+            try:
+                # Enforce timeout for tool execution
+                result = await asyncio.wait_for(
+                    self.tools.execute(tool_call, context),
+                    timeout=self.config.timeout_per_tool,
+                )
+            except asyncio.TimeoutError:
+                tool_duration = (time.time() - tool_start) * 1000
+                result = ToolResult(
+                    tool_call_id=tool_call.id,
+                    success=False,
+                    content="",
+                    error=f"Tool execution timed out after {self.config.timeout_per_tool}s",
+                    tool_name=tool_call.name,
+                )
+                self._emit_progress(
+                    ProgressEventType.ERROR,
+                    f"Tool {tool_call.name} timed out",
+                    {
+                        "tool": tool_call.name,
+                        "timeout_seconds": self.config.timeout_per_tool,
+                        "duration_ms": tool_duration,
+                    },
+                )
             tool_duration = (time.time() - tool_start) * 1000
 
             # Record tool call for step budget (Phase 25)

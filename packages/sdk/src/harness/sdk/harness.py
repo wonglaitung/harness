@@ -561,18 +561,18 @@ class AgentHarness:
         """
         import asyncio
 
-        # Check for running event loop
+        # Robust event loop detection using semantic API
         try:
             asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop -> safe to run synchronously
+            return asyncio.run(self.run(prompt, session_id, **kwargs))
+        else:
+            # Running loop exists -> disallow sync call
             raise RuntimeError(
                 "run_sync() cannot be called from async context. "
                 "Use 'await agent.run()' instead."
             )
-        except RuntimeError as e:
-            if "no running event loop" not in str(e):
-                raise
-
-        return asyncio.run(self.run(prompt, session_id, **kwargs))
 
     def register_tool(
         self,
