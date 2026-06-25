@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QScrollArea,
     QTextBrowser,
@@ -681,10 +682,8 @@ class MessagesContainer(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 16, 0, 16)
         self._layout.setSpacing(0)
-        # 对齐由 QScrollArea.setAlignment() 控制，不再需要 addStretch
-
-        # 高度由内容决定，不扩展填满视口
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        # 布局只使用最小尺寸，不扩展
+        self._layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
