@@ -1,3 +1,10 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "harness-sdk-java"
 
 // 多模块项目
@@ -8,4 +15,4 @@ include("harness-sdk-tools")
 include("harness-sdk-memory")
 include("harness-sdk-skills")
 include("harness-sdk-security")
-include("harness-sdk-all")
+// include("harness-sdk-all")  // Temporarily disabled - requires shadow plugin
