@@ -51,6 +51,7 @@ harness-sdk-java/
 - **OutputOffloader**: 大输出卸载到临时文件，保护上下文窗口
 - **PermissionSet**: 细粒度权限控制（路径、命令、网络）
 - **MockHarness**: 完整测试 Harness，支持预定义响应
+- **SubAgentManager**: 子代理管理器，支持并行子任务执行
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
@@ -86,6 +87,7 @@ harness-sdk-java/
 - **SystemPromptBuilder**: 动态系统提示组装，支持 AGENTS.md/MEMORY.md
 - **SystemPromptConfig**: 系统提示配置
 - **SystemPromptSource**: 系统提示源
+- **VectorMemoryStore**: 语义搜索记忆存储，支持 Retrieval Strength 加权
 
 ### harness-sdk-skills
 - **SkillRegistry**: 技能文件加载和管理
