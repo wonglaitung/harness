@@ -447,18 +447,45 @@ agent.addHook(new LoggingHook());
 
 ## 错误处理
 
-### LLM 重试策略
+### 智能错误处理器 (ErrorHandler)
 
-Agent Loop 使用配置化的重试策略，支持指数退避和随机抖动：
+Agent Loop 使用 `ErrorHandler` 进行智能错误决策：
 
 ```java
 /**
- * Call LLM with retry and exponential backoff.
+ * Intelligent error handler with recovery strategies.
+ */
+public class ErrorHandler {
+
+    public ErrorDecision handle(Exception error, ErrorContext context) {
+        // 根据错误类型智能决策
+    }
+}
+```
+
+**支持的错误类型**：
+
+| 错误类型 | 处理方式 |
+|----------|----------|
+| Rate Limit (429) | RETRY + 指数退避 |
+| Context Overflow | COMPRESS_CONTEXT |
+| Permission Denied | ABORT |
+| Timeout | RETRY (最多 3 次) |
+| Network Error | RETRY + 指数退避 |
+| Tool Error | SKIP 或 RETRY |
+
+### LLM 重试策略
+
+Agent Loop 使用配置化的重试策略，支持 ErrorHandler 智能延迟和指数退避：
+
+```java
+/**
+ * Call LLM with retry and intelligent error handling.
  *
  * Retry strategy:
  * - Max retries from config.retryOnError()
- * - Exponential backoff: min(2^attempt, 30) seconds
- * - Random jitter: 0-500ms to prevent thundering herd
+ * - Uses ErrorHandler for intelligent delay (e.g., Retry-After header)
+ * - Fallback: exponential backoff with jitter
  */
 private LLMResponse callLLMWithRetry(Context context, List<ToolDefinition> tools) {
     int maxRetries = config.retryOnError();
@@ -467,27 +494,38 @@ private LLMResponse callLLMWithRetry(Context context, List<ToolDefinition> tools
         try {
             return llmClient.call(context.messages(), tools, context.systemPrompt());
         } catch (Exception e) {
-            logger.warn("LLM call failed (attempt {}/{}): {}",
-                attempt + 1, maxRetries, e.getMessage());
+            // Get intelligent decision from ErrorHandler
+            ErrorContext errorContext = ErrorContext.builder()
+                .error(e)
+                .iteration(iteration.get())
+                .attempt(attempt + 1)
+                .build();
 
-            if (attempt < maxRetries - 1) {
-                // Calculate backoff with jitter
-                long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
-                long jitterMs = random.nextLong(500);
-                long delayMs = baseBackoffMs + jitterMs;
+            ErrorDecision decision = errorHandler.handle(e, errorContext);
 
-                logger.info("Retrying in {}ms", delayMs);
-                Thread.sleep(delayMs);
+            if (decision.action() == ErrorAction.RETRY) {
+                // Use ErrorHandler's delay or fallback to exponential backoff
+                double delaySeconds;
+                if (decision.delaySeconds() > 0) {
+                    delaySeconds = decision.delaySeconds();
+                } else {
+                    // Exponential backoff with jitter (cap at 30s)
+                    long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
+                    long jitterMs = random.nextLong(500);
+                    delaySeconds = (baseBackoffMs + jitterMs) / 1000.0;
+                }
+
+                Thread.sleep((long) (delaySeconds * 1000));
             }
         }
     }
 
-    logger.error("LLM call failed after {} attempts", maxRetries);
     return null;
 }
 ```
 
 **设计原则**：
+- **智能延迟**：优先使用 ErrorHandler 返回的延迟（如 Retry-After header）
 - **配置化**：重试次数可通过 `LoopConfig.retryOnError()` 调整
 - **指数退避**：避免短时间大量重试，上限 30 秒
 - **随机抖动**：防止多客户端同时重试（惊群效应）
@@ -627,6 +665,182 @@ public CompletableFuture<List<ToolResult>> executeAllAsync(List<ToolCall> calls)
             .toList());
 }
 ```
+
+## 熔断器 (CircuitBreaker)
+
+熔断器用于检测和防止无限循环，遵循 **Bitter Lesson** 原则：简单规则优于复杂启发式。
+
+```java
+CircuitBreaker cb = new CircuitBreaker();
+
+// Before tool execution
+if (cb.isOpen()) {
+    throw new CircuitBreakerException(cb.getReason());
+}
+
+// Record call
+cb.recordCall("read", Map.of("path", "/tmp/file.txt"));
+
+// On error
+cb.recordError(e);
+
+// On success
+cb.recordSuccess();
+```
+
+**检测机制**：
+- 相同工具 + 相同参数重复调用（默认阈值 3 次）
+- 短时间内过多错误（默认 60 秒内 5 次错误）
+
+**配置**：
+
+```java
+CircuitBreakerConfig config = CircuitBreakerConfig.builder()
+    .sameArgsThreshold(3)
+    .errorThreshold(5)
+    .errorWindowSeconds(60)
+    .recoveryTimeoutSeconds(30)
+    .build();
+
+CircuitBreaker cb = new CircuitBreaker(config);
+```
+
+## 步骤预算控制 (StepBudgetController)
+
+步骤预算控制器限制迭代次数和工具调用次数，防止失控的 Agent 循环。
+
+```java
+StepBudgetController budget = new StepBudgetController();
+budget.startTask();
+
+// Before each tool call
+BudgetCheckResult check = budget.checkBeforeToolCall("read");
+if (check.shouldStop()) {
+    // Stop execution
+}
+
+// Record tool call
+budget.recordToolCall("read");
+
+// Advance iteration
+budget.advanceIteration();
+
+// End task
+StepUsage usage = budget.endTask();
+```
+
+**配置**：
+
+```java
+StepBudgetConfig config = StepBudgetConfig.builder()
+    .maxIterationsPerTask(50)
+    .maxToolCallsPerStep(10)
+    .maxToolCallsPerTask(200)
+    .warningThreshold(0.8)
+    .criticalThreshold(0.95)
+    .actionOnExceed("stop")  // stop | warn | throttle
+    .build();
+
+StepBudgetController budget = new StepBudgetController(config);
+```
+
+**预算级别**：
+
+| 级别 | 说明 |
+|------|------|
+| `NORMAL` | 在安全限制内 |
+| `WARNING` | 接近限制（达到 warningThreshold） |
+| `CRITICAL` | 接近限制（达到 criticalThreshold） |
+| `EXCEEDED` | 预算超限，需要采取行动 |
+
+## 生命周期钩子 (Lifecycle Hooks)
+
+钩子系统允许在 Agent 循环的关键点注入自定义逻辑。
+
+### 钩子触发点
+
+```java
+public enum HookPoint {
+    BEFORE_LLM_CALL,        // LLM 调用前
+    AFTER_LLM_CALL,         // LLM 调用后
+    BEFORE_TOOL_EXECUTE,    // 工具执行前
+    AFTER_TOOL_EXECUTE,     // 工具执行后
+    ON_ERROR,               // 错误发生时
+    ON_LOOP_START,          // 循环开始
+    ON_LOOP_END,            // 循环结束
+    ON_EXIT_ATTEMPT         // 尝试退出时（Ralph Loop）
+}
+```
+
+### 钩子动作
+
+```java
+public enum HookAction {
+    CONTINUE,           // 正常继续
+    ABORT,              // 立即停止
+    RETRY,              // 重试当前操作
+    INJECT_MESSAGE,     // 向上下文添加消息
+    MODIFY_ARGS,        // 修改工具参数
+    MODIFY_RESULT,      // 修改工具结果
+    REINJECT            // 清除上下文并重新注入提示（Ralph Loop）
+}
+```
+
+### 使用示例
+
+```java
+// 在工具执行前检查参数
+HookContext context = HookContext.builder()
+    .hookPoint(HookPoint.BEFORE_TOOL_EXECUTE)
+    .toolName("bash")
+    .toolArgs(Map.of("command", "rm -rf /"))
+    .build();
+
+// 返回 ABORT 阻止危险操作
+HookResult result = HookResult.abort("Dangerous command blocked");
+```
+
+## 进度事件 (ProgressEvent)
+
+进度事件用于跟踪 Agent 执行过程，支持 UI 反馈和日志记录。
+
+```java
+// 创建进度事件
+ProgressEvent event = ProgressEvent.of(
+    ProgressEventType.TOOL_CALL,
+    "Calling read tool"
+);
+
+// 带数据的事件
+ProgressEvent event = ProgressEvent.of(
+    ProgressEventType.LLM_RESPONSE,
+    "LLM responded",
+    Map.of("tokens", 150, "model", "claude-3")
+);
+
+// 带持续时间的事件
+ProgressEvent event = ProgressEvent.of(
+    ProgressEventType.TOOL_RESULT,
+    "Tool completed",
+    Map.of("tool", "read"),
+    1234  // duration in ms
+);
+```
+
+**事件类型**：
+
+| 类型 | 说明 |
+|------|------|
+| `LOOP_START` | Agent 循环开始 |
+| `LOOP_END` | Agent 循环结束 |
+| `STATE_CHANGE` | 状态变化 |
+| `TOOL_CALL` | 工具调用开始 |
+| `TOOL_RESULT` | 工具调用结果 |
+| `LLM_CALL` | LLM 调用开始 |
+| `LLM_RESPONSE` | LLM 响应接收 |
+| `TEXT_CHUNK` | 流式文本块 |
+| `ITERATION` | 迭代计数 |
+| `ERROR` | 错误发生 |
 
 ## 下一步
 

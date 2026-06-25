@@ -30,6 +30,7 @@ import com.harness.types.*;
  * - LLM retry with exponential backoff and jitter
  * - Tool execution timeout protection
  * - Configurable retry count
+ * - Intelligent error handling with ErrorHandler
  */
 public class AgentLoop {
 
@@ -40,6 +41,7 @@ public class AgentLoop {
     private final ToolExecutor toolExecutor;
     private final ContextBuilder contextBuilder;
     private final LoopConfig config;
+    private final ErrorHandler errorHandler;
 
     private volatile LoopState state = LoopState.IDLE;
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
@@ -50,6 +52,7 @@ public class AgentLoop {
         this.toolExecutor = toolExecutor;
         this.config = config;
         this.contextBuilder = new ContextBuilder();
+        this.errorHandler = new ErrorHandler();
     }
 
     public AgentLoop(LLMClient llmClient, ToolExecutor toolExecutor) {
@@ -87,6 +90,7 @@ public class AgentLoop {
         interrupted.set(false);
         iteration.set(0);
         state = LoopState.IDLE;
+        errorHandler.reset();  // Reset error handler for new loop
 
         TokenUsage totalUsage = new TokenUsage();
 
@@ -173,43 +177,62 @@ public class AgentLoop {
     }
 
     /**
-     * Call LLM with retry and exponential backoff.
+     * Call LLM with retry and intelligent error handling.
      *
      * Retry strategy:
      * - Max retries from config.retryOnError()
-     * - Exponential backoff: min(2^attempt, 30) seconds
-     * - Random jitter: 0-500ms to prevent thundering herd
+     * - Uses ErrorHandler for intelligent delay (e.g., Retry-After header)
+     * - Fallback: exponential backoff with jitter
      *
      * @return LLMResponse or null if all retries failed
      */
     private LLMResponse callLLMWithRetry(ContextBuilder.Context context, List<LLMClient.ToolDefinition> tools) {
         int maxRetries = config.retryOnError();
-        Exception lastError = null;
 
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
                 return llmClient.call(context.messages(), tools, context.systemPrompt());
             } catch (Exception e) {
-                lastError = e;
                 logger.warn("LLM call failed (attempt {}/{}): {}",
                     attempt + 1, maxRetries, e.getMessage());
 
                 if (attempt < maxRetries - 1) {
-                    // Calculate backoff with jitter
-                    long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
-                    long jitterMs = random.nextLong(500);
-                    long delayMs = baseBackoffMs + jitterMs;
+                    // Build error context
+                    ErrorContext errorContext = ErrorContext.builder()
+                        .error(e)
+                        .iteration(iteration.get())
+                        .attempt(attempt + 1)
+                        .build();
 
-                    logger.info("Retrying in {}ms (backoff={}ms, jitter={}ms)",
-                        delayMs, baseBackoffMs, jitterMs);
+                    // Get intelligent decision from ErrorHandler
+                    ErrorDecision decision = errorHandler.handle(e, errorContext);
 
-                    try {
-                        Thread.sleep(delayMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        logger.warn("Retry sleep interrupted");
+                    if (decision.action() == ErrorAction.RETRY) {
+                        // Use ErrorHandler's delay or fallback to exponential backoff with jitter
+                        double delaySeconds;
+                        if (decision.delaySeconds() > 0) {
+                            delaySeconds = decision.delaySeconds();
+                        } else {
+                            // Exponential backoff with jitter (cap at 30s)
+                            long baseBackoffMs = Math.min((long) Math.pow(2, attempt) * 1000, 30_000);
+                            long jitterMs = random.nextLong(500);
+                            delaySeconds = (baseBackoffMs + jitterMs) / 1000.0;
+                        }
+
+                        logger.info("Retrying in {}s: {}", String.format("%.1f", delaySeconds), decision.message());
+
+                        try {
+                            Thread.sleep((long) (delaySeconds * 1000));
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            logger.warn("Retry sleep interrupted");
+                            break;
+                        }
+                    } else if (decision.action() == ErrorAction.ABORT) {
+                        logger.error("Error handler decided to abort: {}", decision.message());
                         break;
                     }
+                    // Other actions (SKIP, COMPRESS_CONTEXT, ESCALATE) not handled in LLM call
                 }
             }
         }

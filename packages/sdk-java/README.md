@@ -27,7 +27,19 @@ harness-sdk-java/
 - **AgentLoop**: ReAct 执行引擎，支持：
   - LLM 重试：配置化重试次数 + 指数退避 + 随机抖动
   - 工具超时：`timeoutPerTool` 强制超时保护
+  - 智能错误处理：`ErrorHandler` 根据错误类型智能决策
+  - 熔断器：`CircuitBreaker` 检测相同工具+参数重复调用
+  - 步骤预算：`StepBudgetController` 限制迭代和工具调用次数
   - 中断支持：可中断正在执行的循环
+- **生命周期钩子**:
+  - `HookPoint`: 钩子触发点（LLM 调用前后、工具执行前后等）
+  - `HookAction`: 钩子动作（CONTINUE、ABORT、RETRY、INJECT_MESSAGE 等）
+  - `HookContext`: 钩子上下文
+  - `HookResult`: 钩子返回结果
+- **进度事件**: `ProgressEvent`, `ProgressEventType` 跟踪 Agent 执行进度
+- **ErrorHandler**: 智能错误处理器，支持 Rate Limit、Context Overflow、Timeout 等错误类型的智能恢复
+- **CircuitBreaker**: 熔断器，检测无限循环
+- **StepBudgetController**: 步骤预算控制器
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
