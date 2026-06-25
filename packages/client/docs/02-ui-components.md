@@ -88,6 +88,38 @@ class MessageBubble(QWidget):
 - `adjustSize()` 让 QLabel 根据内容计算尺寸
 - 父控件使用 `Fixed` size policy 防止过度扩展
 
+### 消息气泡尺寸策略
+
+AI 消息和用户消息采用不同的尺寸策略，优化视觉布局：
+
+```python
+class MessageBubble(QWidget):
+    def __init__(self, role: str, content: str, max_width: int = 600):
+        # ...
+
+        if self._role == "assistant":
+            # AI 消息：水平扩展，填充可用空间
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self._content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            # 设置最小宽度（60% max_width），避免消息过窄
+            self.setMinimumWidth(int(self._max_width * 0.6))
+        else:
+            # 用户消息：收缩到内容宽度
+            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
+            self.setMinimumWidth(60)
+```
+
+**设计原理**：
+
+| 消息类型 | Size Policy | 行为 |
+|----------|-------------|------|
+| AI 消息 | `Preferred` × `Preferred` | 水平扩展，填充可用空间（有最小宽度） |
+| 用户消息 | `Maximum` × `MinimumExpanding` | 收缩到内容宽度，高度自适应 |
+
+**布局效果**：
+- AI 消息左对齐，占据较宽的空间，便于阅读代码和长文本
+- 用户消息右对齐，紧凑显示用户输入
+
 ## 主窗口 (MainWindow)
 
 主窗口是整个应用的容器，负责协调所有子组件。
