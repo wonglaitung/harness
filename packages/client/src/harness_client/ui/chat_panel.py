@@ -21,7 +21,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QPushButton,
     QScrollArea,
     QTextBrowser,
@@ -682,8 +681,6 @@ class MessagesContainer(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 16, 0, 16)
         self._layout.setSpacing(0)
-        # 布局只使用最小尺寸，不扩展
-        self._layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
@@ -697,6 +694,19 @@ class MessagesContainer(QWidget):
         except Exception:
             pass
 
+    def _update_height(self):
+        """更新容器高度以适应内容。"""
+        # 计算所有子组件的总高度
+        total_height = 32  # 上下 margin (16 + 16)
+        for i in range(self._layout.count()):
+            item = self._layout.itemAt(i)
+            if item and item.widget():
+                w = item.widget()
+                total_height += w.sizeHint().height()
+        # 同时设置最小和最大高度，防止被扩展
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
+
     def _on_theme_changed(self):
         """Handle theme change."""
         theme = get_theme()
@@ -707,6 +717,7 @@ class MessagesContainer(QWidget):
         """Add a message bubble."""
         row = MessageRow(content, role)
         self._layout.addWidget(row)
+        self._update_height()
 
     def add_tool_call(self, tool_name: str, arguments: dict):
         """Add a tool call indicator."""
@@ -717,6 +728,7 @@ class MessagesContainer(QWidget):
         layout.addWidget(indicator)
         layout.addStretch()
         self._layout.addWidget(container)
+        self._update_height()
 
     def add_tool_result(self, tool_name: str, success: bool = True):
         """Add a tool result indicator."""
@@ -727,6 +739,7 @@ class MessagesContainer(QWidget):
         layout.addWidget(indicator)
         layout.addStretch()
         self._layout.addWidget(container)
+        self._update_height()
 
     def add_thinking(self, message: str):
         """Add a thinking indicator."""
@@ -737,6 +750,7 @@ class MessagesContainer(QWidget):
         layout.addWidget(indicator)
         layout.addStretch()
         self._layout.addWidget(container)
+        self._update_height()
 
     def clear(self):
         """Clear all messages."""
