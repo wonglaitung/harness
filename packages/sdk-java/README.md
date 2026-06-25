@@ -30,16 +30,19 @@ harness-sdk-java/
   - 智能错误处理：`ErrorHandler` 根据错误类型智能决策
   - 熔断器：`CircuitBreaker` 检测相同工具+参数重复调用
   - 步骤预算：`StepBudgetController` 限制迭代和工具调用次数
+  - 成本控制：`CostController` 多级预算管理（Session/User/Global）
+  - 停滞检测：`StuckDetector` 语义相似度检测重复输出
   - 中断支持：可中断正在执行的循环
 - **生命周期钩子**:
   - `HookPoint`: 钩子触发点（LLM 调用前后、工具执行前后等）
   - `HookAction`: 钩子动作（CONTINUE、ABORT、RETRY、INJECT_MESSAGE 等）
   - `HookContext`: 钩子上下文
   - `HookResult`: 钩子返回结果
+- **流式处理**:
+  - `StreamingHandler`: 流式输出处理，支持背压控制
+  - `Chunk`/`ChunkType`: 流式块类型定义
 - **进度事件**: `ProgressEvent`, `ProgressEventType` 跟踪 Agent 执行进度
-- **ErrorHandler**: 智能错误处理器，支持 Rate Limit、Context Overflow、Timeout 等错误类型的智能恢复
-- **CircuitBreaker**: 熔断器，检测无限循环
-- **StepBudgetController**: 步骤预算控制器
+- **成本控制**: `CostConfig`, `BudgetStatus`, `UserBudgetStatus`, `GlobalBudgetStatus`
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
@@ -47,6 +50,7 @@ harness-sdk-java/
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl
 - **OpenAIClient**: OpenAI/兼容 API 客户端
+- **MockLLMClient**: 测试用 Mock 客户端，支持预定义响应
 
 ### harness-sdk-mcp
 - **McpManager**: MCP 服务器管理器，支持多服务器连接
