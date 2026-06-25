@@ -214,7 +214,83 @@ async def initialize(self):
 
 ## 二、关键踩坑教训
 
-### 0. Qt 布局机制深层理解（2026-06-07）⭐ 重点
+### 0. QScrollArea 布局陷阱（2026-06-25）⭐ 新增
+
+#### 问题现象
+
+对话框中 AI 回复后，AI 气泡和输入框之间有大块空白区域；或消息气泡高度远高于内容高度。
+
+#### 根因分析
+
+`QScrollArea.setWidgetResizable(True)` 会强制内部 widget 填满视口高度，即使设置了 `setAlignment(Qt.AlignmentFlag.AlignTop)` 也无效。
+
+#### 尝试过的方案
+
+| 方案 | 结果 |
+|------|------|
+| `setAlignment(AlignTop)` | ❌ 无效，widget 仍被扩展 |
+| `sizePolicy = Minimum` | ❌ 无效，被 setWidgetResizable 覆盖 |
+| `layout.setSizeConstraint(SetMinimumSize)` | ❌ 无效 |
+| `setWidgetResizable(False)` | ❌ widget 宽度变为 0，不可见 |
+| **`setMinimumHeight() + setMaximumHeight()`** | ✅ 成功 |
+
+#### 正确实现
+
+```python
+class MessagesContainer(QWidget):
+    def _update_height(self):
+        """更新容器高度以适应内容。"""
+        # 计算所有子组件的总高度
+        total_height = 32  # 上下 margin (16 + 16)
+        for i in range(self._layout.count()):
+            item = self._layout.itemAt(i)
+            if item and item.widget():
+                w = item.widget()
+                total_height += w.sizeHint().height()
+        # 同时设置最小和最大高度，防止被扩展
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
+
+    def add_message(self, content: str, role: str):
+        """Add a message bubble."""
+        row = MessageRow(content, role)
+        self._layout.addWidget(row)
+        self._update_height()  # 每次添加消息后更新高度
+```
+
+同时确保子组件的 sizePolicy 正确：
+
+```python
+class MessageBubble(QWidget):
+    def _setup_ui(self):
+        # 垂直方向使用 Minimum，高度适应内容
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+class MessageRow(QWidget):
+    def _setup_ui(self):
+        # MessageRow 高度应刚好适应内容，不扩展
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+```
+
+#### Qt 布局机制总结
+
+| 设置 | 行为 | 约束级别 |
+|------|------|----------|
+| `setWidgetResizable(True)` | widget 填满视口 | 覆盖 sizePolicy |
+| `setAlignment()` | widget 对齐方式 | 在 setWidgetResizable 下无效 |
+| `sizePolicy` | 尺寸策略 | 被 setWidgetResizable 覆盖 |
+| **`minimumHeight/maximumHeight`** | 尺寸硬约束 | **最高优先级** |
+
+#### 关键洞察
+
+- `setWidgetResizable(True)` 是"强约束"，会覆盖 sizePolicy
+- `setAlignment()` 在 `setWidgetResizable(True)` 时无效
+- **硬约束（maximumHeight）优先级最高**，是最终解决方案
+- 当软约束失效时，升级到硬约束
+
+---
+
+### 1. Qt 布局机制深层理解（2026-06-07）
 
 #### 问题现象
 
@@ -314,7 +390,7 @@ def debug_layout(widget):
 
 ---
 
-### 1. QThread + qasync 静默崩溃（2026-05-31）
+### 2. QThread + qasync 静默崩溃（2026-05-31）
 
 #### 症状
 
@@ -353,7 +429,7 @@ grep -r "asyncio.new_event_loop" packages/client/src/
 
 ---
 
-### 2. 会话状态分散问题（2026-05-31）
+### 3. 会话状态分散问题（2026-05-31）
 
 #### 症状
 
@@ -382,7 +458,7 @@ self._current_session_id: str
 
 ---
 
-### 3. QListWidgetItem 未设置数据（2026-05-31）
+### 4. QListWidgetItem 未设置数据（2026-05-31）
 
 #### 症状
 
@@ -402,7 +478,7 @@ self.session_list.addItem(current_item)
 
 ---
 
-### 4. 用户消息在第二轮迭代丢失（2026-06-06）
+### 5. 用户消息在第二轮迭代丢失（2026-06-06）
 
 #### 症状
 
@@ -427,7 +503,7 @@ if iteration == 0 and prompt:
 
 ---
 
-### 5. 达到迭代上限返回空回复（2026-06-07）
+### 6. 达到迭代上限返回空回复（2026-06-07）
 
 #### 症状
 
@@ -456,7 +532,7 @@ return LoopResult(
 
 ---
 
-### 6. QGridLayout 参数签名错误（2026-06-07）
+### 7. QGridLayout 参数签名错误（2026-06-07）
 
 #### 症状
 
@@ -494,7 +570,7 @@ layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
 
 ---
 
-### 7. 使用 Qt 内置组件替代自定义实现（2026-06-05）⭐ 推荐
+### 8. 使用 Qt 内置组件替代自定义实现（2026-06-05）⭐ 推荐
 
 #### 背景
 
@@ -687,36 +763,6 @@ self.mcp_section.set_collapsed(True)
 - 减少视觉干扰
 - 突出常用功能
 - 用户可随时展开
-
----
-
-### 8. 用轻量动画提升可读性
-
-在不引入复杂自定义绘制的前提下，用最小的动画增强状态感：
-
-- ChatPanel 使用平滑滚动，减少流式输出时的跳动感
-- Tool call / result 卡片使用更强的边框和光晕区分状态
-- RightPanel 折叠/展开加入淡入淡出，降低切换时的突兀感
-
-**设计考量**：
-- 动画只服务于阅读体验，不改变信息结构
-- 保持实现简单，避免把过多行为塞进控制器
-- 优先使用 Qt 与 QTextBrowser 能稳定支持的能力
-
----
-
-### 8. 用轻量动画提升可读性
-
-在不引入复杂自定义绘制的前提下，用最小的动画增强状态感：
-
-- ChatPanel 使用平滑滚动，减少流式输出时的跳动感
-- Tool call / result 卡片使用更强的边框和光晕区分状态
-- RightPanel 折叠/展开加入淡入淡出，降低切换时的突兀感
-
-**设计考量**：
-- 动画只服务于阅读体验，不改变信息结构
-- 保持实现简单，避免把过多行为塞进控制器
-- 优先使用 Qt 与 QTextBrowser 能稳定支持的能力
 
 ---
 
