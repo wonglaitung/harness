@@ -38,10 +38,53 @@ public record HookContext(
 ) {
 
     /**
+     * Compact constructor for common cases.
+     */
+    public HookContext(
+        HookPoint hookPoint,
+        String sessionId,
+        int iteration,
+        List<Message> messages,
+        LLMResponse llmResponse,
+        ToolCall toolCall
+    ) {
+        this(hookPoint, sessionId, iteration,
+            toolCall != null ? toolCall.name() : null,
+            toolCall != null ? toolCall.arguments() : null,
+            null, llmResponse, null, messages, Map.of());
+    }
+
+    /**
      * Create builder.
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Get the last user message from messages.
+     */
+    public String userMessage() {
+        if (messages == null || messages.isEmpty()) {
+            return null;
+        }
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Message msg = messages.get(i);
+            if ("user".equals(msg.role())) {
+                return msg.content();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get tool output from tool result.
+     */
+    public String toolOutput() {
+        if (toolResult == null) {
+            return null;
+        }
+        return toolResult.content();
     }
 
     public static class Builder {

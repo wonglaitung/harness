@@ -59,4 +59,17 @@ public interface Tool {
     default ToolCategory category() {
         return ToolCategory.GENERAL;
     }
+
+    /**
+     * Convert to tool definition for LLM API.
+     *
+     * @return Tool definition map
+     */
+    default Map<String, Object> toDefinition() {
+        return Map.of(
+            "name", name(),
+            "description", description(),
+            "input_schema", inputSchema()
+        );
+    }
 }

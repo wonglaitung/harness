@@ -50,6 +50,13 @@ public record ToolResult(
     }
 
     /**
+     * Create an error result (alias for failure).
+     */
+    public static ToolResult error(String toolCallId, String toolName, String error) {
+        return new ToolResult(toolCallId, false, null, error, toolName, Map.of());
+    }
+
+    /**
      * Convert to API format for Anthropic/OpenAI.
      */
     public Map<String, Object> toApiFormat() {

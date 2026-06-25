@@ -6,13 +6,8 @@ plugins {
 val junitVersion: String by extra
 
 dependencies {
-    api(project(":harness-sdk-core"))
-    api(project(":harness-sdk-llm"))
-    api(project(":harness-sdk-mcp"))
-    api(project(":harness-sdk-tools"))
-    api(project(":harness-sdk-memory"))
-    api(project(":harness-sdk-skills"))
-    api(project(":harness-sdk-security"))
+    // Integration module includes all other modules
+    api(project(":harness-sdk-integration"))
 
     // 测试
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")

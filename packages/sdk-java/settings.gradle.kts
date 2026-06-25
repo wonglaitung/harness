@@ -15,4 +15,5 @@ include("harness-sdk-tools")
 include("harness-sdk-memory")
 include("harness-sdk-skills")
 include("harness-sdk-security")
-// include("harness-sdk-all")  // Temporarily disabled - requires shadow plugin
+include("harness-sdk-integration")
+// include("harness-sdk-all")  // Requires shadow plugin

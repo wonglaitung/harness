@@ -4,18 +4,23 @@
 
 ## 项目状态
 
-✅ **Phase 3 完成** - MCP 集成已实现
+✅ **Phase 4 完成** - 完整功能同步（Python SDK → Java SDK）
+
+✅ **AgentLoop 完整集成** - 所有健壮性组件已集成到核心执行引擎
 
 ## 模块结构
 
 ```
 harness-sdk-java/
-├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop）
-├── harness-sdk-llm/       # LLM 客户端（Anthropic、OpenAI）
+├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop、AgentHarness）
+│   ├── guardrails/        # PII 检测和内容安全
+│   ├── service/           # Spring Cloud 集成（服务发现、Redis 会话、错误处理）
+│   └── testing/           # 测试工具（录制/回放）
+├── harness-sdk-llm/       # LLM 客户端（Anthropic、OpenAI、Routing）
 ├── harness-sdk-mcp/       # MCP 协议集成（STDIO、SSE）
 ├── harness-sdk-tools/     # 内置工具（Read, Write, Edit, Bash, Glob, Grep）
-├── harness-sdk-memory/    # 记忆系统（MEMORY.md 管理）
-├── harness-sdk-skills/    # 技能系统（Skill 加载）
+├── harness-sdk-memory/    # 记忆系统（MEMORY.md 管理、向量存储）
+├── harness-sdk-skills/    # 技能系统（Skill 加载、渐进式加载）
 ├── harness-sdk-security/  # 安全模块（沙箱、验证、审计）
 └── harness-sdk-all/       # 聚合模块（Shadow JAR）
 ```
@@ -24,20 +29,49 @@ harness-sdk-java/
 
 ### harness-sdk-core
 - **类型定义**: Message, Session, ToolCall, ToolResult, LLMResponse, LoopResult
+- **AgentHarness**: 统一 SDK 入口，整合所有组件
+  - `run()`: 执行 Agent
+  - `stream()`: 流式执行
+  - `registerTool()`: 注册工具
+  - `addHook()`: 添加生命周期钩子
+  - `loadSkillsFromDir()`: 加载技能
+- **HarnessConfig**: 统一配置管理，包含子配置：
+  - `SecurityConfig`: 安全配置
+  - `CostControlConfig`: 成本控制配置
+  - `ObservabilityConfig`: 可观测性配置
+  - `StorageConfig`: 存储配置
+  - `OffloadConfig`: 输出卸载配置
+  - `RoutingConfig`: LLM 路由配置
+- **ToolRegistry**: 工具注册表，支持启用/禁用、分类管理
 - **AgentLoop**: ReAct 执行引擎，支持：
   - LLM 重试：配置化重试次数 + 指数退避 + 随机抖动
   - 工具超时：`timeoutPerTool` 强制超时保护
   - 智能错误处理：`ErrorHandler` 根据错误类型智能决策
-  - 熔断器：`CircuitBreaker` 检测相同工具+参数重复调用
+  - 熔断器：`CircuitBreaker` 检测相同工具+参数重复调用，自动注入停止消息
   - 步骤预算：`StepBudgetController` 限制迭代和工具调用次数
   - 成本控制：`CostController` 多级预算管理（Session/User/Global）
-  - 停滞检测：`StuckDetector` 语义相似度检测重复输出
+  - 停滞检测：`StuckDetector` 空结果/错误/语义相似度检测，自动注入反馈
+  - 输出卸载：`OutputOffloader` 大工具输出自动卸载到临时文件
+  - 进度事件：完整的 `ProgressEvent` 发射和格式化
+  - 快照/恢复：`LoopSnapshot` 支持中断恢复
+  - 输入验证：集成 `InputValidator`
+  - 审计日志：集成 `AuditLogger`
   - 中断支持：可中断正在执行的循环
+  - 剩余步骤提示：接近迭代上限时自动注入提示
 - **生命周期钩子**:
   - `HookPoint`: 钩子触发点（LLM 调用前后、工具执行前后等）
   - `HookAction`: 钩子动作（CONTINUE、ABORT、RETRY、INJECT_MESSAGE 等）
   - `HookContext`: 钩子上下文
   - `HookResult`: 钩子返回结果
+- **SelfVerificationHook**: 代码修改后自动运行测试，失败则注入错误消息
+- **Guardrails 模块**: PII 检测和内容安全
+  - `GuardrailConfig`: 配置（含 StreamInterceptConfig、JudgeConfig）
+  - `GuardrailHook`: 生命周期钩子
+  - `PIIDetector`: PII 检测器
+  - `PIIEntity`: PII 实体
+  - `ComplianceJudge`: Layer 2 LLM 合规裁判
+  - `StreamInterceptor`: Token 级流式拦截器
+  - `GuardrailExceptions`: 自定义异常（ContentRiskException, JudgeTimeoutException 等）
 - **流式处理**:
   - `StreamingHandler`: 流式输出处理，支持背压控制
   - `Chunk`/`ChunkType`: 流式块类型定义
@@ -55,11 +89,19 @@ harness-sdk-java/
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
+- **ModelPresets**: 预定义模型配置（Claude, GPT, GLM, Qwen, DeepSeek 等）
+- **ProgressFormatter**: 进度事件格式化（simple, detailed, colored, emoji）
+- **LoopSnapshot**: 循环状态快照，支持中断/恢复
+- **CostStorage**: 多级预算追踪接口（InMemoryCostStorage, SQLiteCostStorage）
+- **ContextBudget**: Token 预算分配，支持优先级分配和压缩检测
+- **SessionManager**: 会话管理，支持文件持久化
 
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl
 - **OpenAIClient**: OpenAI/兼容 API 客户端
 - **MockLLMClient**: 测试用 Mock 客户端，支持预定义响应
+- **RoutingLLMClient**: 智能路由客户端，基于请求复杂度选择模型（高/低成本模型）
+- **LlamaCppClient**: 嵌入式 GGUF 模型客户端（用于路由决策，需 llama.cpp JNI）
 
 ### harness-sdk-mcp
 - **McpManager**: MCP 服务器管理器，支持多服务器连接
@@ -96,6 +138,17 @@ harness-sdk-java/
 - **SkillLoader**: 技能文件加载器，支持多路径搜索和自动发现
 - **SkillInjector**: 技能注入器，将匹配的技能注入系统提示
 - **InjectionConfig**: 注入配置
+- **ProgressiveSkillLoader**: 渐进式技能加载器，三级加载（Frontmatter/Full/References）节省上下文
+
+### harness-sdk-core/service
+- **ServiceDiscovery**: 服务发现，支持 Nacos/Eureka/静态配置
+- **RedisSessionStore**: Redis 分布式会话存储，支持 TTL 和分布式锁
+- **RedisDistributedLock**: 分布式锁，支持 AutoCloseable
+- **ServiceErrorHandler**: 统一错误处理，标准化 REST API 错误响应
+
+### harness-sdk-core/testing
+- **RecordingHarness**: 录制/回放测试工具
+- **RecordingConfig**: 录制配置
 
 ### harness-sdk-security
 - **InputValidator**: 输入验证，检测注入模式
@@ -105,6 +158,38 @@ harness-sdk-java/
 - **LightweightSandbox**: 轻量级沙箱
 - **AuditLogger**: 审计日志
 - **ResultSanitizer**: 输出脱敏
+
+## 快速开始
+
+```java
+import com.harness.core.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+
+// 方式 1：使用默认配置
+AgentHarness agent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey("your-api-key")
+    .build();
+
+LoopResult result = agent.run("Hello, Claude!").join();
+System.out.println(result.content());
+
+// 方式 2：使用完整配置
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .maxIterations(10)
+    .toolTimeout(30.0)
+    .security(HarnessConfig.SecurityConfig.builder()
+        .enableSandbox(true)
+        .build())
+    .build();
+
+AgentHarness agent = new AgentHarness(config);
+
+// 方式 3：从环境变量创建
+AgentHarness agent = AgentHarness.fromEnv();
+```
 
 ## 构建
 

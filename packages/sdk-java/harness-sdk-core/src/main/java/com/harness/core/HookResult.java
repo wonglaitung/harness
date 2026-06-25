@@ -80,6 +80,18 @@ public record HookResult(
     }
 
     /**
+     * Create a modify tool output result (shorthand for string output).
+     */
+    public static HookResult modifyToolOutput(String newOutput) {
+        return new HookResult(
+            HookAction.MODIFY_RESULT,
+            null,
+            new ToolResult("", true, newOutput, null),
+            null, 0, false, Map.of()
+        );
+    }
+
+    /**
      * Create a reinject result (for Ralph Loop).
      */
     public static HookResult reinject(boolean clearContext) {
