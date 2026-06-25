@@ -1054,3 +1054,82 @@ nacos = ["nacos-sdk-python>=0.1.11"]
 | - | Spring Cloud 集成 | ✅ |
 
 **所有 P0-P3 功能 + Spring Cloud 集成已完成！**
+
+## 2026-06-25
+
+### Chat Panel 消息气泡高度修复 ✅ 完成
+
+#### 问题背景
+对话框在 AI 回复后出现大块空白区域，消息气泡高度异常。
+
+#### 问题分析
+1. `QScrollArea.setWidgetResizable(True)` 会强制 widget 填满视口高度
+2. `setAlignment(Qt.AlignmentFlag.AlignTop)` 在 `setWidgetResizable(True)` 时无效
+3. `sizePolicy` 设置被 `setWidgetResizable` 行为覆盖
+
+#### 解决方案
+使用 `minimumHeight` + `maximumHeight` 硬约束控制容器高度：
+- `MessagesContainer._update_height()`: 手动计算内容高度
+- 每次添加消息后更新容器高度
+- 同时设置 min/max 高度防止被扩展
+
+```python
+def _update_height(self):
+    """更新容器高度以适应内容。"""
+    total_height = 32  # 上下 margin (16 + 16)
+    for i in range(self._layout.count()):
+        item = self._layout.itemAt(i)
+        if item and item.widget():
+            total_height += item.widget().sizeHint().height()
+    self.setMinimumHeight(total_height)
+    self.setMaximumHeight(total_height)
+```
+
+同时修复子组件的 sizePolicy：
+- `MessageBubble`: 垂直方向 `Minimum`
+- `MessageRow`: 垂直方向 `Minimum`
+
+#### 提交记录
+- fix(client): remove whitespace gap between AI response and input box (047bb51)
+- fix(client): use Minimum vertical sizePolicy for message bubbles (c5f326d)
+- fix(client): set Maximum vertical sizePolicy on MessagesContainer (c4677c6)
+- fix(client): use SetMinimumSize constraint for MessagesContainer layout (35d4dcf)
+- fix(client): set both minimumHeight and maximumHeight for MessagesContainer (d486989)
+
+#### 文档更新
+- `packages/client/docs/05-client-lessons.md`: 添加 QScrollArea 布局陷阱章节
+
+---
+
+## 当前状态总结
+
+### Harness SDK 功能状态
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+| - | Spring Cloud 集成 | ✅ |
+
+**所有 P0-P3 功能 + Spring Cloud 集成已完成！**
+
+### Harness Client 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| 3-column UI layout | ✅ |
+| 技能系统 UI | ✅ |
+| MCP 服务器管理 | ✅ |
+| 工作区文件树 | ✅ |
+| 技能自动补全 | ✅ |
+| 统一配置目录 (~/.harness) | ✅ |
+| 会话管理 | ✅ |
+| 消息气泡高度正确 | ✅ |

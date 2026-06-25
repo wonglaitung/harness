@@ -4,6 +4,77 @@
 
 ---
 
+## 2026-06-25: QScrollArea 布局陷阱 - setWidgetResizable 覆盖行为
+
+### 问题
+
+对话框中 AI 回复后，AI 气泡和输入框之间有大块空白区域；或消息气泡高度远高于内容高度。
+
+### 根因分析
+
+`QScrollArea.setWidgetResizable(True)` 会强制内部 widget 填满视口高度，即使设置了：
+- `setAlignment(Qt.AlignmentFlag.AlignTop)` - 无效
+- `sizePolicy = Minimum` - 被覆盖
+- `layout.setSizeConstraint(SetMinimumSize)` - 被忽略
+
+**Qt 布局优先级**：
+| 设置 | 行为 | 约束级别 |
+|------|------|----------|
+| `setWidgetResizable(True)` | widget 填满视口 | 覆盖 sizePolicy |
+| `setAlignment()` | widget 对齐方式 | 在 setWidgetResizable 下无效 |
+| `sizePolicy` | 尺寸策略 | 被 setWidgetResizable 覆盖 |
+| **`minimumHeight/maximumHeight`** | 尺寸硬约束 | **最高优先级** |
+
+### 解决方案
+
+使用 `minimumHeight` + `maximumHeight` 硬约束控制高度：
+
+```python
+class MessagesContainer(QWidget):
+    def _update_height(self):
+        """更新容器高度以适应内容。"""
+        total_height = 32  # 上下 margin
+        for i in range(self._layout.count()):
+            item = self._layout.itemAt(i)
+            if item and item.widget():
+                total_height += item.widget().sizeHint().height()
+        # 同时设置最小和最大高度，防止被扩展
+        self.setMinimumHeight(total_height)
+        self.setMaximumHeight(total_height)
+
+    def add_message(self, content: str, role: str):
+        row = MessageRow(content, role)
+        self._layout.addWidget(row)
+        self._update_height()  # 每次添加消息后更新高度
+```
+
+同时确保子组件的 sizePolicy 正确：
+
+```python
+class MessageBubble(QWidget):
+    def _setup_ui(self):
+        # 垂直方向使用 Minimum，高度适应内容
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+class MessageRow(QWidget):
+    def _setup_ui(self):
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+```
+
+### 教训
+
+1. **`setWidgetResizable(True)` 是强约束**：会覆盖 sizePolicy 和 setAlignment
+2. **`setAlignment()` 在 `setWidgetResizable(True)` 时无效**：不要依赖它来对齐
+3. **硬约束优先级最高**：`minimumHeight/maximumHeight` 是最终解决方案
+4. **当软约束失效时，升级到硬约束**：调试布局问题时，从 sizePolicy 升级到 setFixedHeight 或 min/max 约束
+
+### 参考
+
+- [QScrollArea Documentation](https://doc.qt.io/qt-6/qscrollarea.html)
+- 关键文件：`packages/client/src/harness_client/ui/chat_panel.py`
+
+---
+
 ## 2026-06-11: PyQt6 组件选择 - QLabel vs QTextBrowser
 
 ### 问题
