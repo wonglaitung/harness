@@ -46,6 +46,11 @@ harness-sdk-java/
 - **MetricsCollector**: Prometheus 指标收集器，支持迭代、工具调用、Token 使用追踪
 - **TracingManager**: OpenTelemetry 追踪管理器，支持 W3C TraceContext 传播
 - **TracingFilter**: HTTP 过滤器，支持 Spring Cloud Gateway 集成
+- **RalphLoopHook**: 长任务循环续接，防止上下文焦虑导致的提前退出
+- **LifecycleHook**: 生命周期钩子接口
+- **OutputOffloader**: 大输出卸载到临时文件，保护上下文窗口
+- **PermissionSet**: 细粒度权限控制（路径、命令、网络）
+- **MockHarness**: 完整测试 Harness，支持预定义响应
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
@@ -78,6 +83,9 @@ harness-sdk-java/
 - **ContextCompressor**: 上下文压缩器，支持消息摘要和保留最近消息
 - **CompressionConfig**: 压缩配置
 - **CompressionResult**: 压缩结果
+- **SystemPromptBuilder**: 动态系统提示组装，支持 AGENTS.md/MEMORY.md
+- **SystemPromptConfig**: 系统提示配置
+- **SystemPromptSource**: 系统提示源
 
 ### harness-sdk-skills
 - **SkillRegistry**: 技能文件加载和管理
