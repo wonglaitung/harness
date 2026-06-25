@@ -44,6 +44,8 @@ harness-sdk-java/
 - **进度事件**: `ProgressEvent`, `ProgressEventType` 跟踪 Agent 执行进度
 - **成本控制**: `CostConfig`, `BudgetStatus`, `UserBudgetStatus`, `GlobalBudgetStatus`
 - **MetricsCollector**: Prometheus 指标收集器，支持迭代、工具调用、Token 使用追踪
+- **TracingManager**: OpenTelemetry 追踪管理器，支持 W3C TraceContext 传播
+- **TracingFilter**: HTTP 过滤器，支持 Spring Cloud Gateway 集成
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
