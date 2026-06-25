@@ -3,6 +3,7 @@ package com.harness.skills;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -160,5 +161,89 @@ public class SkillRegistry {
      */
     public void registerSkill(Skill skill) {
         skills.put(skill.name(), skill);
+    }
+
+    /**
+     * Find skills that match the user input.
+     *
+     * @param userInput User's input text
+     * @return List of matching skills
+     */
+    public List<Skill> findMatchingSkills(String userInput) {
+        if (userInput == null || userInput.isEmpty()) {
+            return List.of();
+        }
+
+        String lowerInput = userInput.toLowerCase();
+        List<Skill> matching = new ArrayList<>();
+
+        for (Skill skill : skills.values()) {
+            SkillMetadata meta = skill.metadata();
+            if (meta == null) continue;
+
+            // Check triggers
+            List<String> triggers = meta.triggers();
+            if (triggers != null) {
+                for (String trigger : triggers) {
+                    if (lowerInput.contains(trigger.toLowerCase())) {
+                        matching.add(skill);
+                        break;
+                    }
+                }
+            }
+
+            // Check if skill name appears in input
+            if (lowerInput.contains(skill.name().toLowerCase())) {
+                matching.add(skill);
+            }
+        }
+
+        return matching;
+    }
+
+    /**
+     * Get all active skills.
+     *
+     * @return List of skills marked as always active
+     */
+    public List<Skill> getActiveSkills() {
+        List<Skill> active = new ArrayList<>();
+        for (Skill skill : skills.values()) {
+            if (skill.metadata() != null && skill.metadata().active()) {
+                active.add(skill);
+            }
+        }
+        return active;
+    }
+
+    /**
+     * Check if a tool is allowed based on active/matching skills.
+     *
+     * @param toolName Name of the tool
+     * @return True if the tool is allowed
+     */
+    public boolean isToolAllowed(String toolName) {
+        // If no active skills, allow all tools
+        List<Skill> activeSkills = getActiveSkills();
+        if (activeSkills.isEmpty()) {
+            return true;
+        }
+
+        // Check if any active skill allows this tool
+        for (Skill skill : activeSkills) {
+            SkillMetadata meta = skill.metadata();
+            if (meta == null) continue;
+
+            List<String> tools = meta.tools();
+            if (tools == null || tools.isEmpty()) {
+                // No tool restriction for this skill
+                return true;
+            }
+            if (tools.contains(toolName)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

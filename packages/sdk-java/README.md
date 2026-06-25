@@ -43,6 +43,7 @@ harness-sdk-java/
   - `Chunk`/`ChunkType`: 流式块类型定义
 - **进度事件**: `ProgressEvent`, `ProgressEventType` 跟踪 Agent 执行进度
 - **成本控制**: `CostConfig`, `BudgetStatus`, `UserBudgetStatus`, `GlobalBudgetStatus`
+- **MetricsCollector**: Prometheus 指标收集器，支持迭代、工具调用、Token 使用追踪
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
 - **LoopConfig**: 循环配置，支持 Builder 模式
@@ -72,10 +73,17 @@ harness-sdk-java/
 - **MemoryCategory**: 记忆类别枚举，支持 `getValue()` / `fromValue()` 方法
 - **MemoryEntry**: 记忆条目
 - **SessionManager**: 会话持久化
+- **ContextCompressor**: 上下文压缩器，支持消息摘要和保留最近消息
+- **CompressionConfig**: 压缩配置
+- **CompressionResult**: 压缩结果
 
 ### harness-sdk-skills
-- **SkillRegistry**: 技能文件加载
+- **SkillRegistry**: 技能文件加载和管理
 - **Skill**: 技能定义
+- **SkillMetadata**: 技能元数据（描述、版本、工具、触发器）
+- **SkillLoader**: 技能文件加载器，支持多路径搜索和自动发现
+- **SkillInjector**: 技能注入器，将匹配的技能注入系统提示
+- **InjectionConfig**: 注入配置
 
 ### harness-sdk-security
 - **InputValidator**: 输入验证，检测注入模式
