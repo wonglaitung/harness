@@ -218,15 +218,16 @@ class MessageBubble(QWidget):
             self._calculate_width()
 
         # Size policy: AI messages should expand horizontally, user messages shrink to content
+        # Vertical direction: both should be Minimum to fit content height
         if self._role == "assistant":
             # AI messages: expand to a reasonable width (up to max_width)
-            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            self._content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            self._content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             # Set a reasonable minimum width for AI messages (60% of max_width)
             self.setMinimumWidth(int(self._max_width * 0.6))
         else:
             # User messages: shrink to content width
-            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.MinimumExpanding)
+            self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
             self.setMinimumWidth(60)
 
     def _calculate_width(self):
@@ -483,9 +484,13 @@ class MessageRow(QWidget):
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(10)
 
+        # MessageRow 高度应刚好适应内容，不扩展
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
         # Create bubble and save as instance variable for theme updates
         self._bubble = MessageBubble(self._content, self._role)
         self._bubble.setMaximumWidth(800 if self._role == "assistant" else 450)
+        # Bubble 高度适应内容
         self._bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         if self._role == "user":
