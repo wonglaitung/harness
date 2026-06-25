@@ -62,7 +62,12 @@
 
 ## 2026-06-25 提取
 
+## 2026-06-26 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **peerd — 浏览器原生 Agent 运行时** - https://github.com/NotASithLord/peerd
 
 ### 新范式/工具
 - **Daybreak Codex Security — AI驱动的安全补丁闭环** - https://openai.com/index/daybreak-securing-the-world
