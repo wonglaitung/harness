@@ -676,9 +676,7 @@ class MessagesContainer(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 16, 0, 16)
         self._layout.setSpacing(0)
-        # Align content to top
-        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._layout.addStretch(1)
+        # 对齐由 QScrollArea.setAlignment() 控制，不再需要 addStretch
 
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
@@ -701,7 +699,7 @@ class MessagesContainer(QWidget):
     def add_message(self, content: str, role: str):
         """Add a message bubble."""
         row = MessageRow(content, role)
-        self._layout.insertWidget(self._layout.count() - 1, row)
+        self._layout.addWidget(row)
 
     def add_tool_call(self, tool_name: str, arguments: dict):
         """Add a tool call indicator."""
@@ -711,7 +709,7 @@ class MessagesContainer(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.addWidget(indicator)
         layout.addStretch()
-        self._layout.insertWidget(self._layout.count() - 1, container)
+        self._layout.addWidget(container)
 
     def add_tool_result(self, tool_name: str, success: bool = True):
         """Add a tool result indicator."""
@@ -721,7 +719,7 @@ class MessagesContainer(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.addWidget(indicator)
         layout.addStretch()
-        self._layout.insertWidget(self._layout.count() - 1, container)
+        self._layout.addWidget(container)
 
     def add_thinking(self, message: str):
         """Add a thinking indicator."""
@@ -731,11 +729,11 @@ class MessagesContainer(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.addWidget(indicator)
         layout.addStretch()
-        self._layout.insertWidget(self._layout.count() - 1, container)
+        self._layout.addWidget(container)
 
     def clear(self):
         """Clear all messages."""
-        while self._layout.count() > 1:
+        while self._layout.count() > 0:
             item = self._layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
@@ -832,6 +830,7 @@ class ChatPanel(QWidget):
         # Chat display area with scroll
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
+        scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop)  # Widget 对齐到顶部，避免空白区域
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet(f"""
