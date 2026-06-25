@@ -683,6 +683,9 @@ class MessagesContainer(QWidget):
         self._layout.setSpacing(0)
         # 对齐由 QScrollArea.setAlignment() 控制，不再需要 addStretch
 
+        # 高度由内容决定，不扩展填满视口
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+
         theme = get_theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
 
@@ -834,8 +837,8 @@ class ChatPanel(QWidget):
 
         # Chat display area with scroll
         scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(False)  # 让 widget 保持自然大小，不扩展填满视口
-        scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop)  # Widget 对齐到顶部
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setStyleSheet(f"""
