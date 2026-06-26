@@ -438,3 +438,9 @@ You are a code reviewer. Your task is to:
 - [OpenHarness](https://github.com/HKUDS/OpenHarness)
 - [Anthropic Tool Use](https://docs.anthropic.com/en/docs/tool-use)
 - [The Bitter Lesson - Rich Sutton](http://www.incompleteideas.net/IncIdeas/BitterLesson.html)
+
+## 下一步
+
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop 核心循环
+- [03-tool-system.md](./03-tool-system.md) - 了解工具系统
+- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

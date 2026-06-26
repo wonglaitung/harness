@@ -948,3 +948,9 @@ pip install akshare>=1.12.0 yfinance>=0.2.0 pandas>=2.0.0
 | `pandas` | 数据处理 | - |
 
 **注意**：AkShare 使用东方财富数据源，由开源社区维护，API 稳定性高。
+
+## 下一步
+
+- [01-overview.md](./01-overview.md) - 了解 Scraper 整体架构
+- [02-agent-design.md](./02-agent-design.md) - 了解 Agent 设计
+- [04-skills.md](./04-skills.md) - 了解技能系统

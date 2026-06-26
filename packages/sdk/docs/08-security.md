@@ -1134,3 +1134,9 @@ Layer 1 使用 `PatternRecognizer`（正则表达式 + 上下文关键词）检�
 - Guardrails (Layer 1) + InputValidator + Sandbox：基础安全配置
 - 添加 ConfirmationHook：需要用户确认的场景
 - 添加 Guardrails (Layer 2)：高安全要求的场景
+
+## 下一步
+
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [03-tool-system.md](./03-tool-system.md) - 了解工具系统
+- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

@@ -469,3 +469,9 @@ on:
 ls packages/scraper/output/$(date +%Y-%m-%d)/ai/
 ls packages/scraper/output/$(date +%Y-%m-%d)/stocks/
 ```
+
+## 下一步
+
+- [01-overview.md](./01-overview.md) - 了解 Scraper 整体架构
+- [04-skills.md](./04-skills.md) - 了解技能系统
+- [05-cli.md](./05-cli.md) - 了解 CLI 使用

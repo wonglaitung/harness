@@ -283,3 +283,9 @@ await agent.triggers.get_trigger("daily-report").stop()
 # 停止所有触发器
 await agent.triggers.stop_all()
 ```
+
+## 下一步
+
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

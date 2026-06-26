@@ -692,3 +692,9 @@ def closeEvent(self, event):
     self.chat_panel.message_sent.disconnect(self._on_message_sent)
     super().closeEvent(event)
 ```
+
+## 下一步
+
+- [01-overview.md](./01-overview.md) - 了解客户端整体架构
+- [03-controllers.md](./03-controllers.md) - 了解控制器层设计
+- [04-configuration.md](./04-configuration.md) - 了解配置管理

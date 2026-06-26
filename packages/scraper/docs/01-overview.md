@@ -319,3 +319,9 @@ Scraper **不重复实现** SDK 已有的功能：
 - [Harness SDK 文档](../../sdk/docs/)
 - [plan.md](./plan.md) - 原始设计计划
 - [AgentHarness 架构](../../sdk/docs/02-agent-loop.md)
+
+## 下一步
+
+- [02-agent-design.md](./02-agent-design.md) - IntelAgent 设计
+- [03-tools.md](./03-tools.md) - 工具系统
+- [04-skills.md](./04-skills.md) - 技能系统

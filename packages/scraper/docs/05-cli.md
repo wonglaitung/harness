@@ -421,3 +421,9 @@ CI 工作流会发送两封邮件：
 2. **港股异动日报** - 包含 `stocks/` 目录下的 One-Pagers
 
 邮件使用 HTML 格式，支持 Markdown 渲染（表格、列表、链接）。
+
+## 下一步
+
+- [01-overview.md](./01-overview.md) - 了解 Scraper 整体架构
+- [04-skills.md](./04-skills.md) - 了解技能系统
+- [06-configuration.md](./06-configuration.md) - 了解配置说明

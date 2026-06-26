@@ -1105,3 +1105,9 @@ Agent 内部推理:
 | **淘汰粒度** | Entry 级别（跨 section） | 不淘汰，只降权 |
 | **importance 来源** | LLM 评估（可选） | 从 Core Memory 归档时继承 |
 | **无向量数据库时** | 归档到 MEMORY_ARCHIVE.md | 不适用 |
+
+## 下一步
+
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [03-tool-system.md](./03-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
+- [05-skills-system.md](./05-skills-system.md) - 了解技能系统

@@ -476,3 +476,9 @@ await mcp_manager.disconnect_all()
 | 工具调用超时 | 返回 ToolResult(error="MCP timeout") |
 | 服务器崩溃 | 自动重连（最多 3 次） |
 | 工具不存在 | 返回 ToolResult(error="Tool not found") |
+
+## 下一步
+
+- [03-tool-system.md](./03-tool-system.md) - 了解工具系统（MCP 工具包装器）
+- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
+- [08-security.md](./08-security.md) - 了解安全设计

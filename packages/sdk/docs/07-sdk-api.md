@@ -1259,3 +1259,9 @@ from harness.service import (
     EUREKA_AVAILABLE,      # 始终 True (HTTP API)
 )
 ```
+
+## 下一步
+
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [08-security.md](./08-security.md) - 了解安全设计
+- [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成

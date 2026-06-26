@@ -624,3 +624,9 @@ class MemoryController(QObject):
 # UI 连接信号
 self.memory_controller.memory_changed.connect(self._on_memory_changed)
 ```
+
+## 下一步
+
+- [01-overview.md](./01-overview.md) - 了解客户端整体架构
+- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计
+- [04-configuration.md](./04-configuration.md) - 了解配置管理
