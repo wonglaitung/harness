@@ -10,22 +10,22 @@ from pathlib import Path
 # SDK imports
 from harness import (
     AgentHarness,
+    ConfirmationResult,
     HarnessConfig,
     ProgressEvent,
     ProgressEventType,
-    ConfirmationResult,
 )
-from harness.core import ConfirmationHook, get_trust_key
+from harness.core import ConfirmationHook
 from harness.tools.builtins import (
     BashTool,
     GlobTool,
     GrepTool,
     ReadTool,
-    WriteTool,
-    WebSearchTool,
-    WebFetchTool,
-    WebToMarkdownTool,
     UpdateCoreMemoryTool,
+    WebFetchTool,
+    WebSearchTool,
+    WebToMarkdownTool,
+    WriteTool,
 )
 
 from harness_client.controllers.session_manager import SessionManager
@@ -47,6 +47,14 @@ class ChatConfig:
     temperature: float = 0.3  # Lower = more deterministic
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
     auto_update_memory: bool = True  # Allow agent to autonomously update Core Memory
+
+    # Routing configuration (智能路由，根据请求复杂度选择模型)
+    enable_routing: bool = False  # 是否启用路由
+    high_model: str = ""  # 高能力模型（如 gpt-4o）
+    low_model: str = ""  # 低成本模型（如 gpt-4o-mini）
+    router_model_path: str = ""  # 路由器模型路径（GGUF 文件）
+    router_url: str = ""  # HTTP 路由服务 URL
+
     system_prompt: str = """你是一个有帮助的 AI 助手。
 
 ## 核心规则
@@ -186,7 +194,10 @@ class ChatController:
             memory_md_path=get_config_dir() / "MEMORY.md",
         )
 
-        logger.info(f"SDK config: provider={sdk_config.provider}, base_url={sdk_config.base_url}, temperature={sdk_config.temperature}")
+        logger.info(
+            f"SDK config: provider={sdk_config.provider}, "
+            f"base_url={sdk_config.base_url}, temperature={sdk_config.temperature}"
+        )
 
         tools = [
             ReadTool(),
@@ -215,10 +226,15 @@ class ChatController:
             logger.info("Added UpdateCoreMemoryTool (auto_update_memory enabled)")
 
         logger.info("Creating AgentHarness...")
-        self.agent = AgentHarness(
-            config=sdk_config,
-            tools=tools,
-        )
+
+        # Check if routing is enabled
+        if self.config.enable_routing:
+            self.agent = await self._create_routing_agent(sdk_config, tools)
+        else:
+            self.agent = AgentHarness(
+                config=sdk_config,
+                tools=tools,
+            )
 
         # Add confirmation hook if callback is set
         if self._confirm_callback:
@@ -245,6 +261,66 @@ class ChatController:
             logger.info("ConfirmationHook registered with session trust support")
 
         logger.info("AgentHarness created successfully")
+
+    async def _create_routing_agent(self, sdk_config: HarnessConfig, tools: list):
+        """Create AgentHarness with RoutingLLMClient."""
+        from harness.llm.routing import RoutingLLMClient
+        from harness.sdk.config import RoutingConfig
+
+        # Validate routing configuration
+        if not self.config.high_model:
+            raise ValueError("启用路由时，必须配置高级模型")
+        if not self.config.low_model:
+            raise ValueError("启用路由时，必须配置基础模型")
+        if not self.config.router_model_path and not self.config.router_url:
+            raise ValueError("启用路由时，必须配置路由器模型路径或服务 URL")
+
+        routing_config = RoutingConfig(
+            high_model=self.config.high_model,
+            low_model=self.config.low_model,
+            router_model_path=self.config.router_model_path or None,
+            router_url=self.config.router_url or None,
+        )
+
+        # Create downstream clients
+        high_client = self._create_llm_client(self.config.high_model)
+        low_client = self._create_llm_client(self.config.low_model)
+
+        logger.info(
+            f"Creating RoutingLLMClient: high={self.config.high_model}, "
+            f"low={self.config.low_model}"
+        )
+
+        routing_client = RoutingLLMClient(
+            config=routing_config,
+            high_client=high_client,
+            low_client=low_client,
+            on_progress=self._on_progress,
+        )
+
+        return AgentHarness(
+            llm_client=routing_client,
+            config=sdk_config,
+            tools=tools,
+        )
+
+    def _create_llm_client(self, model: str):
+        """Create LLM client for the specified model."""
+        from harness.llm.anthropic import AnthropicClient
+        from harness.llm.openai import OpenAIClient
+
+        if self.config.provider == "anthropic":
+            return AnthropicClient(
+                model=model,
+                api_key=self.config.api_key,
+                base_url=self.config.base_url or None,
+            )
+        else:
+            return OpenAIClient(
+                model=model,
+                api_key=self.config.api_key,
+                base_url=self.config.base_url or None,
+            )
 
     async def send_message(self, message: str) -> AsyncIterator[str]:
         """

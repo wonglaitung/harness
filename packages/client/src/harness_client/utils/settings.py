@@ -75,6 +75,12 @@ class AppSettings:
     work_dir: str = ""
     remember_dir: bool = True
     theme_mode: str = "auto"  # "auto", "light", "dark"
+    # Routing settings
+    enable_routing: bool = False
+    high_model: str = ""
+    low_model: str = ""
+    router_model_path: str = ""
+    router_url: str = ""
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -98,6 +104,12 @@ class AppSettings:
             work_dir=data.get("work_dir", ""),
             remember_dir=data.get("remember_dir", True),
             theme_mode=data.get("theme_mode", "auto"),
+            # Routing settings
+            enable_routing=data.get("enable_routing", False),
+            high_model=data.get("high_model", ""),
+            low_model=data.get("low_model", ""),
+            router_model_path=data.get("router_model_path", ""),
+            router_url=data.get("router_url", ""),
         )
 
 

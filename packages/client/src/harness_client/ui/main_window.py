@@ -11,11 +11,8 @@ from PyQt6.QtGui import QAction, QFont, QFontDatabase, QIcon
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
     QDialog,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -27,11 +24,11 @@ from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.memory_controller import MemoryController
 from harness_client.controllers.skill_controller import SkillController
+from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.right_panel import RightPanel
 from harness_client.ui.sidebar import SidebarPanel
 from harness_client.utils.settings import SettingsManager
-from harness_client.themes import register_theme_listener, unregister_theme_listener, get_theme
 
 # Configure logging
 logging.basicConfig(
@@ -134,7 +131,8 @@ class MainWindow(QMainWindow):
     def _set_window_icon(self):
         """Set window icon from SVG file."""
         import sys
-        from PyQt6.QtGui import QPixmap, QPainter
+
+        from PyQt6.QtGui import QPainter, QPixmap
 
         # In PyInstaller bundle, resources are in sys._MEIPASS
         if getattr(sys, 'frozen', False):
@@ -547,6 +545,12 @@ class MainWindow(QMainWindow):
             max_iterations=settings.get("max_iterations", 20),
             tool_result_role=settings.get("tool_result_role", "tool"),
             auto_update_memory=settings.get("auto_update_memory", True),
+            # Routing settings
+            enable_routing=settings.get("enable_routing", False),
+            high_model=settings.get("high_model", ""),
+            low_model=settings.get("low_model", ""),
+            router_model_path=settings.get("router_model_path", ""),
+            router_url=settings.get("router_url", ""),
         )
         self.chat_controller.configure(chat_config)
 
@@ -556,7 +560,6 @@ class MainWindow(QMainWindow):
 
         # Apply theme change if needed
         theme_mode = settings.get("theme_mode", "auto")
-        from harness_client.themes import set_theme_mode
 
         set_theme_mode(theme_mode)
 
@@ -577,6 +580,12 @@ class MainWindow(QMainWindow):
             temperature=settings.temperature,
             tool_result_role=settings.tool_result_role,
             auto_update_memory=settings.auto_update_memory,
+            # Routing settings
+            enable_routing=getattr(settings, "enable_routing", False),
+            high_model=getattr(settings, "high_model", ""),
+            low_model=getattr(settings, "low_model", ""),
+            router_model_path=getattr(settings, "router_model_path", ""),
+            router_url=getattr(settings, "router_url", ""),
         )
         self.chat_controller.configure(chat_config)
 
@@ -778,9 +787,9 @@ class MainWindow(QMainWindow):
 
     def _on_add_skill(self):
         """Handle add skill button click."""
+
         from harness_client.ui.skill_dialog import SkillEditDialog
         from harness_client.utils.settings import get_config_dir
-        from pathlib import Path
 
         dialog = SkillEditDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -863,6 +872,7 @@ class MainWindow(QMainWindow):
     def _on_memory_add(self, category_name: str):
         """Handle add memory entry request."""
         from harness.memory.memory_file import MemoryCategory
+
         from harness_client.ui.memory_panel import AddEntryDialog
 
         # Get display name
@@ -879,6 +889,7 @@ class MainWindow(QMainWindow):
     def _on_memory_edit(self, category_name: str, index: int):
         """Handle edit memory entry request."""
         from harness.memory.memory_file import MemoryCategory
+
         from harness_client.ui.memory_panel import AddEntryDialog
 
         category = MemoryCategory(category_name)
@@ -924,7 +935,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close - cleanup resources properly."""
-        import asyncio
 
         # Unregister theme listener
         try:

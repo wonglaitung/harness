@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme, ThemeMode
+from harness_client.themes import get_theme
 
 
 class SettingsDialog(QDialog):
@@ -196,6 +196,75 @@ class SettingsDialog(QDialog):
 
         tabs.addTab(dir_tab, "目录")
 
+        # Routing tab (智能路由配置)
+        routing_tab = QWidget()
+        routing_layout = QFormLayout(routing_tab)
+
+        # Enable routing checkbox
+        self.enable_routing_check = QCheckBox("启用智能路由")
+        self.enable_routing_check.setToolTip(
+            "使用 CPU 模型自动选择最合适的 LLM，降低 API 成本。\n"
+            "简单请求使用低成本模型，复杂请求使用高能力模型。"
+        )
+        routing_layout.addRow(self.enable_routing_check)
+
+        # High model selection
+        self.high_model_combo = QComboBox()
+        self.high_model_combo.setEditable(True)
+        self.high_model_combo.addItems([
+            "gpt-4o",
+            "gpt-4-turbo",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "deepseek-chat",
+            "qwen-max",
+        ])
+        self.high_model_combo.setCurrentText("")
+        self.high_model_combo.lineEdit().setPlaceholderText("选择或输入高级模型名称")
+        routing_layout.addRow("高级模型:", self.high_model_combo)
+
+        # Low model selection
+        self.low_model_combo = QComboBox()
+        self.low_model_combo.setEditable(True)
+        self.low_model_combo.addItems([
+            "gpt-4o-mini",
+            "gpt-3.5-turbo",
+            "claude-haiku-4-5",
+            "deepseek-chat",
+            "qwen-plus",
+        ])
+        self.low_model_combo.setCurrentText("")
+        self.low_model_combo.lineEdit().setPlaceholderText("选择或输入基础模型名称")
+        routing_layout.addRow("基础模型:", self.low_model_combo)
+
+        # Router model path (local GGUF)
+        self.router_path_edit = QLineEdit()
+        self.router_path_edit.setPlaceholderText("本地 GGUF 模型文件路径")
+        router_path_btn = QPushButton("浏览...")
+        router_path_btn.clicked.connect(self._browse_router_path)
+        router_path_layout = QHBoxLayout()
+        router_path_layout.addWidget(self.router_path_edit)
+        router_path_layout.addWidget(router_path_btn)
+        routing_layout.addRow("路由器模型:", router_path_layout)
+
+        # Router URL (HTTP service)
+        self.router_url_edit = QLineEdit()
+        self.router_url_edit.setPlaceholderText("或使用 HTTP 服务 (如 http://localhost:8080)")
+        routing_layout.addRow("路由服务 URL:", self.router_url_edit)
+
+        # Help text
+        routing_help = QLabel(
+            "💡 路由功能说明：\n"
+            "• 简单请求（问答、查询、翻译）→ 基础模型\n"
+            "• 复杂请求（推理、代码生成、分析）→ 高级模型\n"
+            "• 需要准备路由器模型（如 Qwen2.5-1.5B GGUF 文件）"
+        )
+        routing_help.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
+        routing_help.setWordWrap(True)
+        routing_layout.addRow(routing_help)
+
+        tabs.addTab(routing_tab, "路由")
+
         layout.addWidget(tabs)
 
         # Config save location info
@@ -244,6 +313,17 @@ class SettingsDialog(QDialog):
         if dir_path:
             self.work_dir_edit.setText(dir_path)
 
+    def _browse_router_path(self):
+        """Browse for router model file (GGUF)."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择路由器模型文件",
+            self.router_path_edit.text(),
+            "GGUF Files (*.gguf);;All Files (*)",
+        )
+        if file_path:
+            self.router_path_edit.setText(file_path)
+
     def _update_save_location(self):
         """Update the save location label."""
         from harness_client.utils.settings import get_config_dir
@@ -290,6 +370,12 @@ class SettingsDialog(QDialog):
             "auto_update_memory": self.auto_update_memory_check.isChecked(),
             "work_dir": self.work_dir_edit.text(),
             "theme_mode": self._get_theme_mode(),
+            # Routing settings
+            "enable_routing": self.enable_routing_check.isChecked(),
+            "high_model": self.high_model_combo.currentText(),
+            "low_model": self.low_model_combo.currentText(),
+            "router_model_path": self.router_path_edit.text(),
+            "router_url": self.router_url_edit.text(),
         }
 
     def _get_theme_mode(self) -> str:
@@ -333,6 +419,17 @@ class SettingsDialog(QDialog):
             self.work_dir_edit.setText(settings["work_dir"])
         if "theme_mode" in settings:
             self._set_theme_mode(settings["theme_mode"])
+        # Routing settings
+        if "enable_routing" in settings:
+            self.enable_routing_check.setChecked(settings["enable_routing"])
+        if "high_model" in settings:
+            self.high_model_combo.setCurrentText(settings["high_model"])
+        if "low_model" in settings:
+            self.low_model_combo.setCurrentText(settings["low_model"])
+        if "router_model_path" in settings:
+            self.router_path_edit.setText(settings["router_model_path"])
+        if "router_url" in settings:
+            self.router_url_edit.setText(settings["router_url"])
 
         # Update UI visibility based on provider
         self._on_provider_changed(self.provider_combo.currentText())
