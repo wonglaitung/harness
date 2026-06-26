@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -12,16 +13,36 @@ import org.slf4j.LoggerFactory;
 /**
  * MCP server manager.
  *
- * Manages configurations for MCP servers and provides tool discovery interface.
+ * Manages connections to MCP servers and provides tool discovery.
  *
- * Note: This implementation provides configuration management and placeholder methods.
- * Actual client connections require Kotlin SDK integration (see McpClientHelper.kt).
+ * Features:
+ * - Server registration and connection management
+ * - Tool discovery from connected servers
+ * - Tool registration with AgentHarness
+ *
+ * Example:
+ * <pre>
+ * McpManager manager = new McpManager();
+ *
+ * // Register server
+ * manager.registerServer(McpServerConfig.sse("filesystem", "http://localhost:3000/mcp"));
+ *
+ * // Connect
+ * boolean connected = manager.connect("filesystem");
+ *
+ * // Get tools
+ * List<McpToolInfo> tools = manager.getServerToolInfos("filesystem");
+ *
+ * // Get as Harness Tools
+ * List<Tool> harnessTools = manager.getHarnessTools("filesystem");
+ * </pre>
  */
 public class McpManager {
 
     private static final Logger logger = LoggerFactory.getLogger(McpManager.class);
 
     private final Map<String, McpServerConfig> configs;
+    private final Map<String, McpClient> clients;
     private final Map<String, List<McpToolInfo>> serverTools;
 
     /**
@@ -29,6 +50,7 @@ public class McpManager {
      */
     public McpManager() {
         this.configs = new ConcurrentHashMap<>();
+        this.clients = new ConcurrentHashMap<>();
         this.serverTools = new ConcurrentHashMap<>();
     }
 
@@ -56,8 +78,6 @@ public class McpManager {
     /**
      * Connect to a specific server.
      *
-     * Note: This is a placeholder. Actual connection requires Kotlin SDK integration.
-     *
      * @param serverName Server name
      * @return true if connected successfully
      */
@@ -73,10 +93,40 @@ public class McpManager {
             return false;
         }
 
-        // Placeholder - actual connection requires Kotlin SDK
-        logger.warn("MCP client connection not yet implemented for server: {}", serverName);
-        logger.info("To connect to MCP server, use McpClientHelper.kt or implement Kotlin SDK integration");
-        return false;
+        // Check if already connected
+        if (clients.containsKey(serverName)) {
+            McpClient existingClient = clients.get(serverName);
+            if (existingClient.isInitialized()) {
+                logger.debug("Already connected to: {}", serverName);
+                return true;
+            }
+        }
+
+        try {
+            // Create client
+            McpClient client = new McpClient(config);
+
+            // Initialize synchronously
+            Boolean success = client.initialize().join();
+            if (!success) {
+                logger.error("Failed to initialize MCP client for: {}", serverName);
+                return false;
+            }
+
+            // Store client
+            clients.put(serverName, client);
+
+            // Discover tools
+            List<McpToolInfo> tools = client.listTools().join();
+            serverTools.put(serverName, tools);
+
+            logger.info("Connected to MCP server: {} ({} tools)", serverName, tools.size());
+            return true;
+
+        } catch (Exception e) {
+            logger.error("Failed to connect to MCP server {}: {}", serverName, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -93,11 +143,22 @@ public class McpManager {
     }
 
     /**
+     * Connect to all servers asynchronously.
+     */
+    public CompletableFuture<Map<String, Boolean>> connectAllAsync() {
+        return CompletableFuture.supplyAsync(this::connectAll);
+    }
+
+    /**
      * Disconnect from a specific server.
      *
      * @param serverName Server name
      */
     public void disconnect(String serverName) {
+        McpClient client = clients.remove(serverName);
+        if (client != null) {
+            client.close();
+        }
         serverTools.remove(serverName);
         logger.info("Disconnected from MCP server: {}", serverName);
     }
@@ -106,13 +167,13 @@ public class McpManager {
      * Disconnect from all servers.
      */
     public void disconnectAll() {
-        for (String serverName : new ArrayList<>(serverTools.keySet())) {
+        for (String serverName : new ArrayList<>(clients.keySet())) {
             disconnect(serverName);
         }
     }
 
     /**
-     * Get all registered tool info (placeholder).
+     * Get all registered tool info.
      *
      * @return List of all MCP tool info
      */
@@ -152,13 +213,52 @@ public class McpManager {
     }
 
     /**
+     * Get Harness Tool wrappers for all tools from a server.
+     *
+     * @param serverName Server name
+     * @return List of Tool wrappers
+     */
+    public List<com.harness.core.Tool> getHarnessTools(String serverName) {
+        McpClient client = clients.get(serverName);
+        List<McpToolInfo> tools = serverTools.getOrDefault(serverName, List.of());
+
+        List<com.harness.core.Tool> harnessTools = new ArrayList<>();
+        for (McpToolInfo tool : tools) {
+            harnessTools.add(new McpToolWrapper(client, tool));
+        }
+        return harnessTools;
+    }
+
+    /**
+     * Get all Harness Tool wrappers from all connected servers.
+     */
+    public List<com.harness.core.Tool> getAllHarnessTools() {
+        List<com.harness.core.Tool> allTools = new ArrayList<>();
+        for (String serverName : clients.keySet()) {
+            allTools.addAll(getHarnessTools(serverName));
+        }
+        return allTools;
+    }
+
+    /**
+     * Get MCP client for a server.
+     *
+     * @param serverName Server name
+     * @return Client or null if not connected
+     */
+    public McpClient getClient(String serverName) {
+        return clients.get(serverName);
+    }
+
+    /**
      * Check if connected to a server.
      *
      * @param serverName Server name
      * @return true if connected
      */
     public boolean isConnected(String serverName) {
-        return serverTools.containsKey(serverName) && !serverTools.get(serverName).isEmpty();
+        McpClient client = clients.get(serverName);
+        return client != null && client.isInitialized();
     }
 
     /**
@@ -166,6 +266,19 @@ public class McpManager {
      */
     public List<String> getRegisteredServers() {
         return new ArrayList<>(configs.keySet());
+    }
+
+    /**
+     * Get list of connected server names.
+     */
+    public List<String> getConnectedServers() {
+        List<String> connected = new ArrayList<>();
+        for (String serverName : clients.keySet()) {
+            if (isConnected(serverName)) {
+                connected.add(serverName);
+            }
+        }
+        return connected;
     }
 
     /**
@@ -194,5 +307,21 @@ public class McpManager {
      */
     public McpServerConfig getConfig(String serverName) {
         return configs.get(serverName);
+    }
+
+    /**
+     * Get statistics.
+     */
+    public Map<String, Object> getStats() {
+        int totalTools = serverTools.values().stream()
+            .mapToInt(List::size)
+            .sum();
+
+        return Map.of(
+            "registeredServers", configs.size(),
+            "connectedServers", clients.size(),
+            "totalTools", totalTools,
+            "servers", getStatus()
+        );
     }
 }
