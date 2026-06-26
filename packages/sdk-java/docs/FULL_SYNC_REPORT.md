@@ -1,6 +1,7 @@
 # Python SDK vs Java SDK 完整对比报告
 
 **生成时间**: 2026-06-26
+**最后更新**: 2026-06-26 (P0 代码重复已修复)
 **对比版本**: Python SDK (harness 0.1.0) vs Java SDK
 
 ---
@@ -111,49 +112,27 @@
 
 ### 2.2 Guardrails 模块
 
-#### ⚠️ 重大问题：代码重复
+#### ✅ 已修复：代码重复问题
 
-Java SDK 存在 **Guardrails 代码重复**：
+~~Java SDK 存在 **Guardrails 代码重复**~~ → 已在 `e80de76` 提交中修复
 
-1. **harness-sdk-core/src/main/java/com/harness/guardrails/** (7 个文件)
-   - `GuardrailConfig.java` - 内嵌 StreamInterceptConfig 和 JudgeConfig
-   - `GuardrailHook.java`
-   - `PIIDetector.java`
-   - `PIIEntity.java`
-   - `ComplianceJudge.java`
-   - `StreamInterceptor.java`
-   - `GuardrailExceptions.java`
+**当前状态**：所有 Guardrails 代码已整合到 `harness-sdk-guardrails` 模块
 
-2. **harness-sdk-guardrails/src/main/java/com/harness/guardrails/** (10 个文件)
-   - `GuardrailConfig.java` - 引用独立的 JudgeConfig 和 StreamInterceptConfig
-   - `JudgeConfig.java` - 独立类
-   - `StreamInterceptConfig.java` - 独立类
-   - `JudgeResult.java`
-   - `ComplianceJudge.java`
-   - `exceptions/ContentRiskException.java`
-   - `exceptions/JudgeTimeoutException.java`
-   - `exceptions/JudgeUnavailableException.java`
-   - `exceptions/StreamInterruptException.java`
-
-**需要解决**: 删除 `harness-sdk-core/guardrails/` 目录，统一使用 `harness-sdk-guardrails` 模块。
-
-#### Python Guardrails 完整功能
-
-| Python | Java (core) | Java (guardrails module) | 状态 |
-|--------|-------------|-------------------------|------|
-| `GuardrailConfig` | ✅ (内嵌配置) | ✅ (引用独立配置) | ⚠️ 重复 |
-| `JudgeConfig` | ✅ (内嵌) | ✅ (独立) | ⚠️ 重复 |
-| `StreamInterceptConfig` | ✅ (内嵌) | ✅ (独立) | ⚠️ 重复 |
-| `GuardrailHook` | ✅ | - | ⚠️ 只在 core |
-| `PIIDetector` | ✅ | - | ⚠️ 只在 core |
-| `PIIEntity` | ✅ | - | ⚠️ 只在 core |
-| `StreamInterceptor` | ✅ | - | ⚠️ 只在 core |
-| `ComplianceJudge` | ✅ | ✅ | ⚠️ 重复 |
-| `JudgeResult` | - | ✅ | ✅ |
-| 异常类 | ✅ | ✅ | ⚠️ 重复 |
-| `chinese_guardrail.py` | - | - | ❌ 未实现 |
-| `chinese_pii_recognizers.py` | - | - | ❌ 未实现 |
-| `chinese_name_recognizer.py` | - | - | ❌ 未实现 |
+| Python | Java (guardrails module) | 状态 |
+|--------|-------------------------|------|
+| `GuardrailConfig` | ✅ `GuardrailConfig.java` | ✅ 同步 |
+| `JudgeConfig` | ✅ `JudgeConfig.java` | ✅ 同步 |
+| `StreamInterceptConfig` | ✅ `StreamInterceptConfig.java` | ✅ 同步 |
+| `GuardrailHook` | ✅ `GuardrailHook.java` | ✅ 同步 |
+| `PIIDetector` | ✅ `PIIDetector.java` | ✅ 同步 |
+| `PIIEntity` | ✅ `PIIEntity.java` | ✅ 同步 |
+| `StreamInterceptor` | ✅ `StreamInterceptor.java` | ✅ 同步 |
+| `ComplianceJudge` | ✅ `ComplianceJudge.java` | ✅ 同步 |
+| `JudgeResult` | ✅ `JudgeResult.java` | ✅ 同步 |
+| 异常类 | ✅ `exceptions/*.java` | ✅ 同步 |
+| `chinese_guardrail.py` | - | ❌ 未实现 |
+| `chinese_pii_recognizers.py` | - | ❌ 未实现 |
+| `chinese_name_recognizer.py` | - | ❌ 未实现 |
 
 ### 2.3 LLM 模块
 
@@ -288,10 +267,10 @@ Java SDK 存在 **Guardrails 代码重复**：
 | Security | 100% | 完全匹配 |
 | Skills | 80% | SkillTrigger/SkillTools 未实现 |
 | Tools | 70% | Web 工具未实现 |
-| Guardrails | 60% | 中文 PII 识别器未实现 |
+| Guardrails | 75% | 中文 PII 识别器未实现 |
 | Service | 50% | FastAPI 服务未实现 |
 
-### 3.2 总体同步率: **85%**
+### 3.2 总体同步率: **87%** (P0 问题已修复)
 
 ---
 
@@ -299,10 +278,11 @@ Java SDK 存在 **Guardrails 代码重复**：
 
 ### 4.1 P0 - 必须立即修复
 
-1. **Guardrails 代码重复**
-   - 删除 `harness-sdk-core/src/main/java/com/harness/guardrails/`
-   - 统一使用 `harness-sdk-guardrails` 模块
-   - 将 `GuardrailHook`, `PIIDetector`, `PIIEntity` 移至 guardrails 模块
+1. ~~**Guardrails 代码重复**~~ ✅ **已修复**
+   - ~~删除 `harness-sdk-core/src/main/java/com/harness/guardrails/`~~
+   - ~~统一使用 `harness-sdk-guardrails` 模块~~
+   - ~~将 `GuardrailHook`, `PIIDetector`, `PIIEntity` 移至 guardrails 模块~~
+   - 修复提交: `e80de76 refactor(sdk-java): consolidate guardrails module to fix code duplication`
 
 ### 4.2 P1 - 短期需要实现
 
