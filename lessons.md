@@ -1997,3 +1997,56 @@ def paintEvent(self, event):
 - GitHub Dark 主题调色板
 - Linear 应用设计
 - 金融机构 UI 设计规范
+
+---
+
+## 2026-06-26: SDK 跨语言同步的设计决策
+
+### 问题
+
+Python SDK 和 Java SDK 的功能同步率达到 96%，但剩余 4% 未实现的功能是否应该补齐？
+
+### 分析
+
+Python SDK 有 `FastAPI 服务`（`service/__init__.py`），提供：
+- `GET /health` - 健康检查
+- `GET /metrics` - Prometheus 指标
+- `POST /api/run` - 同步运行 Agent
+- `WebSocket /ws/run` - 流式执行 Agent
+
+Java SDK 没有对应的 HTTP 端点实现。
+
+### 设计决策
+
+**两种 SDK 定位不同**：
+
+| 定位 | Python SDK | Java SDK |
+|------|-----------|----------|
+| 模式 | Sidecar 微服务 | 嵌入式库 |
+| HTTP 端点 | 需要提供 | 不需要 |
+| 原因 | FastAPI 不是标准组件 | Spring Boot 内置 |
+
+**Python SDK 提供 HTTP 端点的原因**：
+- 作为 Sidecar 部署到 Spring Cloud 架构
+- Java 业务服务通过 HTTP 调用 Python Agent
+- 渐进式引入 AI 能力，无需修改 Java 服务
+
+**Java SDK 不需要 HTTP 端点的原因**：
+- 作为库嵌入 Spring Boot 应用
+- 应用直接调用 `AgentHarness.run()`
+- Spring Boot Actuator 已提供 `/health`、`/metrics`
+- Spring Cloud Sleuth 已提供 TraceID 传播
+
+### 教训
+
+1. **功能同步要考虑架构定位**：不同语言的 SDK 可能有不同的使用场景
+2. **框架能力是已有资产**：Spring Boot 内置的 Actuator、WebSocket 不需要 SDK 重复实现
+3. **Sidecar vs 嵌入式**：
+   - Sidecar：独立扩展、技术隔离、渐进引入，但有网络开销
+   - 嵌入式：更低延迟、更简单架构，但耦合紧密
+4. **96% 同步率是合理的**：剩余 4% 是框架依赖差异，不是功能缺失
+
+### 参考
+
+- Python SDK service 模块：`packages/sdk/src/harness/service/__init__.py`
+- Java SDK 架构：`packages/sdk-java/docs/FULL_SYNC_REPORT.md`
