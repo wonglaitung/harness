@@ -57,6 +57,22 @@ uv run ruff check packages/sdk/src/
 uv run ruff format packages/sdk/src/
 ```
 
+### Java SDK 开发
+
+```bash
+# 使用 snap 版本的 gradle（不要使用项目自带的 gradlew）
+cd packages/sdk-java
+snap run gradle build
+
+# 运行测试
+snap run gradle test
+
+# 发布到 Maven Local
+snap run gradle publishToMavenLocal
+```
+
+**重要**：Java SDK 使用 snap 安装的 gradle，不要使用 `./gradlew`。
+
 ### 客户端开发
 
 ```powershell

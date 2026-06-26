@@ -109,6 +109,8 @@ public class AgentHarness {
             .workingDirectory(config.getSandboxWorkspace() != null
                 ? config.getSandboxWorkspace()
                 : System.getProperty("user.dir"))
+            .memoryMdPath(config.getMemoryMdPath())
+            .toolResultRole(config.getToolResultRole())
             .build();
 
         this.agentLoop = new AgentLoop(llmClient, toolsList, loopConfig, hookRegistry);

@@ -27,6 +27,9 @@ import com.harness.core.StepBudgetController;
 import com.harness.core.StepBudgetConfig;
 import com.harness.core.Tool;
 import com.harness.core.ToolContext;
+import com.harness.core.TracingManager;
+import com.harness.core.TraceContext;
+import com.harness.core.TracingConfig;
 import com.harness.core.ValidationResult;
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
@@ -77,6 +80,7 @@ public class AgentLoop {
     private final StuckDetector stuckDetector;
     private final StepBudgetController stepBudget;
     private final OutputOffloader outputOffloader;
+    private final TracingManager tracingManager;
 
     /**
      * Create AgentLoop with LLM client and tools.
@@ -113,6 +117,12 @@ public class AgentLoop {
             .build());
 
         this.outputOffloader = new OutputOffloader();
+
+        // Initialize tracing manager
+        this.tracingManager = new TracingManager(TracingConfig.defaults());
+        if (this.tracingManager.isEnabled()) {
+            this.tracingManager.setup();
+        }
 
         logger.info("AgentLoop initialized with maxIterations={}, tools={}",
             config.maxIterations(), this.tools.size());
@@ -162,6 +172,33 @@ public class AgentLoop {
         com.harness.types.Session session,
         Consumer<Object> onProgress
     ) {
+        // Wrap with tracing if enabled
+        if (tracingManager != null && tracingManager.isEnabled()) {
+            try {
+                return tracingManager.withSpan("agent_loop.run", null, () ->
+                    runSyncImpl(session, onProgress)
+                );
+            } catch (Exception e) {
+                logger.error("Tracing error: {}", e.getMessage());
+                return runSyncImpl(session, onProgress);
+            }
+        }
+        return runSyncImpl(session, onProgress);
+    }
+
+    /**
+     * Internal implementation of synchronous execution.
+     */
+    private com.harness.types.LoopResult runSyncImpl(
+        com.harness.types.Session session,
+        Consumer<Object> onProgress
+    ) {
+        // Add trace attributes
+        if (tracingManager != null && tracingManager.isEnabled()) {
+            tracingManager.addAttribute("session.id", session.id());
+            tracingManager.addAttribute("model", llmClient.modelName());
+        }
+
         // Reset state
         stepBudget.startTask();
         if (circuitBreaker != null) {
@@ -229,6 +266,13 @@ public class AgentLoop {
                     totalUsage.outputTokens() + response.usage().outputTokens()
                 );
                 currentSession = currentSession.withTokenUsage(totalUsage);
+
+                // Record token usage in trace
+                if (tracingManager != null && tracingManager.isEnabled()) {
+                    tracingManager.addAttribute("tokens.input", totalUsage.inputTokens());
+                    tracingManager.addAttribute("tokens.output", totalUsage.outputTokens());
+                    tracingManager.addAttribute("tokens.total", totalUsage.totalTokens());
+                }
             }
 
             // 5. AFTER_LLM_CALL hook
@@ -319,8 +363,9 @@ public class AgentLoop {
 
                     emitProgress(onProgress, ProgressEventType.toolExecuteEnd(call.name(), result));
 
-                    // Add result to session
-                    currentSession = currentSession.addMessage(Message.fromToolResult(result));
+                    // Add result to session (use configured tool result role)
+                    String toolResultRole = config.toolResultRole() != null ? config.toolResultRole() : "tool";
+                    currentSession = currentSession.addMessage(Message.fromToolResult(result, toolResultRole));
                 }
 
                 // Add assistant message
@@ -329,6 +374,13 @@ public class AgentLoop {
             } else {
                 // No tool calls - complete
                 logger.info("Loop completed at iteration {}", iteration.get());
+
+                // Record completion in trace
+                if (tracingManager != null && tracingManager.isEnabled()) {
+                    tracingManager.addAttribute("result.status", "completed");
+                    tracingManager.addAttribute("result.iterations", iteration.get() + 1);
+                }
+
                 return com.harness.types.LoopResult.completed(
                     currentSession, response.content(), iteration.get(), totalUsage
                 );

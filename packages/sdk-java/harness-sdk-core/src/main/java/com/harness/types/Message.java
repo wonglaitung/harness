@@ -66,6 +66,39 @@ public record Message(
     }
 
     /**
+     * Create a tool result message with configurable role.
+     *
+     * Some proxy APIs don't support "tool" role and require using "user" role instead.
+     *
+     * @param result Tool result
+     * @param role Message role: "tool" (native) or "user" (compatibility mode)
+     */
+    public static Message fromToolResult(ToolResult result, String role) {
+        String content = result.success() ? result.content() : "Error: " + result.error();
+
+        if ("user".equals(role)) {
+            // Compatibility mode: format as user message with tool result info
+            String formattedContent = String.format("[Tool Result: %s]\n%s",
+                result.toolName() != null ? result.toolName() : "unknown",
+                content
+            );
+            return new Message("user", formattedContent, Instant.now(), Map.of(
+                "tool_call_id", result.toolCallId(),
+                "tool_name", result.toolName() != null ? result.toolName() : "",
+                "is_error", !result.success(),
+                "compatibility_mode", true
+            ));
+        } else {
+            // Native mode: use "tool" role
+            return new Message("tool", content, Instant.now(), Map.of(
+                "tool_call_id", result.toolCallId(),
+                "tool_name", result.toolName() != null ? result.toolName() : "",
+                "is_error", !result.success()
+            ));
+        }
+    }
+
+    /**
      * Get content as string.
      */
     public String contentAsString() {

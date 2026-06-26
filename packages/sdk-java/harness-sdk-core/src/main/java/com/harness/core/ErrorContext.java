@@ -1,5 +1,7 @@
 package com.harness.core;
 
+import java.util.List;
+
 /**
  * Context for error handling decision.
  *
@@ -9,6 +11,7 @@ package com.harness.core;
  * @param attempt Retry attempt number
  * @param contextTokens Current context token count
  * @param maxTokens Maximum allowed tokens
+ * @param previousErrors List of previous errors in this session
  */
 public record ErrorContext(
     Exception error,
@@ -16,7 +19,8 @@ public record ErrorContext(
     String toolName,
     int attempt,
     int contextTokens,
-    int maxTokens
+    int maxTokens,
+    List<Exception> previousErrors
 ) {
 
     /**
@@ -40,6 +44,7 @@ public record ErrorContext(
         private int attempt = 1;
         private int contextTokens = 0;
         private int maxTokens = 200_000;
+        private List<Exception> previousErrors = List.of();
 
         public Builder error(Exception error) {
             this.error = error;
@@ -71,8 +76,13 @@ public record ErrorContext(
             return this;
         }
 
+        public Builder previousErrors(List<Exception> previousErrors) {
+            this.previousErrors = previousErrors;
+            return this;
+        }
+
         public ErrorContext build() {
-            return new ErrorContext(error, iteration, toolName, attempt, contextTokens, maxTokens);
+            return new ErrorContext(error, iteration, toolName, attempt, contextTokens, maxTokens, previousErrors);
         }
     }
 }

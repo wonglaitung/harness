@@ -42,6 +42,9 @@ public class HarnessConfig {
     private final String sandboxWorkspace;
     private final boolean enableNetwork;
 
+    // Compatibility settings
+    private final String toolResultRole; // "tool" (native) or "user" (compatibility mode)
+
     // Loop settings
     private final int maxIterations;
     private final double toolTimeout;
@@ -70,6 +73,7 @@ public class HarnessConfig {
         this.sessionWindow = builder.sessionWindow;
         this.sandboxWorkspace = builder.sandboxWorkspace;
         this.enableNetwork = builder.enableNetwork;
+        this.toolResultRole = builder.toolResultRole;
         this.maxIterations = builder.maxIterations;
         this.toolTimeout = builder.toolTimeout;
         this.systemPrompt = builder.systemPrompt;
@@ -94,6 +98,7 @@ public class HarnessConfig {
     public int getSessionWindow() { return sessionWindow; }
     public String getSandboxWorkspace() { return sandboxWorkspace; }
     public boolean isEnableNetwork() { return enableNetwork; }
+    public String getToolResultRole() { return toolResultRole; }
     public int getMaxIterations() { return maxIterations; }
     public double getToolTimeout() { return toolTimeout; }
     public String getSystemPrompt() { return systemPrompt; }
@@ -187,6 +192,7 @@ public class HarnessConfig {
         map.put("sessionWindow", sessionWindow);
         map.put("sandboxWorkspace", sandboxWorkspace);
         map.put("enableNetwork", enableNetwork);
+        map.put("toolResultRole", toolResultRole);
         map.put("maxIterations", maxIterations);
         map.put("toolTimeout", toolTimeout);
         map.put("systemPrompt", systemPrompt);
@@ -206,6 +212,7 @@ public class HarnessConfig {
         private int sessionWindow = 100;
         private String sandboxWorkspace = null;
         private boolean enableNetwork = false;
+        private String toolResultRole = "tool"; // "tool" (native) or "user" (compatibility mode)
         private int maxIterations = 10;
         private double toolTimeout = 30.0;
         private String systemPrompt = "";
@@ -273,6 +280,11 @@ public class HarnessConfig {
 
         public Builder enableNetwork(boolean enableNetwork) {
             this.enableNetwork = enableNetwork;
+            return this;
+        }
+
+        public Builder toolResultRole(String toolResultRole) {
+            this.toolResultRole = toolResultRole;
             return this;
         }
 

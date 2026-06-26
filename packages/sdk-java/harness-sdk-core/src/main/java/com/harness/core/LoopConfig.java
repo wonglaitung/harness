@@ -19,6 +19,7 @@ package com.harness.core;
  * @param stuckMinIterations Minimum iterations before stuck detection.
  * @param stuckConsecutiveFailures Consecutive failures to trigger stuck detection.
  * @param memoryMdPath Path to MEMORY.md for UpdateCoreMemoryTool (null = use ~/.harness/).
+ * @param toolResultRole Role for tool result messages: "tool" (native) or "user" (compatibility mode).
  */
 public record LoopConfig(
     int maxIterations,
@@ -32,7 +33,8 @@ public record LoopConfig(
     int maxStuckFeedbacks,
     int stuckMinIterations,
     int stuckConsecutiveFailures,
-    String memoryMdPath
+    String memoryMdPath,
+    String toolResultRole
 ) {
 
     public static final int DEFAULT_MAX_ITERATIONS = 10;
@@ -40,7 +42,7 @@ public record LoopConfig(
 
     public LoopConfig() {
         this(DEFAULT_MAX_ITERATIONS, DEFAULT_TIMEOUT_PER_TOOL, true, 3, true, true, true,
-             System.getProperty("user.dir"), 2, 3, 3, null);
+             System.getProperty("user.dir"), 2, 3, 3, null, "tool");
     }
 
     /**
@@ -70,6 +72,7 @@ public record LoopConfig(
         private int stuckMinIterations = 3;
         private int stuckConsecutiveFailures = 3;
         private String memoryMdPath = null;
+        private String toolResultRole = "tool";
 
         public Builder maxIterations(int maxIterations) {
             this.maxIterations = maxIterations;
@@ -131,11 +134,17 @@ public record LoopConfig(
             return this;
         }
 
+        public Builder toolResultRole(String toolResultRole) {
+            this.toolResultRole = toolResultRole;
+            return this;
+        }
+
         public LoopConfig build() {
             return new LoopConfig(
                 maxIterations, timeoutPerTool, enableParallelTools, retryOnError,
                 enableProgress, enableCircuitBreaker, enableCostControl, workingDirectory,
-                maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures, memoryMdPath
+                maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures, memoryMdPath,
+                toolResultRole
             );
         }
     }
