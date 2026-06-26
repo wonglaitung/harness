@@ -57,6 +57,9 @@ public class PIIDetector {
 
     /**
      * Detect PII in text.
+     *
+     * @param text Text to analyze
+     * @return List of detected PII entities
      */
     public List<PIIEntity> detect(String text) {
         List<PIIEntity> entities = new ArrayList<>();
@@ -83,6 +86,9 @@ public class PIIDetector {
 
     /**
      * Check if text contains PII.
+     *
+     * @param text Text to check
+     * @return true if PII detected
      */
     public boolean containsPII(String text) {
         for (PIIPattern pattern : patterns) {
@@ -95,6 +101,9 @@ public class PIIDetector {
 
     /**
      * Redact PII in text.
+     *
+     * @param text Text to redact
+     * @return Text with PII replaced by masks
      */
     public String redact(String text) {
         return redact(text, null);
@@ -102,6 +111,10 @@ public class PIIDetector {
 
     /**
      * Redact PII in text with custom mask.
+     *
+     * @param text Text to redact
+     * @param mask Custom mask to use (null for default)
+     * @return Text with PII replaced
      */
     public String redact(String text, String mask) {
         List<PIIEntity> entities = detect(text);
@@ -123,6 +136,9 @@ public class PIIDetector {
 
     /**
      * Scan text and return summary.
+     *
+     * @param text Text to scan
+     * @return Map of PII type code to count
      */
     public Map<String, Integer> scan(String text) {
         List<PIIEntity> entities = detect(text);

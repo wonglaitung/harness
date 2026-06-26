@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.harness.core.*;
+import com.harness.types.Message;
 
 /**
  * Lifecycle hook for PII detection and content safety.
@@ -100,7 +101,7 @@ public class GuardrailHook implements LifecycleHook {
             String redacted = piiDetector.redact(userMessage);
 
             // Inject redacted message
-            return HookResult.injectMessage(new com.harness.types.Message(
+            return HookResult.injectMessage(new Message(
                 "user",
                 redacted,
                 Map.of("pii_detected", true, "pii_count", entities.size())

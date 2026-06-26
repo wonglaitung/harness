@@ -1,6 +1,5 @@
 package com.harness.guardrails;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -19,12 +18,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *
  * Example:
  * <pre>
+ * JudgeConfig judgeConfig = JudgeConfig.builder()
+ *     .enabled(true)
+ *     .endpoint("http://localhost:8001/v1/chat/completions")
+ *     .build();
+ *
  * ComplianceJudge judge = new ComplianceJudge(judgeConfig);
+ * StreamInterceptConfig streamConfig = StreamInterceptConfig.builder()
+ *     .enabled(true)
+ *     .checkInterval(10)
+ *     .safetyThreshold(0.3)
+ *     .build();
+ *
  * StreamInterceptor interceptor = new StreamInterceptor(judge, streamConfig);
  *
  * // Check streaming content
+ * StringBuilder buffer = new StringBuilder();
+ * int tokenCount = 0;
  * for (String chunk : stream) {
- *     InterceptResult result = interceptor.checkChunk(chunk).join();
+ *     tokenCount++;
+ *     InterceptResult result = interceptor.checkChunk(chunk, buffer, tokenCount).join();
  *     if (result.shouldStop()) {
  *         break;
  *     }
@@ -37,10 +50,10 @@ public class StreamInterceptor {
     private static final Logger logger = LoggerFactory.getLogger(StreamInterceptor.class);
 
     private final ComplianceJudge judge;
-    private final GuardrailConfig.StreamInterceptConfig config;
+    private final StreamInterceptConfig config;
     private final ObjectMapper objectMapper;
 
-    public StreamInterceptor(ComplianceJudge judge, GuardrailConfig.StreamInterceptConfig config) {
+    public StreamInterceptor(ComplianceJudge judge, StreamInterceptConfig config) {
         this.judge = judge;
         this.config = config;
         this.objectMapper = new ObjectMapper();
@@ -105,25 +118,30 @@ public class StreamInterceptor {
             );
         }
 
-        // Run quick check
-        return judge.quickCheck(buffer.toString())
-            .thenApply(score -> {
-                logger.debug("Stream safety check: tokens={}, score={}", tokenCount, score);
+        // Run quick check (synchronous)
+        try {
+            double score = judge.quickCheck(buffer.toString());
+            logger.debug("Stream safety check: tokens={}, score={}", tokenCount, score);
 
-                if (score < config.getSafetyThreshold()) {
-                    logger.warn(
-                        "Stream interrupted: score={} < threshold={}, tokens={}",
-                        score, config.getSafetyThreshold(), tokenCount
-                    );
-                    return new InterceptResult(true, score, "Content risk detected", tokenCount);
-                }
+            if (score < config.getSafetyThreshold()) {
+                logger.warn(
+                    "Stream interrupted: score={} < threshold={}, tokens={}",
+                    score, config.getSafetyThreshold(), tokenCount
+                );
+                return CompletableFuture.completedFuture(
+                    new InterceptResult(true, score, "Content risk detected", tokenCount)
+                );
+            }
 
-                return new InterceptResult(false, score, "Content safe", tokenCount);
-            })
-            .exceptionally(e -> {
-                logger.warn("Safety check failed: {}, continuing stream", e.getMessage());
-                return new InterceptResult(false, 0.5, "Check failed: " + e.getMessage(), tokenCount);
-            });
+            return CompletableFuture.completedFuture(
+                new InterceptResult(false, score, "Content safe", tokenCount)
+            );
+        } catch (Exception e) {
+            logger.warn("Safety check failed: {}, continuing stream", e.getMessage());
+            return CompletableFuture.completedFuture(
+                new InterceptResult(false, 0.5, "Check failed: " + e.getMessage(), tokenCount)
+            );
+        }
     }
 
     /**
@@ -139,26 +157,29 @@ public class StreamInterceptor {
             );
         }
 
-        return judge.quickCheck(content)
-            .thenApply(score -> {
-                boolean shouldStop = score < config.getSafetyThreshold();
+        try {
+            double score = judge.quickCheck(content);
+            boolean shouldStop = score < config.getSafetyThreshold();
 
-                return new InterceptResult(
+            return CompletableFuture.completedFuture(
+                new InterceptResult(
                     shouldStop,
                     score,
                     shouldStop ? "Content risk detected" : "Content safe",
                     content.split("\\s+").length
-                );
-            })
-            .exceptionally(e -> {
-                logger.warn("Content check failed: {}", e.getMessage());
-                return new InterceptResult(
+                )
+            );
+        } catch (Exception e) {
+            logger.warn("Content check failed: {}", e.getMessage());
+            return CompletableFuture.completedFuture(
+                new InterceptResult(
                     false,
                     0.5,
                     "Check failed: " + e.getMessage(),
                     content.split("\\s+").length
-                );
-            });
+                )
+            );
+        }
     }
 
     /**

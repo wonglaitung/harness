@@ -1,13 +1,29 @@
 package com.harness.guardrails;
 
 import java.util.Map;
-import java.util.regex.MatchResult;
 
 /**
  * PII entity detected in text.
+ *
+ * Represents a single piece of Personally Identifiable Information
+ * found during content analysis.
+ *
+ * Example:
+ * <pre>
+ * PIIEntity entity = new PIIEntity(
+ *     PIIEntity.Type.PHONE,
+ *     "13812345678",
+ *     10, 21, 0.95
+ * );
+ *
+ * String redacted = entity.redact(text, "[REDACTED]");
+ * </pre>
  */
 public class PIIEntity {
 
+    /**
+     * Types of PII that can be detected.
+     */
     public enum Type {
         PHONE("phone", "手机号"),
         ID_CARD("id_card", "身份证号"),
@@ -60,6 +76,10 @@ public class PIIEntity {
 
     /**
      * Redact the entity in the given text.
+     *
+     * @param text Original text
+     * @param mask Mask to replace the entity with
+     * @return Text with entity redacted
      */
     public String redact(String text, String mask) {
         if (start < 0 || end > text.length()) {
