@@ -1,8 +1,6 @@
 package com.harness.mcp;
 
-import java.util.List;
-
-import com.harness.core.Tool;
+import java.util.Map;
 
 /**
  * MCP tool information.

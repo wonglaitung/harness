@@ -6,9 +6,10 @@ import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.harness.core.LLMClient;
 import com.harness.core.HarnessConfig.RoutingConfig;
 import com.harness.types.LLMResponse;
-import com.harness.types.TokenUsage;
+import com.harness.types.Message;
 
 /**
  * LLM client that routes requests to different downstream models.
@@ -30,7 +31,7 @@ import com.harness.types.TokenUsage;
  *     new OpenAIClient("key", "gpt-4o-mini")
  * );
  *
- * LLMResponse response = client.call(messages).join();
+ * LLMResponse response = client.call(messages, null, null);
  * </pre>
  */
 public class RoutingLLMClient implements LLMClient {
@@ -56,52 +57,55 @@ public class RoutingLLMClient implements LLMClient {
         return String.format("routing(high=%s, low=%s)", config.getHighModel(), config.getLowModel());
     }
 
-    /**
-     * Route the request and call the appropriate downstream model.
-     */
     @Override
-    public CompletableFuture<LLMResponse> call(List<Message> messages) {
-        return call(messages, null, null);
+    public LLMResponse call(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
+        // Extract routing input
+        String userMessage = extractUserMessage(messages);
+        String conversationHistory = extractConversationHistory(messages);
+
+        String route;
+        double routerLatencyMs = 0.0;
+
+        if (userMessage == null || userMessage.isEmpty()) {
+            logger.warn("No user message found, defaulting to high");
+            route = config.getDefaultRoute();
+        } else {
+            // Build routing prompt
+            String routePrompt = buildRoutePrompt(userMessage, conversationHistory);
+
+            // Get routing decision
+            long routerStart = System.currentTimeMillis();
+            route = getRouteDecision(routePrompt);
+            routerLatencyMs = (System.currentTimeMillis() - routerStart);
+        }
+
+        // Store for observability
+        this.lastRoute = route;
+        this.lastRouterLatencyMs = routerLatencyMs;
+
+        logger.info("Routing decision: {} (latency: {:.1f}ms)", route, routerLatencyMs);
+
+        // Select downstream client
+        LLMClient client = "high".equals(route) ? highClient : lowClient;
+
+        // Call downstream
+        return client.call(messages, tools, systemPrompt);
     }
 
-    /**
-     * Route the request and call the appropriate downstream model.
-     */
     @Override
-    public CompletableFuture<LLMResponse> call(List<Message> messages, List<ToolDefinition> tools, String system) {
-        return CompletableFuture.supplyAsync(() -> {
-            // Extract routing input
-            String userMessage = extractUserMessage(messages);
-            String conversationHistory = extractConversationHistory(messages);
+    public CompletableFuture<LLMResponse> callAsync(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
+        return CompletableFuture.supplyAsync(() -> call(messages, tools, systemPrompt));
+    }
 
-            String route;
-            double routerLatencyMs = 0.0;
+    @Override
+    public void stream(List<Message> messages, List<ToolDefinition> tools, String systemPrompt, StreamCallback onChunk) {
+        // Make routing decision (non-streaming)
+        LLMResponse response = call(messages, tools, systemPrompt);
 
-            if (userMessage == null || userMessage.isEmpty()) {
-                logger.warn("No user message found, defaulting to high");
-                route = config.getDefaultRoute();
-            } else {
-                // Build routing prompt
-                String routePrompt = buildRoutePrompt(userMessage, conversationHistory);
-
-                // Get routing decision
-                long routerStart = System.currentTimeMillis();
-                route = getRouteDecision(routePrompt);
-                routerLatencyMs = (System.currentTimeMillis() - routerStart);
-            }
-
-            // Store for observability
-            this.lastRoute = route;
-            this.lastRouterLatencyMs = routerLatencyMs;
-
-            logger.info("Routing decision: {} (latency: {:.1f}ms)", route, routerLatencyMs);
-
-            // Select downstream client
-            LLMClient client = "high".equals(route) ? highClient : lowClient;
-
-            // Call downstream
-            return client.call(messages, tools, system).join();
-        });
+        // Yield the response as a single chunk
+        if (response.content() != null && onChunk != null) {
+            onChunk.onChunk(response.content());
+        }
     }
 
     /**
@@ -111,7 +115,7 @@ public class RoutingLLMClient implements LLMClient {
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message msg = messages.get(i);
             if ("user".equals(msg.role())) {
-                return msg.content();
+                return msg.contentAsString();
             }
         }
         return null;
@@ -127,8 +131,8 @@ public class RoutingLLMClient implements LLMClient {
         StringBuilder sb = new StringBuilder();
         for (int i = start; i < messages.size(); i++) {
             Message msg = messages.get(i);
-            String preview = msg.content();
-            if (preview.length() > 200) {
+            String preview = msg.contentAsString();
+            if (preview != null && preview.length() > 200) {
                 preview = preview.substring(0, 200) + "...";
             }
             sb.append("[").append(msg.role()).append("]: ").append(preview).append("\n");
@@ -212,7 +216,8 @@ public class RoutingLLMClient implements LLMClient {
             return "low";
         }
 
-        logger.warn("Could not parse route label from: {}, defaulting to {}", content.substring(0, Math.min(50, content.length())), config.getDefaultRoute());
+        logger.warn("Could not parse route label from: {}, defaulting to {}",
+            content.substring(0, Math.min(50, content.length())), config.getDefaultRoute());
         return config.getDefaultRoute();
     }
 

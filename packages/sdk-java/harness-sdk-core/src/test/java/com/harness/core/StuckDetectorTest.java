@@ -161,6 +161,12 @@ class StuckDetectorTest {
 
     @Test
     void testCheckNoCandidates() {
+        // Test that messages below minChars threshold are filtered out
+        // Note: This test expects model_unavailable because no EmbeddingModel is provided.
+        // The "no_candidates" reason is only returned when:
+        // 1. enableSemantic is true
+        // 2. embeddingModel is available
+        // 3. All messages are filtered out by minChars
         StuckDetectorConfig config = StuckDetectorConfig.builder()
             .enableSemantic(true)
             .minChars(100)  // High threshold
@@ -173,6 +179,52 @@ class StuckDetectorTest {
 
         StuckDetectionResult result = detector.check("session-1", messages, 3);
 
+        // Without an embedding model, returns model_unavailable (before checking candidates)
+        assertFalse(result.isStuck());
+        assertEquals("model_unavailable", result.reason());
+    }
+
+    @Test
+    void testCheckNoCandidatesWithMockModel() {
+        // To properly test "no_candidates", we need a mock embedding model
+        // This test verifies the candidate filtering logic works correctly
+        StuckDetectorConfig config = StuckDetectorConfig.builder()
+            .enableSemantic(true)
+            .minChars(100)  // High threshold
+            .build();
+
+        // Create a mock embedding model that returns availability
+        EmbeddingModel mockModel = new EmbeddingModel() {
+            @Override
+            public int getDimension() {
+                return 384;
+            }
+
+            @Override
+            public float[] embed(String text) {
+                return new float[384];  // Dummy embedding
+            }
+
+            @Override
+            public List<float[]> embedBatch(List<String> texts) {
+                return texts.stream().map(t -> new float[384]).toList();
+            }
+
+            @Override
+            public boolean isAvailable() {
+                return true;
+            }
+        };
+
+        StuckDetector detector = new StuckDetector(config, mockModel);
+
+        List<Message> messages = List.of(
+            Message.tool("Short", "call-1", "tool")  // Too short for minChars=100
+        );
+
+        StuckDetectionResult result = detector.check("session-1", messages, 3);
+
+        // With model available but no candidates, should return no_candidates
         assertFalse(result.isStuck());
         assertEquals("no_candidates", result.reason());
     }

@@ -40,8 +40,8 @@ class HookContextTest {
     void testBuilderWithAllFields() {
         List<Message> messages = List.of(Message.user("hello"));
         Map<String, Object> toolArgs = Map.of("path", "/tmp/test");
-        ToolResult toolResult = new ToolResult("call-1", true, "output", null);
-        LLMResponse llmResponse = new LLMResponse("assistant", "response", List.of(), null);
+        ToolResult toolResult = ToolResult.success("call-1", "output");
+        LLMResponse llmResponse = new LLMResponse("response");
         Exception error = new RuntimeException("test error");
         Map<String, Object> metadata = Map.of("key", "value");
 
@@ -128,7 +128,7 @@ class HookContextTest {
 
     @Test
     void testToolOutputReturnsContent() {
-        ToolResult toolResult = new ToolResult("call-1", true, "tool output content", null);
+        ToolResult toolResult = ToolResult.success("call-1", "tool output content");
 
         HookContext context = HookContext.builder()
             .hookPoint(HookPoint.AFTER_TOOL_EXECUTE)
@@ -154,7 +154,7 @@ class HookContextTest {
         // This tests the compact constructor that takes ToolCall
         // Since ToolCall might not exist, we'll test the builder equivalent
         List<Message> messages = List.of(Message.user("test"));
-        LLMResponse llmResponse = new LLMResponse("assistant", "response", List.of(), null);
+        LLMResponse llmResponse = new LLMResponse("response");
 
         HookContext context = HookContext.builder()
             .hookPoint(HookPoint.AFTER_LLM_CALL)
@@ -176,7 +176,7 @@ class HookContextTest {
     @Test
     void testCompactConstructorWithoutToolCall() {
         List<Message> messages = List.of(Message.user("test"));
-        LLMResponse llmResponse = new LLMResponse("assistant", "response", List.of(), null);
+        LLMResponse llmResponse = new LLMResponse("response");
 
         HookContext context = HookContext.builder()
             .hookPoint(HookPoint.AFTER_LLM_CALL)

@@ -1,6 +1,7 @@
 package com.harness.core;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
@@ -25,8 +26,10 @@ import com.harness.types.ProgressEventType;
  */
 public class ProgressFormatter {
 
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter DETAILED_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter TIME_FORMAT =
+        DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter DETAILED_TIME_FORMAT =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     // ANSI color codes
     private static final String RESET = "\u001B[0m";
@@ -48,7 +51,7 @@ public class ProgressFormatter {
      * Detailed format with timestamp and data.
      */
     public static String detailed(ProgressEvent event) {
-        String ts = event.timestamp().format(DETAILED_TIME_FORMAT);
+        String ts = DETAILED_TIME_FORMAT.format(event.timestamp());
         String duration = event.durationMs() != null ? String.format(" (%.0fms)", event.durationMs()) : "";
 
         StringBuilder sb = new StringBuilder();
@@ -90,7 +93,7 @@ public class ProgressFormatter {
      */
     public static String colored(ProgressEvent event) {
         String color = getColorForType(event.type());
-        String ts = event.timestamp().format(TIME_FORMAT);
+        String ts = TIME_FORMAT.format(event.timestamp());
         String duration = event.durationMs() != null ? String.format(" (%.0fms)", event.durationMs()) : "";
 
         StringBuilder sb = new StringBuilder();
@@ -125,7 +128,7 @@ public class ProgressFormatter {
      */
     public static String emoji(ProgressEvent event) {
         String icon = getIconForType(event.type());
-        String ts = event.timestamp().format(TIME_FORMAT);
+        String ts = TIME_FORMAT.format(event.timestamp());
         String duration = event.durationMs() != null ? String.format(" (%.0fms)", event.durationMs()) : "";
 
         StringBuilder sb = new StringBuilder();

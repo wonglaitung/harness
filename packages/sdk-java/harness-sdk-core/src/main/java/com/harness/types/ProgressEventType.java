@@ -16,5 +16,12 @@ public enum ProgressEventType {
     ERROR,                 // 错误发生
     STREAM_BACKPRESSURE,   // 流式输出背压
     STUCK_DETECTED,        // 检测到停滞状态
-    ROUTER_DECISION        // 路由决策（CPU Router）
+    ROUTER_DECISION;       // 路由决策（CPU Router）
+
+    /**
+     * Get the string value of this event type.
+     */
+    public String getValue() {
+        return name().toLowerCase();
+    }
 }

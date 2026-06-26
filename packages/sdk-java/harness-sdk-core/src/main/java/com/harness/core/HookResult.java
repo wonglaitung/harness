@@ -86,7 +86,7 @@ public record HookResult(
         return new HookResult(
             HookAction.MODIFY_RESULT,
             null,
-            new ToolResult("", true, newOutput, null),
+            ToolResult.success("", newOutput),
             null, 0, false, Map.of()
         );
     }

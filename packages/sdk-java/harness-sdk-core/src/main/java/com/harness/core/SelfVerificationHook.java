@@ -143,7 +143,7 @@ public class SelfVerificationHook implements LifecycleHook {
                 }
             }
 
-            boolean completed = process.waitFor(config.timeout(), TimeUnit.SECONDS);
+            boolean completed = process.waitFor((long) config.timeout(), TimeUnit.SECONDS);
 
             if (!completed) {
                 process.destroyForcibly();

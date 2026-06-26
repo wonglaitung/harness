@@ -114,7 +114,7 @@ public class ContextCompressor {
             : new ArrayList<>();
 
         if (oldMessages.isEmpty()) {
-            return new CompressionResult.SummaryPair(messages, null);
+            return new SummaryPair(messages, null);
         }
 
         // Generate summary of old messages
@@ -127,7 +127,7 @@ public class ContextCompressor {
         }
         compressed.addAll(recentMessages);
 
-        return new CompressionResult.SummaryPair(compressed, summary);
+        return new SummaryPair(compressed, summary);
     }
 
     /**

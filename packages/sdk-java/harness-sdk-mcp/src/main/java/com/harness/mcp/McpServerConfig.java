@@ -11,9 +11,6 @@ import java.util.Map;
  */
 public record McpServerConfig(
     String name,
-    String command,
-    List<String> args,
-    Map<String, String> env,
     String url,
     McpTransportType transportType,
     Duration requestTimeout,
@@ -24,35 +21,19 @@ public record McpServerConfig(
      * Transport types for MCP connections.
      */
     public enum McpTransportType {
-        STDIO,
-        SSE
+        SSE,  // HTTP Server-Sent Events (recommended)
+        STDIO // Process-based (requires native process management)
     }
 
     /**
-     * Create config for stdio transport.
-     */
-    public static McpServerConfig stdio(String name, String command, String... args) {
-        return new McpServerConfig(
-            name,
-            command,
-            List.of(args),
-            Map.of(),
-            null,
-            McpTransportType.STDIO,
-            Duration.ofSeconds(30),
-            true
-        );
-    }
-
-    /**
-     * Create config for SSE transport.
+     * Create config for SSE/HTTP transport.
+     *
+     * @param name Server name
+     * @param url Server URL (e.g., "http://localhost:3000/mcp")
      */
     public static McpServerConfig sse(String name, String url) {
         return new McpServerConfig(
             name,
-            null,
-            List.of(),
-            Map.of(),
             url,
             McpTransportType.SSE,
             Duration.ofSeconds(30),
@@ -61,29 +42,16 @@ public record McpServerConfig(
     }
 
     /**
-     * Create config with environment variables.
-     */
-    public McpServerConfig withEnv(Map<String, String> env) {
-        return new McpServerConfig(
-            name, command, args, env, url, transportType, requestTimeout, enabled
-        );
-    }
-
-    /**
      * Create config with timeout.
      */
     public McpServerConfig withTimeout(Duration timeout) {
-        return new McpServerConfig(
-            name, command, args, env, url, transportType, timeout, enabled
-        );
+        return new McpServerConfig(name, url, transportType, timeout, enabled);
     }
 
     /**
      * Create disabled config.
      */
     public McpServerConfig disabled() {
-        return new McpServerConfig(
-            name, command, args, env, url, transportType, requestTimeout, false
-        );
+        return new McpServerConfig(name, url, transportType, requestTimeout, false);
     }
 }

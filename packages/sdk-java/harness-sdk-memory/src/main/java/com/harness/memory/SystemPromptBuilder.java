@@ -80,7 +80,7 @@ public class SystemPromptBuilder {
 
         // Custom sources
         if (config.customSources() != null) {
-            sources.addAll(config.customSources());
+            sources.addAll(config.customSources().values());
         }
 
         // Sort by priority (highest first)

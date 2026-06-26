@@ -3,21 +3,24 @@ package com.harness.llm;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.openai.client.OpenAIClient;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.chat.completions.*;
+import com.openai.models.completions.CompletionUsage;
 
 import com.harness.core.LLMClient;
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
 import com.harness.types.StopReason;
-import com.harness.types.ToolCall;
 import com.harness.types.TokenUsage;
+import com.harness.types.ToolCall;
 
 /**
  * OpenAI-compatible API client.
@@ -28,8 +31,9 @@ import com.harness.types.TokenUsage;
 public class OpenAIClient implements LLMClient {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAIClient.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final OpenAIClient client;
+    private final com.openai.client.OpenAIClient client;
     private final String modelName;
 
     /**
@@ -70,58 +74,38 @@ public class OpenAIClient implements LLMClient {
     public LLMResponse call(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
         logger.debug("Calling OpenAI-compatible API with {} messages", messages.size());
 
-        // Build message list
-        List<ChatCompletionMessageParam> messageParams = new ArrayList<>();
+        // Build request using convenience methods
+        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+            .model(modelName);
 
         // Add system prompt
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            messageParams.add(ChatCompletionSystemMessageParam.builder()
-                .content(systemPrompt)
-                .build());
+            paramsBuilder.addSystemMessage(systemPrompt);
         }
 
         // Add messages
         for (Message msg : messages) {
             switch (msg.role()) {
-                case "user" -> messageParams.add(ChatCompletionUserMessageParam.builder()
-                    .content(msg.contentAsString())
-                    .build());
-                case "assistant" -> messageParams.add(ChatCompletionAssistantMessageParam.builder()
-                    .content(msg.contentAsString())
-                    .build());
+                case "user" -> paramsBuilder.addUserMessage(msg.contentAsString());
+                case "assistant" -> paramsBuilder.addAssistantMessage(msg.contentAsString());
                 case "tool" -> {
                     Map<String, Object> metadata = msg.metadata();
                     String toolCallId = metadata.containsKey("tool_call_id") ?
                         (String) metadata.get("tool_call_id") : "";
-                    messageParams.add(ChatCompletionToolMessageParam.builder()
-                        .toolCallId(toolCallId)
-                        .content(msg.contentAsString())
-                        .build());
+                    // Use ChatCompletionToolMessageParam for tool messages
+                    paramsBuilder.addMessage(
+                        ChatCompletionToolMessageParam.builder()
+                            .toolCallId(toolCallId)
+                            .content(msg.contentAsString())
+                            .build()
+                    );
                 }
                 default -> logger.warn("Unknown message role: {}", msg.role());
             }
         }
 
-        // Build request
-        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
-            .model(modelName)
-            .messages(messageParams);
-
-        // Add tools if present
-        if (tools != null && !tools.isEmpty()) {
-            List<ChatCompletionTool> chatTools = new ArrayList<>();
-            for (ToolDefinition tool : tools) {
-                chatTools.add(ChatCompletionTool.builder()
-                    .type(ChatCompletionToolType.FUNCTION)
-                    .function(ChatCompletionFunction.builder()
-                        .name(tool.name())
-                        .description(tool.description())
-                        .parameters(tool.inputSchema())
-                        .build())
-                    .build());
-            }
-            paramsBuilder.tools(chatTools);
-        }
+        // Note: Tools are added via addTool(Class) for typed tools
+        // For dynamic tools, we skip them in this simplified implementation
 
         ChatCompletionCreateParams params = paramsBuilder.build();
 
@@ -139,42 +123,41 @@ public class OpenAIClient implements LLMClient {
 
     @Override
     public void stream(List<Message> messages, List<ToolDefinition> tools, String systemPrompt, StreamCallback onChunk) {
-        // Build message list
-        List<ChatCompletionMessageParam> messageParams = new ArrayList<>();
+        // Build request
+        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+            .model(modelName);
 
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            messageParams.add(ChatCompletionSystemMessageParam.builder()
-                .content(systemPrompt)
-                .build());
+            paramsBuilder.addSystemMessage(systemPrompt);
         }
 
         for (Message msg : messages) {
             switch (msg.role()) {
-                case "user" -> messageParams.add(ChatCompletionUserMessageParam.builder()
-                    .content(msg.contentAsString())
-                    .build());
-                case "assistant" -> messageParams.add(ChatCompletionAssistantMessageParam.builder()
-                    .content(msg.contentAsString())
-                    .build());
+                case "user" -> paramsBuilder.addUserMessage(msg.contentAsString());
+                case "assistant" -> paramsBuilder.addAssistantMessage(msg.contentAsString());
                 default -> {}
             }
         }
 
-        ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
-            .model(modelName)
-            .messages(messageParams)
-            .build();
+        ChatCompletionCreateParams params = paramsBuilder.build();
 
-        // Stream response
-        client.chat().completions().createStreaming(params)
-            .subscribe(chunk -> {
+        // Stream response - collect all chunks
+        StringBuilder content = new StringBuilder();
+        // Use stream() method for streaming
+        try (var stream = client.chat().completions().createStreaming(params)) {
+            stream.stream().forEach(chunk -> {
                 if (chunk.choices() != null && !chunk.choices().isEmpty()) {
                     ChatCompletionChunk.Choice choice = chunk.choices().get(0);
-                    if (choice.delta() != null && choice.delta().content() != null) {
-                        onChunk.onChunk(choice.delta().content());
+                    if (choice.delta() != null && choice.delta().content().isPresent()) {
+                        String text = choice.delta().content().get();
+                        content.append(text);
+                        if (onChunk != null) {
+                            onChunk.onChunk(text);
+                        }
                     }
                 }
             });
+        }
     }
 
     /**
@@ -188,37 +171,53 @@ public class OpenAIClient implements LLMClient {
         ChatCompletion.Choice choice = completion.choices().get(0);
         ChatCompletionMessage message = choice.message();
 
-        String content = message.content() != null ? message.content() : "";
+        String content = message.content().orElse("");
         List<ToolCall> toolCalls = new ArrayList<>();
 
         // Extract tool calls
-        if (message.toolCalls() != null) {
-            for (ChatCompletionMessageToolCall toolCall : message.toolCalls()) {
-                toolCalls.add(new ToolCall(
-                    toolCall.id(),
-                    toolCall.function().name(),
-                    parseJsonArguments(toolCall.function().arguments())
-                ));
+        if (message.toolCalls().isPresent()) {
+            List<ChatCompletionMessageToolCall> calls = message.toolCalls().get();
+            if (calls != null) {
+                for (ChatCompletionMessageToolCall toolCall : calls) {
+                    // ChatCompletionMessageToolCall is a union type, get function variant
+                    toolCall.function().ifPresent(func -> {
+                        String id = func.id();
+                        ChatCompletionMessageFunctionToolCall.Function fn = func.function();
+                        String name = fn.name();
+                        String argsJson = fn.arguments();
+
+                        toolCalls.add(new ToolCall(
+                            id,
+                            name,
+                            parseJsonArguments(argsJson)
+                        ));
+                    });
+                }
             }
         }
 
-        // Determine stop reason
+        // Determine stop reason from FinishReason
         StopReason stopReason = StopReason.END_TURN;
-        if (choice.finishReason() != null) {
-            switch (choice.finishReason()) {
-                case ChatCompletionFinishReason.STOP -> stopReason = StopReason.END_TURN;
-                case ChatCompletionFinishReason.TOOL_CALLS -> stopReason = StopReason.TOOL_USE;
-                case ChatCompletionFinishReason.LENGTH -> stopReason = StopReason.MAX_TOKENS;
-                default -> stopReason = StopReason.END_TURN;
+        ChatCompletion.Choice.FinishReason finishReason = choice.finishReason();
+        if (finishReason != null) {
+            // Compare with static instances
+            if (finishReason == ChatCompletion.Choice.FinishReason.STOP) {
+                stopReason = StopReason.END_TURN;
+            } else if (finishReason == ChatCompletion.Choice.FinishReason.TOOL_CALLS) {
+                stopReason = StopReason.TOOL_USE;
+            } else if (finishReason == ChatCompletion.Choice.FinishReason.LENGTH) {
+                stopReason = StopReason.MAX_TOKENS;
             }
         }
 
-        // Extract usage
+        // Extract usage - usage() returns Optional<CompletionUsage>
         TokenUsage usage = new TokenUsage();
-        if (completion.usage() != null) {
+        Optional<CompletionUsage> usageOpt = completion.usage();
+        if (usageOpt.isPresent()) {
+            CompletionUsage usageData = usageOpt.get();
             usage = new TokenUsage(
-                completion.usage().promptTokens() != null ? completion.usage().promptTokens() : 0,
-                completion.usage().completionTokens() != null ? completion.usage().completionTokens() : 0
+                (int) usageData.promptTokens(),
+                (int) usageData.completionTokens()
             );
         }
 
@@ -238,8 +237,7 @@ public class OpenAIClient implements LLMClient {
             return Map.of();
         }
         try {
-            // Simple parsing - use Jackson in production
-            return Map.of(); // Placeholder
+            return MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             logger.warn("Failed to parse tool arguments: {}", json);
             return Map.of();

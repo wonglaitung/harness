@@ -107,7 +107,7 @@ public class SandboxExecutor {
             null,
             blockedCommands,
             maxExecutionTime,
-            LightweightSandbox.DEFAULT_MAX_OUTPUT_SIZE,
+            SandboxConfig.DEFAULT_MAX_OUTPUT_SIZE,
             null
         );
 

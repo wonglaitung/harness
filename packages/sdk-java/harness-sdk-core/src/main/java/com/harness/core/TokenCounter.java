@@ -6,9 +6,11 @@ import java.util.concurrent.TimeUnit;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
-import com.knuddelsgmbh.jtokkit.Encodings;
-import com.knuddelsgmbh.jtokkit.api.Encoding;
-import com.knuddelsgmbh.jtokkit.api.EncodingType;
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
+
+import com.harness.types.Message;
 
 /**
  * Token counter using jtokkit library.

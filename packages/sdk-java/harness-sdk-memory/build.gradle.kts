@@ -11,6 +11,7 @@ dependencies {
 
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
+    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion")
 
     // Logging
     implementation("org.slf4j:slf4j-api:$slf4jVersion")

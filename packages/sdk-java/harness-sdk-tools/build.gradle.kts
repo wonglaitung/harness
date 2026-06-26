@@ -8,6 +8,7 @@ val junitVersion: String by extra
 
 dependencies {
     api(project(":harness-sdk-core"))
+    api(project(":harness-sdk-memory"))
 
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")

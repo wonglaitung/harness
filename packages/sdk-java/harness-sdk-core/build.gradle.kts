@@ -10,7 +10,7 @@ val caffeineVersion: String by extra
 
 dependencies {
     // Token 计数
-    api("com.knuddels:jtokkit:1.1.0")
+    api("com.knuddels:jtokkit:1.0.0")
 
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")

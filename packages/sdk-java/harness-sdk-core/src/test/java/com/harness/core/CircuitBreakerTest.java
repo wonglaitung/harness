@@ -178,7 +178,7 @@ class CircuitBreakerTest {
     void testRecordSuccessClosesHalfOpen() {
         CircuitBreakerConfig config = CircuitBreakerConfig.builder()
             .sameArgsThreshold(2)
-            .recoveryTimeoutSeconds(0)  // Immediate recovery
+            .recoveryTimeoutSeconds(1)  // 1 second recovery timeout
             .build();
         CircuitBreaker cb = new CircuitBreaker(config);
 
@@ -186,14 +186,23 @@ class CircuitBreakerTest {
         cb.recordCall("read", Map.of("path", "/tmp/file.txt"));
         cb.recordCall("read", Map.of("path", "/tmp/file.txt"));
         assertTrue(cb.isOpen());
+        assertEquals(CircuitState.OPEN, cb.getState());
 
-        // Wait for recovery (immediate with timeout=0)
-        // This simulates entering HALF_OPEN state
-        // In practice, we'd need to wait, but for testing we'll reset
-        cb.reset();
-        cb.recordCall("read", Map.of("path", "/tmp/file.txt"));
-        cb.recordCall("read", Map.of("path", "/tmp/file.txt"));
-        assertTrue(cb.isOpen());
+        // Wait for recovery timeout
+        try {
+            Thread.sleep(1100);  // Wait slightly longer than recovery timeout
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Now isOpen() should transition to HALF_OPEN and return false
+        assertFalse(cb.isOpen());
+        assertEquals(CircuitState.HALF_OPEN, cb.getState());
+
+        // Record success should close the circuit from HALF_OPEN
+        cb.recordSuccess();
+        assertEquals(CircuitState.CLOSED, cb.getState());
+        assertFalse(cb.isOpen());
     }
 
     @Test

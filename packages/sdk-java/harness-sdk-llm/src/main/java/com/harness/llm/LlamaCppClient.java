@@ -7,6 +7,7 @@ import java.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.harness.core.LLMClient;
 import com.harness.core.ModelPresets;
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
@@ -29,7 +30,7 @@ import com.harness.types.TokenUsage;
  *     .contextWindow("auto")  // Infers from filename
  *     .build();
  *
- * LLMResponse response = client.call(messages).join();
+ * LLMResponse response = client.call(messages, null, null);
  * </pre>
  */
 public class LlamaCppClient implements LLMClient {
@@ -134,40 +135,42 @@ public class LlamaCppClient implements LLMClient {
     }
 
     @Override
-    public String model_name() {
+    public String modelName() {
         return modelPath;
     }
 
     @Override
-    public CompletableFuture<LLMResponse> call(List<Message> messages) {
-        return call(messages, null, null);
-    }
-
-    @Override
-    public CompletableFuture<LLMResponse> call(
-            List<Message> messages,
-            List<Map<String, Object>> tools,
-            String system) {
-
+    public LLMResponse call(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
         // Lazy load on first call
         if (!loaded) {
             loadModel();
         }
 
-        return CompletableFuture.supplyAsync(() -> {
-            // In a real implementation, this would call llama.cpp JNI:
-            // return model.createChatCompletion(messages, maxTokens, temperature);
+        // In a real implementation, this would call llama.cpp JNI:
+        // return model.createChatCompletion(messages, maxTokens, temperature);
 
-            // Simulated response for now
-            logger.warn("LlamaCppClient.call() is simulated - no native bindings available");
+        // Simulated response for now
+        logger.warn("LlamaCppClient.call() is simulated - no native bindings available");
 
-            return new LLMResponse(
-                "[Simulated response - install llama.cpp JNI bindings for real inference]",
-                List.of(),
-                StopReason.END_TURN,
-                new TokenUsage(10, 5)
-            );
-        }, executor);
+        return LLMResponse.builder()
+            .content("[Simulated response - install llama.cpp JNI bindings for real inference]")
+            .toolCalls(List.of())
+            .stopReason(StopReason.END_TURN)
+            .usage(new TokenUsage(10, 5))
+            .build();
+    }
+
+    @Override
+    public CompletableFuture<LLMResponse> callAsync(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
+        return CompletableFuture.supplyAsync(() -> call(messages, tools, systemPrompt), executor);
+    }
+
+    @Override
+    public void stream(List<Message> messages, List<ToolDefinition> tools, String systemPrompt, StreamCallback onChunk) {
+        LLMResponse response = call(messages, tools, systemPrompt);
+        if (response.content() != null && onChunk != null) {
+            onChunk.onChunk(response.content());
+        }
     }
 
     /**

@@ -1,6 +1,5 @@
 package com.harness.mcp;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,34 +9,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.java.sdk.McpSyncClient;
-import io.modelcontextprotocol.java.sdk.McpClient;
-import io.modelcontextprotocol.java.sdk.ServerParameters;
-import io.modelcontextprotocol.java.sdk.ListToolsResult;
-import io.modelcontextprotocol.java.sdk.Tool;
-import io.modelcontextprotocol.java.sdk.ClientCapabilities;
-import io.modelcontextprotocol.java.sdk.transport.McpTransport;
-
-import com.harness.core.ToolCategory;
-
 /**
  * MCP server manager.
  *
- * Manages connections to multiple MCP servers and discovers their tools.
+ * Manages configurations for MCP servers and provides tool discovery interface.
+ *
+ * Note: This implementation provides configuration management and placeholder methods.
+ * Actual client connections require Kotlin SDK integration (see McpClientHelper.kt).
  */
 public class McpManager {
 
     private static final Logger logger = LoggerFactory.getLogger(McpManager.class);
 
-    private final Map<String, McpSyncClient> clients;
     private final Map<String, McpServerConfig> configs;
-    private final Map<String, List<McpToolWrapper>> serverTools;
+    private final Map<String, List<McpToolInfo>> serverTools;
 
     /**
      * Create manager.
      */
     public McpManager() {
-        this.clients = new ConcurrentHashMap<>();
         this.configs = new ConcurrentHashMap<>();
         this.serverTools = new ConcurrentHashMap<>();
     }
@@ -66,6 +56,8 @@ public class McpManager {
     /**
      * Connect to a specific server.
      *
+     * Note: This is a placeholder. Actual connection requires Kotlin SDK integration.
+     *
      * @param serverName Server name
      * @return true if connected successfully
      */
@@ -81,22 +73,10 @@ public class McpManager {
             return false;
         }
 
-        try {
-            McpSyncClient client = createClient(config);
-            client.initialize();
-
-            clients.put(serverName, client);
-
-            // Discover tools
-            discoverTools(serverName, client);
-
-            logger.info("Connected to MCP server: {}", serverName);
-            return true;
-
-        } catch (Exception e) {
-            logger.error("Failed to connect to MCP server {}: {}", serverName, e.getMessage());
-            return false;
-        }
+        // Placeholder - actual connection requires Kotlin SDK
+        logger.warn("MCP client connection not yet implemented for server: {}", serverName);
+        logger.info("To connect to MCP server, use McpClientHelper.kt or implement Kotlin SDK integration");
+        return false;
     }
 
     /**
@@ -118,75 +98,57 @@ public class McpManager {
      * @param serverName Server name
      */
     public void disconnect(String serverName) {
-        McpSyncClient client = clients.remove(serverName);
-        if (client != null) {
-            try {
-                client.closeGracefully();
-                logger.info("Disconnected from MCP server: {}", serverName);
-            } catch (Exception e) {
-                logger.warn("Error disconnecting from MCP server {}: {}", serverName, e.getMessage());
-            }
-        }
         serverTools.remove(serverName);
+        logger.info("Disconnected from MCP server: {}", serverName);
     }
 
     /**
      * Disconnect from all servers.
      */
     public void disconnectAll() {
-        for (String serverName : new ArrayList<>(clients.keySet())) {
+        for (String serverName : new ArrayList<>(serverTools.keySet())) {
             disconnect(serverName);
         }
     }
 
     /**
-     * Get all discovered tools.
+     * Get all registered tool info (placeholder).
      *
-     * @return List of all MCP tool wrappers
+     * @return List of all MCP tool info
      */
-    public List<McpToolWrapper> getAllTools() {
-        List<McpToolWrapper> allTools = new ArrayList<>();
-        for (List<McpToolWrapper> tools : serverTools.values()) {
+    public List<McpToolInfo> getAllToolInfos() {
+        List<McpToolInfo> allTools = new ArrayList<>();
+        for (List<McpToolInfo> tools : serverTools.values()) {
             allTools.addAll(tools);
         }
         return allTools;
     }
 
     /**
-     * Get tools from a specific server.
+     * Get tools info from a specific server.
      *
      * @param serverName Server name
-     * @return List of tools from the server
+     * @return List of tool info from the server
      */
-    public List<McpToolWrapper> getServerTools(String serverName) {
+    public List<McpToolInfo> getServerToolInfos(String serverName) {
         return serverTools.getOrDefault(serverName, List.of());
     }
 
     /**
-     * Get a specific tool.
+     * Get a specific tool info.
      *
      * @param toolName Full tool name (mcp_servername_toolname)
-     * @return Tool wrapper or null
+     * @return Tool info or null
      */
-    public McpToolWrapper getTool(String toolName) {
-        for (List<McpToolWrapper> tools : serverTools.values()) {
-            for (McpToolWrapper tool : tools) {
-                if (tool.name().equals(toolName)) {
+    public McpToolInfo getToolInfo(String toolName) {
+        for (List<McpToolInfo> tools : serverTools.values()) {
+            for (McpToolInfo tool : tools) {
+                if (tool.fullName().equals(toolName)) {
                     return tool;
                 }
             }
         }
         return null;
-    }
-
-    /**
-     * Get client for a server.
-     *
-     * @param serverName Server name
-     * @return MCP client or null
-     */
-    public McpSyncClient getClient(String serverName) {
-        return clients.get(serverName);
     }
 
     /**
@@ -196,14 +158,14 @@ public class McpManager {
      * @return true if connected
      */
     public boolean isConnected(String serverName) {
-        return clients.containsKey(serverName);
+        return serverTools.containsKey(serverName) && !serverTools.get(serverName).isEmpty();
     }
 
     /**
-     * Get list of connected server names.
+     * Get list of registered server names.
      */
-    public List<String> getConnectedServers() {
-        return new ArrayList<>(clients.keySet());
+    public List<String> getRegisteredServers() {
+        return new ArrayList<>(configs.keySet());
     }
 
     /**
@@ -212,7 +174,7 @@ public class McpManager {
     public Map<String, String> getStatus() {
         Map<String, String> status = new HashMap<>();
         for (String serverName : configs.keySet()) {
-            if (clients.containsKey(serverName)) {
+            if (isConnected(serverName)) {
                 int toolCount = serverTools.getOrDefault(serverName, List.of()).size();
                 status.put(serverName, "connected (" + toolCount + " tools)");
             } else if (configs.get(serverName).enabled()) {
@@ -225,62 +187,12 @@ public class McpManager {
     }
 
     /**
-     * Create MCP client based on transport type.
+     * Get config for a server.
+     *
+     * @param serverName Server name
+     * @return Server config or null
      */
-    private McpSyncClient createClient(McpServerConfig config) {
-        McpTransport transport;
-
-        if (config.transportType() == McpServerConfig.McpTransportType.SSE) {
-            // SSE transport
-            transport = new io.modelcontextprotocol.java.sdk.transport.HttpClientSseClientTransport(config.url());
-        } else {
-            // STDIO transport
-            ServerParameters params = ServerParameters.builder(config.command())
-                .args(config.args().toArray(new String[0]))
-                .build();
-            transport = new io.modelcontextprotocol.java.sdk.transport.StdioClientTransport(params);
-        }
-
-        Duration timeout = config.requestTimeout() != null ? config.requestTimeout() : Duration.ofSeconds(30);
-
-        return McpClient.sync(transport)
-            .requestTimeout(timeout)
-            .capabilities(ClientCapabilities.builder()
-                .roots(true)
-                .build())
-            .build();
-    }
-
-    /**
-     * Discover tools from a connected server.
-     */
-    private void discoverTools(String serverName, McpSyncClient client) {
-        try {
-            ListToolsResult result = client.listTools();
-            List<McpToolWrapper> tools = new ArrayList<>();
-
-            if (result.tools() != null) {
-                for (Tool tool : result.tools()) {
-                    McpToolInfo toolInfo = new McpToolInfo(
-                        serverName,
-                        tool.name(),
-                        tool.description(),
-                        tool.inputSchema() != null ? tool.inputSchema() : Map.of()
-                    );
-
-                    McpToolWrapper wrapper = new McpToolWrapper(client, toolInfo);
-                    tools.add(wrapper);
-
-                    logger.debug("Discovered MCP tool: {} from {}", tool.name(), serverName);
-                }
-            }
-
-            serverTools.put(serverName, tools);
-            logger.info("Discovered {} tools from {}", tools.size(), serverName);
-
-        } catch (Exception e) {
-            logger.error("Failed to discover tools from {}: {}", serverName, e.getMessage());
-            serverTools.put(serverName, List.of());
-        }
+    public McpServerConfig getConfig(String serverName) {
+        return configs.get(serverName);
     }
 }

@@ -64,7 +64,7 @@ class HookResultTest {
 
     @Test
     void testModifyResultMethod() {
-        ToolResult toolResult = new ToolResult("call-123", true, "output", null);
+        ToolResult toolResult = ToolResult.success("call-123", "output");
         HookResult result = HookResult.modifyResult(toolResult);
         assertEquals(HookAction.MODIFY_RESULT, result.action());
         assertEquals(toolResult, result.modifiedResult());

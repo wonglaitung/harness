@@ -117,12 +117,12 @@ public class MockLLMClient implements LLMClient {
         int inputTokens = estimateTokens(messages);
         int outputTokens = mock.getContent() != null ? mock.getContent().length() / 4 : 0;
 
-        return new LLMResponse(
-            mock.getContent(),
-            toolCalls,
-            mock.getStopReason(),
-            new TokenUsage(inputTokens, outputTokens)
-        );
+        return LLMResponse.builder()
+            .content(mock.getContent())
+            .toolCalls(toolCalls)
+            .stopReason(mock.getStopReason())
+            .usage(new TokenUsage(inputTokens, outputTokens))
+            .build();
     }
 
     @Override

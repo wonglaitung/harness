@@ -1,14 +1,11 @@
-package com.harness.mcp;
-
 /**
  * MCP integration module for Harness SDK Java.
  *
- * Provides integration with Model Context Protocol (MCP) servers.
+ * Provides configuration and management for Model Context Protocol (MCP) servers.
  *
  * Core Components:
- * - {@link McpManager}: Manages connections to multiple MCP servers
+ * - {@link McpManager}: Manages configurations for multiple MCP servers
  * - {@link McpServerConfig}: Configuration for MCP server connections
- * - {@link McpToolWrapper}: Wraps MCP tools as Harness Tools
  * - {@link McpToolInfo}: MCP tool metadata
  *
  * Usage:
@@ -16,23 +13,22 @@ package com.harness.mcp;
  * // Create manager
  * McpManager manager = new McpManager();
  *
- * // Register servers
- * manager.registerServer(McpServerConfig.stdio("filesystem", "npx", "-y", "@modelcontextprotocol/server-filesystem"));
- * manager.registerServer(McpServerConfig.sse("custom", "http://localhost:8080/mcp"));
+ * // Register servers (SSE/HTTP transport)
+ * manager.registerServer(McpServerConfig.sse("filesystem", "http://localhost:3000/mcp"));
  *
- * // Connect
- * manager.connectAll();
+ * // Get registered servers
+ * List<String> servers = manager.getRegisteredServers();
  *
- * // Get tools
- * List<McpToolWrapper> tools = manager.getAllTools();
- *
- * // Disconnect
- * manager.disconnectAll();
+ * // Get status
+ * Map<String, String> status = manager.getStatus();
  * ```
  *
  * Transport Types:
- * - STDIO: Process-based communication (npm packages)
- * - SSE: HTTP Server-Sent Events (remote servers)
+ * - SSE: HTTP Server-Sent Events (recommended for remote servers)
+ * - STDIO: Process-based communication (requires native process management)
+ *
+ * Note: This module provides configuration management. Actual client connections
+ * require Kotlin SDK integration (io.modelcontextprotocol:kotlin-sdk-jvm).
  *
  * @see com.harness.core.Tool
  */

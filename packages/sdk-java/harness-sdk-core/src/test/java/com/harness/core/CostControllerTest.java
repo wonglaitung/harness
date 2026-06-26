@@ -171,8 +171,12 @@ class CostControllerTest {
     void testControllerDefaultInit() {
         CostController controller = new CostController();
         assertNotNull(controller);
-        assertEquals(CostConfig.DEFAULT_MAX_TOKENS_PER_SESSION,
-            controller.getSessionUsage("test").totalTokens());
+        // New session has 0 usage (not the max limit)
+        assertEquals(0, controller.getSessionUsage("test").totalTokens());
+        // Verify config is set correctly
+        Map<String, Object> stats = controller.getStats();
+        Map<String, Object> configMap = (Map<String, Object>) stats.get("config");
+        assertEquals(CostConfig.DEFAULT_MAX_TOKENS_PER_SESSION, configMap.get("maxTokensPerSession"));
     }
 
     @Test

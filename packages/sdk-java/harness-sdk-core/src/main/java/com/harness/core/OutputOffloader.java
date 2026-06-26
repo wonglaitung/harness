@@ -161,6 +161,7 @@ public class OutputOffloader {
             originalResult.success(),
             offloaded.getReferenceString(),
             originalResult.error(),
+            originalResult.toolName(),
             Map.of(
                 "offloaded", true,
                 "offload_path", offloaded.filePath().toString(),

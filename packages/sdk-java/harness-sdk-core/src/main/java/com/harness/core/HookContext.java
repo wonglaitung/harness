@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
+import com.harness.types.ToolCall;
 import com.harness.types.ToolResult;
 
 /**
@@ -71,7 +72,7 @@ public record HookContext(
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message msg = messages.get(i);
             if ("user".equals(msg.role())) {
-                return msg.content();
+                return msg.contentAsString();
             }
         }
         return null;

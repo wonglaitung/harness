@@ -47,7 +47,7 @@ public class ToolExecutor {
 
         // Validate arguments
         ValidationResult validation = tool.validate(call.arguments());
-        if (!validation.valid()) {
+        if (!validation.isValid()) {
             return CompletableFuture.completedFuture(
                 ToolResult.failure(call.id(), "Validation failed: " + validation.error(), call.name())
             );

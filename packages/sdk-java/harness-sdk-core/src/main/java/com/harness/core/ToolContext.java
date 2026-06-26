@@ -19,6 +19,13 @@ public record ToolContext(
     }
 
     /**
+     * Create a ToolContext with working directory and session ID.
+     */
+    public static ToolContext of(String workingDirectory, String sessionId) {
+        return new ToolContext(sessionId, workingDirectory, 0, Map.of());
+    }
+
+    /**
      * Builder for ToolContext.
      */
     public static Builder builder() {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 
 class MemoryFileManagerTest {
 
@@ -15,68 +16,60 @@ class MemoryFileManagerTest {
     @Test
     void testCreateMemoryFile() {
         Path memoryFile = tempDir.resolve("MEMORY.md");
-        MemoryFileManager manager = new MemoryFileManager(memoryFile);
+        MemoryFileManager manager = new MemoryFileManager(tempDir);
 
-        assertTrue(java.nio.file.Files.exists(memoryFile));
+        // The manager doesn't create the file until we write to it
+        assertFalse(manager.exists());
     }
 
     @Test
     void testAddAndGetMemory() {
-        Path memoryFile = tempDir.resolve("MEMORY.md");
-        MemoryFileManager manager = new MemoryFileManager(memoryFile);
+        MemoryFileManager manager = new MemoryFileManager(tempDir);
 
         MemoryEntry entry = new MemoryEntry(
-            "user",
-            "Test User",
+            MemoryCategory.USER_PROFILE,
             "Test content",
-            MemoryCategory.USER,
-            MemorySource.HUMAN,
-            Instant.now()
+            MemorySource.USER_INPUT
         );
 
         manager.addEntry(entry);
 
-        java.util.List<MemoryEntry> memories = manager.getEntries();
+        List<String> memories = manager.getEntries(MemoryCategory.USER_PROFILE);
         assertFalse(memories.isEmpty());
-        assertEquals("Test content", memories.get(0).content());
+        assertTrue(memories.get(0).contains("Test content"));
     }
 
     @Test
     void testGetEntriesByCategory() {
-        Path memoryFile = tempDir.resolve("MEMORY.md");
-        MemoryFileManager manager = new MemoryFileManager(memoryFile);
+        MemoryFileManager manager = new MemoryFileManager(tempDir);
 
         MemoryEntry userEntry = new MemoryEntry(
-            "user", "User", "User content",
-            MemoryCategory.USER, MemorySource.HUMAN, Instant.now()
+            MemoryCategory.USER_PROFILE, "User content", MemorySource.USER_INPUT
         );
         MemoryEntry projectEntry = new MemoryEntry(
-            "project", "Project", "Project content",
-            MemoryCategory.PROJECT, MemorySource.HUMAN, Instant.now()
+            MemoryCategory.PROJECT_CONTEXT, "Project content", MemorySource.USER_INPUT
         );
 
         manager.addEntry(userEntry);
         manager.addEntry(projectEntry);
 
-        java.util.List<MemoryEntry> userMemories = manager.getEntriesByCategory(MemoryCategory.USER);
+        List<String> userMemories = manager.getEntries(MemoryCategory.USER_PROFILE);
         assertEquals(1, userMemories.size());
-        assertEquals("User content", userMemories.get(0).content());
+        assertTrue(userMemories.get(0).contains("User content"));
     }
 
     @Test
     void testRemoveEntry() {
-        Path memoryFile = tempDir.resolve("MEMORY.md");
-        MemoryFileManager manager = new MemoryFileManager(memoryFile);
+        MemoryFileManager manager = new MemoryFileManager(tempDir);
 
         MemoryEntry entry = new MemoryEntry(
-            "user", "User", "Test content",
-            MemoryCategory.USER, MemorySource.HUMAN, Instant.now()
+            MemoryCategory.USER_PROFILE, "Test content", MemorySource.USER_INPUT
         );
 
         manager.addEntry(entry);
-        assertEquals(1, manager.getEntries().size());
+        assertEquals(1, manager.getEntries(MemoryCategory.USER_PROFILE).size());
 
-        manager.removeEntry("user");
-        assertTrue(manager.getEntries().isEmpty());
+        manager.removeEntry(MemoryCategory.USER_PROFILE, 0);
+        assertTrue(manager.getEntries(MemoryCategory.USER_PROFILE).isEmpty());
     }
 }

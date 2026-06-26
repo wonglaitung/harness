@@ -1,10 +1,12 @@
 package com.harness.core;
 
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.harness.types.Message;
-import com.harness.types.Session;
 import com.harness.types.ToolCall;
 import com.harness.types.ToolResult;
 
@@ -12,24 +14,26 @@ class ToolExecutorTest {
 
     @Test
     void testToolRegistration() {
-        ToolExecutor executor = new ToolExecutor();
+        ToolExecutor executor = new ToolExecutor(List.of());
 
         Tool tool = new SimpleTool();
         executor.registerTool(tool);
 
-        assertTrue(executor.hasTool("simple"));
-        assertEquals(1, executor.toolCount());
+        List<Tool> tools = executor.listTools();
+        assertEquals(1, tools.size());
     }
 
     @Test
     void testToolExecution() {
-        ToolExecutor executor = new ToolExecutor();
-        executor.registerTool(new SimpleTool());
+        ToolExecutor executor = new ToolExecutor(List.of(new SimpleTool()));
 
-        ToolContext context = ToolContext.of("/tmp", "test-session");
+        ToolContext context = ToolContext.builder()
+            .workingDirectory("/tmp")
+            .sessionId("test-session")
+            .build();
         ToolCall call = new ToolCall("call-1", "simple", Map.of("input", "test"));
 
-        ToolResult result = executor.executeTool(call, context).join();
+        ToolResult result = executor.execute(call, context).join();
 
         assertTrue(result.success());
         assertEquals("Processed: test", result.content());
@@ -37,11 +41,14 @@ class ToolExecutorTest {
 
     @Test
     void testUnknownTool() {
-        ToolExecutor executor = new ToolExecutor();
-        ToolContext context = ToolContext.of("/tmp", "test-session");
+        ToolExecutor executor = new ToolExecutor(List.of());
+        ToolContext context = ToolContext.builder()
+            .workingDirectory("/tmp")
+            .sessionId("test-session")
+            .build();
         ToolCall call = new ToolCall("call-1", "unknown", Map.of());
 
-        ToolResult result = executor.executeTool(call, context).join();
+        ToolResult result = executor.execute(call, context).join();
 
         assertFalse(result.success());
         assertTrue(result.error().contains("Unknown tool"));
@@ -49,16 +56,18 @@ class ToolExecutorTest {
 
     @Test
     void testToolValidation() {
-        ToolExecutor executor = new ToolExecutor();
-        executor.registerTool(new ValidatingTool());
+        ToolExecutor executor = new ToolExecutor(List.of(new ValidatingTool()));
 
-        ToolContext context = ToolContext.of("/tmp", "test-session");
+        ToolContext context = ToolContext.builder()
+            .workingDirectory("/tmp")
+            .sessionId("test-session")
+            .build();
         ToolCall call = new ToolCall("call-1", "validating", Map.of());
 
-        ToolResult result = executor.executeTool(call, context).join();
+        ToolResult result = executor.execute(call, context).join();
 
         assertFalse(result.success());
-        assertTrue(result.error().contains("required"));
+        assertTrue(result.error().contains("Validation failed"));
     }
 
     // Helper test tools
@@ -76,10 +85,10 @@ class ToolExecutorTest {
         }
 
         @Override
-        public java.util.concurrent.CompletableFuture<ToolResult> execute(
+        public CompletableFuture<ToolResult> execute(
                 Map<String, Object> args, ToolContext ctx) {
             String input = (String) args.getOrDefault("input", "");
-            return java.util.concurrent.CompletableFuture.completedFuture(
+            return CompletableFuture.completedFuture(
                 ToolResult.success("", "Processed: " + input, name()));
         }
     }
@@ -95,7 +104,7 @@ class ToolExecutorTest {
         public Map<String, Object> inputSchema() {
             return Map.of("type", "object",
                 "properties", Map.of("value", Map.of("type", "string")),
-                "required", java.util.List.of("value"));
+                "required", List.of("value"));
         }
 
         @Override
@@ -107,9 +116,9 @@ class ToolExecutorTest {
         }
 
         @Override
-        public java.util.concurrent.CompletableFuture<ToolResult> execute(
+        public CompletableFuture<ToolResult> execute(
                 Map<String, Object> args, ToolContext ctx) {
-            return java.util.concurrent.CompletableFuture.completedFuture(
+            return CompletableFuture.completedFuture(
                 ToolResult.success("", "OK", name()));
         }
     }
