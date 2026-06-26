@@ -306,6 +306,96 @@ public record TokenUsage(
 }
 ```
 
+### ValidationResult
+
+```java
+package com.harness.core;
+
+/**
+ * 工具参数验证结果。
+ */
+public record ValidationResult(
+    boolean isValid,    // 验证是否通过
+    String error        // 错误信息（验证失败时）
+) {
+    /**
+     * 创建验证通过结果。
+     */
+    public static ValidationResult valid() {
+        return new ValidationResult(true, null);
+    }
+    
+    /**
+     * 创建验证失败结果。
+     */
+    public static ValidationResult invalid(String error) {
+        return new ValidationResult(false, error);
+    }
+    
+    /**
+     * 便捷方法：检查验证是否通过。
+     */
+    public boolean passed() {
+        return isValid;
+    }
+}
+```
+
+### TokenCounter
+
+```java
+package com.harness.core;
+
+/**
+ * 基于 jtokkit 的 Token 计数器。
+ * 使用 Caffeine 缓存提升性能。
+ */
+public class TokenCounter {
+    
+    /**
+     * 计算单个文本的 token 数量。
+     * @param text 输入文本，null 返回 0
+     */
+    public int count(String text);
+    
+    /**
+     * 计算多个文本的总 token 数量。
+     */
+    public int countAll(List<String> texts);
+    
+    /**
+     * 计算消息列表的 token 数量。
+     */
+    public int countMessages(List<Message> messages);
+    
+    /**
+     * 清除缓存。
+     */
+    public void clearCache();
+}
+```
+
+**使用示例**:
+```java
+TokenCounter counter = new TokenCounter();
+
+// 计算单个文本
+int tokens = counter.count("Hello, world!");
+
+// 计算多个文本
+int total = counter.countAll(List.of("Hello", "World"));
+
+// 计算消息列表
+List<Message> messages = List.of(
+    Message.system("You are a helpful assistant."),
+    Message.user("Hello!")
+);
+int msgTokens = counter.countMessages(messages);
+
+// 清除缓存（可选）
+counter.clearCache();
+```
+
 ## 工具系统
 
 ### Tool 接口

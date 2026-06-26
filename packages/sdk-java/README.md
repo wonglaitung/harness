@@ -88,6 +88,10 @@ harness-sdk-java/
 - **SubAgentManager**: 子代理管理器，支持并行子任务执行
 - **Tool 接口**: 工具抽象类，支持验证和异步执行
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
+  - `count(String)`: 计算单个文本的 token 数量
+  - `countAll(List<String>)`: 计算多个文本的总 token 数量
+  - `countMessages(List<Message>)`: 计算消息列表的 token 数量
+  - `clearCache()`: 清除缓存
 - **LoopConfig**: 循环配置，支持 Builder 模式
 - **ModelPresets**: 预定义模型配置（Claude, GPT, GLM, Qwen, DeepSeek 等）
 - **ProgressFormatter**: 进度事件格式化（simple, detailed, colored, emoji）

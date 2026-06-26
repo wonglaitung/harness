@@ -59,22 +59,39 @@ import com.anthropic.models.messages.Message;
 // 发送请求
 MessageCreateParams params = MessageCreateParams.builder()
     .model(Model.CLAUDE_SONNET_4_6)
-    .maxTokens(1024)
+    .maxTokens(1024L)  // 注意：maxTokens 现在接受 long 类型
     .addUserMessage("Hello, Claude")
     .build();
 
 Message message = client.messages().create(params);
-System.out.println(message.content().get(0).asText().text());
+
+// 解析响应（使用 Optional-based API）
+message.content().forEach(block -> {
+    block.text().ifPresent(textBlock -> {
+        System.out.println(textBlock.text());
+    });
+});
 ```
 
 **流式响应**:
 ```java
-// 流式 API
-client.messages().createStreaming(params)
-    .subscribe(chunk -> {
-        System.out.print(chunk.content().get(0).asText().text());
+// 流式 API（使用 try-with-resources）
+try (var streamResponse = client.messages().createStreaming(params)) {
+    streamResponse.stream().forEach(event -> {
+        event.contentBlockDelta().ifPresent(deltaEvent -> {
+            deltaEvent.delta().text().ifPresent(textDelta -> {
+                System.out.print(textDelta.text());
+            });
+        });
     });
+}
 ```
+
+**API 注意事项**:
+- `maxTokens()` 参数现在接受 `long` 类型
+- 响应内容使用 Optional-based API（`block.text().ifPresent(...)`）
+- 流式响应使用 `stream().forEach()` 模式，支持 try-with-resources
+- `stopReason()` 返回 `Optional<StopReason>`
 
 **配置文件方式**:
 ```yaml
@@ -122,27 +139,39 @@ OpenAIClient client = OpenAIOkHttpClient.builder()
 ```java
 import com.openai.models.chat.completions.*;
 
-// 发送请求
+// 发送请求（使用 convenience methods）
 ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
     .model("your-model-name")
-    .messages(List.of(
-        ChatCompletionUserMessageParam.builder()
-            .content("Hello")
-            .build()
-    ))
+    .addSystemMessage("You are a helpful assistant.")
+    .addUserMessage("Hello")
     .build();
 
 ChatCompletion completion = client.chat().completions().create(params);
+
+// 解析响应（使用 Optional-based API）
+String content = completion.choices().get(0).message().content().orElse("");
+System.out.println(content);
 ```
 
 **流式响应**:
 ```java
-// 流式 API
-client.chat().completions().createStreaming(params)
-    .subscribe(chunk -> {
-        System.out.print(chunk.choices().get(0).delta().content());
+// 流式 API（使用 try-with-resources）
+try (var stream = client.chat().completions().createStreaming(params)) {
+    stream.stream().forEach(chunk -> {
+        if (chunk.choices() != null && !chunk.choices().isEmpty()) {
+            chunk.choices().get(0).delta().content().ifPresent(text -> {
+                System.out.print(text);
+            });
+        }
     });
+}
 ```
+
+**API 注意事项**:
+- 使用 `addSystemMessage()`/`addUserMessage()` convenience methods
+- 响应内容使用 `Optional`（`message.content().orElse("")`）
+- 流式响应使用 `stream().forEach()` 模式
+- `usage()` 返回 `Optional<CompletionUsage>`
 
 **配置文件方式**:
 ```yaml
@@ -197,7 +226,7 @@ var result = client.callTool("read_file", Map.of("path", "README.md"));
 
 ### 4. Token 计数 (jtokkit)
 
-**Maven 坐标**: `com.knuddelsgmbh:jtokkit:1.0.0`
+**Maven 坐标**: `com.knuddels:jtokkit:1.0.0`
 
 **支持的编码**:
 | 编码名 | 模型 |
@@ -210,9 +239,9 @@ var result = client.callTool("read_file", Map.of("path", "README.md"));
 
 **使用示例**:
 ```java
-import com.knuddelsgmbh.jtokkit.Encodings;
-import com.knuddelsgmbh.jtokkit.api.Encoding;
-import com.knuddelsgmbh.jtokkit.api.EncodingType;
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
 
 // 获取编码器
 Encoding encoding = Encodings.newDefaultEncodingRegistry()
