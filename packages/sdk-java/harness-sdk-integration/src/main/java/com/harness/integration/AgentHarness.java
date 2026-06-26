@@ -16,6 +16,9 @@ import com.harness.core.LoopConfig;
 import com.harness.core.Tool;
 import com.harness.core.ToolRegistry;
 import com.harness.core.LifecycleHook;
+import com.harness.skills.SkillInjector;
+import com.harness.skills.SkillLoader;
+import com.harness.skills.SkillRegistry;
 import com.harness.types.LoopResult;
 import com.harness.types.Session;
 import com.harness.types.TokenUsage;
@@ -60,6 +63,11 @@ public class AgentHarness {
     // Session management
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
+    // Skill system
+    private final SkillRegistry skillRegistry;
+    private final SkillLoader skillLoader;
+    private final SkillInjector skillInjector;
+
     /**
      * Create AgentHarness with configuration.
      */
@@ -69,6 +77,13 @@ public class AgentHarness {
         this.llmClient = null; // Will be set via builder or method
         this.hookRegistry = new HookRegistry();
         this.agentLoop = null;
+
+        // Initialize skill system
+        this.skillRegistry = new SkillRegistry();
+        this.skillLoader = new SkillLoader(skillRegistry);
+        this.skillInjector = new SkillInjector(skillRegistry);
+        this.skillLoader.loadDefaults();
+
         logger.info("AgentHarness initialized with model: {}", config.getModel());
     }
 
@@ -80,6 +95,12 @@ public class AgentHarness {
         this.llmClient = llmClient;
         this.toolRegistry = new ToolRegistry();
         this.hookRegistry = new HookRegistry();
+
+        // Initialize skill system
+        this.skillRegistry = new SkillRegistry();
+        this.skillLoader = new SkillLoader(skillRegistry);
+        this.skillInjector = new SkillInjector(skillRegistry);
+        this.skillLoader.loadDefaults();
 
         // Create loop config from harness config
         LoopConfig loopConfig = LoopConfig.builder()
@@ -340,6 +361,58 @@ public class AgentHarness {
             agentLoop.reset();
         }
         hookRegistry.reset();
+    }
+
+    // -------------------------------------------------------------------------
+    // Skill System Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the skill registry.
+     */
+    public SkillRegistry getSkillRegistry() {
+        return skillRegistry;
+    }
+
+    /**
+     * Get the skill loader.
+     */
+    public SkillLoader getSkillLoader() {
+        return skillLoader;
+    }
+
+    /**
+     * Get the skill injector.
+     */
+    public SkillInjector getSkillInjector() {
+        return skillInjector;
+    }
+
+    /**
+     * Reload skills from disk.
+     */
+    public void reloadSkills() {
+        skillRegistry.reload();
+        skillLoader.loadDefaults();
+        logger.info("Skills reloaded");
+    }
+
+    /**
+     * Inject skills into a system prompt.
+     *
+     * @param systemPrompt Original system prompt
+     * @param userInput User's input text
+     * @return Enhanced system prompt with skills injected
+     */
+    public String injectSkills(String systemPrompt, String userInput) {
+        return skillInjector.injectSkills(systemPrompt, userInput);
+    }
+
+    /**
+     * List all available skills.
+     */
+    public java.util.List<String> listSkills() {
+        return skillRegistry.listSkills();
     }
 
     /**

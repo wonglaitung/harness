@@ -68,7 +68,7 @@ public class McpToolWrapper implements Tool {
 
         return client.callTool(toolInfo.toolName(), args)
             .thenApply(mcpResult -> {
-                if (mcpResult.isSuccess()) {
+                if (mcpResult.success()) {
                     return ToolResult.success(
                         context != null ? context.sessionId() : "",
                         mcpResult.content(),
