@@ -1173,18 +1173,18 @@ def _update_height(self):
 
 #### 同步率
 
-| 模块 | 覆盖率 |
-|------|--------|
-| Core | 98% |
-| Types | 100% |
-| LLM | 95% |
-| MCP | 100% |
-| Memory | 95% |
-| Security | 100% |
-| Skills | 95% |
-| Tools | 100% |
-| Guardrails | 100% |
-| Service | 85% |
+| 模块 | 覆盖率 | 差异原因 |
+|------|--------|----------|
+| Core | 98% | 代码组织差异：HookManager 集成在 AgentLoop，ObservabilityManager 分散为 MetricsCollector + TracingManager |
+| Types | 100% | 完全匹配 |
+| LLM | 95% | 模块位置差异：LLMClient 在 core 模块，LLMConfig 合并在 HarnessConfig 中 |
+| MCP | 100% | 完全匹配 |
+| Memory | 95% | 语言特性差异：Java 使用同步 JDBC，无 AsyncSQLiteSessionStore |
+| Security | 100% | 完全匹配 |
+| Skills | 95% | 实现方式差异：LoadingLevel 未独立暴露为公开 API |
+| Tools | 100% | 完全匹配 |
+| Guardrails | 100% | 完全匹配 |
+| Service | 85% | 架构设计差异：Python SDK 是 Sidecar 模式（提供 HTTP 端点），Java SDK 是嵌入式库（由应用定义端点） |
 
 **总体同步率: 96%**
 

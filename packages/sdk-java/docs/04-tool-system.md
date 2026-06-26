@@ -1119,6 +1119,107 @@ public enum ToolCategory {
 }
 ```
 
+## Web 工具
+
+### WebSearchTool
+
+使用 DuckDuckGo Instant Answer API 进行网页搜索（免费，无需 API Key）：
+
+```java
+import com.harness.tools.WebSearchTool;
+
+WebSearchTool tool = new WebSearchTool();
+
+// 执行搜索
+Map<String, Object> args = Map.of(
+    "query", "Java 21 features",
+    "num_results", 5  // 可选，默认 5
+);
+ToolResult result = tool.execute(args, context).join();
+
+// 返回 JSON 格式的搜索结果
+// [{"title": "...", "link": "...", "snippet": "..."}, ...]
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| query | String | 必填 | 搜索关键词 |
+| num_results | int | 5 | 返回结果数量 |
+
+### WebFetchTool
+
+抓取网页内容：
+
+```java
+import com.harness.tools.WebFetchTool;
+
+WebFetchTool tool = new WebFetchTool();
+
+Map<String, Object> args = Map.of(
+    "url", "https://example.com/article",
+    "timeout", 30000  // 可选，默认 30 秒
+);
+ToolResult result = tool.execute(args, context).join();
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| url | String | 必填 | 网页 URL |
+| timeout | int | 30000 | 超时时间（毫秒） |
+
+### WebToMarkdownTool
+
+将网页转换为 Markdown 格式：
+
+```java
+import com.harness.tools.WebToMarkdownTool;
+
+WebToMarkdownTool tool = new WebToMarkdownTool();
+
+Map<String, Object> args = Map.of(
+    "url", "https://example.com/article"
+);
+ToolResult result = tool.execute(args, context).join();
+
+// 返回 Markdown 格式的内容
+// # Title\n\nContent...
+```
+
+**特性**：
+- 自动提取网页正文
+- 保留标题、列表、链接等格式
+- 过滤广告和导航栏
+
+### 使用示例
+
+```java
+import com.harness.Harness;
+import com.harness.HarnessConfig;
+import com.harness.tools.WebSearchTool;
+import com.harness.tools.WebFetchTool;
+import com.harness.tools.WebToMarkdownTool;
+
+// 创建 Agent 并添加 Web 工具
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .tools(List.of(
+        new WebSearchTool(),
+        new WebFetchTool(),
+        new WebToMarkdownTool()
+    ))
+    .build();
+
+Harness agent = new Harness(config);
+
+// Agent 可以自主搜索和获取网页内容
+LoopResult result = agent.run("搜索最新的 Java 21 特性并总结");
+```
+
 ## 下一步
 
 - [05-memory-system.md](./05-memory-system.md) - 了解记忆系统

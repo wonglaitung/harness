@@ -533,6 +533,144 @@ McpServerConfig config = McpServerConfig.stdio(
 
 ---
 
+## MCP Transport 层
+
+### Transport 接口
+
+MCP Transport 是传输层抽象，支持不同的通信机制：
+
+```java
+package com.harness.mcp;
+
+/**
+ * MCP transport layer abstraction.
+ */
+public interface MCPTransport {
+
+    /**
+     * Establish connection to MCP server.
+     */
+    void connect() throws IOException;
+
+    /**
+     * Close connection to MCP server.
+     */
+    void disconnect();
+
+    /**
+     * Send a JSON-RPC message.
+     */
+    void send(Map<String, Object> message) throws IOException;
+
+    /**
+     * Send a JsonRpcRequest.
+     */
+    void send(JsonRpcRequest request) throws IOException;
+
+    /**
+     * Receive a message (blocking).
+     */
+    Map<String, Object> receive() throws InterruptedException;
+
+    /**
+     * Receive a message with timeout.
+     */
+    Map<String, Object> receive(long timeout, TimeUnit unit)
+        throws InterruptedException, TimeoutException;
+
+    /**
+     * Check if transport is connected.
+     */
+    boolean isConnected();
+}
+```
+
+### StdioTransport
+
+子进程标准输入输出传输，用于本地 MCP 服务器：
+
+```java
+import com.harness.mcp.StdioTransport;
+
+// 创建 stdio 传输
+StdioTransport transport = StdioTransport.builder()
+    .command("mcp-server-filesystem")
+    .args("--root", "/workspace")
+    .env(Map.of("DEBUG", "1"))
+    .build();
+
+// 连接
+transport.connect();
+
+// 发送请求
+JsonRpcRequest request = new JsonRpcRequest("1", "tools/list", Map.of());
+transport.send(request);
+
+// 接收响应
+Map<String, Object> response = transport.receive();
+
+// 断开
+transport.disconnect();
+```
+
+**特性**：
+- 启动子进程并通过 stdin/stdout 通信
+- 后台线程读取 stdout 和 stderr
+- 支持进程超时终止
+
+### HTTPTransport
+
+HTTP/SSE 传输，支持三种协议：
+
+```java
+import com.harness.mcp.HTTPTransport;
+
+// 创建 HTTP 传输
+HTTPTransport transport = HTTPTransport.builder()
+    .url("http://localhost:3000")
+    .timeout(Duration.ofSeconds(30))
+    .build();
+
+// 自动检测协议
+transport.connect();
+
+// 查看检测到的协议
+String protocol = transport.getProtocol();
+// "streamable-http", "http-sse", 或 "fastmcp-sse"
+```
+
+**支持的协议**：
+
+| 协议 | 说明 | 检测方式 |
+|------|------|----------|
+| Streamable HTTP | 2025-11-25 规范，POST /mcp，响应可能为 SSE | 尝试 POST /mcp |
+| HTTP+SSE | 2024-11-05 规范（已弃用），POST /message + GET /sse | POST /mcp 返回 400/404/405 |
+| FastMCP SSE | FastMCP 实现，GET /sse 发现端点 | 默认回退 |
+
+**使用示例**：
+
+```java
+// 强制指定协议
+HTTPTransport transport = HTTPTransport.builder()
+    .url("http://localhost:3000")
+    .protocol(HTTPTransport.PROTOCOL_STREAMABLE_HTTP)
+    .build();
+
+// 发送请求
+Map<String, Object> request = Map.of(
+    "jsonrpc", "2.0",
+    "id", "1",
+    "method", "tools/list",
+    "params", Map.of()
+);
+transport.send(request);
+
+// 接收响应（带超时）
+JsonRpcResponse response = transport.receiveResponse(5, TimeUnit.SECONDS);
+```
+
+---
+
 ## 注意事项
 
 ### 依赖版本

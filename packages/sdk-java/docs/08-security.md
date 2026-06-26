@@ -937,6 +937,112 @@ public String getSafeErrorMessage(Exception e) {
 }
 ```
 
+## 中文 PII 识别
+
+### 概述
+
+Java SDK 提供完整的中文 PII（个人身份信息）识别和脱敏功能，支持中国大陆和香港的多种证件和号码格式。
+
+### 支持的 PII 类型
+
+| 类型 | 识别器 | 格式示例 |
+|------|--------|----------|
+| 中国大陆手机号 | `ChinaMobilePhoneRecognizer` | 13812345678 |
+| 中国大陆身份证 | `ChinaIDCardRecognizer` | 110101199001011234 |
+| 银行卡号 | `ChinaBankCardRecognizer` | 6222021234567890123 |
+| 护照号码 | `ChinaPassportRecognizer` | E12345678 |
+| 统一社会信用代码 | `ChinaSocialCreditCodeRecognizer` | 91110000000000000X |
+| 车牌号码 | `ChinaLicensePlateRecognizer` | 京A12345 |
+| 香港手机号 | `HongKongPhoneRecognizer` | 51234567 |
+| 香港身份证 | `HongKongIDCardRecognizer` | A123456(7) |
+
+### ChinesePIIGuardrail
+
+完整的中文 PII 安全护栏，支持检测和脱敏：
+
+```java
+import com.harness.guardrails.ChinesePIIGuardrail;
+import com.harness.guardrails.GuardrailConfig;
+
+// 创建中文 PII 护栏
+GuardrailConfig config = GuardrailConfig.builder()
+    .enablePIIDetection(true)
+    .enableRedaction(true)
+    .build();
+
+ChinesePIIGuardrail guardrail = new ChinesePIIGuardrail(config);
+
+// 检测 PII
+String text = "我的手机号是13812345678，身份证是110101199001011234";
+List<PIIEntity> entities = guardrail.detect(text);
+// entities 包含检测到的 PII 信息
+
+// 脱敏处理
+String redacted = guardrail.redact(text);
+// "我的手机号是<PHONE>，身份证是<ID_CARD>"
+```
+
+### 中文姓名识别
+
+基于姓氏库 + 规则的中文姓名识别器：
+
+```java
+import com.harness.guardrails.ChineseNameRecognizer;
+
+ChineseNameRecognizer recognizer = new ChineseNameRecognizer();
+
+// 识别姓名
+List<PIIEntity> names = recognizer.recognize("张三和李四一起去了北京");
+// 识别到 "张三" 和 "李四"
+
+// 设置最小置信度
+recognizer.setMinConfidence(0.8);
+```
+
+**识别规则**：
+- 使用 Top 100 中文姓氏 + 复姓（欧阳、司马等）
+- 上下文感知评分（关键词提升置信度）
+- 误报过滤（过滤常见非姓名短语）
+
+### 上下文感知评分
+
+PII 识别器支持上下文关键词提升评分：
+
+```java
+// 手机号识别：附近有"手机"、"电话"、"联系"等关键词时评分更高
+// 身份证识别：附近有"身份证"、"证件"、"号码"等关键词时评分更高
+// 银行卡识别：附近有"银行卡"、"卡号"、"账户"等关键词时评分更高
+```
+
+### 多语言支持
+
+支持简体中文、繁体中文、英文三种脚本：
+
+```java
+ChinesePIIGuardrail guardrail = new ChinesePIIGuardrail();
+
+// 自动检测脚本类型
+guardrail.setScriptType(ScriptType.AUTO);  // 默认
+
+// 强制指定脚本类型
+guardrail.setScriptType(ScriptType.SIMPLIFIED_CHINESE);
+guardrail.setScriptType(ScriptType.TRADITIONAL_CHINESE);
+guardrail.setScriptType(ScriptType.ENGLISH);
+```
+
+### 自定义脱敏占位符
+
+```java
+Map<String, String> placeholders = Map.of(
+    "PHONE", "<电话>",
+    "ID_CARD", "<身份证>",
+    "BANK_CARD", "<银行卡>",
+    "NAME", "<姓名>"
+);
+
+guardrail.setPlaceholders(placeholders);
+```
+
 ## 下一步
 
 - [09-implementation.md](./09-implementation.md) - 了解实施路线图

@@ -19,8 +19,8 @@
 | `harness/skills/` | `harness-sdk-skills/` | ✅ 对应 |
 | `harness/tools/` | `harness-sdk-tools/` | ✅ 对应 |
 | `harness/security/` | `harness-sdk-security/` | ✅ 对应 |
-| `harness/guardrails/` | `harness-sdk-guardrails/` | ⚠️ 重复实现 |
-| `harness/service/` | - | ❌ 缺失 |
+| `harness/guardrails/` | `harness-sdk-guardrails/` | ✅ 对应 |
+| `harness/service/` | `harness-sdk-core/` (分散) | ⚠️ 架构差异 |
 | `harness/testing/` | `harness-sdk-integration/src/main/java/com/harness/testing/` | ✅ 对应 |
 | `harness/sdk/` | `harness-sdk-integration/` | ✅ 对应 |
 
@@ -262,7 +262,7 @@
 | Core | 98% | HookManager 未独立实现 |
 | Types | 100% | 完全匹配 |
 | LLM | 95% | LLMConfig 未独立实现 |
-| MCP | 90% | StdioTransport 未实现 |
+| MCP | 100% | 完全匹配 |
 | Memory | 95% | AsyncSQLiteSessionStore 未实现 |
 | Security | 100% | 完全匹配 |
 | Skills | 95% | - |
@@ -367,3 +367,40 @@ Java SDK 已实现 Python SDK 约 **96%** 的功能。主要差距：
 - **HTTPTransport.java** - HTTP/SSE 传输（支持 Streamable HTTP、HTTP+SSE、FastMCP）
 
 建议后续可选实现：Spring Boot HTTP 端点。
+
+---
+
+## 7. 架构差异说明
+
+### Python SDK - Sidecar 模式
+
+```
+┌─────────────────┐
+│  Spring Boot    │
+│  业务服务 (Java) │ ──HTTP/WS──▶ Python Agent Sidecar
+└─────────────────┘                   │
+                                      ▼
+                                 LLM API
+```
+
+- 提供 FastAPI HTTP 端点
+- 作为独立微服务部署
+- 适合渐进式引入 AI 能力
+
+### Java SDK - 嵌入式库模式
+
+```
+┌─────────────────┐
+│  Spring Boot    │
+│  应用           │
+│    ↓           │
+│  AgentHarness  │ ← 直接调用
+└─────────────────┘
+```
+
+- 纯库，无 HTTP 端点
+- 应用自己定义 Controller
+- Spring Boot Actuator 提供 /health、/metrics
+- 更低延迟，无网络开销
+
+**结论**：96% 的同步率是合理的，剩余 4% 是框架依赖差异而非功能缺失。

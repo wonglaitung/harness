@@ -2050,3 +2050,35 @@ Java SDK 没有对应的 HTTP 端点实现。
 
 - Python SDK service 模块：`packages/sdk/src/harness/service/__init__.py`
 - Java SDK 架构：`packages/sdk-java/docs/FULL_SYNC_REPORT.md`
+
+---
+
+## 2026-06-26: SDK 模块覆盖率差异分析
+
+### 问题
+
+Java SDK 各模块同步率不同，Core 98%、LLM 95%、Memory 95%、Skills 95%、Service 85%，原因是什么？
+
+### 分析
+
+| 模块 | 覆盖率 | 差异原因 |
+|------|--------|----------|
+| Core | 98% | **代码组织差异**：Python 的 `HookManager` 在 Java 中集成到 `AgentLoop`；`ObservabilityManager` 在 Java 中分散为 `MetricsCollector` + `TracingManager` 两个独立类 |
+| LLM | 95% | **模块位置差异**：Java 的 `LLMClient` 放在 core 模块而非独立 llm 模块；`LLMConfig` 合并在 `HarnessConfig` 中而非独立配置类 |
+| Memory | 95% | **语言特性差异**：Java 使用同步 JDBC API，Python 的 `AsyncSQLiteSessionStore` 在 Java 中没有对应实现（Java 生态偏好同步数据库访问） |
+| Skills | 95% | **实现方式差异**：Python 的 `LoadingLevel` 枚举在 Java 中未独立暴露为公开 API，作为内部实现细节处理 |
+| Service | 85% | **架构设计差异**：Python SDK 设计为 Sidecar 模式（需要提供 FastAPI HTTP 端点），Java SDK 设计为嵌入式库（由 Spring Boot 应用定义端点） |
+
+### 教训
+
+1. **代码组织 != 功能缺失**：同样功能的代码可能组织在不同文件/模块中，不影响实际能力
+2. **语言特性影响实现**：Python 的 async/await 在 Java 中有不同的解决方案
+3. **模块边界是软约束**：不同语言生态对模块划分有不同习惯
+4. **架构定位决定接口**：Sidecar 需要暴露 HTTP，嵌入式库只需要 API
+
+### 结论
+
+同步率分析要区分三类差异：
+- **代码组织差异**：功能相同，代码位置不同（不影响使用）
+- **语言特性差异**：因语言生态不同而采用不同实现方式
+- **架构设计差异**：因定位不同而有意省略的接口

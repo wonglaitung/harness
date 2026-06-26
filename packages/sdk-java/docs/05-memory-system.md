@@ -944,6 +944,137 @@ public enum MemoryCategory {
 }
 ```
 
+## SessionStore 接口
+
+### 概述
+
+SessionStore 提供会话持久化能力，支持跨应用重启恢复会话状态。
+
+### 接口定义
+
+```java
+package com.harness.memory;
+
+/**
+ * Session storage interface.
+ */
+public interface SessionStore {
+
+    /**
+     * Save a session.
+     */
+    void save(Session session);
+
+    /**
+     * Load a session by ID.
+     */
+    Optional<Session> load(String sessionId);
+
+    /**
+     * Delete a session.
+     */
+    void delete(String sessionId);
+
+    /**
+     * Check if a session exists.
+     */
+    default boolean exists(String sessionId) {
+        return load(sessionId).isPresent();
+    }
+
+    /**
+     * List all session IDs.
+     */
+    List<String> listSessions();
+
+    /**
+     * Delete all sessions.
+     */
+    void deleteAll();
+}
+```
+
+### FileSessionStore
+
+JSON 文件存储实现：
+
+```java
+import com.harness.memory.FileSessionStore;
+
+// 创建文件存储
+Path storageDir = Path.of(System.getProperty("user.home"), ".harness", "sessions");
+SessionStore store = new FileSessionStore(storageDir);
+
+// 保存会话
+Session session = Session.builder()
+    .id("session-123")
+    .messages(messages)
+    .build();
+store.save(session);
+
+// 加载会话
+Optional<Session> loaded = store.load("session-123");
+
+// 列出所有会话
+List<String> sessionIds = store.listSessions();
+
+// 删除会话
+store.delete("session-123");
+```
+
+**文件格式**：每个会话存储为独立的 JSON 文件 `{sessionId}.json`
+
+### SQLiteSessionStore
+
+SQLite 数据库存储实现：
+
+```java
+import com.harness.memory.SQLiteSessionStore;
+
+// 创建 SQLite 存储
+Path dbPath = Path.of(System.getProperty("user.home"), ".harness", "sessions.db");
+SessionStore store = new SQLiteSessionStore(dbPath);
+
+// 使用方式与 FileSessionStore 相同
+store.save(session);
+Optional<Session> loaded = store.load("session-123");
+```
+
+**特性**：
+- 单文件数据库，便于备份
+- 支持事务操作
+- 自动创建表结构
+- 更高效的查询性能
+
+### 集成到 Agent
+
+```java
+import com.harness.Harness;
+import com.harness.HarnessConfig;
+import com.harness.memory.FileSessionStore;
+
+// 创建会话存储
+SessionStore sessionStore = new FileSessionStore(Path.of(".harness/sessions"));
+
+// 配置 Agent
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+    .sessionStore(sessionStore)
+    .build();
+
+Harness agent = new Harness(config);
+
+// 恢复之前的会话
+Optional<Session> previousSession = sessionStore.load("session-123");
+if (previousSession.isPresent()) {
+    agent.resume(previousSession.get());
+}
+
+// 运行 Agent（会话会自动保存）
+LoopResult result = agent.run("继续之前的工作");
+```
+
 ## 下一步
 
 - [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 集成
