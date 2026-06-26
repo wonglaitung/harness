@@ -211,6 +211,26 @@ tools:
    - 注意事项2
    ```
 
+3. **建立双向链接**
+
+   每个文档章节末尾必须有"下一步"或"相关文档"部分，链接到相关文档：
+
+   ```markdown
+   ## 下一步
+
+   - [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
+   - [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 工具集成
+   ```
+
+   **双向链接规则**：
+   - 在文档 A 添加新功能章节后，必须更新该章节末尾的"下一步"链接
+   - 同时检查相关文档 B，确保 B 中也有链接指向 A
+   - 链接使用相对路径 `./filename.md`
+
+   **示例**：
+   - 在 `04-tool-system.md` 添加 Web 工具章节 → 末尾添加链接到相关文档
+   - 在 `08-security.md` 添加中文 PII 章节 → 检查 `04-tool-system.md` 是否需要添加反向链接（如果 Web 工具涉及安全）
+
 ### Phase 4: 执行更新
 
 1. **确认更新内容**
@@ -256,6 +276,7 @@ tools:
 4. **代码可运行**: 所有代码示例必须是有效的 Python 代码
 5. **先分析后更新**: 必须先完成代码分析再执行更新
 6. **用户确认**: 执行更新前必须展示计划并等待用户确认
+7. **建立双向链接**: 每个新增章节必须有"下一步"链接，相关文档间要建立双向引用
 
 ## 注意事项
 
@@ -267,3 +288,8 @@ tools:
 6. **Cloud 相关变更**: 同时更新 `packages/cloud/docs/` 和 `packages/cloud/README.md`
 7. **Scraper 相关变更**: 同时更新 `packages/scraper/docs/` 和 `packages/scraper/README.md`
 8. **跨包经验教训**: 更新 `lessons.md` 和 `packages/sdk/docs/programmer_skill.md`
+9. **双向链接检查清单**:
+   - 新增章节末尾是否有"下一步"链接？
+   - 相关文档是否有反向链接？
+   - 链接路径是否正确（相对路径 `./filename.md`）？
+   - 链接描述是否清晰（如"了解 XXX 功能"）？

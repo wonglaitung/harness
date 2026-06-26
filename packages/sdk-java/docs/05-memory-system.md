@@ -1077,5 +1077,6 @@ LoopResult result = agent.run("继续之前的工作");
 
 ## 下一步
 
+- [04-tool-system.md](./04-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
 - [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 集成
 - [07-sdk-api.md](./07-sdk-api.md) - 查看完整 API 参考

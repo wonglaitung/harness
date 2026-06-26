@@ -698,6 +698,8 @@ var asyncClient = McpClient.async(transport)
 
 ## 下一步
 
+- [04-tool-system.md](./04-tool-system.md) - 了解工具系统（MCP 工具包装器）
+- [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
 - [07-sdk-api.md](./07-sdk-api.md) - 查看完整 API 参考
 - [08-security.md](./08-security.md) - 了解安全设计
 - [09-implementation.md](./09-implementation.md) - 查看实施进度
