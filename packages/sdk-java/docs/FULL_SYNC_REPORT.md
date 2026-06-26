@@ -174,10 +174,10 @@
 | `SystemPromptConfig` | `SystemPromptConfig.java` | ✅ |
 | `VectorMemoryStore` | `VectorMemoryStore.java` | ✅ |
 | `TokenCounter` | `TokenCounter.java` (core) | ✅ |
-| `SessionStore` | - | ⚠️ 使用 SessionManager |
-| `FileSessionStore` | - | ⚠️ 未实现 |
-| `SQLiteSessionStore` | - | ⚠️ 未实现 |
-| `AsyncSQLiteSessionStore` | - | ⚠️ 未实现 |
+| `SessionStore` | `SessionStore.java` | ✅ 已实现 |
+| `FileSessionStore` | `FileSessionStore.java` | ✅ 已实现 |
+| `SQLiteSessionStore` | `SQLiteSessionStore.java` | ✅ 已实现 |
+| `AsyncSQLiteSessionStore` | - | ⚠️ 未实现 (Java 使用同步 API) |
 
 ### 2.6 Security 模块
 
@@ -207,8 +207,8 @@
 | `SkillMetadata` | `SkillMetadata.java` | ✅ |
 | `ProgressiveSkillLoader` | `ProgressiveSkillLoader.java` | ✅ |
 | `LoadingLevel` | - | ⚠️ 未独立实现 |
-| `SkillTrigger` | - | ⚠️ 未实现 |
-| `SkillTools` | - | ⚠️ 未实现 |
+| `SkillTrigger` | `SkillTrigger.java` | ✅ 已实现 |
+| `SkillTools` | `SkillTools.java` | ✅ 已实现 |
 
 ### 2.8 Tools 模块
 
@@ -224,9 +224,9 @@
 | `BashTool` | `BashTool.java` | ✅ |
 | `GlobTool` | `GlobTool.java` | ✅ |
 | `GrepTool` | `GrepTool.java` | ✅ |
-| `WebSearchTool` | - | ❌ 未实现 |
-| `WebFetchTool` | - | ❌ 未实现 |
-| `WebToMarkdownTool` | - | ❌ 未实现 |
+| `WebSearchTool` | `WebSearchTool.java` | ✅ 已实现 |
+| `WebFetchTool` | `WebFetchTool.java` | ✅ 已实现 |
+| `WebToMarkdownTool` | `WebToMarkdownTool.java` | ✅ 已实现 |
 | - | `UpdateCoreMemoryTool.java` | ✅ Java 新增 |
 
 ### 2.9 Service 模块
@@ -263,14 +263,14 @@
 | Types | 100% | 完全匹配 |
 | LLM | 95% | LLMConfig 未独立实现 |
 | MCP | 90% | StdioTransport 未实现 |
-| Memory | 85% | SessionStore 系列未实现 |
+| Memory | 95% | AsyncSQLiteSessionStore 未实现 |
 | Security | 100% | 完全匹配 |
-| Skills | 80% | SkillTrigger/SkillTools 未实现 |
-| Tools | 70% | Web 工具未实现 |
+| Skills | 95% | - |
+| Tools | 100% | - |
 | Guardrails | 75% | 中文 PII 识别器未实现 |
 | Service | 50% | FastAPI 服务未实现 |
 
-### 3.2 总体同步率: **87%** (P0 问题已修复)
+### 3.2 总体同步率: **92%** (P0 + P1 已完成)
 
 ---
 
@@ -284,20 +284,23 @@
    - ~~将 `GuardrailHook`, `PIIDetector`, `PIIEntity` 移至 guardrails 模块~~
    - 修复提交: `e80de76 refactor(sdk-java): consolidate guardrails module to fix code duplication`
 
-### 4.2 P1 - 短期需要实现
+### 4.2 P1 - 短期需要实现 ✅ **已完成**
 
-2. **Web 工具缺失**
-   - `WebSearchTool`
-   - `WebFetchTool`
-   - `WebToMarkdownTool`
+2. ~~**Web 工具缺失**~~ ✅ **已实现**
+   - `WebSearchTool` - DuckDuckGo 搜索
+   - `WebFetchTool` - 网页抓取
+   - `WebToMarkdownTool` - 网页转 Markdown
 
-3. **Skills 模块完善**
-   - `SkillTrigger`
-   - `SkillTools`
+3. ~~**Skills 模块完善**~~ ✅ **已实现**
+   - `SkillTrigger` - 技能触发条件
+   - `SkillTools` - 技能工具权限
 
-4. **Memory 模块完善**
-   - `FileSessionStore`
-   - `SQLiteSessionStore`
+4. ~~**Memory 模块完善**~~ ✅ **已实现**
+   - `SessionStore` 接口
+   - `FileSessionStore` - JSON 文件存储
+   - `SQLiteSessionStore` - SQLite 数据库存储
+
+   修复提交: `f18d9a7 feat(sdk-java): implement P1 features`
 
 ### 4.3 P2 - 中期实现
 
