@@ -136,6 +136,7 @@ public class McpClient {
     /**
      * List available tools from server.
      */
+    @SuppressWarnings("unchecked")
     public CompletableFuture<List<McpToolInfo>> listTools() {
         if (!initialized.get()) {
             logger.warn("Client not initialized, initializing first...");
@@ -150,6 +151,7 @@ public class McpClient {
         return listToolsInternal();
     }
 
+    @SuppressWarnings("unchecked")
     private CompletableFuture<List<McpToolInfo>> listToolsInternal() {
         JsonRpcRequest request = JsonRpcRequest.listTools();
 
@@ -157,7 +159,7 @@ public class McpClient {
             .thenApply(response -> {
                 if (!response.isSuccess()) {
                     logger.error("List tools failed: {}", response.errorMessage());
-                    return List.of();
+                    return List.<McpToolInfo>of();
                 }
 
                 Map<String, Object> result = response.resultAsMap();
@@ -200,7 +202,7 @@ public class McpClient {
                 if (!response.isSuccess()) {
                     return McpToolResult.error(
                         response.errorMessage(),
-                        response.error
+                        response.error() != null ? response.error() : null
                     );
                 }
 
@@ -370,9 +372,14 @@ public class McpClient {
     /**
      * Parse tool info from response.
      */
+    @SuppressWarnings("unchecked")
     private McpToolInfo parseToolInfo(Map<?, ?> toolMap) {
         String name = (String) toolMap.get("name");
-        String description = (String) toolMap.getOrDefault("description", "");
+        String description = "";
+        Object descObj = toolMap.get("description");
+        if (descObj != null) {
+            description = descObj.toString();
+        }
 
         Object inputSchemaObj = toolMap.get("inputSchema");
         Map<String, Object> inputSchema = Map.of();
