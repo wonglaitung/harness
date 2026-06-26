@@ -18,6 +18,7 @@ package com.harness.core;
  * @param maxStuckFeedbacks Maximum stuck feedback injection attempts.
  * @param stuckMinIterations Minimum iterations before stuck detection.
  * @param stuckConsecutiveFailures Consecutive failures to trigger stuck detection.
+ * @param memoryMdPath Path to MEMORY.md for UpdateCoreMemoryTool (null = use ~/.harness/).
  */
 public record LoopConfig(
     int maxIterations,
@@ -30,7 +31,8 @@ public record LoopConfig(
     String workingDirectory,
     int maxStuckFeedbacks,
     int stuckMinIterations,
-    int stuckConsecutiveFailures
+    int stuckConsecutiveFailures,
+    String memoryMdPath
 ) {
 
     public static final int DEFAULT_MAX_ITERATIONS = 10;
@@ -38,7 +40,7 @@ public record LoopConfig(
 
     public LoopConfig() {
         this(DEFAULT_MAX_ITERATIONS, DEFAULT_TIMEOUT_PER_TOOL, true, 3, true, true, true,
-             System.getProperty("user.dir"), 2, 3, 3);
+             System.getProperty("user.dir"), 2, 3, 3, null);
     }
 
     /**
@@ -67,6 +69,7 @@ public record LoopConfig(
         private int maxStuckFeedbacks = 2;
         private int stuckMinIterations = 3;
         private int stuckConsecutiveFailures = 3;
+        private String memoryMdPath = null;
 
         public Builder maxIterations(int maxIterations) {
             this.maxIterations = maxIterations;
@@ -123,11 +126,16 @@ public record LoopConfig(
             return this;
         }
 
+        public Builder memoryMdPath(String memoryMdPath) {
+            this.memoryMdPath = memoryMdPath;
+            return this;
+        }
+
         public LoopConfig build() {
             return new LoopConfig(
                 maxIterations, timeoutPerTool, enableParallelTools, retryOnError,
                 enableProgress, enableCircuitBreaker, enableCostControl, workingDirectory,
-                maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures
+                maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures, memoryMdPath
             );
         }
     }

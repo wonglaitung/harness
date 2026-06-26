@@ -432,11 +432,19 @@ public class AgentLoop {
             return ToolResult.failure(call.id(), "Validation failed: " + validation.error(), call.name());
         }
 
-        // Build tool context
+        // Build tool context with memory path
+        java.nio.file.Path memoryPath = config.memoryMdPath() != null
+            ? java.nio.file.Path.of(config.memoryMdPath())
+            : java.nio.file.Path.of(System.getProperty("user.home"), ".harness");
+
+        java.util.Map<String, Object> metadata = new java.util.HashMap<>();
+        metadata.put("memory_md_path", memoryPath.toString());
+
         ToolContext ctx = ToolContext.builder()
             .sessionId(session.id())
             .workingDirectory(config.workingDirectory())
             .iteration(stepBudget.getUsage().iterations())
+            .metadata(metadata)
             .build();
 
         // Execute

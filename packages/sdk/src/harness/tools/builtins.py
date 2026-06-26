@@ -1297,11 +1297,11 @@ class UpdateCoreMemoryTool(Tool):
                 f"Must be one of: user_profile, key_decisions, learned_patterns, project_context",
             )
 
-        # Get MemoryFileManager - use global memory path (~/.harness/)
-        # Core Memory is always stored in global config directory
+        # Get MemoryFileManager - use configured path or global ~/.harness/
         from harness.tools.permissions import get_harness_config_dir
 
-        global_memory_root = get_harness_config_dir()
+        # Priority: 1) context metadata, 2) config default (~/.harness/)
+        global_memory_root = context.metadata.get("memory_md_path") or get_harness_config_dir()
         manager = MemoryFileManager(project_root=global_memory_root)
 
         if action == "add":

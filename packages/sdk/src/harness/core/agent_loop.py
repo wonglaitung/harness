@@ -110,6 +110,9 @@ class LoopConfig:
     step_budget_config: StepBudgetConfig | None = None  # Step budget configuration
     enable_step_budget: bool = True  # Enable step budget control
 
+    # Memory path for UpdateCoreMemoryTool
+    memory_md_path: Path | None = None  # Optional path to MEMORY.md
+
 
 class AgentLoop:
     """
@@ -882,12 +885,16 @@ class AgentLoop:
         session: Session,
     ) -> list:
         """Execute tool calls with progress tracking and circuit breaker."""
-        from harness.tools.permissions import PermissionSet
+        from harness.tools.permissions import PermissionSet, get_harness_config_dir
+
+        # Determine memory path: use config if specified, otherwise global ~/.harness/
+        memory_path = self.config.memory_md_path or get_harness_config_dir()
 
         context = ToolContext(
             session_id=session.id,
             working_directory=Path(self.config.working_directory or os.getcwd()),
             permissions=PermissionSet.sandbox(self.config.working_directory or os.getcwd()),
+            metadata={"memory_md_path": memory_path},
         )
 
         results = []

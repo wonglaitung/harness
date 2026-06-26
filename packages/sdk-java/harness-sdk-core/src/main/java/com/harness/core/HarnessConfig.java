@@ -35,6 +35,7 @@ public class HarnessConfig {
 
     // Memory settings
     private final String memoryDir;
+    private final String memoryMdPath;  // Path to MEMORY.md for UpdateCoreMemoryTool
     private final int sessionWindow;
 
     // Tool settings
@@ -65,6 +66,7 @@ public class HarnessConfig {
         this.maxTokens = builder.maxTokens;
         this.temperature = builder.temperature;
         this.memoryDir = builder.memoryDir;
+        this.memoryMdPath = builder.memoryMdPath;
         this.sessionWindow = builder.sessionWindow;
         this.sandboxWorkspace = builder.sandboxWorkspace;
         this.enableNetwork = builder.enableNetwork;
@@ -88,6 +90,7 @@ public class HarnessConfig {
     public int getMaxTokens() { return maxTokens; }
     public double getTemperature() { return temperature; }
     public String getMemoryDir() { return memoryDir; }
+    public String getMemoryMdPath() { return memoryMdPath; }
     public int getSessionWindow() { return sessionWindow; }
     public String getSandboxWorkspace() { return sandboxWorkspace; }
     public boolean isEnableNetwork() { return enableNetwork; }
@@ -199,6 +202,7 @@ public class HarnessConfig {
         private int maxTokens = 4096;
         private double temperature = 1.0;
         private String memoryDir = ".harness/memory";
+        private String memoryMdPath = null;  // Path to MEMORY.md, defaults to ~/.harness/
         private int sessionWindow = 100;
         private String sandboxWorkspace = null;
         private boolean enableNetwork = false;
@@ -249,6 +253,11 @@ public class HarnessConfig {
 
         public Builder memoryDir(String memoryDir) {
             this.memoryDir = memoryDir;
+            return this;
+        }
+
+        public Builder memoryMdPath(String memoryMdPath) {
+            this.memoryMdPath = memoryMdPath;
             return this;
         }
 

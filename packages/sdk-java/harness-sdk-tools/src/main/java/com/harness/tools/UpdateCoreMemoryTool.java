@@ -5,6 +5,7 @@ import com.harness.core.ToolContext;
 import com.harness.memory.*;
 import com.harness.types.ToolResult;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -18,6 +19,8 @@ import java.util.concurrent.CompletableFuture;
  * This tool should be explicitly added to the tools list (Mem0 pattern).
  */
 public class UpdateCoreMemoryTool implements Tool {
+
+    private static final Path DEFAULT_HARNESS_DIR = Path.of(System.getProperty("user.home"), ".harness");
 
     @Override
     public String name() {
@@ -66,6 +69,22 @@ public class UpdateCoreMemoryTool implements Tool {
         );
     }
 
+    /**
+     * Get the memory path from context metadata or use default (~/.harness).
+     */
+    private Path getMemoryPath(ToolContext context) {
+        Map<String, Object> metadata = context.metadata();
+        if (metadata != null && metadata.containsKey("memory_md_path")) {
+            Object pathObj = metadata.get("memory_md_path");
+            if (pathObj instanceof Path path) {
+                return path;
+            } else if (pathObj instanceof String pathStr) {
+                return Path.of(pathStr);
+            }
+        }
+        return DEFAULT_HARNESS_DIR;
+    }
+
     @Override
     public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
         String categoryStr = (String) args.get("category");
@@ -82,7 +101,9 @@ public class UpdateCoreMemoryTool implements Tool {
             );
         }
 
-        MemoryFileManager manager = new MemoryFileManager();
+        // Get MemoryFileManager - use configured path or global ~/.harness/
+        Path memoryPath = getMemoryPath(context);
+        MemoryFileManager manager = new MemoryFileManager(memoryPath);
 
         if ("add".equals(action)) {
             MemoryEntry entry = new MemoryEntry(category, content, MemorySource.USER_INPUT);
