@@ -258,4 +258,110 @@
 
 ---
 生成时间: 2026-06-25
-更新时间: 2026-06-25 (完整同步验证)
+更新时间: 2026-06-26 (完整同步验证 + 新增缺失项)
+
+## 2026-06-26 更新：发现额外缺失项
+
+### 缺失的 Built-in Hooks
+
+| Hook | Python 位置 | 功能 | 重要性 |
+|------|-------------|------|--------|
+| **LoggingHook** | hooks.py | 日志所有钩子事件 | 🟡 中 |
+| **AbortOnDangerousToolHook** | hooks.py | 拦截危险工具调用 | 🔴 高 |
+| **MaxToolCallsHook** | hooks.py | 限制工具调用次数 | 🟡 中 |
+| **ConfirmationHook** | hooks.py | 用户确认危险操作 | 🔴 高 |
+
+### ConfirmationHook 详细分析
+
+Python SDK 的 `ConfirmationHook` 是企业安全的关键功能：
+
+```python
+# Python 实现
+class ConfirmationHook(LifecycleHook):
+    DANGEROUS_TOOLS = {"write", "edit"}
+    DANGEROUS_COMMANDS = {
+        "rm", "sudo", "chmod", "dd", "mkfs", "git push --force",
+        "curl | bash", "npm publish", ...
+    }
+    
+    def __init__(self, on_confirm, is_trusted, on_trust):
+        # 用户确认回调
+        # 信任缓存检查
+        # 信任缓存更新
+```
+
+**Java 需要实现**：
+- `ConfirmationHook.java` - 确认钩子
+- `ConfirmationResult.java` - 确认结果
+- `get_trust_key()` 工具方法
+
+### Guardrails 模块缺失详细分析
+
+当前 Java SDK 的 Guardrails 模块**不存在**：
+
+```bash
+# Python SDK 有完整的 guardrails 模块
+packages/sdk/src/harness/guardrails/
+├── __init__.py
+├── chinese_guardrail.py      # ❌ Java 缺失
+├── chinese_name_recognizer.py # ❌ Java 缺失  
+├── chinese_pii_recognizers.py # ❌ Java 缺失
+├── config.py                  # ❌ Java 缺失
+├── exceptions.py              # ❌ Java 缺失
+├── hook.py                    # ❌ Java 缺失
+├── judge.py                   # ❌ Java 缺失
+└── stream_interceptor.py      # ❌ Java 缺失
+```
+
+**需要创建**: `harness-sdk-guardrails` 模块
+
+### Service 模块缺失
+
+Java SDK 没有 `harness-sdk-service` 模块：
+
+| Python Service | 功能 | Java 状态 |
+|----------------|------|-----------|
+| metrics.py | Prometheus 指标 | ❌ 缺失 |
+| tracing.py | OpenTelemetry 追踪 | ❌ 缺失 |
+| discovery.py | 服务发现 | ❌ 缺失 |
+| store_redis.py | Redis 会话存储 | ❌ 缺失 |
+| error_handler.py | 服务错误处理 | ❌ 缺失 |
+
+### Permissions 系统对比
+
+| 功能 | Python | Java |
+|------|--------|------|
+| PermissionSet 类 | ✅ 完整 | ✅ 存在 |
+| is_path_allowed() | ✅ | 需验证 |
+| is_tool_allowed() | ✅ | 需验证 |
+| network_enabled | ✅ | 需验证 |
+
+### tool_result_role 兼容性
+
+Python SDK 支持 `tool_result_role` 配置：
+- `"tool"` - 原生模式
+- `"user"` - 兼容代理 API 模式
+
+Java SDK **未实现**此配置项。
+
+---
+
+## 优先级修复建议
+
+### P0 (必须立即实现)
+
+1. **ConfirmationHook** - 企业安全必需
+2. **AbortOnDangerousToolHook** - 防止危险操作
+3. **创建 harness-sdk-guardrails 模块**
+
+### P1 (短期实现)
+
+4. **LoggingHook** - 调试支持
+5. **MaxToolCallsHook** - 防止无限循环
+6. **tool_result_role 配置**
+
+### P2 (中期实现)
+
+7. **harness-sdk-service 模块**
+8. **Permissions 系统完善**
+9. **Chinese PII Recognizers**

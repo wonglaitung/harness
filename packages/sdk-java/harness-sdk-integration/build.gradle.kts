@@ -29,6 +29,9 @@ dependencies {
     // 安全
     api(project(":harness-sdk-security"))
 
+    // Guardrails (内容安全)
+    api(project(":harness-sdk-guardrails"))
+
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
 
