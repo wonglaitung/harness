@@ -155,7 +155,7 @@ implementation(fileTree("libs") { include("*.jar") })
 
 ### 测试覆盖
 
-- **27 个功能演示测试**: `SdkFeatureDemo.java`
+- **27 个功能演示示例**: `examples/SdkFeatureDemo.java`
 - **7 个单元测试文件**: ModelPreset, MemoryEntry, MemoryScoringConfig 等
 - **覆盖率目标**: 80%+
 

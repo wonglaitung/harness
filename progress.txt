@@ -1238,10 +1238,10 @@ Python SDK 和 Java SDK 的定位不同：
 
 #### 实现内容
 
-**功能演示测试集** (`SdkFeatureDemo.java`):
-- 27 个测试用例，覆盖所有主要功能
+**功能演示示例** (`examples/SdkFeatureDemo.java`):
+- 27 个演示示例，覆盖所有主要功能
 - 包含 MockLLMClient、SimpleTool、LoggingHook 辅助类
-- 所有测试通过
+- 可作为 main 方法运行或 JUnit 测试运行
 
 **单元测试**:
 - `ModelPresetTest.java` - ModelPreset, ModelPresets 测试

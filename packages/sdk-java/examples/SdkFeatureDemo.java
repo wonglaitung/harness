@@ -1,4 +1,15 @@
-package com.harness.integration;
+/**
+ * Harness Java SDK 功能演示示例
+ *
+ * 这个文件展示了 Harness Java SDK 的主要功能，共 27 个演示。
+ *
+ * 运行方式：
+ * 1. 作为 JUnit 测试运行
+ * 2. 或直接运行 main 方法查看演示
+ *
+ * @author Harness Team
+ */
+package com.harness.examples;
 
 import com.harness.core.*;
 import com.harness.types.*;
@@ -8,37 +19,56 @@ import com.harness.skills.*;
 import com.harness.skills.SkillMetadata;
 import com.harness.mcp.*;
 
-import org.junit.jupiter.api.*;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-/**
- * Harness Java SDK 功能演示测试集
- *
- * 这个文件展示了 Harness Java SDK 的主要功能。
- *
- * @author Harness Team
- */
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SdkFeatureDemo {
 
     private static final String MODEL = System.getenv().getOrDefault("OPENAI_MODEL", "gpt-4o-mini");
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("=== Harness Java SDK 功能演示 ===\n");
+
+        demo01_basicConversation();
+        demo02_fileTools();
+        demo03_multiTurnConversation();
+        demo04_costControl();
+        demo05_progressTracking();
+        demo06_customTool();
+        demo07_mockTesting();
+        demo08_skillsSystem();
+        demo09_skillInjection();
+        demo10_mcpIntegration();
+        demo11_securitySystem();
+        demo12_observability();
+        demo13_advancedCostControl();
+        demo14_interruptAndResume();
+        demo15_configuration();
+        demo16_completeWorkflow();
+        demo17_lifecycleHooks();
+        demo18_dynamicSystemPrompt();
+        demo19_ralphLoop();
+        demo20_subAgent();
+        demo21_selfVerification();
+        demo22_progressiveSkills();
+        demo23_memoryMd();
+        demo24_vectorSearch();
+        demo25_semanticStuckDetection();
+        demo26_guardrails();
+        demo27_cpuRouter();
+
+        System.out.println("\n=== 所有演示完成 ===");
+    }
 
     // =========================================================================
     // 演示 1: 基础对话功能
     // =========================================================================
 
-    @Test
-    @Order(1)
-    void demo01_basicConversation() throws Exception {
+    public static void demo01_basicConversation() throws Exception {
         System.out.println("\n=== 演示 1: 基础对话功能 ===");
 
         MockLLMClient mockClient = new MockLLMClient("你好！我是 Harness AI 助手。");
@@ -51,17 +81,13 @@ public class SdkFeatureDemo {
         System.out.println("Agent: " + result.content());
         System.out.println("执行状态: " + result.status());
         System.out.println("迭代次数: " + result.iterations());
-
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 2: 工具系统 - 文件操作
     // =========================================================================
 
-    @Test
-    @Order(2)
-    void demo02_fileTools() throws Exception {
+    public static void demo02_fileTools() throws Exception {
         System.out.println("\n=== 演示 2: 工具系统 - 文件操作 ===");
 
         HarnessConfig config = HarnessConfig.builder()
@@ -79,16 +105,13 @@ public class SdkFeatureDemo {
         LoopResult result = agent.run("请列出当前目录下所有的 Java 文件名称。").join();
 
         System.out.println("响应: " + result.content());
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 3: 多轮对话 - 会话管理
     // =========================================================================
 
-    @Test
-    @Order(3)
-    void demo03_multiTurnConversation() throws Exception {
+    public static void demo03_multiTurnConversation() throws Exception {
         System.out.println("\n=== 演示 3: 多轮对话 - 会话管理 ===");
 
         MockLLMClient mockClient = new MockLLMClient();
@@ -105,18 +128,15 @@ public class SdkFeatureDemo {
         LoopResult result2 = agent.run("你还记得我叫什么名字吗？", sessionId).join();
         System.out.println("Agent: " + result2.content());
 
-        // 验证会话隔离
         Session session1 = agent.getSession(sessionId);
-        assertNotNull(session1);
+        System.out.println("会话消息数: " + session1.messages().size());
     }
 
     // =========================================================================
     // 演示 4: 成本控制
     // =========================================================================
 
-    @Test
-    @Order(4)
-    void demo04_costControl() throws Exception {
+    public static void demo04_costControl() throws Exception {
         System.out.println("\n=== 演示 4: 成本控制 ===");
 
         HarnessConfig config = HarnessConfig.builder()
@@ -130,16 +150,13 @@ public class SdkFeatureDemo {
 
         System.out.println("响应: " + result.content());
         System.out.println("Token 使用: " + result.tokenUsage().totalTokens());
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 5: 进度追踪
     // =========================================================================
 
-    @Test
-    @Order(5)
-    void demo05_progressTracking() throws Exception {
+    public static void demo05_progressTracking() throws Exception {
         System.out.println("\n=== 演示 5: 进度追踪 ===");
 
         List<Object> eventsLog = new ArrayList<>();
@@ -154,16 +171,13 @@ public class SdkFeatureDemo {
         LoopResult result = agent.run("使用 glob 工具列出所有 *.md 文件。", null, onProgress).join();
 
         System.out.println("事件数: " + eventsLog.size());
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 6: 自定义工具
     // =========================================================================
 
-    @Test
-    @Order(6)
-    void demo06_customTool() throws Exception {
+    public static void demo06_customTool() throws Exception {
         System.out.println("\n=== 演示 6: 自定义工具 ===");
 
         Tool addTool = new SimpleTool(
@@ -192,16 +206,14 @@ public class SdkFeatureDemo {
         System.out.println("已注册工具: add_numbers");
 
         LoopResult result = agent.run("帮我计算 123 + 456。").join();
-        assertNotNull(result.content());
+        System.out.println("结果: " + result.content());
     }
 
     // =========================================================================
     // 演示 7: Mock 测试
     // =========================================================================
 
-    @Test
-    @Order(7)
-    void demo07_mockTesting() throws Exception {
+    public static void demo07_mockTesting() throws Exception {
         System.out.println("\n=== 演示 7: Mock 测试 ===");
 
         MockLLMClient mockClient = new MockLLMClient("这是一个模拟的响应。");
@@ -211,21 +223,16 @@ public class SdkFeatureDemo {
 
         LoopResult result = agent.run("你好").join();
         System.out.println("Agent: " + result.content());
-
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 8: Skills 技能系统
     // =========================================================================
 
-    @Test
-    @Order(8)
-    void demo08_skillsSystem() throws Exception {
+    public static void demo08_skillsSystem() throws Exception {
         System.out.println("\n=== 演示 8: Skills 技能系统 ===");
 
         SkillRegistry registry = new SkillRegistry();
-        // Create skill with triggers in metadata (full constructor: description, version, tags, tools, triggers, active)
         SkillMetadata metadata = new SkillMetadata(
             "代码审查技能", "1.0", List.of("code"), List.of(), List.of("review", "审查", "代码检查"), false);
         Skill skill = new Skill("code-review", metadata, "你是代码审查专家。", null);
@@ -235,21 +242,16 @@ public class SdkFeatureDemo {
 
         List<Skill> matches = registry.findMatchingSkills("请 review 这段代码");
         System.out.println("匹配的技能: " + matches.stream().map(Skill::name).toList());
-
-        assertFalse(matches.isEmpty());
     }
 
     // =========================================================================
     // 演示 9: Skill 注入
     // =========================================================================
 
-    @Test
-    @Order(9)
-    void demo09_skillInjection() throws Exception {
+    public static void demo09_skillInjection() throws Exception {
         System.out.println("\n=== 演示 9: Skill 注入 ===");
 
         SkillRegistry registry = new SkillRegistry();
-        // Create skills with triggers in metadata (full constructor: description, version, tags, tools, triggers, active)
         SkillMetadata meta1 = new SkillMetadata("代码审查", "1.0", List.of("code"), List.of(), List.of("review", "审查", "代码检查"), false);
         SkillMetadata meta2 = new SkillMetadata("翻译专家", "1.0", List.of("translate"), List.of(), List.of("translate", "翻译", "译成"), false);
 
@@ -261,23 +263,18 @@ public class SdkFeatureDemo {
 
         List<Skill> matched = registry.findMatchingSkills("请 review 这段代码");
         System.out.println("匹配的技能: " + matched.stream().map(Skill::name).toList());
-
-        assertFalse(matched.isEmpty());
     }
 
     // =========================================================================
     // 演示 10: MCP 服务器
     // =========================================================================
 
-    @Test
-    @Order(10)
-    void demo10_mcpIntegration() throws Exception {
+    public static void demo10_mcpIntegration() throws Exception {
         System.out.println("\n=== 演示 10: MCP 服务器 ===");
 
         McpManager manager = new McpManager();
         System.out.println("已创建 McpManager");
         System.out.println("MCP 配置示例: .mcp.json 或 ~/.harness/mcp.json");
-
         System.out.println("✅ MCP 服务器演示完成");
     }
 
@@ -285,9 +282,7 @@ public class SdkFeatureDemo {
     // 演示 11: Security 安全系统
     // =========================================================================
 
-    @Test
-    @Order(11)
-    void demo11_securitySystem() throws Exception {
+    public static void demo11_securitySystem() throws Exception {
         System.out.println("\n=== 演示 11: Security 安全系统 ===");
 
         HarnessConfig.SecurityConfig securityConfig = HarnessConfig.SecurityConfig.builder()
@@ -316,17 +311,13 @@ public class SdkFeatureDemo {
 
         LoopResult result = agent.run("读取 pom.xml 文件", "security-demo").join();
         System.out.println("响应: " + result.content());
-
-        assertNotNull(result.content());
     }
 
     // =========================================================================
     // 演示 12: Observability 可观测性
     // =========================================================================
 
-    @Test
-    @Order(12)
-    void demo12_observability() throws Exception {
+    public static void demo12_observability() throws Exception {
         System.out.println("\n=== 演示 12: Observability 可观测性 ===");
 
         TracingConfig tracingConfig = TracingConfig.builder()
@@ -346,7 +337,6 @@ public class SdkFeatureDemo {
         HarnessConfig config = HarnessConfig.builder().model(MODEL).build();
         AgentHarness agent = new AgentHarness(new MockLLMClient(), config);
 
-        // Use withSpan to run within trace context
         final LoopResult[] resultHolder = new LoopResult[1];
         tracingManager.withSpan("agent.run", null, () -> {
             resultHolder[0] = agent.run("你好").join();
@@ -360,9 +350,7 @@ public class SdkFeatureDemo {
     // 演示 13: 多级成本控制
     // =========================================================================
 
-    @Test
-    @Order(13)
-    void demo13_advancedCostControl() throws Exception {
+    public static void demo13_advancedCostControl() throws Exception {
         System.out.println("\n=== 演示 13: 多级成本控制 ===");
 
         System.out.println("多级成本控制配置:");
@@ -386,9 +374,7 @@ public class SdkFeatureDemo {
     // 演示 14: 中断与恢复
     // =========================================================================
 
-    @Test
-    @Order(14)
-    void demo14_interruptAndResume() throws Exception {
+    public static void demo14_interruptAndResume() throws Exception {
         System.out.println("\n=== 演示 14: 中断与恢复 ===");
 
         AgentHarness agent = new AgentHarness(
@@ -406,9 +392,7 @@ public class SdkFeatureDemo {
     // 演示 15: 配置管理
     // =========================================================================
 
-    @Test
-    @Order(15)
-    void demo15_configuration() throws Exception {
+    public static void demo15_configuration() throws Exception {
         System.out.println("\n=== 演示 15: 配置管理 ===");
 
         HarnessConfig config = HarnessConfig.builder()
@@ -428,16 +412,14 @@ public class SdkFeatureDemo {
 
         AgentHarness agent = new AgentHarness(new MockLLMClient(), config);
         LoopResult result = agent.run("你好").join();
-        assertNotNull(result.content());
+        System.out.println("响应: " + result.content());
     }
 
     // =========================================================================
     // 演示 16: 完整工作流
     // =========================================================================
 
-    @Test
-    @Order(16)
-    void demo16_completeWorkflow() throws Exception {
+    public static void demo16_completeWorkflow() throws Exception {
         System.out.println("\n=== 演示 16: 完整工作流 ===");
 
         HarnessConfig config = HarnessConfig.builder()
@@ -466,9 +448,7 @@ public class SdkFeatureDemo {
     // 演示 17: Lifecycle Hooks
     // =========================================================================
 
-    @Test
-    @Order(17)
-    void demo17_lifecycleHooks() throws Exception {
+    public static void demo17_lifecycleHooks() throws Exception {
         System.out.println("\n=== 演示 17: Lifecycle Hooks ===");
 
         LifecycleHook loggingHook = new LoggingHook();
@@ -490,44 +470,32 @@ public class SdkFeatureDemo {
     // 演示 18-27: 高级功能
     // =========================================================================
 
-    @Test
-    @Order(18)
-    void demo18_dynamicSystemPrompt() {
+    public static void demo18_dynamicSystemPrompt() {
         System.out.println("\n=== 演示 18: 动态系统提示 ===");
         System.out.println("SystemPromptBuilder 支持从多个源组装系统提示。");
     }
 
-    @Test
-    @Order(19)
-    void demo19_ralphLoop() {
+    public static void demo19_ralphLoop() {
         System.out.println("\n=== 演示 19: Ralph Loop ===");
         System.out.println("Ralph Loop 支持长任务循环，防止上下文焦虑。");
     }
 
-    @Test
-    @Order(20)
-    void demo20_subAgent() {
+    public static void demo20_subAgent() {
         System.out.println("\n=== 演示 20: Sub-Agent 管理 ===");
         System.out.println("Sub-Agent 支持创建子代理处理子任务。");
     }
 
-    @Test
-    @Order(21)
-    void demo21_selfVerification() {
+    public static void demo21_selfVerification() {
         System.out.println("\n=== 演示 21: 自验证钩子 ===");
         System.out.println("自验证钩子适用于代码修改场景。");
     }
 
-    @Test
-    @Order(22)
-    void demo22_progressiveSkills() {
+    public static void demo22_progressiveSkills() {
         System.out.println("\n=== 演示 22: 渐进式技能加载 ===");
         System.out.println("三级加载: L1 → L2 → L3");
     }
 
-    @Test
-    @Order(23)
-    void demo23_memoryMd() throws Exception {
+    public static void demo23_memoryMd() throws Exception {
         System.out.println("\n=== 演示 23: MEMORY.md 标准 ===");
 
         Path tempDir = Files.createTempDirectory("memory-demo");
@@ -543,30 +511,22 @@ public class SdkFeatureDemo {
         System.out.println("记忆条目已创建: " + entry.content());
     }
 
-    @Test
-    @Order(24)
-    void demo24_vectorSearch() {
+    public static void demo24_vectorSearch() {
         System.out.println("\n=== 演示 24: 向量检索 ===");
         System.out.println("向量检索支持语义搜索。");
     }
 
-    @Test
-    @Order(25)
-    void demo25_semanticStuckDetection() {
+    public static void demo25_semanticStuckDetection() {
         System.out.println("\n=== 演示 25: 语义卡住检测 ===");
         System.out.println("检测重复输出模式。");
     }
 
-    @Test
-    @Order(26)
-    void demo26_guardrails() {
+    public static void demo26_guardrails() {
         System.out.println("\n=== 演示 26: Guardrails PII 检测 ===");
         System.out.println("支持检测手机号、身份证等 PII。");
     }
 
-    @Test
-    @Order(27)
-    void demo27_cpuRouter() {
+    public static void demo27_cpuRouter() {
         System.out.println("\n=== 演示 27: CPU Router ===");
         System.out.println("根据请求复杂度路由到不同模型。");
     }

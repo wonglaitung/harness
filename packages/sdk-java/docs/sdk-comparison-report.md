@@ -18,7 +18,7 @@
 
 ## 测试用例验证
 
-Java SDK 已创建完整的功能演示测试集 `SdkFeatureDemo.java`，包含 27 个测试用例：
+Java SDK 已创建完整的功能演示示例 `SdkFeatureDemo.java`（位于 `examples/` 目录），包含 27 个演示：
 
 1. **基础对话功能** - MockLLMClient 测试
 2. **工具系统 - 文件操作** - ReadTool, GlobTool, GrepTool

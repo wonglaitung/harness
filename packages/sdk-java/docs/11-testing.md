@@ -865,7 +865,7 @@ tasks.jacocoTestCoverageVerification {
 
 ### SdkFeatureDemo.java
 
-位于 `harness-sdk-integration/src/test/java/com/harness/integration/SdkFeatureDemo.java`，包含 27 个功能演示测试：
+位于 `examples/SdkFeatureDemo.java`，包含 27 个功能演示示例：
 
 | 序号 | 测试方法 | 功能 |
 |------|---------|------|
@@ -897,11 +897,16 @@ tasks.jacocoTestCoverageVerification {
 | 26 | `demo26_guardrails` | Guardrails PII 检测 |
 | 27 | `demo27_cpuRouter` | CPU Router |
 
-### 运行测试
+### 运行示例
 
 ```bash
 cd packages/sdk-java
-gradle :harness-sdk-integration:test --tests "SdkFeatureDemo"
+
+# 编译 SDK
+gradle build
+
+# 运行示例（需要配置 API Key）
+java -cp harness-sdk-all/build/libs/*:examples/ com.harness.examples.SdkFeatureDemo
 ```
 
 ### MockLLMClient
