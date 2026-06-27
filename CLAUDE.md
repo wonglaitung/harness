@@ -73,6 +73,11 @@ snap run gradle publishToMavenLocal
 
 **重要**：Java SDK 使用 snap 安装的 gradle，不要使用 `./gradlew`。
 
+**集成测试**：
+- 位置：`packages/sdk-java/harness-sdk-integration/`
+- 运行真实 LLM API 测试：`snap run gradle :harness-sdk-integration:test`
+- 示例代码：`packages/sdk-java/examples/SimpleTest.java`
+
 ### 客户端开发
 
 ```powershell
@@ -493,6 +498,33 @@ agent = AgentHarness(
 )
 ```
 
+### PII 便捷函数
+
+```python
+from harness.guardrails import check_pii, scan_pii, redact_pii, PIIEntity
+
+# check_pii() 返回元组：(safe_text, entities, has_pii)
+safe_text, entities, has_pii = check_pii("我的手机号是13812345678")
+
+# PIIEntity 属性
+for entity in entities:
+    print(f"Type: {entity.entity_type}")  # "PHONE_NUMBER"
+    print(f"Text: {entity.text}")          # "13812345678"
+    print(f"Start: {entity.start}")        # 起始位置
+    print(f"End: {entity.end}")            # 结束位置
+    print(f"Score: {entity.score}")        # 置信度
+
+# scan_pii() 返回对象
+result = scan_pii(text)
+print(result.entities)
+print(result.has_pii)
+
+# 快速脱敏
+redacted = redact_pii(text)  # "我的手机号是<手机号>"
+```
+
+**注意**：`check_pii()` 返回元组而非对象，使用元组解包获取结果。
+
 ### 测试使用 MockHarness
 
 ```python
@@ -533,4 +565,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-25.
+Today's date is 2026-06-27.
