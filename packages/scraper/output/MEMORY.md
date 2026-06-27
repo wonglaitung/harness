@@ -66,7 +66,12 @@
 
 ## 2026-06-27 提取
 
+## 2026-06-28 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **DESIGN.md — AI 代理的设计系统即代码规范** - https://github.com/google-labs-code/design.md
 
 ### 新范式/工具
 - **OpenSpec — Spec-Driven Development (SDD) 规格驱动开发** - https://github.com/Fission-AI/OpenSpec
