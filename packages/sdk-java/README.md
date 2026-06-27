@@ -197,6 +197,201 @@ AgentHarness agent = AgentHarness.fromEnv();
 
 ## 构建
 
+### 使用 Snap Gradle（推荐）
+
+```bash
+# 构建所有模块
+snap run gradle build
+
+# 跳过测试构建
+snap run gradle build -x test
+
+# 只构建核心模块
+snap run gradle :harness-sdk-core:build
+```
+
+### 构建 Shadow JAR（聚合包）
+
+Shadow JAR 包含所有依赖，可直接运行：
+
+```bash
+# 构建聚合包
+snap run gradle :harness-sdk-all:shadowJar
+
+# 输出位置
+# harness-sdk-all/build/libs/harness-sdk-all-*.jar
+```
+
+### 发布到 Maven Local
+
+```bash
+# 发布所有模块到本地 Maven 仓库
+snap run gradle publishToMavenLocal
+
+# 发布后可在 ~/.m2/repository/com/harness/ 找到
+```
+
+## 使用 SDK-Java
+
+### Maven 依赖
+
+```xml
+<!-- 方式 1：使用聚合包（包含所有依赖） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-all</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 方式 2：按需引入模块 -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-core</artifactId>
+    <version>1.0.0</version>
+</dependency>
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-llm</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+### Gradle 依赖
+
+```groovy
+// 方式 1：使用聚合包
+implementation 'com.harness:harness-sdk-all:1.0.0'
+
+// 方式 2：按需引入模块
+implementation 'com.harness:harness-sdk-core:1.0.0'
+implementation 'com.harness:harness-sdk-llm:1.0.0'
+```
+
+### 环境变量配置
+
+```bash
+# Anthropic Claude
+export ANTHROPIC_API_KEY=your-api-key
+
+# OpenAI / 兼容接口
+export OPENAI_API_KEY=your-api-key
+export OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI
+```
+
+### 基本用法
+
+```java
+import com.harness.core.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import com.harness.tools.ReadTool;
+import com.harness.tools.GlobTool;
+
+import java.util.List;
+
+public class Example {
+    public static void main(String[] args) {
+        // 方式 1：Builder 模式（推荐）
+        AgentHarness agent = AgentHarness.builder()
+            .model("claude-sonnet-4-6")
+            .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+            .tools(List.of(new ReadTool(), new GlobTool()))
+            .build();
+
+        LoopResult result = agent.run("分析当前目录下的 Java 文件").join();
+        System.out.println(result.content());
+
+        // 方式 2：使用完整配置
+        HarnessConfig config = HarnessConfig.builder()
+            .model("claude-sonnet-4-6")
+            .maxIterations(10)
+            .toolTimeout(30.0)
+            .systemPrompt("你是一个有帮助的 AI 助手")
+            .build();
+
+        AgentHarness agent2 = new AgentHarness(config);
+
+        // 方式 3：从环境变量自动配置
+        AgentHarness agent3 = AgentHarness.fromEnv();
+
+        // 方式 4：使用第三方 OpenAI 兼容接口
+        AgentHarness agent4 = AgentHarness.builder()
+            .provider("openai")
+            .baseUrl("https://api.your-provider.com/v1")
+            .apiKey("your-api-key")
+            .model("your-model-name")
+            .build();
+    }
+}
+```
+
+### 流式执行
+
+```java
+import com.harness.core.Chunk;
+import com.harness.core.ChunkType;
+
+agent.stream("请解释什么是 ReAct 模式")
+    .thenAccept(chunk -> {
+        if (chunk.type() == ChunkType.TEXT) {
+            System.out.print(chunk.content());
+        } else if (chunk.type() == ChunkType.TOOL_CALL_START) {
+            System.out.println("\n[调用工具: " + chunk.toolName() + "]");
+        }
+    })
+    .join();
+```
+
+### 添加自定义工具
+
+```java
+import com.harness.tools.Tool;
+import com.harness.types.ToolResult;
+
+public class MyTool extends Tool {
+    @Override
+    public String name() {
+        return "my_tool";
+    }
+
+    @Override
+    public String description() {
+        return "我的自定义工具";
+    }
+
+    @Override
+    public Object inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of(
+                "input", Map.of("type", "string", "description", "输入参数")
+            ),
+            "required", List.of("input")
+        );
+    }
+
+    @Override
+    public ToolResult execute(Map<String, Object> args, ToolContext ctx) {
+        String input = (String) args.get("input");
+        return ToolResult.success("处理结果: " + input);
+    }
+}
+
+// 使用
+AgentHarness agent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")
+    .tools(List.of(new MyTool()))
+    .build();
+```
+
+### 更多示例
+
+完整示例代码见：
+- `examples/SimpleTest.java` - 基础用法
+- `harness-sdk-integration/src/test/java/com/harness/integration/SdkFeatureDemoRealApi.java` - 27 个功能演示
+
+## 构建
+
 ```bash
 # 构建所有模块
 ./gradlew build
