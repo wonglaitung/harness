@@ -68,6 +68,12 @@
 
 ## 注意事项
 
+### 新范式/工具
+- **OpenSpec — Spec-Driven Development (SDD) 规格驱动开发** - https://github.com/Fission-AI/OpenSpec
+
+### 新范式/工具
+- **DESIGN.md — AI 编码代理的视觉身份规范** - https://github.com/google-labs-code/design.md
+
 ### 港股分析
 - **港股AI板块集体暴跌-科技股恐慌出逃-2026-06-27**
 
