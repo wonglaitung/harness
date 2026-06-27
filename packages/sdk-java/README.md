@@ -208,19 +208,24 @@ snap run gradle build -x test
 
 # 只构建核心模块
 snap run gradle :harness-sdk-core:build
+
+# 查看所有可用模块
+snap run gradle projects
 ```
 
-### 构建 Shadow JAR（聚合包）
+### 可用模块
 
-Shadow JAR 包含所有依赖，可直接运行：
-
-```bash
-# 构建聚合包
-snap run gradle :harness-sdk-all:shadowJar
-
-# 输出位置
-# harness-sdk-all/build/libs/harness-sdk-all-*.jar
-```
+| 模块 | 说明 |
+|------|------|
+| `harness-sdk-core` | 核心模块（类型定义、AgentLoop、AgentHarness、Guardrails） |
+| `harness-sdk-llm` | LLM 客户端（Anthropic、OpenAI、Routing） |
+| `harness-sdk-mcp` | MCP 协议集成（STDIO、SSE） |
+| `harness-sdk-tools` | 内置工具（Read, Write, Edit, Bash, Glob, Grep） |
+| `harness-sdk-memory` | 记忆系统（MEMORY.md 管理、向量存储） |
+| `harness-sdk-skills` | 技能系统（Skill 加载、渐进式加载） |
+| `harness-sdk-security` | 安全模块（沙箱、验证、审计） |
+| `harness-sdk-guardrails` | PII 检测和内容安全 |
+| `harness-sdk-integration` | 集成测试 |
 
 ### 发布到 Maven Local
 
@@ -231,27 +236,78 @@ snap run gradle publishToMavenLocal
 # 发布后可在 ~/.m2/repository/com/harness/ 找到
 ```
 
+### 构建 JAR 包
+
+每个模块构建后会生成 JAR 包：
+
+```bash
+# 构建所有模块的 JAR
+snap run gradle build
+
+# JAR 输出位置
+# harness-sdk-core/build/libs/harness-sdk-core-*.jar
+# harness-sdk-llm/build/libs/harness-sdk-llm-*.jar
+# ...
+```
+
 ## 使用 SDK-Java
 
 ### Maven 依赖
 
 ```xml
-<!-- 方式 1：使用聚合包（包含所有依赖） -->
-<dependency>
-    <groupId>com.harness</groupId>
-    <artifactId>harness-sdk-all</artifactId>
-    <version>1.0.0</version>
-</dependency>
-
-<!-- 方式 2：按需引入模块 -->
+<!-- 核心模块（必需） -->
 <dependency>
     <groupId>com.harness</groupId>
     <artifactId>harness-sdk-core</artifactId>
     <version>1.0.0</version>
 </dependency>
+
+<!-- LLM 客户端（必需，二选一） -->
 <dependency>
     <groupId>com.harness</groupId>
     <artifactId>harness-sdk-llm</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 内置工具（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-tools</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- MCP 协议支持（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-mcp</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 记忆系统（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-memory</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 技能系统（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-skills</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 安全模块（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-security</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- PII 检测和内容安全（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-guardrails</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
@@ -259,12 +315,29 @@ snap run gradle publishToMavenLocal
 ### Gradle 依赖
 
 ```groovy
-// 方式 1：使用聚合包
-implementation 'com.harness:harness-sdk-all:1.0.0'
-
-// 方式 2：按需引入模块
+// 核心模块（必需）
 implementation 'com.harness:harness-sdk-core:1.0.0'
+
+// LLM 客户端（必需）
 implementation 'com.harness:harness-sdk-llm:1.0.0'
+
+// 内置工具（可选）
+implementation 'com.harness:harness-sdk-tools:1.0.0'
+
+// MCP 协议支持（可选）
+implementation 'com.harness:harness-sdk-mcp:1.0.0'
+
+// 记忆系统（可选）
+implementation 'com.harness:harness-sdk-memory:1.0.0'
+
+// 技能系统（可选）
+implementation 'com.harness:harness-sdk-skills:1.0.0'
+
+// 安全模块（可选）
+implementation 'com.harness:harness-sdk-security:1.0.0'
+
+// PII 检测和内容安全（可选）
+implementation 'com.harness:harness-sdk-guardrails:1.0.0'
 ```
 
 ### 环境变量配置
@@ -389,16 +462,6 @@ AgentHarness agent = AgentHarness.builder()
 完整示例代码见：
 - `examples/SimpleTest.java` - 基础用法
 - `harness-sdk-integration/src/test/java/com/harness/integration/SdkFeatureDemoRealApi.java` - 27 个功能演示
-
-## 构建
-
-```bash
-# 构建所有模块
-./gradlew build
-
-# 构建 Shadow JAR
-./gradlew :harness-sdk-all:shadowJar
-```
 
 ## 依赖
 
