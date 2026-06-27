@@ -12,7 +12,7 @@
 
 ```
 harness-sdk-java/
-├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop、AgentHarness）
+├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop、Tool 接口、Guardrails）
 │   ├── guardrails/        # PII 检测和内容安全
 │   ├── service/           # Spring Cloud 集成（服务发现、Redis 会话、错误处理）
 │   └── testing/           # 测试工具（录制/回放）
@@ -22,83 +22,44 @@ harness-sdk-java/
 ├── harness-sdk-memory/    # 记忆系统（MEMORY.md 管理、向量存储）
 ├── harness-sdk-skills/    # 技能系统（Skill 加载、渐进式加载）
 ├── harness-sdk-security/  # 安全模块（沙箱、验证、审计）
-└── harness-sdk-all/       # 聚合模块（Shadow JAR）
+├── harness-sdk-guardrails/ # PII 检测和内容安全（独立模块）
+└── harness-sdk-integration/ # 集成测试 + AgentHarness 入口类
 ```
 
 ## 核心组件
 
 ### harness-sdk-core
-- **类型定义**: Message, Session, ToolCall, ToolResult, LLMResponse, LoopResult
-- **AgentHarness**: 统一 SDK 入口，整合所有组件
-  - `run()`: 执行 Agent
-  - `stream()`: 流式执行
-  - `registerTool()`: 注册工具
-  - `addHook()`: 添加生命周期钩子
-  - `loadSkillsFromDir()`: 加载技能
-- **HarnessConfig**: 统一配置管理，包含子配置：
-  - `SecurityConfig`: 安全配置
-  - `CostControlConfig`: 成本控制配置
-  - `ObservabilityConfig`: 可观测性配置
-  - `StorageConfig`: 存储配置
-  - `OffloadConfig`: 输出卸载配置
-  - `RoutingConfig`: LLM 路由配置
+- **类型定义**: Message, Session, ToolCall, ToolResult, LLMResponse, LoopResult, Chunk, ChunkType
+- **HarnessConfig**: 统一配置管理，支持 Builder 模式
+  - `provider()`: LLM 提供商（"anthropic", "openai", "auto"）
+  - `baseUrl()`: 自定义 API 地址
+  - `model()`: 模型名称
+  - `maxIterations()`: 最大迭代次数
+  - `toolTimeout()`: 工具超时时间
+  - 子配置：SecurityConfig, CostControlConfig, ObservabilityConfig, StorageConfig, OffloadConfig, RoutingConfig
+- **Tool 接口**: 工具抽象接口
+  - `name()`: 工具名称
+  - `description()`: 工具描述
+  - `inputSchema()`: 参数 Schema
+  - `execute()`: 异步执行
+  - `validate()`: 参数验证
 - **ToolRegistry**: 工具注册表，支持启用/禁用、分类管理
-- **AgentLoop**: ReAct 执行引擎，支持：
-  - LLM 重试：配置化重试次数 + 指数退避 + 随机抖动
-  - 工具超时：`timeoutPerTool` 强制超时保护
-  - 智能错误处理：`ErrorHandler` 根据错误类型智能决策
-  - 熔断器：`CircuitBreaker` 检测相同工具+参数重复调用，自动注入停止消息
-  - 步骤预算：`StepBudgetController` 限制迭代和工具调用次数
-  - 成本控制：`CostController` 多级预算管理（Session/User/Global）
-  - 停滞检测：`StuckDetector` 空结果/错误/语义相似度检测，自动注入反馈
-  - 输出卸载：`OutputOffloader` 大工具输出自动卸载到临时文件
-  - 进度事件：完整的 `ProgressEvent` 发射和格式化
-  - 快照/恢复：`LoopSnapshot` 支持中断恢复
-  - 输入验证：集成 `InputValidator`
-  - 审计日志：集成 `AuditLogger`
-  - 中断支持：可中断正在执行的循环
-  - 剩余步骤提示：接近迭代上限时自动注入提示
-- **生命周期钩子**:
-  - `HookPoint`: 钩子触发点（LLM 调用前后、工具执行前后等）
-  - `HookAction`: 钩子动作（CONTINUE、ABORT、RETRY、INJECT_MESSAGE 等）
-  - `HookContext`: 钩子上下文
-  - `HookResult`: 钩子返回结果
-- **SelfVerificationHook**: 代码修改后自动运行测试，失败则注入错误消息
+- **AgentLoop**: ReAct 执行引擎（位于 harness-sdk-integration）
+- **生命周期钩子**: HookPoint, HookAction, HookContext, HookResult
 - **Guardrails 模块**: PII 检测和内容安全
-  - `GuardrailConfig`: 配置（含 StreamInterceptConfig、JudgeConfig）
-  - `GuardrailHook`: 生命周期钩子
-  - `PIIDetector`: PII 检测器
-  - `PIIEntity`: PII 实体
-  - `ComplianceJudge`: Layer 2 LLM 合规裁判
-  - `StreamInterceptor`: Token 级流式拦截器
-  - `GuardrailExceptions`: 自定义异常（ContentRiskException, JudgeTimeoutException 等）
-- **流式处理**:
-  - `StreamingHandler`: 流式输出处理，支持背压控制
-  - `Chunk`/`ChunkType`: 流式块类型定义
-- **进度事件**: `ProgressEvent`, `ProgressEventType` 跟踪 Agent 执行进度
-- **成本控制**: `CostConfig`, `BudgetStatus`, `UserBudgetStatus`, `GlobalBudgetStatus`
-- **MetricsCollector**: Prometheus 指标收集器，支持迭代、工具调用、Token 使用追踪
-- **TracingManager**: OpenTelemetry 追踪管理器，支持 W3C TraceContext 传播
-- **TracingFilter**: HTTP 过滤器，支持 Spring Cloud Gateway 集成
-- **RalphLoopHook**: 长任务循环续接，防止上下文焦虑导致的提前退出
-- **LifecycleHook**: 生命周期钩子接口
-- **OutputOffloader**: 大输出卸载到临时文件，保护上下文窗口
-- **PermissionSet**: 细粒度权限控制（路径、命令、网络）
-- **MockHarness**: 完整测试 Harness，支持预定义响应
-- **SubAgentManager**: 子代理管理器，支持并行子任务执行
-- **Tool 接口**: 工具抽象类，支持验证和异步执行
+- **进度事件**: ProgressEvent, ProgressEventType
 - **TokenCounter**: 基于 jtokkit 的 Token 计数
-  - `count(String)`: 计算单个文本的 token 数量
-  - `countAll(List<String>)`: 计算多个文本的总 token 数量
-  - `countMessages(List<Message>)`: 计算消息列表的 token 数量
-  - `clearCache()`: 清除缓存
-- **LoopConfig**: 循环配置，支持 Builder 模式
-- **ModelPresets**: 预定义模型配置（Claude, GPT, GLM, Qwen, DeepSeek 等）
-- **ProgressFormatter**: 进度事件格式化（simple, detailed, colored, emoji）
-- **LoopSnapshot**: 循环状态快照，支持中断/恢复
-- **CostStorage**: 多级预算追踪接口（InMemoryCostStorage, SQLiteCostStorage）
-- **ContextBudget**: Token 预算分配，支持优先级分配和压缩检测
-- **SessionManager**: 会话管理，支持文件持久化
+- **MockHarness**: 测试 Harness，支持预定义响应
+
+### harness-sdk-integration
+- **AgentHarness**: 统一 SDK 入口
+  - `run(prompt)`: 执行 Agent
+  - `run(prompt, sessionId)`: 指定会话 ID
+  - `run(prompt, sessionId, onProgress)`: 带进度回调
+  - `continueSession(sessionId, prompt)`: 继续会话
+  - `registerTool(tool)`: 注册工具
+  - `addHook(hook)`: 添加生命周期钩子
+- **Builder 模式**: `AgentHarness.builder().config(config).addTool(tool).build()`
 
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl
@@ -166,33 +127,54 @@ harness-sdk-java/
 ## 快速开始
 
 ```java
-import com.harness.core.AgentHarness;
+import com.harness.integration.AgentHarness;
 import com.harness.core.HarnessConfig;
+import com.harness.core.LLMClient;
+import com.harness.llm.OpenAIClient;
 import com.harness.types.LoopResult;
+import com.harness.tools.ReadTool;
+import com.harness.tools.GlobTool;
 
-// 方式 1：使用默认配置
-AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey("your-api-key")
-    .build();
+import java.util.List;
 
-LoopResult result = agent.run("Hello, Claude!").join();
-System.out.println(result.content());
+public class Example {
+    public static void main(String[] args) {
+        // 方式 1：使用 HarnessConfig 创建（推荐）
+        HarnessConfig config = HarnessConfig.builder()
+            .provider("openai")
+            .baseUrl("https://api.openai.com/v1")
+            .apiKey("your-api-key")
+            .model("gpt-4o")
+            .maxIterations(10)
+            .build();
 
-// 方式 2：使用完整配置
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .maxIterations(10)
-    .toolTimeout(30.0)
-    .security(HarnessConfig.SecurityConfig.builder()
-        .enableSandbox(true)
-        .build())
-    .build();
+        AgentHarness agent = AgentHarness.builder()
+            .config(config)
+            .tools(List.of(new ReadTool(), new GlobTool()))
+            .build();
 
-AgentHarness agent = new AgentHarness(config);
+        LoopResult result = agent.run("分析当前目录").join();
+        System.out.println(result.content());
 
-// 方式 3：从环境变量创建
-AgentHarness agent = AgentHarness.fromEnv();
+        // 方式 2：直接传入 LLMClient
+        OpenAIClient llmClient = new OpenAIClient(
+            "your-api-key",
+            "https://api.openai.com/v1",
+            "gpt-4o"
+        );
+
+        AgentHarness agent2 = AgentHarness.builder()
+            .llmClient(llmClient)
+            .addTool(new ReadTool())
+            .build();
+
+        // 方式 3：从环境变量自动配置
+        HarnessConfig configFromEnv = HarnessConfig.fromEnv();
+        AgentHarness agent3 = AgentHarness.builder()
+            .config(configFromEnv)
+            .build();
+    }
+}
 ```
 
 ## 构建
@@ -354,7 +336,7 @@ export OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI
 ### 基本用法
 
 ```java
-import com.harness.core.AgentHarness;
+import com.harness.integration.AgentHarness;
 import com.harness.core.HarnessConfig;
 import com.harness.types.LoopResult;
 import com.harness.tools.ReadTool;
@@ -364,64 +346,76 @@ import java.util.List;
 
 public class Example {
     public static void main(String[] args) {
-        // 方式 1：Builder 模式（推荐）
+        // 方式 1：使用 HarnessConfig（推荐）
+        HarnessConfig config = HarnessConfig.builder()
+            .provider("openai")
+            .baseUrl("https://api.openai.com/v1")
+            .apiKey("your-api-key")
+            .model("gpt-4o")
+            .maxIterations(10)
+            .toolTimeout(30.0)
+            .systemPrompt("你是一个有帮助的 AI 助手")
+            .build();
+
         AgentHarness agent = AgentHarness.builder()
-            .model("claude-sonnet-4-6")
-            .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+            .config(config)
             .tools(List.of(new ReadTool(), new GlobTool()))
             .build();
 
         LoopResult result = agent.run("分析当前目录下的 Java 文件").join();
         System.out.println(result.content());
 
-        // 方式 2：使用完整配置
-        HarnessConfig config = HarnessConfig.builder()
-            .model("claude-sonnet-4-6")
-            .maxIterations(10)
-            .toolTimeout(30.0)
-            .systemPrompt("你是一个有帮助的 AI 助手")
-            .build();
-
-        AgentHarness agent2 = new AgentHarness(config);
-
-        // 方式 3：从环境变量自动配置
-        AgentHarness agent3 = AgentHarness.fromEnv();
-
-        // 方式 4：使用第三方 OpenAI 兼容接口
-        AgentHarness agent4 = AgentHarness.builder()
+        // 方式 2：使用第三方 OpenAI 兼容接口
+        HarnessConfig customConfig = HarnessConfig.builder()
             .provider("openai")
             .baseUrl("https://api.your-provider.com/v1")
             .apiKey("your-api-key")
             .model("your-model-name")
             .build();
+
+        AgentHarness agent2 = AgentHarness.builder()
+            .config(customConfig)
+            .build();
+
+        // 方式 3：从环境变量自动配置
+        // 需要设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY
+        HarnessConfig configFromEnv = HarnessConfig.fromEnv();
+        AgentHarness agent3 = AgentHarness.builder()
+            .config(configFromEnv)
+            .build();
     }
 }
 ```
 
-### 流式执行
+### 进度回调
+
+AgentHarness 支持通过进度回调监控执行过程：
 
 ```java
-import com.harness.core.Chunk;
-import com.harness.core.ChunkType;
+import com.harness.types.ProgressEvent;
 
-agent.stream("请解释什么是 ReAct 模式")
-    .thenAccept(chunk -> {
-        if (chunk.type() == ChunkType.TEXT) {
-            System.out.print(chunk.content());
-        } else if (chunk.type() == ChunkType.TOOL_CALL_START) {
-            System.out.println("\n[调用工具: " + chunk.toolName() + "]");
-        }
-    })
-    .join();
+agent.run("分析项目结构", null, progress -> {
+    if (progress instanceof ProgressEvent event) {
+        System.out.println("[" + event.type() + "] " + event.message());
+    }
+}).join();
 ```
 
 ### 添加自定义工具
 
 ```java
-import com.harness.tools.Tool;
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.core.ToolCategory;
+import com.harness.core.ValidationResult;
 import com.harness.types.ToolResult;
 
-public class MyTool extends Tool {
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+public class MyTool implements Tool {
+
     @Override
     public String name() {
         return "my_tool";
@@ -433,7 +427,7 @@ public class MyTool extends Tool {
     }
 
     @Override
-    public Object inputSchema() {
+    public Map<String, Object> inputSchema() {
         return Map.of(
             "type", "object",
             "properties", Map.of(
@@ -444,16 +438,42 @@ public class MyTool extends Tool {
     }
 
     @Override
-    public ToolResult execute(Map<String, Object> args, ToolContext ctx) {
+    public ToolCategory category() {
+        return ToolCategory.GENERAL;
+    }
+
+    @Override
+    public ValidationResult validate(Map<String, Object> args) {
+        if (!args.containsKey("input")) {
+            return ValidationResult.invalid("input is required");
+        }
+        return ValidationResult.valid();
+    }
+
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
         String input = (String) args.get("input");
-        return ToolResult.success("处理结果: " + input);
+        String toolCallId = context != null ? context.toolCallId() : "";
+
+        // 使用 Builder 创建结果
+        ToolResult result = ToolResult.builder()
+            .toolCallId(toolCallId)
+            .content("处理结果: " + input)
+            .toolName(name())
+            .build();
+
+        return CompletableFuture.completedFuture(result);
     }
 }
 
 // 使用
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
-    .tools(List.of(new MyTool()))
+    .config(HarnessConfig.builder()
+        .provider("openai")
+        .apiKey("your-api-key")
+        .model("gpt-4o")
+        .build())
+    .addTool(new MyTool())
     .build();
 ```
 
