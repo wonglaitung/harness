@@ -1263,3 +1263,51 @@ Python SDK 和 Java SDK 的定位不同：
 #### 提交记录
 
 - 1349686 test(sdk-java): add comprehensive test suite for Java SDK
+
+## 2026-06-27 (续)
+
+### Python SDK 与 Java SDK 示例对齐 ✅ 完成
+
+#### 背景
+对比 Python SDK 和 Java SDK 的示例代码，确保两者功能一致，且都调用真实 LLM API。
+
+#### 实现内容
+
+**Python SDK 示例修复** (`examples/third_party_api_example.py`):
+- demo09: 添加 `agent.run()` 调用
+- demo25: 添加 `agent.run()` 调用
+- demo26: 添加 `agent.run()` 调用
+- 修复 PII API 用法：
+  - `check_pii()` 返回 `(safe_text, entities, has_pii)` 元组
+  - `PIIEntity` 属性：`entity_type`, `text`, `start`, `end`, `score`
+  - `scan_pii()` 返回 `PIIScanResult` 对象
+- 修复 `StreamInterceptor` 创建：需要 `ComplianceJudge` 和 `JudgeConfig`
+- 修复 `GuardrailConfig`：移除无效参数 `judge_model`, `judge_timeout_ms`
+- 添加 `redact_pii_traditional` 导入
+
+**Java SDK 示例修复** (`SdkFeatureDemoRealApi.java`):
+- demo08: 添加 `agent.run()` 调用
+- demo09: 添加 `agent.run()` 调用
+- demo10: 添加 `agent.run()` 调用
+- demo22: 添加 `agent.run()` 调用
+- demo24: 添加 `agent.run()` 调用
+
+#### 文档同步
+
+更新以下文档以反映正确的 API 用法：
+- `docs/08-security.md`: 添加便捷函数说明、PIIEntity 数据结构、StreamInterceptor 示例
+
+#### 测试验证
+
+**Python SDK**:
+- 27 个演示全部通过，所有调用真实 LLM
+- 执行时间：约 5 分钟
+
+**Java SDK**:
+- 27 个演示全部通过，所有调用真实 LLM
+- 执行时间：约 3.3 分钟
+
+#### 提交记录
+
+- 1c5dba7 feat(sdk-java): sync P0/P1 features from Python SDK
+- docs: sync design documentation with code changes

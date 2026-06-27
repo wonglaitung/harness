@@ -884,6 +884,17 @@ triggers:
         print(f"\n从目录加载了 {count} 个技能")
         print(f"已加载的技能: {list(registry.list_skills())}")
 
+    # 6. 使用注入后的 prompt 运行 Agent
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        system_prompt=injected_prompt,
+    )
+    result = await agent.run(user_input)
+    print(f"\nAgent 响应: {result.content[:200]}...")
+
     print("\n✅ Skill 注入与批量加载演示完成")
 
 
@@ -3216,6 +3227,11 @@ async def demo_semantic_stuck_detection():
     print(f"  - 相似度阈值: {semantic_config.similarity_threshold}")
     print(f"  - 连续轮数: {semantic_config.consecutive_rounds}")
 
+    # 运行 Agent 演示
+    result = await agent.run("你好，请简单介绍你自己。")
+    print(f"\nAgent 响应: {result.content[:200]}...")
+    print(f"迭代次数: {result.iterations}")
+
     # -------------------------------------------------------------------------
     # 6. 安装依赖说明
     # -------------------------------------------------------------------------
@@ -3292,6 +3308,7 @@ async def demo_guardrails():
         GuardrailConfig,
         check_pii,
         redact_pii,
+        redact_pii_traditional,
         scan_pii,
     )
 
@@ -3302,16 +3319,16 @@ async def demo_guardrails():
     邮箱：zhangsan@example.com
     """
 
-    # 检测 PII
-    pii_result = check_pii(test_text)
-    print(f"检测到 PII: {pii_result.has_pii}")
-    print(f"PII 类型: {[e.type for e in pii_result.entities]}")
+    # 检测 PII (返回 tuple: safe_text, entities, has_pii)
+    safe_text, entities, has_pii = check_pii(test_text)
+    print(f"检测到 PII: {has_pii}")
+    print(f"PII 类型: {[e.entity_type for e in entities]}")
 
-    # 扫描 PII（返回详细信息）
-    entities = scan_pii(test_text)
+    # 扫描 PII（返回详细信息, 也是 tuple）
+    _, scan_entities, _ = scan_pii(test_text)
     print(f"\nPII 实体详情:")
-    for entity in entities:
-        print(f"  - 类型: {entity.type}, 值: {entity.value}, 位置: {entity.start}-{entity.end}")
+    for entity in scan_entities:
+        print(f"  - 类型: {entity.entity_type}, 值: {entity.text}, 位置: {entity.start}-{entity.end}")
 
     # -------------------------------------------------------------------------
     # 2. PII 脱敏
@@ -3345,8 +3362,7 @@ async def demo_guardrails():
         layer1_enabled=True,
         layer2_enabled=True,
         judge_endpoint="http://localhost:8001/v1/chat/completions",
-        judge_model="gpt-4",
-        judge_timeout_ms=500,
+        judge_timeout=5.0,
     )
     print(f"完整配置: Layer 1 + Layer 2")
 
@@ -3385,30 +3401,37 @@ async def demo_guardrails():
 
     print(f"已创建带 PII 检测的 Agent")
 
+    # 运行 Agent 演示
+    result = await agent.run("你好，请简单介绍你自己。")
+    print(f"\nAgent 响应: {result.content[:200]}...")
+    print(f"迭代次数: {result.iterations}")
+
     # -------------------------------------------------------------------------
     # 5. 流式拦截器
     # -------------------------------------------------------------------------
     print("\n--- 5. 流式拦截器 ---")
 
     from harness.guardrails import StreamInterceptor, StreamInterceptConfig
+    from harness.guardrails.judge import ComplianceJudge
+    from harness.guardrails.config import JudgeConfig
 
-    # 创建拦截器
+    # 创建拦截器（需要 ComplianceJudge）
     interceptor_config = StreamInterceptConfig(
         enabled=True,
-        buffer_size=100,  # 缓冲区大小
-        check_pii=True,   # 检测 PII
-        redact_pii=True,  # 脱敏 PII
+        check_interval=10,        # 每 10 个 token 检测一次
+        safety_threshold=0.3,     # 安全阈值
+        min_tokens_before_check=5,  # 检测前最小 token 数
     )
 
-    interceptor = StreamInterceptor(config=interceptor_config)
+    # 创建 Judge（可选，用于 Layer 2 检测）
+    judge_config = JudgeConfig(enabled=False, endpoint="", timeout=5.0)
+    judge = ComplianceJudge(config=judge_config)
+    interceptor = StreamInterceptor(judge=judge, config=interceptor_config)
     print(f"已创建流式拦截器")
 
     # 模拟流式输出
-    stream_chunks = ["用户", "的手机号是", " 13812345678"]
     print(f"\n模拟流式输出:")
-    for chunk in stream_chunks:
-        result = interceptor.process(chunk)
-        print(f"  输入: {chunk!r} → 输出: {result.content!r}")
+    print(f"  (流式拦截器需要与 AgentLoop 集成使用，这里仅展示配置)")
 
     # -------------------------------------------------------------------------
     # 6. 支持的 PII 类型

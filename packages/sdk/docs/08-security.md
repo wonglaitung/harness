@@ -931,6 +931,49 @@ redacted = guardrail.redact(text)
 # "我的手机号是[PHONE_REDACTED]，身份证是[ID_REDACTED]"
 ```
 
+#### 便捷函数
+
+SDK 提供了便捷函数，无需创建 Guardrail 实例即可快速检测和脱敏 PII：
+
+```python
+from harness.guardrails import check_pii, scan_pii, redact_pii, redact_pii_traditional
+
+text = "用户张三的手机号是 13812345678，身份证号是 110101199001011234"
+
+# check_pii: 检测并脱敏（返回 tuple）
+safe_text, entities, has_pii = check_pii(text)
+print(f"检测到 PII: {has_pii}")  # True
+print(f"PII 类型: {[e.entity_type for e in entities]}")
+# ['PERSON', 'CN_PHONE_NUMBER', 'CN_ID_CARD']
+
+# scan_pii: 扫描 PII 详情（返回 tuple）
+_, scan_entities, _ = scan_pii(text)
+for entity in scan_entities:
+    print(f"类型: {entity.entity_type}, 值: {entity.text}, 位置: {entity.start}-{entity.end}")
+
+# redact_pii: 智能脱敏（使用占位符）
+redacted = redact_pii(text)
+# "用户<姓名>机号是 <手机号>，身份证号是 <身份证号>"
+
+# redact_pii_traditional: 传统脱敏（繁体中文占位符）
+redacted_traditional = redact_pii_traditional(text)
+# "用户<姓名>机号是 <手機號>，身份证号是 <身分證字號>"
+```
+
+**注意**：`check_pii` 和 `scan_pii` 返回的是元组 `(str, List[PIIEntity], bool)`，需要解包使用。
+
+#### PIIEntity 数据结构
+
+```python
+@dataclass
+class PIIEntity:
+    entity_type: str  # PII 类型，如 "CN_PHONE_NUMBER"
+    text: str         # 匹配的文本，如 "13812345678"
+    start: int        # 起始位置
+    end: int          # 结束位置
+    score: float      # 置信度 (0.0-1.0)
+```
+
 ### Layer 2: LLM Judge 语义检测
 
 LLM Judge 通过大语言模型进行语义级别的风险检测，识别规则难以覆盖的恶意内容。
@@ -975,14 +1018,25 @@ print(result.reason)      # 风险原因
 
 ```python
 from harness.guardrails import StreamInterceptor, StreamInterceptConfig
+from harness.guardrails.judge import ComplianceJudge
+from harness.guardrails.config import JudgeConfig
 
-config = StreamInterceptConfig(
+# 创建 Judge（用于 Layer 2 检测）
+judge_config = JudgeConfig(
+    enabled=True,
+    endpoint="http://localhost:8001/v1/chat/completions",
+    timeout=5.0,
+)
+judge = ComplianceJudge(config=judge_config)
+
+# 创建流式拦截器
+interceptor_config = StreamInterceptConfig(
     enabled=True,
     check_interval=10,         # 每 10 个 token 检测一次
     safety_threshold=0.3,      # 安全阈值
     min_tokens_before_check=5, # 检测前最小 token 数
 )
-interceptor = StreamInterceptor(config, judge)
+interceptor = StreamInterceptor(judge=judge, config=interceptor_config)
 
 async for chunk in stream:
     result = interceptor.check(chunk)

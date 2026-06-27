@@ -2053,6 +2053,150 @@ Java SDK 没有对应的 HTTP 端点实现。
 
 ---
 
+## 2026-06-27: PII API 返回值结构
+
+### 问题
+
+使用 `check_pii()` 函数时，假设返回对象有 `has_pii` 属性，但实际返回的是元组。
+
+### 根因分析
+
+文档和实际实现不一致：
+
+```python
+# ❌ 错误假设：返回对象有属性
+result = check_pii(text)
+if result.has_pii:  # AttributeError: 'tuple' object has no attribute 'has_pii'
+
+# ✅ 正确用法：返回元组
+safe_text, entities, has_pii = check_pii(text)
+for entity in entities:
+    print(f"Type: {entity.entity_type}, Value: {entity.text}")
+```
+
+### 返回值结构
+
+| 函数 | 返回类型 | 说明 |
+|------|---------|------|
+| `check_pii(text)` | `tuple[str, list[PIIEntity], bool]` | (safe_text, entities, has_pii) |
+| `scan_pii(text)` | `PIIScanResult` | 对象，有 `.entities`, `.has_pii` 属性 |
+
+### PIIEntity 属性
+
+```python
+@dataclass
+class PIIEntity:
+    entity_type: str   # 如 "PERSON", "PHONE_NUMBER"
+    text: str          # 原始文本
+    start: int         # 起始位置
+    end: int           # 结束位置
+    score: float       # 置信度
+```
+
+### 教训
+
+1. **先读实现再使用**：不要假设 API 返回类型，查看实际代码或类型注解
+2. **类型检查器很重要**：mypy 可以在编译期发现此类问题
+3. **元组 vs 对象**：Python SDK 的便捷函数可能返回元组而非对象
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `packages/sdk/src/harness/guardrails/__init__.py` | 便捷函数定义 |
+
+---
+
+## 2026-06-27: StreamInterceptor 依赖 ComplianceJudge
+
+### 问题
+
+创建 `StreamInterceptor` 时报错：
+
+```
+StreamInterceptor.__init__() missing required positional argument: 'judge'
+```
+
+### 根因分析
+
+`StreamInterceptor` 需要 `ComplianceJudge` 实例，不能只传配置：
+
+```python
+# ❌ 错误：只传配置
+interceptor = StreamInterceptor(config=GuardrailConfig())
+
+# ✅ 正确：需要创建 judge
+from harness.guardrails import ComplianceJudge, JudgeConfig
+
+judge = ComplianceJudge(JudgeConfig())
+interceptor = StreamInterceptor(judge=judge, config=GuardrailConfig())
+```
+
+### 依赖关系
+
+```
+StreamInterceptor
+    ├── judge: ComplianceJudge  # 必需
+    └── config: GuardrailConfig # 可选
+```
+
+### 教训
+
+1. **检查构造函数参数**：创建对象前检查 `__init__` 签名
+2. **依赖注入模式**：复杂组件可能需要其他组件实例
+3. **查阅源码**：IDE 自动补全可能不显示所有必需参数
+
+---
+
+## 2026-06-27: GuardrailConfig 参数验证
+
+### 问题
+
+创建 `GuardrailConfig` 时报错：
+
+```
+GuardrailConfig.__init__() got unexpected keyword argument 'judge_model'
+```
+
+### 根因分析
+
+`GuardrailConfig` 没有模型相关参数：
+
+```python
+# ❌ 错误：传入不存在的参数
+config = GuardrailConfig(
+    judge_model="gpt-4",
+    judge_timeout_ms=5000,
+)
+
+# ✅ 正确：只有基础参数
+config = GuardrailConfig(
+    enable_pii_check=True,
+    enable_compliance_check=True,
+)
+```
+
+### 参数分离原则
+
+- `GuardrailConfig`：护栏配置（启用/禁用）
+- `JudgeConfig`：法官配置（模型、超时）
+
+```python
+judge_config = JudgeConfig(
+    model="gpt-4",
+    timeout_seconds=5.0,
+)
+judge = ComplianceJudge(judge_config)
+```
+
+### 教训
+
+1. **配置类职责单一**：不要假设一个配置类包含所有参数
+2. **查看类定义**：配置类可能有 `__post_init__` 验证
+3. **参数命名**：`timeout_ms` vs `timeout_seconds` 注意单位
+
+---
+
 ## 2026-06-26: SDK 模块覆盖率差异分析
 
 ### 问题
