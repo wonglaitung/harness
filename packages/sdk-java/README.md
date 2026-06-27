@@ -262,7 +262,7 @@ snap run gradle build
     <version>1.0.0</version>
 </dependency>
 
-<!-- LLM 客户端（必需，二选一） -->
+<!-- LLM 客户端（必需，包含 Anthropic、OpenAI、Mock、Routing） -->
 <dependency>
     <groupId>com.harness</groupId>
     <artifactId>harness-sdk-llm</artifactId>
@@ -318,7 +318,7 @@ snap run gradle build
 // 核心模块（必需）
 implementation 'com.harness:harness-sdk-core:1.0.0'
 
-// LLM 客户端（必需）
+// LLM 客户端（必需，包含 Anthropic、OpenAI、Mock、Routing）
 implementation 'com.harness:harness-sdk-llm:1.0.0'
 
 // 内置工具（可选）
