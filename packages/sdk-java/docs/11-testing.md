@@ -860,3 +860,82 @@ tasks.jacocoTestCoverageVerification {
 
 - [12-deployment.md](./12-deployment.md) - 部署指南
 - [13-production-readiness.md](./13-production-readiness.md) - 生产就绪检查
+
+## 功能演示测试套件
+
+### SdkFeatureDemo.java
+
+位于 `harness-sdk-integration/src/test/java/com/harness/integration/SdkFeatureDemo.java`，包含 27 个功能演示测试：
+
+| 序号 | 测试方法 | 功能 |
+|------|---------|------|
+| 1 | `demo01_basicConversation` | 基础对话功能 |
+| 2 | `demo02_fileTools` | 文件操作工具 |
+| 3 | `demo03_multiTurnConversation` | 多轮对话会话管理 |
+| 4 | `demo04_costControl` | 成本控制 |
+| 5 | `demo05_progressTracking` | 进度追踪 |
+| 6 | `demo06_customTool` | 自定义工具 |
+| 7 | `demo07_mockTesting` | Mock 测试 |
+| 8 | `demo08_skillsSystem` | 技能系统 |
+| 9 | `demo09_skillInjection` | 技能注入 |
+| 10 | `demo10_mcpIntegration` | MCP 服务器 |
+| 11 | `demo11_securitySystem` | 安全系统 |
+| 12 | `demo12_observability` | 可观测性 |
+| 13 | `demo13_advancedCostControl` | 多级成本控制 |
+| 14 | `demo14_interruptAndResume` | 中断与恢复 |
+| 15 | `demo15_configuration` | 配置管理 |
+| 16 | `demo16_completeWorkflow` | 完整工作流 |
+| 17 | `demo17_lifecycleHooks` | 生命周期钩子 |
+| 18 | `demo18_dynamicSystemPrompt` | 动态系统提示 |
+| 19 | `demo19_ralphLoop` | Ralph Loop |
+| 20 | `demo20_subAgent` | Sub-Agent 管理 |
+| 21 | `demo21_selfVerification` | 自验证钩子 |
+| 22 | `demo22_progressiveSkills` | 渐进式技能加载 |
+| 23 | `demo23_memoryMd` | MEMORY.md 标准 |
+| 24 | `demo24_vectorSearch` | 向量检索 |
+| 25 | `demo25_semanticStuckDetection` | 语义卡住检测 |
+| 26 | `demo26_guardrails` | Guardrails PII 检测 |
+| 27 | `demo27_cpuRouter` | CPU Router |
+
+### 运行测试
+
+```bash
+cd packages/sdk-java
+gradle :harness-sdk-integration:test --tests "SdkFeatureDemo"
+```
+
+### MockLLMClient
+
+测试使用内置的 MockLLMClient 模拟 LLM 响应：
+
+```java
+static class MockLLMClient implements LLMClient {
+    private final String response;
+    
+    @Override
+    public String modelName() { return "mock-model"; }
+    
+    @Override
+    public LLMResponse call(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
+        return new LLMResponse(response);
+    }
+    
+    @Override
+    public CompletableFuture<LLMResponse> callAsync(...) { ... }
+    
+    @Override
+    public void stream(..., StreamCallback onChunk) { ... }
+}
+```
+
+### 单元测试清单
+
+| 模块 | 测试文件 | 覆盖内容 |
+|------|---------|---------|
+| Core | `ModelPresetTest.java` | ModelPreset, ModelPresets |
+| Integration | `AgentHarnessTest.java` | AgentHarness 生命周期 |
+| LLM | `MockResponseTest.java` | Mock 响应处理 |
+| Memory | `MemoryEntryTest.java` | MemoryEntry, retrieval strength |
+| Memory | `MemoryScoringConfigTest.java` | 评分配置 |
+| Skills | `SkillLoaderTest.java` | 技能加载 |
+| Skills | `SkillRegistryTest.java` | 技能注册与匹配 |

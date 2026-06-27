@@ -130,6 +130,35 @@ implementation(fileTree("libs") { include("*.jar") })
 4. **可观测性**: 内置日志、追踪、指标（支持银行审计要求）
 5. **离线友好**: 所有依赖打包，无需网络访问
 
+## 功能特性
+
+### 核心功能
+
+- **Agent Loop**: ReAct 循环、Circuit Breaker、Stuck Detection、Step Budget
+- **工具系统**: ReadTool, WriteTool, EditTool, BashTool, GrepTool, GlobTool
+- **记忆系统**: MemoryFileManager, Memory Scoring, Archive, ContextBuilder
+- **技能系统**: SkillRegistry, SkillLoader, SkillInjector
+- **MCP 协议**: McpManager, StdioTransport, HTTPTransport
+- **安全系统**: InputValidator, ResultSanitizer, SandboxExecutor, AuditLogger
+- **Guardrails**: PIIDetector, ChinesePIIRecognizers
+
+### 新增功能 (v1.0.0)
+
+| 功能 | 说明 |
+|------|------|
+| ModelPresets | 根据模型名称自动检测 provider、context_window |
+| toolResultRole | 兼容不支持 "tool" role 的代理 API |
+| Memory Scoring | 基于 Bjork's Theory 的检索强度计算 |
+| Memory Archive | 自动归档低重要性记忆 |
+| Tracing 集成 | OpenTelemetry tracing 集成到 AgentLoop |
+| Error Handler | 完整错误处理策略 (RETRY/COMPRESS_CONTEXT/ABORT) |
+
+### 测试覆盖
+
+- **27 个功能演示测试**: `SdkFeatureDemo.java`
+- **7 个单元测试文件**: ModelPreset, MemoryEntry, MemoryScoringConfig 等
+- **覆盖率目标**: 80%+
+
 ## 技术选型
 
 | 类别 | 选择 | 说明 |

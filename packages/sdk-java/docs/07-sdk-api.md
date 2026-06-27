@@ -125,6 +125,7 @@ public record HarnessConfig(
     double temperature,             // 温度参数
     String systemPrompt,            // 系统提示词
     boolean auditEnabled,          // 是否启用审计
+    String toolResultRole,          // 工具结果角色: "tool" (原生) 或 "user" (兼容模式)
     SecurityConfig security,       // 安全配置
     CostConfig costControl         // 成本控制配置
 ) {
@@ -138,6 +139,29 @@ public record HarnessConfig(
     }
 }
 ```
+
+#### toolResultRole 配置
+
+某些代理 API（如 OpenAI-compatible）不支持 `tool` role，需要使用 `user` role 发送 tool results。
+
+```java
+// 原生模式（默认）
+HarnessConfig config = HarnessConfig.builder()
+    .toolResultRole("tool")  // Claude 原生支持
+    .build();
+
+// 兼容模式
+HarnessConfig config = HarnessConfig.builder()
+    .toolResultRole("user")  // 用于不支持 tool role 的 API
+    .build();
+```
+
+**工具结果消息格式对比**:
+
+| 模式 | Role | Content |
+|------|------|---------|
+| 原生 | `tool` | `文件读取成功...` |
+| 兼容 | `user` | `[Tool Result: read]\n文件读取成功...` |
 
 ### LLM 客户端配置
 
@@ -304,6 +328,144 @@ public record TokenUsage(
         );
     }
 }
+```
+
+### ModelPreset
+
+```java
+package com.harness.core;
+
+/**
+ * 模型预设配置。
+ * 
+ * 根据模型名称自动检测 provider、context_window、max_tokens。
+ */
+public record ModelPreset(
+    String provider,        // "anthropic" 或 "openai"
+    int contextWindow,      // 上下文窗口大小
+    int maxTokens,          // 最大输出 token
+    double inputCost,       // 输入成本 ($/1M tokens)
+    double outputCost       // 输出成本 ($/1M tokens)
+) {
+    /**
+     * 从模型名称获取预设。
+     */
+    public static ModelPreset fromModel(String modelName) {
+        return ModelPresets.get(modelName);
+    }
+}
+```
+
+### ModelPresets
+
+```java
+package com.harness.core;
+
+/**
+ * 模型预设注册表。
+ * 
+ * 支持的模型：
+ * - claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5
+ * - gpt-4o, gpt-4o-mini, gpt-4-turbo
+ * - glm-4, glm-4-flash
+ */
+public final class ModelPresets {
+    
+    /**
+     * 获取模型预设。
+     * @param modelName 模型名称
+     * @return 预设配置，如果未知模型返回默认值
+     */
+    public static ModelPreset get(String modelName);
+    
+    /**
+     * 注册自定义预设。
+     */
+    public static void register(String modelName, ModelPreset preset);
+    
+    /**
+     * 检查模型是否已知。
+     */
+    public static boolean isKnown(String modelName);
+    
+    /**
+     * 获取所有已注册的模型名称。
+     */
+    public static Set<String> knownModels();
+}
+```
+
+**使用示例**:
+
+```java
+// 自动检测模型预设
+ModelPreset preset = ModelPresets.get("claude-sonnet-4-6");
+System.out.println("Provider: " + preset.provider());
+System.out.println("Context Window: " + preset.contextWindow());
+
+// 注册自定义模型
+ModelPresets.register("my-custom-model", new ModelPreset(
+    "openai",      // provider
+    128000,        // contextWindow
+    8192,          // maxTokens
+    0.5,           // inputCost
+    1.5            // outputCost
+));
+```
+
+### Message (toolResultRole 支持)
+
+```java
+package com.harness.types;
+
+/**
+ * 消息类型。
+ */
+public record Message(
+    String role,                              // user, assistant, tool
+    String content,
+    Map<String, Object> metadata
+) {
+    /**
+     * 创建用户消息。
+     */
+    public static Message user(String content);
+    
+    /**
+     * 创建助手消息。
+     */
+    public static Message assistant(String content);
+    
+    /**
+     * 创建工具结果消息（原生模式）。
+     */
+    public static Message toolResult(ToolResult result);
+    
+    /**
+     * 创建工具结果消息（兼容模式）。
+     * 
+     * 某些代理 API 不支持 "tool" role，需要使用 "user" role 发送 tool results。
+     * 
+     * @param result 工具执行结果
+     * @param role 消息角色："tool" (原生) 或 "user" (兼容模式)
+     */
+    public static Message fromToolResult(ToolResult result, String role);
+}
+```
+
+**toolResultRole 使用示例**:
+
+```java
+// 在 HarnessConfig 中配置兼容模式
+HarnessConfig config = HarnessConfig.builder()
+    .model("glm-4")
+    .apiKey(System.getenv("API_KEY"))
+    .baseUrl("https://open.bigmodel.cn/api/paas/v4/")
+    .toolResultRole("user")  // 使用 "user" role 发送工具结果
+    .build();
+
+// Agent 会自动使用兼容模式
+AgentHarness agent = new AgentHarness(config);
 ```
 
 ### ValidationResult
@@ -652,3 +814,5 @@ public class McpExample {
 
 - [08-security.md](./08-security.md) - 详细了解安全设计
 - [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent 循环实现
+- [05-memory-system.md](./05-memory-system.md) - 了解 Memory Scoring 和归档机制
+- [11-testing.md](./11-testing.md) - 查看测试套件

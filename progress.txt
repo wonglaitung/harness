@@ -1231,3 +1231,35 @@ Python SDK 和 Java SDK 的定位不同：
 - e80de76 refactor(sdk-java): consolidate guardrails module to fix code duplication
 - f18d9a7 feat(sdk-java): implement P1 features - Web tools, Skills, SessionStore
 - b3e9659 feat(sdk-java): implement P2 features - Chinese PII recognizers and MCP transports
+
+## 2026-06-27
+
+### Java SDK 测试套件完成 ✅
+
+#### 实现内容
+
+**功能演示测试集** (`SdkFeatureDemo.java`):
+- 27 个测试用例，覆盖所有主要功能
+- 包含 MockLLMClient、SimpleTool、LoggingHook 辅助类
+- 所有测试通过
+
+**单元测试**:
+- `ModelPresetTest.java` - ModelPreset, ModelPresets 测试
+- `MemoryEntryTest.java` - MemoryEntry, retrieval strength 测试
+- `MemoryScoringConfigTest.java` - 评分配置测试
+- `SkillLoaderTest.java` - 技能加载测试
+- `SkillRegistryTest.java` - 技能注册与匹配测试
+- `AgentHarnessTest.java` - AgentHarness 生命周期测试
+- `MockResponseTest.java` - Mock 响应处理测试
+
+#### 文档同步
+
+更新以下文档以反映新功能：
+- `docs/07-sdk-api.md`: 添加 ModelPreset、MemoryScoringConfig、toolResultRole API 文档
+- `docs/05-memory-system.md`: 添加 Memory Scoring (Retrieval Strength) 章节
+- `docs/11-testing.md`: 添加测试套件引用
+- `docs/README.md`: 更新功能列表
+
+#### 提交记录
+
+- 1349686 test(sdk-java): add comprehensive test suite for Java SDK

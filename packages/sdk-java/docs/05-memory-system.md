@@ -913,6 +913,177 @@ boolean added3 = manager.addEntry(entry3);  // 返回 true
 - 阈值越高，去重越严格
 - 可通过 `addEntry(entry, false)` 跳过去重检查
 
+## Memory Scoring (Retrieval Strength)
+
+基于 Bjork's New Theory of Disuse 的记忆衰减和检索强度计算。
+
+### 概述
+
+Memory Scoring 实现了两个核心概念：
+- **Storage Strength (存储强度)**: 记忆的重要性/稳定性，由 `importance` 字段表示
+- **Retrieval Strength (检索强度)**: 当前访问该记忆的容易程度，基于时间和访问频率计算
+
+### MemoryScoringConfig
+
+```java
+package com.harness.memory;
+
+/**
+ * 记忆评分配置。
+ */
+public record MemoryScoringConfig(
+    double decayLambda,        // 衰减速率，默认 0.1
+    double minStrength,        // 最小强度，默认 0.1
+    int archiveThreshold       // 归档阈值（重要性低于此值的条目可归档），默认 0.3
+) {
+    public static MemoryScoringConfig defaults() {
+        return new MemoryScoringConfig(0.1, 0.1, 0.3);
+    }
+    
+    public static Builder builder() { ... }
+}
+```
+
+### MemoryEntry 扩展
+
+```java
+/**
+ * 记忆条目（扩展版本，支持评分）。
+ */
+public record MemoryEntry(
+    MemoryCategory category,
+    String content,
+    MemorySource source,
+    Instant timestamp,
+    double importance,          // Storage Strength (存储强度)
+    int accessCount,           // 访问次数
+    Instant lastAccessed       // 最后访问时间
+) {
+    /**
+     * 计算检索强度。
+     * 
+     * 基于时间和访问频率计算当前访问该记忆的容易程度。
+     * 
+     * @param config 评分配置
+     * @return 检索强度 (0.0 - 2.0+)
+     */
+    public double calculateRetrievalStrength(MemoryScoringConfig config) {
+        if (lastAccessed == null) {
+            return 1.0;
+        }
+        
+        // 时间衰减
+        long daysIdle = Duration.between(lastAccessed, Instant.now()).toDays();
+        double timeDecay = config.minStrength() + 
+            (1.0 - config.minStrength()) * Math.exp(-config.decayLambda() * daysIdle);
+        
+        // 访问奖励
+        double accessBonus = 1.0 + 0.5 * Math.log(1.0 + accessCount);
+        
+        return timeDecay * accessBonus;
+    }
+    
+    /**
+     * 记录访问（增加访问计数并更新时间）。
+     */
+    public MemoryEntry recordAccess() {
+        return new MemoryEntry(
+            category, content, source, timestamp,
+            importance,
+            accessCount + 1,
+            Instant.now()
+        );
+    }
+    
+    public static Builder builder() { ... }
+}
+```
+
+### 记忆归档
+
+当 Core Memory 超过 token 限制时，自动归档低 importance 条目：
+
+```java
+/**
+ * 归档低重要性记忆。
+ * 
+ * @param archivePath 归档文件路径 (MEMORY_ARCHIVE.md)
+ * @param config 评分配置
+ * @return 被归档的条目数量
+ */
+public int archiveLowImportance(Path archivePath, MemoryScoringConfig config) {
+    List<MemoryEntry> allEntries = getAllEntries();
+    
+    // 按重要性排序（最低优先）
+    allEntries.sort(Comparator.comparingDouble(MemoryEntry::importance));
+    
+    int archived = 0;
+    for (MemoryEntry entry : allEntries) {
+        if (entry.importance() < config.archiveThreshold()) {
+            // 归档到文件
+            archiveToFile(archivePath, entry);
+            // 从主记忆中移除
+            removeEntry(entry);
+            archived++;
+        }
+    }
+    
+    return archived;
+}
+```
+
+### 使用示例
+
+```java
+import com.harness.memory.*;
+
+// 创建带评分的记忆
+MemoryEntry entry = MemoryEntry.builder()
+    .category(MemoryCategory.KEY_DECISIONS)
+    .content("用户偏好使用 Java 17 特性")
+    .source(MemorySource.USER_INPUT)
+    .importance(0.8)  // 高重要性
+    .build();
+
+// 添加到记忆管理器
+MemoryFileManager manager = new MemoryFileManager(memoryDir);
+manager.addEntry(entry);
+
+// 计算检索强度
+MemoryScoringConfig config = MemoryScoringConfig.defaults();
+double strength = entry.calculateRetrievalStrength(config);
+System.out.println("Retrieval Strength: " + strength);
+
+// 归档低重要性记忆
+Path archivePath = memoryDir.resolve("MEMORY_ARCHIVE.md");
+int archived = manager.archiveLowImportance(archivePath, config);
+System.out.println("Archived " + archived + " entries");
+```
+
+### 归档文件格式
+
+`MEMORY_ARCHIVE.md` 存储被归档的记忆：
+
+```markdown
+# Memory Archive
+
+本文件存储被归档的低重要性记忆。
+
+---
+
+## 2026-06-27
+
+### user_profile
+
+- 操作系统：Windows 10 *(archived: importance=0.2)*
+
+### learned_patterns
+
+- 偏好使用 cmd 而非 powershell *(archived: importance=0.1)*
+
+---
+```
+
 ## MemoryCategory 扩展
 
 ### getValue() 和 fromValue()
