@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from harness.core.agent_loop import AgentLoop, LoopConfig
+from harness.core.hooks import HookPoint, LifecycleHook
 from harness.core.observability import ObservabilityManager
 from harness.llm.anthropic import AnthropicClient
 from harness.llm.base import LLMClient, ToolDefinition
@@ -17,18 +18,11 @@ from harness.memory.context_builder import ContextBuilder, ContextConfig
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore, SQLiteSessionStore
 from harness.progress import create_progress_handler
-from harness.sdk.config import (
-    CostControlConfig,
-    HarnessConfig,
-    ObservabilityConfig,
-    RoutingConfig,
-    StorageConfig,
-)
+from harness.sdk.config import HarnessConfig, RoutingConfig
+from harness.skills import SkillInjector, SkillLoader, SkillRegistry
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
-from harness.core.hooks import HookPoint, LifecycleHook
-from harness.skills import SkillInjector, SkillLoader, SkillRegistry
 from harness.types import (
     CostConfig,
     LoopResult,
@@ -575,6 +569,93 @@ class AgentHarness:
                 "Use 'await agent.run()' instead."
             )
 
+    async def run_goal(
+        self,
+        goal: str,
+        success_criteria: str | None = None,
+        workspace_dir: str = ".",
+        max_iterations: int = 50,
+        max_context_resets: int = 5,
+        timeout_seconds: int = 3600,
+        custom_verifier: Callable | None = None,
+        on_progress: ProgressCallback | None = None,
+        **kwargs,
+    ):
+        """
+        Run the agent in goal-driven mode.
+
+        The agent will continue execution until the goal is achieved
+        or a limit is reached (iterations, timeout, cost).
+
+        This implements the Loop Engineering paradigm where agents
+        run autonomously until a verifiable goal is achieved.
+
+        Args:
+            goal: Description of the goal to achieve
+            success_criteria: Optional specific criteria for success
+            workspace_dir: Working directory for execution (for worktree isolation)
+            max_iterations: Maximum iterations per context window
+            max_context_resets: Maximum context reset attempts
+            timeout_seconds: Total execution timeout in seconds
+            custom_verifier: Optional custom verification function (async recommended)
+            on_progress: Progress callback
+            **kwargs: Additional GoalConfig options
+
+        Returns:
+            GoalResult with achievement status and execution details
+
+        Example:
+            ```python
+            agent = AgentHarness(model="claude-sonnet-4-6")
+
+            # Simple goal
+            result = await agent.run_goal("Fix all type errors in src/")
+
+            # With custom verification
+            async def check_types(result):
+                proc = await asyncio.create_subprocess_exec(
+                    "mypy", "src/",
+                    stdout=asyncio.subprocess.PIPE,
+                )
+                return (await proc.wait()) == 0
+
+            result = await agent.run_goal(
+                goal="Add type hints to all functions",
+                custom_verifier=check_types,
+            )
+
+            if result.achieved:
+                print(f"Goal achieved in {result.total_iterations} iterations!")
+            ```
+
+        For more details, see:
+            packages/sdk/design/loop-engineering.md
+        """
+        from harness.loop import GoalConfig, GoalLoop, VerificationMethod
+
+        # Build GoalConfig
+        verification_method = (
+            VerificationMethod.CUSTOM
+            if custom_verifier
+            else VerificationMethod.LLM
+        )
+
+        config = GoalConfig(
+            description=goal,
+            success_criteria=success_criteria,
+            workspace_dir=workspace_dir,
+            max_iterations=max_iterations,
+            max_context_resets=max_context_resets,
+            timeout_seconds=timeout_seconds,
+            verification_method=verification_method,
+            custom_verifier=custom_verifier,
+            **kwargs,
+        )
+
+        # Create and run GoalLoop
+        loop = GoalLoop(agent=self, config=config, on_progress=on_progress)
+        return await loop.run()
+
     def register_tool(
         self,
         tool: Tool,
@@ -771,8 +852,6 @@ class AgentHarness:
             loaded = LoopSnapshot.from_dict(snapshot_dict)
             ```
         """
-        from harness.types import LoopSnapshot
-
         session = None
         if session_id:
             session = self._session_manager.get_session(session_id)

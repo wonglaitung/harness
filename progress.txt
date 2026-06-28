@@ -1311,3 +1311,161 @@ Python SDK 和 Java SDK 的定位不同：
 
 - 1c5dba7 feat(sdk-java): sync P0/P1 features from Python SDK
 - docs: sync design documentation with code changes
+
+## 2026-06-28
+
+### Loop Engineering Phase 1: Goal Verifier ✅ 完成
+
+#### 背景
+Loop Engineering 是 2026 年 6 月兴起的新范式：**不再逐轮手动提示 Agent，而是设计自动化循环系统驱动 Agent**。
+
+核心公式：`Loop = Trigger + Context + Action + Verification + State + Stop rules`
+
+#### 实现内容
+
+**类型定义** (`loop/types.py`):
+- `GoalConfig` - 目标配置（description, success_criteria, workspace_dir, max_iterations, timeout 等）
+- `GoalResult` - 执行结果（status, total_iterations, verification_log 等）
+- `GoalStatus` - 状态枚举（ACHIEVED, TIMEOUT, MAX_ITERATIONS, MAX_RESETS, ERROR, VERIFIER_FAULT, CANCELLED）
+- `VerificationResult` - 验证结果（achieved, confidence, reasoning）
+- `VerificationRecord` - 验证记录（iteration, achieved, confidence, reasoning）
+
+**GoalVerifier** (`loop/goal.py`):
+- LLM 验证：让 LLM 判断目标是否达成
+- 自定义验证：用户提供的验证函数（支持同步/异步）
+- 指数退避重试：处理 LLM API 限流
+- 无状态设计：所有上下文通过参数传递，支持并发执行
+
+**GoalLoop** (`loop/goal_loop.py`):
+- 迭代控制：max_iterations, max_context_resets
+- 上下文重置：防止 "context anxiety"（token 接近模型限制时自动重置）
+- 超时处理：timeout_seconds
+- 成本控制：max_tokens, max_cost_usd
+- 进度回调：on_progress 参数
+
+**AgentHarness 集成** (`sdk/harness.py`):
+- 新增 `run_goal()` 方法
+- 简化 API：`result = await agent.run_goal("修复所有类型错误")`
+
+#### 设计原则
+
+1. **GoalVerifier 无状态性**：
+   - 所有上下文通过 `context` 参数传递
+   - 支持并发执行多个 Goal（Phase 3 Worktrees 预留）
+   - 便于测试（无副作用）
+
+2. **异步设计**：
+   - 每次迭代后 `await asyncio.sleep(0)` 让出控制权
+   - 防止阻塞事件循环
+   - 支持长时间运行（数分钟/数小时）
+
+3. **验证器容错**：
+   - `VERIFIER_FAULT` 状态区分基础设施故障
+   - 指数退避重试（API 限流、网络超时）
+   - JSON 解析失败直接返回故障状态
+
+#### 测试状态
+
+| 测试文件 | 测试数 | 状态 |
+|---------|--------|------|
+| test_goal.py | 18 | ✅ |
+| test_goal_loop.py | 12 | ✅ |
+| test_integration.py | 6 | ✅ |
+| **总计** | **36** | ✅ |
+
+#### API 示例
+
+```python
+from harness import AgentHarness, GoalStatus
+
+agent = AgentHarness()
+
+# 基础用法
+result = await agent.run_goal("修复所有类型错误")
+
+# 自定义验证
+async def check_types(result):
+    proc = await asyncio.create_subprocess_exec("mypy", "--strict")
+    return proc.returncode == 0
+
+result = await agent.run_goal(
+    goal="修复类型错误",
+    custom_verifier=check_types,
+    max_iterations=50,
+)
+
+if result.status == GoalStatus.ACHIEVED:
+    print(f"目标达成，共 {result.total_iterations} 轮迭代")
+```
+
+#### 文件结构
+
+```
+packages/sdk/src/harness/loop/
+├── __init__.py
+├── types.py
+├── goal.py
+└── goal_loop.py
+
+packages/sdk/design/
+└── loop-engineering.md  # 设计文档
+```
+
+#### 后续 Phase
+
+- Phase 2: Automations（定时调度）
+- Phase 3: Worktrees（并行隔离）
+- Phase 4: Connectors（外部集成）
+- Phase 5: Loop Orchestrator（统一编排）
+
+#### 提交记录
+
+- feat(sdk): Implement Loop Engineering Phase 1 - Goal Verifier
+
+---
+
+## 当前状态总结
+
+### Harness SDK 功能状态
+
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| P0 | Lifecycle Hooks | ✅ |
+| P0 | 动态系统提示组装 | ✅ |
+| P0 | **Loop Engineering (Phase 1)** | ✅ **NEW** |
+| P1 | Ralph Loop | ✅ |
+| P1 | Sub-Agent 管理 | ✅ |
+| P2 | 自验证钩子 | ✅ |
+| P2 | 渐进式技能加载 | ✅ |
+| P2 | MEMORY.md 标准 | ✅ |
+| P2 | 向量检索 | ✅ |
+| P3 | 工具输出卸载 | ✅ |
+| P3 | 步骤预算 | ✅ |
+| - | Spring Cloud 集成 | ✅ |
+
+**所有 P0-P3 功能 + Spring Cloud 集成 + Loop Engineering Phase 1 已完成！**
+
+### Harness Client 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| 3-column UI layout | ✅ |
+| 技能系统 UI | ✅ |
+| MCP 服务器管理 | ✅ |
+| 工作区文件树 | ✅ |
+| 技能自动补全 | ✅ |
+| 统一配置目录 (~/.harness) | ✅ |
+| 会话管理 | ✅ |
+| 消息气泡高度正确 | ✅ |
+
+### Harness Cloud 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| Agent WebSocket | ✅ MVP |
+| Gateway 容器管理 | ✅ MVP |
+| Docker 部署 | ✅ MVP |
+| 自动化测试 | ✅ |
+| Vue 前端 | ✅ MVP |
+| JWT 认证系统 | 📝 待开发 |
+| MinIO 文件存储 | 📝 待开发 |

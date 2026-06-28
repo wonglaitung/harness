@@ -489,6 +489,7 @@ print(result.redacted)  # 脱敏后的文本
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
 - **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
+- **Loop Engineering**: 目标驱动执行，Agent 自主运行直到目标达成
 - **Streaming**: 流式输出与背压控制
 - **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
 - **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
@@ -499,6 +500,75 @@ print(result.redacted)  # 脱敏后的文本
 - **Testing**: MockHarness + RecordingHarness 完整测试工具链
 - **SDK**: 简洁的 Python API
 - **Progress Events**: 执行过程可视化，支持 UI 展示和调试
+
+## Loop Engineering
+
+**Loop Engineering** 是一种新的 Agent 编排范式：不再逐轮手动提示，而是设计自动化循环系统驱动 Agent 自主运行。
+
+### Goal-Driven Execution
+
+让 Agent 自主运行直到目标达成：
+
+```python
+from harness import AgentHarness, GoalStatus
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 基础用法
+result = await agent.run_goal("修复所有类型错误")
+
+# 检查结果
+if result.status == GoalStatus.ACHIEVED:
+    print(f"目标达成！共 {result.total_iterations} 轮迭代")
+else:
+    print(f"未达成: {result.status}")
+```
+
+### 自定义验证
+
+提供自定义验证函数判断目标是否达成：
+
+```python
+async def check_coverage(result):
+    """检查测试覆盖率是否达到 80%"""
+    proc = await asyncio.create_subprocess_exec(
+        "pytest", "--cov", "--cov-report=term",
+        stdout=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    return "TOTAL.*80%" in stdout.decode()
+
+result = await agent.run_goal(
+    goal="将测试覆盖率提升到 80%",
+    custom_verifier=check_coverage,
+    max_iterations=50,
+)
+```
+
+### 配置参数
+
+```python
+result = await agent.run_goal(
+    goal="你的目标",
+    success_criteria="成功标准描述",   # 可选
+    max_iterations=50,                # 最大迭代次数
+    max_context_resets=5,             # 最大上下文重置次数
+    timeout_seconds=3600,             # 超时时间（秒）
+    on_progress=my_callback,          # 进度回调
+)
+```
+
+### 目标状态
+
+| 状态 | 说明 |
+|------|------|
+| `ACHIEVED` | 目标达成 |
+| `TIMEOUT` | 超时 |
+| `MAX_ITERATIONS` | 达到最大迭代次数 |
+| `MAX_RESETS` | 达到最大上下文重置次数 |
+| `ERROR` | Agent 执行错误 |
+| `VERIFIER_FAULT` | 验证器基础设施故障 |
+| `CANCELLED` | 用户取消 |
 
 ## Documentation
 

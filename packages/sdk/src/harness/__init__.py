@@ -152,6 +152,18 @@ from harness.types import (
     HookContext,
     HookResult,
 )
+# Loop Engineering (P0)
+from harness.loop import (
+    GoalConfig,
+    GoalResult,
+    GoalStatus,
+    VerificationError,
+    VerificationMethod,
+    VerificationRecord,
+    VerificationResult,
+    GoalVerifier,
+    GoalLoop,
+)
 
 __version__ = "0.1.0"
 
@@ -299,4 +311,14 @@ __all__ = [
     "VectorSearchResult",
     "SimpleInMemoryVectorStore",
     "MockEmbeddingModel",
+    # Loop Engineering (P0)
+    "GoalConfig",
+    "GoalResult",
+    "GoalStatus",
+    "VerificationError",
+    "VerificationMethod",
+    "VerificationRecord",
+    "VerificationResult",
+    "GoalVerifier",
+    "GoalLoop",
 ]

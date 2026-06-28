@@ -4,6 +4,121 @@
 
 ---
 
+## 2026-06-28: GoalVerifier 无状态设计支持并发执行
+
+### 问题
+
+实现 Loop Engineering 的 GoalVerifier 时，是否应该在类内部存储状态（如当前工作目录、分支信息）？
+
+### 设计决策
+
+**GoalVerifier 必须保持无状态**，所有上下文通过参数传递：
+
+```python
+# ✅ 正确：无状态验证
+class GoalVerifier:
+    async def verify(
+        self,
+        result: LoopResult,
+        context: dict | None = None,  # 包含 workspace_dir 等信息
+    ) -> VerificationResult:
+        workspace = context.get("workspace_dir", ".")
+        ...
+
+# ❌ 错误：有状态验证
+class GoalVerifier:
+    def __init__(self):
+        self._current_branch = None  # 不要存储分支状态
+        self._workspace = None       # 不要存储路径
+```
+
+### 原因
+
+1. **支持并发执行**：Phase 3 Worktrees 会并行执行多个 Goal，每个 Goal 可能在不同 workspace
+2. **验证器可复用**：同一个验证器实例可用于不同 workspace
+3. **便于测试**：无副作用，测试不需要 mock 内部状态
+4. **避免状态污染**：多个 Goal 共享验证器时，状态会互相干扰
+
+### 教训
+
+1. **验证器是纯函数**：输入结果 + 上下文，输出验证结果
+2. **状态放在调用方**：GoalLoop 负责管理状态，验证器只做判断
+3. **为未来扩展预留**：无状态设计天然支持并发
+
+---
+
+## 2026-06-28: GoalLoop 异步设计防止事件循环阻塞
+
+### 问题
+
+GoalLoop 可能运行数分钟甚至数小时，如何避免阻塞事件循环？
+
+### 解决方案
+
+在每次迭代后让出控制权：
+
+```python
+class GoalLoop:
+    async def run(self) -> GoalResult:
+        while True:
+            # ... 执行迭代 ...
+
+            # 让出控制权，防止阻塞事件循环
+            await asyncio.sleep(0)
+
+            # 通过 ProgressCallback 报告进度
+            if self._on_progress:
+                self._on_progress(ProgressEvent(...))
+```
+
+### 原理
+
+- `await asyncio.sleep(0)` 让事件循环处理其他待处理任务
+- 不会实际延迟（0 秒），但会让出控制权
+- 支持长时间运行任务的同时保持响应性
+
+### 教训
+
+1. **长时间循环要 yield**：任何可能运行很久的循环都要定期让出控制权
+2. **支持进度监控**：通过 callback 让用户了解执行状态
+3. **防止假死**：不 yield 的循环会让应用看起来卡死
+
+---
+
+## 2026-06-28: VERIFIER_FAULT 区分基础设施故障
+
+### 问题
+
+验证器调用 LLM API 时可能失败（限流、超时、JSON 解析错误），如何与 Agent 执行错误区分？
+
+### 解决方案
+
+引入 `VERIFIER_FAULT` 状态：
+
+```python
+class GoalStatus(Enum):
+    ACHIEVED = "achieved"           # 目标达成
+    ERROR = "error"                 # Agent 执行错误
+    VERIFIER_FAULT = "verifier_fault"  # 验证器基础设施故障
+```
+
+### 区分逻辑
+
+| 场景 | 状态 | 重试 |
+|------|------|------|
+| Agent 抛出异常 | ERROR | 不重试 |
+| LLM API 限流 | VERIFIER_FAULT | 指数退避重试 |
+| LLM API 超时 | VERIFIER_FAULT | 指数退避重试 |
+| JSON 解析失败 | VERIFIER_FAULT | 直接失败（不重试） |
+
+### 教训
+
+1. **区分业务错误和基础设施错误**：Agent 错误和验证器错误是不同层级的问题
+2. **不同错误不同处理**：业务错误可能需要用户干预，基础设施错误可以自动重试
+3. **状态要足够细粒度**：帮助用户快速定位问题根源
+
+---
+
 ## 2026-06-25: QScrollArea 布局陷阱 - setWidgetResizable 覆盖行为
 
 ### 问题
