@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 快速参考
 
 > **📚 详细文档**：完整指南请查看 `packages/sdk/docs/` 目录
+> **📐 设计文档**：`packages/sdk/design/` - Loop Engineering 等设计文档
 > **⚠️ 经验教训**：关键警告和最佳实践请参阅 `lessons.md`
 > **🔧 编程规范**：开发流程、系统设计决策请遵守 `packages/sdk/docs/programmer_skill.md`
 > **📅 进度跟踪**：`progress.txt` - 项目当前进展
@@ -30,6 +31,7 @@ Harness 是一个 **Monorepo** 项目，包含：
 | 包 | 路径 | 说明 |
 |---|------|------|
 | `harness-sdk` | `packages/sdk/` | 可内嵌的 Python AI Agent SDK（跨平台） |
+| `harness-sdk-java` | `packages/sdk-java/` | Java SDK（嵌入式库，96% 功能同步） |
 | `harness-client` | `packages/client/` | Windows 桌面客户端（PyQt6） |
 | `harness-cloud` | `packages/cloud/` | Docker 沙箱云服务 |
 | `harness-scraper` | `packages/scraper/` | AI 情报/港股 Alpha 提取系统 |
@@ -294,6 +296,10 @@ packages/sdk/src/harness/
 │   ├── step_budget.py      # 步骤预算控制
 │   ├── cost_controller.py  # 成本控制
 │   └── streaming.py        # 流式背压控制
+├── loop/                    # Loop Engineering (P0)
+│   ├── types.py            # GoalConfig, GoalResult, GoalStatus
+│   ├── goal.py             # GoalVerifier (无状态验证)
+│   └── goal_loop.py        # GoalLoop (目标驱动执行)
 ├── llm/
 │   ├── base.py             # LLMClient 接口
 │   ├── anthropic.py        # Claude
@@ -361,6 +367,38 @@ SidebarPanel.update_sessions() (纯渲染)
 返回 LoopResult
 ```
 
+### Loop Engineering（目标驱动执行）
+
+让 Agent 自主运行直到目标达成，而不是逐轮手动提示：
+
+```python
+from harness import AgentHarness, GoalStatus
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 基础用法
+result = await agent.run_goal("修复所有类型错误")
+
+# 自定义验证
+async def check_coverage(result):
+    proc = await asyncio.create_subprocess_exec("pytest", "--cov")
+    return proc.returncode == 0
+
+result = await agent.run_goal(
+    goal="测试覆盖率达到 80%",
+    custom_verifier=check_coverage,
+    max_iterations=50,
+)
+
+if result.status == GoalStatus.ACHIEVED:
+    print(f"目标达成，共 {result.total_iterations} 轮迭代")
+```
+
+**设计原则**：
+- **GoalVerifier 无状态**：所有上下文通过参数传递，支持并发执行
+- **上下文自动重置**：防止 "context anxiety"（token 接近模型限制时自动重置）
+- **VERIFIER_FAULT**：区分基础设施故障和 Agent 执行错误
+
 ### Scraper 架构（技能驱动）
 
 ```
@@ -414,6 +452,17 @@ Agent Container (FastAPI)
 - Redis 分布式会话存储
 - Nacos/Eureka 服务发现
 - 详见 `packages/sdk/docs/14-spring-cloud-integration.md`
+
+### Java SDK 架构差异
+
+Python SDK 和 Java SDK 定位不同：
+
+| SDK | 模式 | 说明 |
+|-----|------|------|
+| Python | Sidecar 微服务 | 提供 FastAPI HTTP 端点，独立部署 |
+| Java | 嵌入式库 | 无 HTTP 端点，应用直接调用 AgentHarness |
+
+**功能同步率 96%**，未实现的 4% 是框架依赖差异（如 Java 用同步 JDBC，无 AsyncSQLiteSessionStore）。
 
 ---
 
@@ -565,4 +614,4 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-27.
+Today's date is 2026-06-28.
