@@ -68,7 +68,12 @@
 
 ## 2026-06-28 提取
 
+## 2026-06-29 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **DESIGN.md — AI Agent 视觉身份规范** - https://github.com/google-labs-code/design.md
 
 ### 新范式/工具
 - **DESIGN.md — AI 编码代理的视觉身份描述规范** - https://github.com/google-labs-code/design.md
