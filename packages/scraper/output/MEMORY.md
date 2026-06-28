@@ -71,6 +71,9 @@
 ## 注意事项
 
 ### 新范式/工具
+- **DESIGN.md — AI 编码代理的视觉身份描述规范** - https://github.com/google-labs-code/design.md
+
+### 新范式/工具
 - **DESIGN.md — AI 代理的设计系统即代码规范** - https://github.com/google-labs-code/design.md
 
 ### 新范式/工具
