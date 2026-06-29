@@ -163,6 +163,23 @@ from harness.loop import (
     VerificationResult,
     GoalVerifier,
     GoalLoop,
+    # Phase 2: Automation
+    Automation,
+    AutomationConfig,
+    AutomationResult,
+    AutomationStatus,
+)
+# Trigger System (P0 - Phase 2)
+from harness.triggers import (
+    Trigger,
+    CronTrigger,
+    IntervalTrigger,
+    TriggerManager,
+    TriggerType,
+    TriggerState,
+    TriggerEvent,
+    TriggerAction,
+    TriggerRegistration,
 )
 
 __version__ = "0.1.0"
@@ -321,4 +338,19 @@ __all__ = [
     "VerificationResult",
     "GoalVerifier",
     "GoalLoop",
+    # Phase 2: Automation
+    "Automation",
+    "AutomationConfig",
+    "AutomationResult",
+    "AutomationStatus",
+    # Trigger System (P0 - Phase 2)
+    "Trigger",
+    "CronTrigger",
+    "IntervalTrigger",
+    "TriggerManager",
+    "TriggerType",
+    "TriggerState",
+    "TriggerEvent",
+    "TriggerAction",
+    "TriggerRegistration",
 ]

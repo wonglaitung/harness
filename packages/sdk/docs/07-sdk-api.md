@@ -167,6 +167,32 @@ from harness import (
     VectorSearchResult,
     SimpleInMemoryVectorStore,
     MockEmbeddingModel,
+
+    # Loop Engineering (P0)
+    GoalConfig,
+    GoalResult,
+    GoalStatus,
+    GoalVerifier,
+    GoalLoop,
+    VerificationMethod,
+    VerificationRecord,
+    VerificationResult,
+
+    # Automation (P0 - Phase 2)
+    Automation,
+    AutomationConfig,
+    AutomationResult,
+    AutomationStatus,
+
+    # Trigger System (P0 - Phase 2)
+    Trigger,
+    CronTrigger,
+    IntervalTrigger,
+    TriggerManager,
+    TriggerType,
+    TriggerState,
+    TriggerEvent,
+    TriggerAction,
 )
 ```
 
@@ -1124,6 +1150,212 @@ class GoalResult:
 
 详见 [15-loop-engineering.md](./15-loop-engineering.md)。
 
+## Automation API
+
+Automation 是 Loop Engineering Phase 2 的核心 API，整合 Trigger + GoalConfig 实现自动化执行。
+
+### Automation
+
+```python
+from harness.loop import Automation, AutomationStatus
+
+# 创建定时任务
+automation = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",           # cron 表达式：每天 9:00
+    goal="生成每日报告并发送到 Slack",
+    skills=["report-generation"],
+)
+
+# 创建间隔任务
+health_check = Automation(
+    name="health-check",
+    interval_seconds=300,           # 每 5 分钟
+    goal="检查系统健康状态",
+)
+
+# 启动
+await automation.start(agent)
+
+# 查看状态
+print(f"状态: {automation.status}")  # RUNNING
+
+# 停止
+await automation.stop()
+```
+
+### AutomationConfig
+
+```python
+from harness.loop import AutomationConfig
+
+@dataclass
+class AutomationConfig:
+    name: str                              # 自动化名称
+    goal: str                              # 目标描述
+
+    # 触发方式（三选一）
+    schedule: str | None = None            # cron 表达式
+    interval_seconds: int | None = None    # 间隔秒数
+    trigger: Trigger | None = None         # 自定义 Trigger
+
+    # Goal 配置
+    workspace_dir: str = "."
+    max_iterations: int = 50
+    timeout_seconds: int = 3600
+    custom_verifier: Callable | None = None
+
+    # 输出配置
+    skills: list[str] = field(default_factory=list)
+```
+
+### AutomationStatus
+
+```python
+class AutomationStatus(Enum):
+    PENDING = "pending"     # 等待启动
+    RUNNING = "running"     # 运行中
+    PAUSED = "paused"       # 已暂停
+    STOPPED = "stopped"     # 已停止
+    ERROR = "error"         # 错误状态
+```
+
+### AutomationResult
+
+```python
+@dataclass
+class AutomationResult:
+    automation_name: str
+    status: AutomationStatus
+    goal_result: GoalResult | None = None
+    last_run: datetime | None = None
+    run_count: int = 0
+    error_count: int = 0
+    error_message: str | None = None
+```
+
+详见 [06-triggers.md](./06-triggers.md)。
+
+## Trigger System API
+
+Trigger System 提供触发器基础设施，支持时间、事件驱动的自动化执行。
+
+### CronTrigger
+
+```python
+from harness.triggers import CronTrigger, TriggerAction
+
+trigger = CronTrigger(
+    schedule="0 9 * * *",  # 每天 9:00
+    action=TriggerAction(
+        goal="生成每日报告",
+        skills=["report-generation"],
+    ),
+    timezone="Asia/Shanghai",
+    jitter_seconds=60,     # 添加随机延迟避免同时触发
+)
+
+# 查看下次运行时间
+next_runs = trigger.get_next_runs(5)
+for run_time in next_runs:
+    print(f"下次运行: {run_time}")
+
+# 启动
+await trigger.start(callback=my_callback)
+
+# 停止
+await trigger.stop()
+```
+
+### IntervalTrigger
+
+```python
+from harness.triggers import IntervalTrigger
+
+trigger = IntervalTrigger(
+    interval_seconds=300,  # 每 5 分钟
+    action=TriggerAction(
+        goal="检查系统健康状态",
+    ),
+    start_immediately=False,  # 是否立即触发第一次
+)
+
+# 最小间隔为 1 秒
+# trigger = IntervalTrigger(interval_seconds=0.1)  # ValueError!
+```
+
+### TriggerAction
+
+```python
+from harness.triggers import TriggerAction, TriggerEvent
+
+action = TriggerAction(
+    goal="修复所有类型错误",           # 目标描述
+    workspace_dir=".",                # 工作目录
+    max_iterations=50,                # 最大迭代
+    timeout_seconds=3600,             # 超时时间
+    custom_verifier=None,             # 自定义验证器
+    skills=["typescript"],            # 激活的技能
+)
+
+# 转换为 GoalConfig
+event = TriggerEvent(trigger_type=TriggerType.CRON, trigger_id="trigger-1")
+goal_config = action.to_goal_config(event)
+```
+
+### TriggerManager
+
+```python
+from harness.triggers import TriggerManager, TriggerType
+from harness import AgentHarness
+
+agent = AgentHarness()
+manager = TriggerManager(agent)
+
+# 注册触发器
+trigger_id = manager.register(
+    trigger=CronTrigger(schedule="0 9 * * *", action=action),
+    enabled=True,
+)
+
+# 列出所有触发器
+triggers = manager.list_triggers()
+for t in triggers:
+    print(f"ID: {t['id']}, Type: {t['type']}, Enabled: {t['enabled']}")
+
+# 启动所有触发器
+await manager.start()
+
+# 停止所有触发器
+await manager.stop()
+
+# 注销触发器
+manager.unregister(trigger_id)
+```
+
+### TriggerType & TriggerState
+
+```python
+from harness.triggers import TriggerType, TriggerState
+
+class TriggerType(Enum):
+    CRON = "cron"           # 定时触发
+    INTERVAL = "interval"   # 间隔触发
+    WEBHOOK = "webhook"     # HTTP webhook
+    HEARTBEAT = "heartbeat" # 心跳
+    FILE_WATCH = "file_watch"  # 文件变化
+    EVENT = "event"         # 事件总线
+
+class TriggerState(Enum):
+    IDLE = "idle"           # 空闲
+    RUNNING = "running"     # 运行中
+    PAUSED = "paused"       # 已暂停
+    STOPPED = "stopped"     # 已停止
+    ERROR = "error"         # 错误
+```
+
+详见 [06-triggers.md](./06-triggers.md)。
+
 ## Service 模块 (Spring Cloud 集成)
 
 `harness.service` 模块提供 FastAPI 服务包装，用于 Spring Cloud 微服务集成。
@@ -1340,5 +1572,7 @@ from harness.service import (
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [06-triggers.md](./06-triggers.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
+- [15-loop-engineering.md](./15-loop-engineering.md) - Loop Engineering 完整指南
