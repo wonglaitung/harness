@@ -2312,6 +2312,213 @@ judge = ComplianceJudge(judge_config)
 
 ---
 
+## 2026-06-29: TriggerAction 直接映射 GoalConfig 设计
+
+### 问题
+
+Trigger System（Phase 2）如何与 Goal Verifier（Phase 1）集成？应该创建新的执行路径还是复用现有组件？
+
+### 设计决策
+
+**TriggerAction 直接映射到 GoalConfig**，触发后调用 `run_goal()`：
+
+```python
+@dataclass
+class TriggerAction:
+    """触发后动作 - 映射到 GoalConfig"""
+    goal: str                           # 目标描述
+    workspace_dir: str = "."            # 工作目录
+    max_iterations: int = 50            # 最大迭代
+    timeout_seconds: int = 3600         # 超时
+    custom_verifier: Callable | None = None
+    skills: list[str] = field(default_factory=list)
+
+    def to_goal_config(self, event: TriggerEvent) -> GoalConfig:
+        """转换为 GoalConfig"""
+        return GoalConfig(
+            description=self.goal,
+            workspace_dir=self.workspace_dir,
+            max_iterations=self.max_iterations,
+            timeout_seconds=self.timeout_seconds,
+            custom_verifier=self.custom_verifier,
+        )
+```
+
+### 架构图
+
+```
+Trigger (Cron/Interval)
+    ↓ 触发
+TriggerEvent
+    ↓
+TriggerAction.to_goal_config()
+    ↓
+GoalConfig
+    ↓
+TriggerManager._on_trigger()
+    ↓
+agent.run_goal(config)
+    ↓
+GoalLoop (Phase 1)
+```
+
+### 原因
+
+1. **避免重复实现**：GoalLoop 已有完整的迭代控制、上下文重置、超时处理逻辑
+2. **单一执行路径**：无论是用户调用 `run_goal()` 还是触发器触发，都走同一代码路径
+3. **便于维护**：Goal 相关的改进自动适用于 Trigger
+
+### 教训
+
+1. **新功能优先组合现有组件**：Trigger 的本质是"定时/事件驱动的 Goal"，不需要新的执行引擎
+2. **类型转换优于重新实现**：`TriggerAction.to_goal_config()` 是简单的数据转换，而非逻辑实现
+3. **架构设计要考虑复用**：Phase 1 的 GoalConfig 设计为 Phase 2 的集成铺平了道路
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `packages/sdk/src/harness/triggers/types.py` | TriggerAction.to_goal_config() |
+| `packages/sdk/src/harness/triggers/manager.py` | TriggerManager._on_trigger() 调用 run_goal() |
+
+---
+
+## 2026-06-29: IntervalTrigger 最小间隔约束
+
+### 问题
+
+测试中使用 `interval_seconds=0.1`，期望 0.1 秒后触发，但测试失败。
+
+### 原因
+
+`IntervalTrigger` 有最小间隔约束（1 秒）：
+
+```python
+def __post_init__(self):
+    if self.interval_seconds < 1:
+        raise ValueError("interval_seconds must be >= 1 second")
+```
+
+### 为什么需要最小间隔？
+
+1. **避免高频触发**：间隔太短会导致资源消耗过大
+2. **LLM 调用延迟**：一次 Goal 执行可能需要几秒到几分钟，间隔太短无意义
+3. **事件循环压力**：高频定时器会阻塞事件循环
+
+### 教训
+
+1. **测试边界条件要精确**：不要使用"刚好低于阈值"的值，测试应该使用合法值
+2. **最小间隔是设计决策**：不是技术限制，而是使用场景的合理约束
+3. **文档要说明约束**：API 文档应明确最小/最大值
+
+### 修复
+
+```python
+# ❌ 错误：低于最小值
+trigger = IntervalTrigger(interval_seconds=0.1, action=action)
+
+# ✅ 正确：使用合法值，调整测试等待时间
+trigger = IntervalTrigger(interval_seconds=1, action=action)
+await asyncio.sleep(1.5)  # 等待 1.5 秒确保触发
+```
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `packages/sdk/src/harness/triggers/interval.py` | IntervalTrigger 最小间隔验证 |
+| `packages/sdk/tests/test_triggers.py` | 测试用例 |
+
+---
+
+## 2026-06-29: MockHarness 需要 run_goal() 支持触发器测试
+
+### 问题
+
+`TriggerManager` 测试失败：
+
+```python
+AttributeError: 'MockHarness' object has no attribute 'run_goal'
+```
+
+### 原因
+
+`TriggerManager._on_trigger()` 调用 `agent.run_goal()`，但 `MockHarness` 只实现了 `run()` 方法，没有 `run_goal()`。
+
+### 解决
+
+为 `MockHarness` 添加 `run_goal()` 方法：
+
+```python
+async def run_goal(
+    self,
+    goal: str | "GoalConfig",
+    **kwargs,
+) -> "GoalResult":
+    """Mock implementation of run_goal for testing."""
+    from harness.loop.types import GoalConfig, GoalResult, GoalStatus
+
+    if isinstance(goal, GoalConfig):
+        description = goal.description
+    else:
+        description = goal
+
+    return GoalResult(
+        goal=description,
+        status=GoalStatus.ACHIEVED,
+        total_iterations=1,
+        context_resets=0,
+        total_tokens={"input": 100, "output": 50},
+        duration_seconds=0.1,
+        final_response=f"Mock goal achieved: {description}",
+        verification_log=[],
+    )
+```
+
+### 教训
+
+1. **Mock 要与真实 API 同步**：如果被测代码调用 `run_goal()`，Mock 必须实现它
+2. **测试驱动发现缺失**：测试失败揭示了 MockHarness 不完整
+3. **Mock 返回值要合理**：返回合法的 `GoalResult` 对象，而非 None 或抛异常
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `packages/sdk/src/harness/testing/mock_harness.py` | MockHarness.run_goal() |
+| `packages/sdk/src/harness/triggers/manager.py` | TriggerManager 调用 run_goal() |
+
+---
+
+## 2026-06-29: 测试使用合法边界值而非极限值
+
+### 问题
+
+测试触发器时使用 `interval_seconds=0.1`（低于最小值 1 秒），导致测试失败。
+
+### 原因
+
+测试假设"越小越好"，想快速验证触发行为，但忽略了约束条件。
+
+### 解决
+
+```python
+# ❌ 错误：使用非法值
+trigger = IntervalTrigger(interval_seconds=0.1, ...)
+
+# ✅ 正确：使用最小合法值
+trigger = IntervalTrigger(interval_seconds=1, ...)
+await asyncio.sleep(1.5)  # 相应调整等待时间
+```
+
+### 教训
+
+1. **测试要用合法值**：不要试图测试"刚好低于阈值"的情况，那是边界验证测试的职责
+2. **功能测试 ≠ 边界测试**：功能测试验证正常行为，边界测试单独处理
+3. **等待时间要合理**：间隔 1 秒，等待 1.5 秒确保触发（留出执行时间）
+
+---
+
 ## 2026-06-26: SDK 模块覆盖率差异分析
 
 ### 问题
