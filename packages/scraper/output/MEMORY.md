@@ -70,7 +70,12 @@
 
 ## 2026-06-29 提取
 
+## 2026-06-30 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股创新药CXO板块爆发 - 左侧政策催化右侧资金共振**
 
 ### 新范式/工具
 - **DESIGN.md — AI Agent 视觉身份规范** - https://github.com/google-labs-code/design.md
