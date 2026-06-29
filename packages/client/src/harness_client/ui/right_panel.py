@@ -312,8 +312,9 @@ class SkillsSection(CollapsibleSection):
         """)
         self.skills_list_layout.addWidget(self.placeholder_label)
 
-        # Store skill item widgets
-        self._skill_items: dict[str, QWidget] = {}
+        # Store skill item widgets with their sub-widgets for theme updates
+        # key: skill name, value: dict with 'widget', 'name_label', 'indicator', 'enabled'
+        self._skill_items: dict[str, dict] = {}
 
     def _on_add_clicked(self):
         """Handle add skill button click."""
@@ -326,8 +327,8 @@ class SkillsSection(CollapsibleSection):
             skills: List of dicts with 'name' and 'enabled' keys
         """
         # Clear existing items
-        for item in self._skill_items.values():
-            item.deleteLater()
+        for item_data in self._skill_items.values():
+            item_data['widget'].deleteLater()
         self._skill_items.clear()
 
         if not skills:
@@ -341,12 +342,16 @@ class SkillsSection(CollapsibleSection):
             enabled = skill.get("enabled", True)
 
             # Create skill item widget
-            item_widget = self._create_skill_item(name, enabled)
-            self.skills_list_layout.addWidget(item_widget)
-            self._skill_items[name] = item_widget
+            item_data = self._create_skill_item(name, enabled)
+            self.skills_list_layout.addWidget(item_data['widget'])
+            self._skill_items[name] = item_data
 
-    def _create_skill_item(self, name: str, enabled: bool) -> QWidget:
-        """Create a skill item widget."""
+    def _create_skill_item(self, name: str, enabled: bool) -> dict:
+        """Create a skill item widget.
+
+        Returns:
+            dict with 'widget', 'name_label', 'indicator', 'enabled'
+        """
         theme = get_theme()
         widget = QWidget()
         widget.setStyleSheet(f"""
@@ -375,7 +380,12 @@ class SkillsSection(CollapsibleSection):
         # Double-click to edit
         widget.mouseDoubleClickEvent = lambda event, n=name: self._on_double_click(n)
 
-        return widget
+        return {
+            'widget': widget,
+            'name_label': name_label,
+            'indicator': indicator,
+            'enabled': enabled,
+        }
 
     def _on_double_click(self, name: str):
         """Handle double-click on skill item."""
@@ -396,13 +406,26 @@ class SkillsSection(CollapsibleSection):
         """)
 
         # Update skill items
-        for name, item in self._skill_items.items():
-            item.setStyleSheet(f"""
+        for _name, item_data in self._skill_items.items():
+            widget = item_data['widget']
+            name_label = item_data['name_label']
+            indicator = item_data['indicator']
+            enabled = item_data['enabled']
+
+            # Update widget background
+            widget.setStyleSheet(f"""
                 QWidget {{
                     background-color: {theme.APP_BACKGROUND};
                     border-radius: {theme.RADIUS_SM};
                 }}
             """)
+
+            # Update name label
+            name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+
+            # Update indicator color
+            indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
+            indicator.setStyleSheet(f"color: {indicator_color}; font-size: {theme.FONT_SIZE_SM};")
 
 
 class MCPServersSection(CollapsibleSection):
