@@ -18,6 +18,7 @@
 - [12-deployment.md](./12-deployment.md) - 内嵌部署指南
 - [13-production-readiness.md](./13-production-readiness.md) - 生产就绪检查
 - [14-spring-cloud-integration.md](./14-spring-cloud-integration.md) - Spring Cloud 集成指南
+- [15-loop-engineering.md](./15-loop-engineering.md) - Loop Engineering 循环工程
 
 ## 项目定位
 

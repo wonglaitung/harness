@@ -293,6 +293,7 @@ You are a code reviewer. Your task is to:
 | 10 | **步骤预算** | ✅ | StepBudgetController 迭代/工具调用限制 |
 | 11 | **语义卡住检测** | ✅ | StuckDetector 基于 embedding 检测重复输出模式 |
 | 12 | **Guardrails** | ✅ | Layer 1 PII 检测 + Layer 2 LLM Judge，通过 Hook 系统集成 |
+| 13 | **Loop Engineering** | ✅ | Goal Verifier (Phase 1) - 目标驱动执行，详见 [15-loop-engineering.md](./15-loop-engineering.md) |
 
 ## 数据流
 
@@ -443,4 +444,5 @@ You are a code reviewer. Your task is to:
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop 核心循环
 - [03-tool-system.md](./03-tool-system.md) - 了解工具系统
+- [15-loop-engineering.md](./15-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

@@ -253,6 +253,47 @@ class MockHarness:
                 token_usage=total_usage,
             )
 
+    async def run_goal(
+        self,
+        goal: str | "GoalConfig",
+        **kwargs,
+    ) -> "GoalResult":
+        """
+        Mock implementation of run_goal for testing.
+
+        Returns a successful GoalResult for testing purposes.
+
+        Args:
+            goal: Goal description or GoalConfig
+            **kwargs: Additional arguments (ignored)
+
+        Returns:
+            GoalResult with ACHIEVED status
+        """
+        from harness.loop.types import GoalConfig, GoalResult, GoalStatus
+
+        # Extract goal description
+        if isinstance(goal, GoalConfig):
+            description = goal.description
+        else:
+            description = goal
+
+        # Return mock successful result
+        return GoalResult(
+            goal=description,
+            status=GoalStatus.ACHIEVED,
+            total_iterations=1,
+            context_resets=0,
+            total_tokens={"input": 100, "output": 50},
+            duration_seconds=0.1,
+            final_response=f"Mock goal achieved: {description}",
+            verification_log=[],
+        )
+
+    def activate_skill(self, skill_name: str) -> None:
+        """Mock skill activation (does nothing)."""
+        pass
+
     def get_recordings(self) -> list[dict[str, Any]]:
         """Get all recordings."""
         return self._recordings.copy()

@@ -265,6 +265,30 @@ async def stream(
     """
 ```
 
+#### run_goal() - 目标驱动执行
+
+```python
+async def run_goal(
+    self,
+    goal: str | GoalConfig,          # 目标描述或配置
+    custom_verifier: Callable | None = None,  # 自定义验证函数
+    max_iterations: int = 50,        # 最大迭代次数
+    max_context_resets: int = 5,     # 最大上下文重置次数
+    timeout_seconds: int = 3600,     # 超时时间（秒）
+    workspace_dir: str = ".",        # 工作目录
+    **kwargs,                        # 其他 GoalConfig 选项
+) -> GoalResult:
+    """目标驱动执行：Agent 自主运行直到目标达成
+    
+    示例：
+        result = await agent.run_goal("修复所有类型错误")
+        if result.status == GoalStatus.ACHIEVED:
+            print(f"目标达成，共 {result.total_iterations} 轮迭代")
+    """
+```
+
+详见 [15-loop-engineering.md](./15-loop-engineering.md)。
+
 #### tool() - 注册工具装饰器
 
 ```python
@@ -1046,6 +1070,59 @@ class ToolCallRecord:
     error: str | None       # 错误信息
     duration_ms: int        # 执行耗时
 ```
+
+### GoalStatus
+
+```python
+from harness.loop import GoalStatus
+
+class GoalStatus(Enum):
+    ACHIEVED = "achieved"               # 目标达成
+    TIMEOUT = "timeout"                 # 超时
+    MAX_ITERATIONS = "max_iterations"   # 达到最大迭代
+    MAX_RESETS = "max_resets"           # 达到最大重置次数
+    ERROR = "error"                     # Agent 执行错误
+    VERIFIER_FAULT = "verifier_fault"   # 验证器故障
+    CANCELLED = "cancelled"             # 用户取消
+```
+
+### GoalConfig
+
+```python
+from harness.loop import GoalConfig
+
+@dataclass
+class GoalConfig:
+    description: str                    # 目标描述
+    success_criteria: str | None = None # 成功标准
+    workspace_dir: str = "."            # 工作目录
+    max_iterations: int = 50            # 最大迭代次数
+    max_context_resets: int = 5         # 最大上下文重置次数
+    timeout_seconds: int = 3600         # 超时时间（秒）
+    custom_verifier: Callable | None = None  # 自定义验证函数
+    max_tokens: int | None = None       # 最大 token 数
+    max_cost_usd: float | None = None   # 最大成本（美元）
+```
+
+### GoalResult
+
+```python
+from harness.loop import GoalResult
+
+@dataclass
+class GoalResult:
+    goal: str                           # 目标描述
+    status: GoalStatus                  # 执行状态
+    total_iterations: int               # 总迭代次数
+    context_resets: int                 # 上下文重置次数
+    total_tokens: TokenUsage            # Token 使用量
+    duration_seconds: float             # 执行时长
+    final_response: str                 # 最终响应
+    verification_log: list[VerificationRecord]  # 验证日志
+    error: str | None = None            # 错误详情
+```
+
+详见 [15-loop-engineering.md](./15-loop-engineering.md)。
 
 ## Service 模块 (Spring Cloud 集成)
 

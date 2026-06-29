@@ -1,10 +1,360 @@
 # 06 - Trigger & Orchestration 触发与编排
 
-> **注意**: 完整的触发器系统是计划功能，当前版本仅实现了 `SkillTrigger`（技能触发器）。本文档描述的是完整的设计架构，具体实现将在后续版本中完成。
+> **状态**: 设计完成，待实现
+> **关联**: Loop Engineering Phase 2 (Automations)
+> **优先级**: P0
 
 ## 概述
 
 Trigger System 让 Agent 能够自主运行，不仅响应用户消息，还能根据时间、事件、状态变化自动触发执行。
+
+### 与 Loop Engineering 的关系
+
+Trigger System 是 **Loop Engineering Phase 2: Automations** 的核心实现：
+
+```
+Loop Engineering 架构:
+┌─────────────────────────────────────────────────────────────┐
+│                    LoopOrchestrator                          │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              Automation (简化 API)                   │    │
+│  │  automation = Automation(schedule="0 9 * * *",       │    │
+│  │                        goal="生成每日报告")           │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                           │                                  │
+│  ┌────────────────────────┴────────────────────────────┐    │
+│  │                 Trigger System                        │    │
+│  │  - CronTrigger / IntervalTrigger / WebhookTrigger   │    │
+│  │  - TriggerManager                                     │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                           │                                  │
+│  ┌────────────────────────┴────────────────────────────┐    │
+│  │              GoalLoop (Phase 1 ✅)                   │    │
+│  │  - GoalVerifier                                       │    │
+│  │  - GoalConfig / GoalResult                           │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**数据流**:
+```
+Trigger 触发 → TriggerManager 创建 GoalConfig → GoalLoop 执行 → GoalVerifier 验证
+```
+
+### 与 SkillTrigger 的区别
+
+| 组件 | 用途 | 触发条件 |
+|------|------|----------|
+| `SkillTrigger` | 激活技能 | 用户输入内容匹配关键词/正则 |
+| `Trigger` (本文档) | 自动执行 Goal | 时间/事件/外部请求 |
+
+**示例**:
+```python
+# SkillTrigger: 用户说 "review" 时激活 code-review 技能
+skill_trigger = SkillTrigger(keywords=["review"])
+skill_trigger.matches("请 review 这段代码")  # → True
+
+# Trigger: 每天 9:00 自动执行 "生成报告"
+cron_trigger = CronTrigger(schedule="0 9 * * *", goal="生成每日报告")
+```
+
+---
+
+## 实现状态
+
+| 组件 | 状态 | 优先级 | 说明 |
+|------|------|--------|------|
+| Trigger 基类 | ✅ 已实现 | P0 | `triggers/base.py` |
+| TriggerType | ✅ 已实现 | P0 | `triggers/types.py` |
+| TriggerEvent | ✅ 已实现 | P0 | `triggers/types.py` |
+| TriggerAction | ✅ 已实现 | P0 | `triggers/types.py` |
+| CronTrigger | ✅ 已实现 | P0 | `triggers/cron.py` |
+| IntervalTrigger | ✅ 已实现 | P0 | `triggers/interval.py` |
+| TriggerManager | ✅ 已实现 | P0 | `triggers/manager.py` |
+| Automation | ✅ 已实现 | P0 | `loop/automation.py` |
+| WebhookTrigger | ❌ 待实现 | P1 | HTTP webhook |
+| HeartbeatTrigger | ❌ 待实现 | P1 | 心跳触发 |
+| FileWatchTrigger | ❌ 待实现 | P2 | 文件变化 |
+| EventBusTrigger | ❌ 待实现 | P2 | 事件总线 |
+| OutputHandler | ❌ 待实现 | P1 | 输出处理器 |
+| DistributedTriggerManager | ❌ 待实现 | P2 | 分布式支持 |
+
+---
+
+## Automation 简化 API
+
+Automation 是 Trigger System 的主要入口，整合 Trigger + GoalConfig：
+
+```python
+from harness.loop import Automation, AutomationStatus
+
+# 方式 1：定时任务（最常用）
+automation = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",           # cron 表达式
+    goal="生成每日报告并发送到 Slack",
+    workspace_dir=".",
+    max_iterations=30,
+    output_channels=["slack"],
+)
+
+# 方式 2：间隔任务
+automation = Automation(
+    name="health-check",
+    interval_seconds=3600,          # 每小时
+    goal="检查系统健康状态",
+)
+
+# 方式 3：自定义 Trigger
+automation = Automation(
+    name="pr-review",
+    trigger=WebhookTrigger(endpoint="/webhook/github"),
+    goal="Review the pull request changes",
+    skills=["code-review"],
+)
+
+# 生命周期管理
+await automation.start()            # 启动
+status = automation.status          # 获取状态
+await automation.stop()             # 停止
+```
+
+### Automation 类定义
+
+```python
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Callable, List, Optional
+
+class AutomationStatus(Enum):
+    PENDING = "pending"         # 等待启动
+    RUNNING = "running"         # 运行中
+    PAUSED = "paused"           # 已暂停
+    STOPPED = "stopped"         # 已停止
+    ERROR = "error"             # 错误状态
+
+
+@dataclass
+class AutomationConfig:
+    """Automation 配置"""
+    name: str
+    goal: str                           # 目标描述
+    
+    # 触发方式（三选一）
+    schedule: str | None = None         # cron 表达式
+    interval_seconds: int | None = None # 间隔秒数
+    trigger: Trigger | None = None      # 自定义 Trigger
+    
+    # Goal 配置
+    workspace_dir: str = "."
+    max_iterations: int = 50
+    timeout_seconds: int = 3600
+    custom_verifier: Callable | None = None
+    
+    # 输出配置
+    output_channels: List[str] = field(default_factory=list)
+    skills: List[str] = field(default_factory=list)
+    
+    # 重试配置
+    max_retries: int = 3
+    retry_delay_seconds: float = 5.0
+
+
+@dataclass
+class AutomationResult:
+    """Automation 执行结果"""
+    automation_name: str
+    status: AutomationStatus
+    goal_result: GoalResult | None = None
+    last_run: datetime | None = None
+    run_count: int = 0
+    error_count: int = 0
+    error_message: str | None = None
+
+
+class Automation:
+    """
+    Automation - Trigger + Goal 的简化 API
+    
+    主要功能：
+    1. 创建和管理 Trigger
+    2. 触发时创建 GoalConfig 并调用 GoalLoop
+    3. 处理输出和错误
+    """
+    
+    def __init__(self, config: AutomationConfig):
+        self.config = config
+        self._trigger: Trigger | None = None
+        self._status = AutomationStatus.PENDING
+        self._result = AutomationResult(automation_name=config.name, status=AutomationStatus.PENDING)
+    
+    @classmethod
+    def create(
+        cls,
+        name: str,
+        goal: str,
+        schedule: str | None = None,
+        interval_seconds: int | None = None,
+        **kwargs
+    ) -> "Automation":
+        """便捷创建方法"""
+        return cls(AutomationConfig(
+            name=name,
+            goal=goal,
+            schedule=schedule,
+            interval_seconds=interval_seconds,
+            **kwargs
+        ))
+    
+    @property
+    def status(self) -> AutomationStatus:
+        return self._status
+    
+    @property
+    def result(self) -> AutomationResult:
+        return self._result
+    
+    async def start(self) -> None:
+        """启动 Automation"""
+        # 创建 Trigger
+        if self.config.schedule:
+            self._trigger = CronTrigger(
+                schedule=self.config.schedule,
+                action=self._create_action()
+            )
+        elif self.config.interval_seconds:
+            self._trigger = IntervalTrigger(
+                interval_seconds=self.config.interval_seconds,
+                action=self._create_action()
+            )
+        elif self.config.trigger:
+            self._trigger = self.config.trigger
+        else:
+            raise ValueError("必须指定 schedule、interval_seconds 或 trigger")
+        
+        # 启动 Trigger
+        await self._trigger.start(self._on_trigger)
+        self._status = AutomationStatus.RUNNING
+    
+    async def stop(self) -> None:
+        """停止 Automation"""
+        if self._trigger:
+            await self._trigger.stop()
+        self._status = AutomationStatus.STOPPED
+    
+    async def pause(self) -> None:
+        """暂停 Automation"""
+        if self._trigger:
+            await self._trigger.stop()
+        self._status = AutomationStatus.PAUSED
+    
+    async def resume(self) -> None:
+        """恢复 Automation"""
+        if self._trigger:
+            await self._trigger.start(self._on_trigger)
+        self._status = AutomationStatus.RUNNING
+    
+    def _create_action(self) -> "TriggerAction":
+        """创建 TriggerAction"""
+        return TriggerAction(
+            agent_prompt=self.config.goal,
+            skills_to_activate=self.config.skills,
+            output_channels=self.config.output_channels,
+        )
+    
+    async def _on_trigger(self, event: "TriggerEvent") -> None:
+        """Trigger 触发时的回调"""
+        try:
+            # 创建 GoalConfig
+            goal_config = GoalConfig(
+                description=self.config.goal,
+                workspace_dir=self.config.workspace_dir,
+                max_iterations=self.config.max_iterations,
+                timeout_seconds=self.config.timeout_seconds,
+                custom_verifier=self.config.custom_verifier,
+            )
+            
+            # 执行 GoalLoop
+            result = await self._run_goal(goal_config, event)
+            
+            # 更新结果
+            self._result.goal_result = result
+            self._result.last_run = datetime.now()
+            self._result.run_count += 1
+            
+            # 处理输出
+            await self._handle_output(result)
+            
+        except Exception as e:
+            self._result.error_count += 1
+            self._result.error_message = str(e)
+            self._status = AutomationStatus.ERROR
+    
+    async def _run_goal(self, config: GoalConfig, event: TriggerEvent) -> GoalResult:
+        """执行 Goal（调用 GoalLoop）"""
+        # 这里调用 Phase 1 实现的 GoalLoop
+        from harness.loop import GoalLoop
+        
+        agent = AgentHarness()  # 或从外部传入
+        goal_loop = GoalLoop(agent, config)
+        return await goal_loop.run()
+    
+    async def _handle_output(self, result: GoalResult) -> None:
+        """处理输出"""
+        for channel in self.config.output_channels:
+            if channel == "console":
+                print(result.final_response)
+            elif channel == "slack":
+                # 发送到 Slack
+                pass
+            elif channel == "email":
+                # 发送邮件
+                pass
+```
+
+### 使用示例
+
+```python
+from harness.loop import Automation
+import asyncio
+
+async def main():
+    # 创建定时报告任务
+    daily_report = Automation.create(
+        name="daily-report",
+        schedule="0 9 * * *",
+        goal="分析昨天的系统日志，生成每日报告并发送到 #ops 频道",
+        output_channels=["slack"],
+    )
+    
+    # 创建健康检查任务
+    health_check = Automation.create(
+        name="health-check",
+        interval_seconds=300,  # 每 5 分钟
+        goal="检查 API 健康状态，如果异常则发送告警",
+        output_channels=["slack", "email"],
+    )
+    
+    # 启动所有任务
+    await daily_report.start()
+    await health_check.start()
+    
+    # 查看状态
+    print(f"Daily report: {daily_report.status}")
+    print(f"Health check: {health_check.status}")
+    
+    # 运行一段时间后停止
+    await asyncio.sleep(3600)
+    
+    await daily_report.stop()
+    await health_check.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
 
 ## 架构设计
 
@@ -123,13 +473,50 @@ class Trigger(ABC):
 
 @dataclass
 class TriggerAction:
-    """触发后的动作"""
-    agent_prompt: str                    # 发送给 Agent 的提示
-    session_id: Optional[str] = None     # 使用哪个会话
+    """
+    触发后的动作配置
+    
+    用于创建 GoalConfig，指定 Trigger 触发后如何执行 Goal。
+    """
+    
+    # Goal 配置
+    goal: str                              # 目标描述（映射到 GoalConfig.description）
+    workspace_dir: str = "."               # 工作目录
+    max_iterations: int = 50               # 最大迭代次数
+    timeout_seconds: int = 3600            # 超时时间
+    custom_verifier: Callable | None = None  # 自定义验证器
+    
+    # 上下文配置
+    session_id: Optional[str] = None       # 使用哪个会话
     skills_to_activate: List[str] = field(default_factory=list)
+    
+    # 输出配置
     output_channels: List[str] = field(default_factory=list)
     save_result: bool = True
-    retry_on_failure: int = 0
+    
+    # 重试配置
+    retry_on_failure: int = 3
+    retry_delay_seconds: float = 5.0
+    
+    def to_goal_config(self, event: TriggerEvent) -> "GoalConfig":
+        """转换为 GoalConfig"""
+        from harness.loop.types import GoalConfig
+        
+        # 将事件上下文添加到目标描述
+        goal = self.goal
+        if event.payload:
+            context = "\n\nEvent context:\n"
+            for key, value in event.payload.items():
+                context += f"- {key}: {value}\n"
+            goal += context
+        
+        return GoalConfig(
+            description=goal,
+            workspace_dir=self.workspace_dir,
+            max_iterations=self.max_iterations,
+            timeout_seconds=self.timeout_seconds,
+            custom_verifier=self.custom_verifier,
+        )
 ```
 
 ### 6.1 Cron Trigger
@@ -764,22 +1151,17 @@ class TriggerManager:
             return
 
         try:
-            # 获取或创建会话
-            session_id = reg.action.session_id
-            if session_id:
-                session = await self.harness.memory.get_session(session_id)
-            else:
-                session = await self.harness.memory.create_session()
-
-            # 构建提示
-            prompt = self._build_prompt(reg.action, event)
-
             # 激活技能
             for skill_name in reg.action.skills_to_activate:
                 self.harness.skills.activate(skill_name)
-
-            # 运行 Agent
-            result = await self.harness.run(prompt, session.id)
+            
+            # 创建 GoalConfig
+            goal_config = reg.action.to_goal_config(event)
+            
+            # 执行 GoalLoop
+            from harness.loop import GoalLoop
+            goal_loop = GoalLoop(self.harness, goal_config)
+            result = await goal_loop.run()
 
             # 输出结果
             await self._handle_output(result, reg.action)
@@ -796,20 +1178,7 @@ class TriggerManager:
             if reg.action.retry_on_failure > 0:
                 await self._retry(reg, event)
 
-    def _build_prompt(self, action: TriggerAction, event: TriggerEvent) -> str:
-        """构建提示"""
-        prompt = action.agent_prompt
-
-        # 添加事件上下文
-        if event.payload:
-            context = "\n\nEvent context:\n"
-            for key, value in event.payload.items():
-                context += f"- {key}: {value}\n"
-            prompt += context
-
-        return prompt
-
-    async def _handle_output(self, result: Any, action: TriggerAction):
+    async def _handle_output(self, result: "GoalResult", action: TriggerAction):
         """处理输出"""
         for channel in action.output_channels:
             if channel == "console":
@@ -827,7 +1196,7 @@ class TriggerManager:
     async def _retry(self, reg: TriggerRegistration, event: TriggerEvent):
         """重试触发"""
         for attempt in range(reg.action.retry_on_failure):
-            await asyncio.sleep(5 * (attempt + 1))
+            await asyncio.sleep(reg.action.retry_delay_seconds * (attempt + 1))
 
             try:
                 await self._handle_event(event)

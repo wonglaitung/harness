@@ -1422,6 +1422,109 @@ packages/sdk/design/
 
 - feat(sdk): Implement Loop Engineering Phase 1 - Goal Verifier
 
+## 2026-06-29
+
+### Loop Engineering Phase 2: Automations ✅ 完成
+
+#### 背景
+
+让 Agent 能够根据时间自动触发执行，实现"自动化 Agent"。
+
+#### 实现内容
+
+**Trigger System** (`triggers/`):
+- `Trigger` 基类 - 抽象基类，定义 start/stop/create_event 接口
+- `TriggerType` 枚举 - CRON, INTERVAL, WEBHOOK, HEARTBEAT, FILE_WATCH, EVENT
+- `TriggerState` 枚举 - IDLE, RUNNING, PAUSED, STOPPED, ERROR
+- `TriggerEvent` - 触发事件数据结构
+- `TriggerAction` - 触发后动作，映射到 GoalConfig
+
+**Trigger 实现**:
+- `CronTrigger` - cron 表达式定时触发（使用 croniter 库）
+- `IntervalTrigger` - 固定间隔触发
+
+**TriggerManager**:
+- 注册/注销触发器
+- 启动/停止所有触发器
+- 事件队列管理
+- 调用 GoalLoop 执行目标
+
+**Automation** (`loop/automation.py`):
+- 简化 API：整合 Trigger + GoalConfig
+- 支持定时任务（schedule）和间隔任务（interval_seconds）
+- 生命周期管理：start/stop/pause/resume
+
+#### API 示例
+
+```python
+from harness.loop import Automation
+from harness import AgentHarness
+
+agent = AgentHarness()
+
+# 定时任务
+automation = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",  # 每天 9:00
+    goal="生成每日报告",
+    skills=["report-generation"],
+)
+
+await automation.start(agent)
+
+# 间隔任务
+health_check = Automation(
+    name="health-check",
+    interval_seconds=300,  # 每 5 分钟
+    goal="检查系统健康状态",
+)
+
+await health_check.start(agent)
+
+# 停止
+await automation.stop()
+await health_check.stop()
+```
+
+#### 文件结构
+
+```
+packages/sdk/src/harness/triggers/
+├── __init__.py        # 模块入口
+├── types.py           # TriggerType, TriggerEvent, TriggerAction
+├── base.py            # Trigger ABC
+├── cron.py            # CronTrigger
+├── interval.py        # IntervalTrigger
+└── manager.py         # TriggerManager
+
+packages/sdk/src/harness/loop/
+└── automation.py      # Automation 类（新增）
+```
+
+#### 依赖
+
+```toml
+dependencies = [
+    # ... existing ...
+    "croniter>=2.0.0",  # cron 表达式解析
+]
+```
+
+#### 测试状态
+
+- 28 个测试通过
+- 覆盖：TriggerAction, TriggerEvent, CronTrigger, IntervalTrigger, TriggerManager, 集成测试
+
+#### 文档更新
+
+- `docs/06-triggers.md` - 更新实现状态
+- `docs/15-loop-engineering.md` - 添加 Phase 2 说明
+- `design/loop-engineering.md` - 更新实现状态
+
+#### 提交记录
+
+- feat(sdk): Implement Loop Engineering Phase 2 - Automations
+
 ---
 
 ## 当前状态总结
@@ -1432,7 +1535,8 @@ packages/sdk/design/
 |--------|------|------|
 | P0 | Lifecycle Hooks | ✅ |
 | P0 | 动态系统提示组装 | ✅ |
-| P0 | **Loop Engineering (Phase 1)** | ✅ **NEW** |
+| P0 | **Loop Engineering (Phase 1)** | ✅ |
+| P0 | **Loop Engineering (Phase 2)** | ✅ **NEW** |
 | P1 | Ralph Loop | ✅ |
 | P1 | Sub-Agent 管理 | ✅ |
 | P2 | 自验证钩子 | ✅ |
@@ -1443,7 +1547,7 @@ packages/sdk/design/
 | P3 | 步骤预算 | ✅ |
 | - | Spring Cloud 集成 | ✅ |
 
-**所有 P0-P3 功能 + Spring Cloud 集成 + Loop Engineering Phase 1 已完成！**
+**所有 P0-P3 功能 + Spring Cloud 集成 + Loop Engineering Phase 1-2 已完成！**
 
 ### Harness Client 功能状态
 

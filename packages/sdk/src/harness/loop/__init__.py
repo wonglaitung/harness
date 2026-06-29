@@ -11,6 +11,7 @@ Core components:
 - GoalStatus: Status of goal achievement
 - GoalVerifier: Verifies if a goal has been achieved
 - GoalLoop: Executes the goal-driven loop
+- Automation: Simplified API for scheduled/periodic execution (Phase 2)
 
 Example:
     ```python
@@ -28,10 +29,28 @@ Example:
         print("Goal achieved!")
     ```
 
+    ```python
+    # Phase 2: Automation
+    from harness.loop import Automation
+
+    automation = Automation(
+        name="daily-report",
+        schedule="0 9 * * *",
+        goal="Generate daily report",
+    )
+    await automation.start(agent)
+    ```
+
 For more details, see the design document:
     packages/sdk/design/loop-engineering.md
 """
 
+from harness.loop.automation import (
+    Automation,
+    AutomationConfig,
+    AutomationResult,
+    AutomationStatus,
+)
 from harness.loop.goal import GoalVerifier, VerificationError
 from harness.loop.goal_loop import GoalLoop
 from harness.loop.types import (
@@ -55,4 +74,9 @@ __all__ = [
     "GoalVerifier",
     "VerificationError",
     "GoalLoop",
+    # Phase 2: Automation
+    "Automation",
+    "AutomationConfig",
+    "AutomationResult",
+    "AutomationStatus",
 ]
