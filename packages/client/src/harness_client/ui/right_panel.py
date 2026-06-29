@@ -439,8 +439,9 @@ class MCPServersSection(CollapsibleSection):
         """)
         self.server_list_layout.addWidget(self.placeholder_label)
 
-        # Store server item widgets
-        self._server_items: dict[str, QWidget] = {}
+        # Store server item widgets with their sub-widgets for theme updates
+        # key: server name, value: dict with 'widget', 'name_label', 'status_label', 'action_btn'
+        self._server_items: dict[str, dict] = {}
 
     def _on_add_clicked(self):
         """Handle add server button click."""
@@ -453,8 +454,8 @@ class MCPServersSection(CollapsibleSection):
             servers: List of dicts with 'name', 'status', and 'tools_count' keys
         """
         # Clear existing items
-        for item in self._server_items.values():
-            item.deleteLater()
+        for item_data in self._server_items.values():
+            item_data['widget'].deleteLater()
         self._server_items.clear()
 
         if not servers:
@@ -469,12 +470,16 @@ class MCPServersSection(CollapsibleSection):
             tools_count = server.get("tools_count", 0)
 
             # Create server item widget
-            item_widget = self._create_server_item(name, status, tools_count)
-            self.server_list_layout.addWidget(item_widget)
-            self._server_items[name] = item_widget
+            item_data = self._create_server_item(name, status, tools_count)
+            self.server_list_layout.addWidget(item_data['widget'])
+            self._server_items[name] = item_data
 
-    def _create_server_item(self, name: str, status: str, tools_count: int) -> QWidget:
-        """Create a server item widget."""
+    def _create_server_item(self, name: str, status: str, tools_count: int) -> dict:
+        """Create a server item widget.
+
+        Returns:
+            dict with 'widget', 'name_label', 'status_label', 'action_btn', 'is_connected'
+        """
         theme = get_theme()
         widget = QWidget()
         widget.setStyleSheet(f"""
@@ -573,7 +578,14 @@ class MCPServersSection(CollapsibleSection):
         # Double-click to toggle
         widget.mouseDoubleClickEvent = lambda event, n=name: self._on_double_click(n)
 
-        return widget
+        return {
+            'widget': widget,
+            'name_label': name_label,
+            'status_label': status_label,
+            'action_btn': action_btn,
+            'is_connected': is_connected,
+            'status': status,  # Store original status for theme updates
+        }
 
     def _on_toggle_server(self, name: str):
         """Handle connect/disconnect button click."""
@@ -596,6 +608,67 @@ class MCPServersSection(CollapsibleSection):
                 padding: 4px;
             }}
         """)
+
+        # Update server items
+        for _name, item_data in self._server_items.items():
+            widget = item_data['widget']
+            name_label = item_data['name_label']
+            status_label = item_data['status_label']
+            action_btn = item_data['action_btn']
+            is_connected = item_data['is_connected']
+            status = item_data['status']
+
+            # Update widget background
+            widget.setStyleSheet(f"""
+                QWidget {{
+                    background-color: {theme.APP_BACKGROUND};
+                    border-radius: {theme.RADIUS_SM};
+                }}
+            """)
+
+            # Update name label
+            name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+
+            # Update status label with theme colors
+            if is_connected:
+                status_color = theme.STATUS_CONNECTED
+            elif status == "连接中...":
+                status_color = theme.STATUS_CONNECTING
+            elif status == "错误":
+                status_color = theme.STATUS_ERROR
+            else:
+                status_color = theme.STATUS_DISCONNECTED
+            status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
+
+            # Update action button
+            if is_connected:
+                action_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {theme.MCP_DISCONNECT_BG};
+                        border: none;
+                        border-radius: {theme.RADIUS_SM};
+                        padding: 4px 8px;
+                        color: {theme.MCP_DISCONNECT_TEXT};
+                        font-size: {theme.FONT_SIZE_XS};
+                    }}
+                    QPushButton:hover {{
+                        background-color: {theme.MCP_DISCONNECT_BG_HOVER};
+                    }}
+                """)
+            else:
+                action_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {theme.MCP_CONNECT_BG};
+                        border: none;
+                        border-radius: {theme.RADIUS_SM};
+                        padding: 4px 8px;
+                        color: {theme.MCP_CONNECT_TEXT};
+                        font-size: {theme.FONT_SIZE_XS};
+                    }}
+                    QPushButton:hover {{
+                        background-color: {theme.MCP_CONNECT_BG_HOVER};
+                    }}
+                """)
 
 
 class FileTreeSection(CollapsibleSection):
