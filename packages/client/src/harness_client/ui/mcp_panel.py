@@ -299,6 +299,16 @@ class MCPServerDialog(QDialog):
         self.args_edit.setText(", ".join(config.get("args", [])))
         self.url_edit.setText(config.get("url", ""))
 
+        # Load environment variables
+        env = config.get("env", {})
+        if env:
+            self.env_edit.setText(", ".join(f"{k}={v}" for k, v in env.items()))
+
+        # Load headers
+        headers = config.get("headers", {})
+        if headers:
+            self.headers_edit.setText(", ".join(f"{k}: {v}" for k, v in headers.items()))
+
     def get_config(self) -> dict:
         """Get server configuration."""
         config = {
