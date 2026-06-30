@@ -27,9 +27,9 @@
 |-------|------|------|------|
 | **Phase 1** | Goal Verifier | ✅ 已实现 | 目标驱动执行 |
 | **Phase 2** | Automations | ✅ 已实现 | 定时触发/调度 |
-| **Phase 3** | Worktrees | ❌ 待实现 | 多 Agent 并行隔离 |
-| **Phase 4** | Connectors | ❌ 待实现 | 外部系统集成 |
-| **Phase 5** | Loop Orchestrator | ❌ 待实现 | 多 Agent 协调 |
+| **Phase 3** | Worktrees | 📝 设计完成 | 多 Agent 并行隔离 |
+| **Phase 4** | Connectors | 📝 设计完成 | 外部系统集成 |
+| **Phase 5** | Loop Orchestrator | 📝 设计完成 | 统一编排 API |
 
 ---
 
@@ -361,7 +361,7 @@ class GoalLoop:
 
 详见：`design/phase2-automations.md`
 
-### Phase 3: Worktrees ❌ 待实现
+### Phase 3: Worktrees 📝 设计完成
 - `WorktreeManager`: git worktree 生命周期管理
 - `ParallelGoalExecutor`: 并行 Goal 执行器
 - `WorktreeOrchestrator`: 顶层 API
@@ -369,10 +369,20 @@ class GoalLoop:
 
 详见：`design/phase3-worktrees.md`
 
-### Phase 4: Connectors
-- `Connector` 基类
-- Webhook / Slack / GitHub 集成
+### Phase 4: Connectors 📝 设计完成
+- `Connector` 基类和标准化事件
+- WebhookConnector: HTTP webhook 接收
+- SlackConnector: Slack 消息收发
+- GitHubConnector: GitHub App 集成
+- ConnectorManager: 统一管理
+- OutputChannel: 输出路由
 
-### Phase 5: Loop Orchestrator
-- 整合所有组件
-- 统一 API
+详见：`design/phase4-connectors.md`
+
+### Phase 5: Loop Orchestrator 📝 设计完成
+- `WorkflowEngine`: 多步骤工作流执行
+- `TeamOrchestrator`: 多 Agent 协作编排
+- `LoopOrchestrator`: 统一 API 入口
+- `MonitorService`: 可观测性
+
+详见：`design/phase5-orchestrator.md`
