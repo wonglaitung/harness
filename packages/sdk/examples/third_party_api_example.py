@@ -34,6 +34,7 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 25: 语义卡住检测 - 基于相似度检测重复输出 (P2)
     演示 26: Guardrails - PII 检测和内容安全 (P2)
     演示 27: CPU Router - 成本优化的请求路由 (P2)
+    演示 28: Guardrails 进阶 - LLM Judge、流式拦截、中文姓名识别、异常处理 (P2)
 
 作者: Harness Team
 """
@@ -3617,6 +3618,199 @@ async def demo_cpu_router():
 
 
 # ============================================================================
+# 演示 28: Guardrails 进阶 - LLM Judge、流式拦截、中文姓名、异常处理 (P2)
+# ============================================================================
+
+async def demo_guardrails_advanced():
+    """
+    演示 28: Guardrails 进阶 - LLM Judge、流式拦截、中文姓名、异常处理 (P2)
+
+    功能:
+    - Layer 2: LLM Judge 语义安全检测
+    - 流式拦截器 (StreamInterceptor)
+    - 中文姓名识别 (ChineseNameRecognizer)
+    - 异常处理 (JudgeTimeoutException / JudgeUnavailableException)
+    - 快速安全分数 (Quick Score)
+
+    学习要点:
+    - Layer 1 是规则检测，Layer 2 是 LLM 语义判断
+    - Judge 需要独立的 LLM 端点（Qwen3Guard-8B-Stream 或任意兼容 API）
+    - 流式拦截在 Agent 流式输出时实时过滤风险内容
+    - 中文姓名识别基于姓氏库 + N-gram，无需 spaCy
+    """
+    print("\n" + "=" * 70)
+    print("演示 28: Guardrails 进阶 - LLM Judge、流式拦截、中文姓名、异常 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. Layer 2: LLM Judge 语义检测
+    # -------------------------------------------------------------------------
+    print("\n--- 1. Layer 2: LLM Judge 语义检测 ---")
+
+    from harness.guardrails import (
+        GuardrailConfig,
+        JudgeConfig,
+    )
+    from harness.guardrails.judge import ComplianceJudge, RiskLevel
+
+    # 创建 Judge 配置
+    judge_config = JudgeConfig(
+        enabled=True,
+        endpoint="http://localhost:8001/v1/chat/completions",
+        model="qwen3-guard-8b-stream",
+        timeout=5.0,
+    )
+
+    print(f"""
+    JudgeConfig 配置:
+    - endpoint: {judge_config.endpoint}
+    - model: {judge_config.model}
+    - timeout: {judge_config.timeout}s
+    - 支持缓存 (cachetools): 减少重复 API 调用
+
+    风险等级: {", ".join(level.value for level in RiskLevel)}
+
+    Judge 检测内容类型:
+    - prompt_injection: 提示注入攻击
+    - harmful_content: 有害内容
+    - pii_leakage: 隐私信息泄露
+    - bias_discrimination: 偏见与歧视
+    - illegal_content: 非法内容
+    - other: 其他风险
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. 流式拦截器 (StreamInterceptor)
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 流式拦截器 (StreamInterceptor) ---")
+
+    from harness.guardrails import (
+        StreamInterceptor,
+        StreamInterceptConfig,
+        InterceptResult,
+    )
+
+    # 拦截器配置
+    stream_config = StreamInterceptConfig(
+        enabled=True,
+        check_interval=15,              # 每 15 个 token 检测一次
+        safety_threshold=0.4,           # 安全阈值 < 0.4 则拦截
+        min_tokens_before_check=10,     # 至少 10 个 token 后才检测
+        max_check_attempts=3,           # 最大重试次数
+    )
+
+    print(f"""
+    StreamInterceptConfig 配置:
+    - check_interval: {stream_config.check_interval} tokens/次
+    - safety_threshold: {stream_config.safety_threshold}
+    - min_tokens_before_check: {stream_config.min_tokens_before_check}
+    - max_check_attempts: {stream_config.max_check_attempts}
+
+    拦截结果类型 (InterceptResult):
+    - safe: 内容安全，继续流式输出
+    - blocked: 内容被拦截，停止流式输出
+    - warning: 有轻微风险，标记警告但不中断
+    """)
+
+    # -------------------------------------------------------------------------
+    # 3. 中文姓名识别器
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 中文姓名识别器 ---")
+
+    from harness.guardrails.chinese_guardrail import ChinesePIIGuardrail
+    from harness.guardrails.chinese_name_recognizer import (
+        ChineseNameRecognizer,
+        extract_chinese_names,
+        COMMON_SURNAMES,
+        COMPOUND_SURNAMES,
+    )
+
+    # 测试中文姓名识别
+    test_text = """
+    我叫张三，我的同事是李四和王五。
+    我们的领导是欧阳修先生，他的秘书是张婉儿。
+    另外，陈小明和刘姥姥也参加了今天的会议。
+    """
+
+    # 创建姓名识别器
+    name_recognizer = ChineseNameRecognizer()
+    names = extract_chinese_names(test_text)
+
+    print(f"测试文本:\n  {test_text.strip()}")
+    print(f"\n识别到的中文姓名: {[n.matched_text for n in names]}")
+    print(f"姓氏数量: {len(COMMON_SURNAMES)} (单姓) + {len(COMPOUND_SURNAMES)} (复姓)")
+    print(f"复姓包括: {', '.join(COMPOUND_SURNAMES[:5])}...")
+
+    # -------------------------------------------------------------------------
+    # 4. 异常处理
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 异常处理 ---")
+
+    from harness.guardrails import (
+        JudgeTimeoutException,
+        JudgeUnavailableException,
+        StreamInterruptException,
+    )
+
+    print("""
+    Guardrails 定义了以下异常:
+
+    1. JudgeTimeoutException:
+       - 触发: Judge 服务在 timeout 内未响应
+       - 处理: 捕获异常后降级为仅 Layer 1，或重试
+       - 示例:
+           try:
+               result = await judge.judge(content)
+           except JudgeTimeoutException as e:
+               print(f"Judge 超时 ({e.timeout}s)，使用降级策略")
+
+    2. JudgeUnavailableException:
+       - 触发: Judge 服务不可达（HTTP 错误、网络错误）
+       - 处理: 捕获异常后关闭 Layer 2，回退到 Layer 1
+       - 示例:
+           except JudgeUnavailableException as e:
+               print(f"Judge 不可用: {e.detail}，已降级")
+
+    3. StreamInterruptException:
+       - 触发: 流式拦截检测到高风险内容，强制中断输出
+       - 处理: 在流式输出循环中捕获，清理资源
+    """)
+
+    # -------------------------------------------------------------------------
+    # 5. 完整集成配置
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 完整 Guardrails 集成 ---")
+
+    print("""
+    完整 Guardrails 配置（Layer 1 + Layer 2 + 流式拦截）:
+
+    guardrails = GuardrailConfig(
+        enabled=True,
+        layer1_enabled=True,        # PII 规则检测
+        layer2_enabled=True,        # LLM Judge 语义检测
+        layer1_mode="pass_through",  # 检测到 PII 时脱敏后继续
+        judge_config=JudgeConfig(
+            endpoint="http://localhost:8001/v1/chat/completions",
+            model="qwen3-guard-8b-stream",
+            timeout=5.0,
+        ),
+        stream_intercept_config=StreamInterceptConfig(
+            enabled=True,
+            check_interval=15,
+            safety_threshold=0.4,
+        ),
+    )
+
+    agent = AgentHarness(
+        model="claude-sonnet-4-6",
+        guardrails=guardrails,
+    )
+    """)
+
+    print("\n✅ Guardrails 进阶演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -3710,6 +3904,9 @@ async def main():
 
         # CPU Router 成本优化 (P2)
         await demo_cpu_router()
+
+        # Guardrails 进阶 (P2)
+        await demo_guardrails_advanced()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")
