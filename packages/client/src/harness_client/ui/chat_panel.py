@@ -122,6 +122,27 @@ def create_clear_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIco
     return QIcon(pixmap)
 
 
+def create_scroll_down_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a scroll-down arrow icon (chevron pointing down)."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color, 2.5)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    margin = 6
+    # Chevron: two lines forming a V pointing down
+    painter.drawLine(margin, margin + 2, size // 2, size - margin - 2)
+    painter.drawLine(size // 2, size - margin - 2, size - margin, margin + 2)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
 class MessageBubble(QWidget):
     """
     Message bubble with rounded corners and selectable text.
@@ -1057,11 +1078,63 @@ class ChatPanel(QWidget):
         # Store scroll area for scrolling
         self._scroll_area = scroll_area
 
+        # --- Scroll-to-bottom floating button ---
+        # Shows when user scrolls up, positioned at bottom-center of scroll area
+        self._scroll_down_btn = QPushButton()
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(20, QColor(theme.TEXT)))
+        self._scroll_down_btn.setIconSize(QSize(20, 20))
+        self._scroll_down_btn.setFixedSize(44, 44)
+        self._scroll_down_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._scroll_down_btn.setToolTip("滚动到最新消息")
+        self._scroll_down_btn.setVisible(False)  # Initially hidden
+        self._scroll_down_btn.clicked.connect(self._scroll_to_bottom)
+        self._scroll_down_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.COMPOSER};
+                border: 1px solid {theme.BORDER};
+                border-radius: 22px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+        # Add as floating overlay on scroll area (will be positioned in resizeEvent)
+        scroll_area.setParent(self)  # Ensure scroll_area is a child for overlay positioning
+        self._scroll_down_btn.setParent(self)
+
+        # Connect scrollbar value change to detect scrolling
+        scrollbar = scroll_area.verticalScrollBar()
+        scrollbar.valueChanged.connect(self._on_scroll_changed)
+
         # Welcome message (Chinese)
         self.messages_container.add_message(
             "你好！我是你的 AI 助手，很高兴为你服务。有什么我可以帮助你的吗？",
             "assistant",
         )
+
+    def resizeEvent(self, event):
+        """Position the scroll-down button at bottom-center of scroll area."""
+        super().resizeEvent(event)
+        if hasattr(self, '_scroll_down_btn') and hasattr(self, '_scroll_area'):
+            # Calculate position: bottom-center of scroll area, above input bar
+            scroll_rect = self._scroll_area.geometry()
+            input_height = self._input_bar.height() if hasattr(self, '_input_bar') else 0
+            btn_width = self._scroll_down_btn.width()
+            btn_height = self._scroll_down_btn.height()
+            # Position: horizontally centered, 16px above input bar
+            x = scroll_rect.x() + (scroll_rect.width() - btn_width) // 2
+            y = scroll_rect.bottom() - btn_height - 16
+            self._scroll_down_btn.move(x, y)
+
+    def _on_scroll_changed(self, value: int):
+        """Show/hide scroll-down button based on scroll position."""
+        if not hasattr(self, '_scroll_area'):
+            return
+        scrollbar = self._scroll_area.verticalScrollBar()
+        # Show button when not at bottom (with 20px threshold for smooth UX)
+        at_bottom = value >= scrollbar.maximum() - 20
+        self._scroll_down_btn.setVisible(not at_bottom)
 
     def _on_send(self):
         """Handle send button click."""
@@ -1550,6 +1623,20 @@ class ChatPanel(QWidget):
             }}
             QPushButton:disabled {{
                 background-color: {theme.DISABLED_BACKGROUND};
+            }}
+        """)
+
+        # Update scroll-down button
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(20, QColor(theme.TEXT)))
+        self._scroll_down_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.COMPOSER};
+                border: 1px solid {theme.BORDER};
+                border-radius: 22px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
             }}
         """)
 
