@@ -1081,18 +1081,18 @@ class ChatPanel(QWidget):
         # --- Scroll-to-bottom floating button ---
         # Shows when user scrolls up, positioned at bottom-center of scroll area
         self._scroll_down_btn = QPushButton()
-        self._scroll_down_btn.setIcon(create_scroll_down_icon(20, QColor(theme.TEXT)))
-        self._scroll_down_btn.setIconSize(QSize(20, 20))
-        self._scroll_down_btn.setFixedSize(44, 44)
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(16, QColor(theme.TEXT)))
+        self._scroll_down_btn.setIconSize(QSize(16, 16))
+        self._scroll_down_btn.setFixedSize(32, 32)
         self._scroll_down_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._scroll_down_btn.setToolTip("滚动到最新消息")
         self._scroll_down_btn.setVisible(False)  # Initially hidden
         self._scroll_down_btn.clicked.connect(self._scroll_to_bottom)
         self._scroll_down_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.COMPOSER};
+                background-color: rgba({theme.COMPOSER.red()}, {theme.COMPOSER.green()}, {theme.COMPOSER.blue()}, 0.85);
                 border: 1px solid {theme.BORDER};
-                border-radius: 22px;
+                border-radius: 16px;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
@@ -1627,12 +1627,12 @@ class ChatPanel(QWidget):
         """)
 
         # Update scroll-down button
-        self._scroll_down_btn.setIcon(create_scroll_down_icon(20, QColor(theme.TEXT)))
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(16, QColor(theme.TEXT)))
         self._scroll_down_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.COMPOSER};
+                background-color: rgba({theme.COMPOSER.red()}, {theme.COMPOSER.green()}, {theme.COMPOSER.blue()}, 0.85);
                 border: 1px solid {theme.BORDER};
-                border-radius: 22px;
+                border-radius: 16px;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
