@@ -1,6 +1,6 @@
-# 15 - Loop Engineering 循环工程
+# 10 - Loop Engineering 循环工程
 
-> **状态**: Phase 1 已实现
+> **状态**: ✅ 全部实现
 > **创建时间**: 2026-06-28
 
 ## 概述
@@ -15,9 +15,9 @@
 |-------|------|------|------|
 | Phase 1 | Goal Verifier | ✅ 已实现 | 目标驱动执行 |
 | Phase 2 | Automations | ✅ 已实现 | 定时触发/调度 |
-| Phase 3 | Worktrees | ❌ 待实现 | 多 Agent 并行隔离 |
-| Phase 4 | Connectors | ❌ 待实现 | 外部系统集成 |
-| Phase 5 | Loop Orchestrator | ❌ 待实现 | 多 Agent 协调 |
+| Phase 3 | Worktrees | ✅ 已实现 | 多 Agent 并行隔离 |
+| Phase 4 | Connectors | ✅ 已实现 | 外部系统集成 |
+| Phase 5 | Loop Orchestrator | ✅ 已实现 | 多 Agent 协调 |
 
 ---
 
@@ -276,50 +276,87 @@ asyncio.run(main())
 
 详见 [06-triggers.md](./06-triggers.md)。
 
-### Phase 3: Worktrees（并行隔离）
+### Phase 3: Worktrees（并行隔离）✅ 已实现
 
 支持并行执行多个 Goal，每个在独立工作目录。
 
 ```python
-# 计划 API
-from harness.loop import ParallelGoalExecutor
+from harness.loop import WorktreeOrchestrator, WorktreeConfig
 
-executor = ParallelGoalExecutor(max_parallel=3)
-results = await executor.execute([
-    GoalConfig(description="修复模块 A"),
-    GoalConfig(description="优化模块 B"),
+orchestrator = WorktreeOrchestrator(agent, ".")
+
+results = await orchestrator.run_parallel([
+    WorktreeConfig(name="feature-a", goal="实现功能 A"),
+    WorktreeConfig(name="feature-b", goal="实现功能 B"),
 ])
+
+# 合并成功的分支
+for name, result in results.items():
+    if result.status == "completed":
+        await orchestrator.merge(name)
 ```
 
-### Phase 4: Connectors（外部集成）
+详见 [11-worktrees.md](./11-worktrees.md)。
+
+### Phase 4: Connectors（外部集成）✅ 已实现
 
 让 Agent 与外部系统集成。
 
 ```python
-# 计划 API
-from harness.connectors import GitHubConnector, SlackConnector
+from harness.connectors import (
+    ConnectorManager,
+    SlackConnector,
+    GitHubConnector,
+)
 
-agent.add_connector(GitHubConnector(repo="owner/repo"))
-agent.add_connector(SlackConnector(channel="#alerts"))
+manager = ConnectorManager(trigger_manager)
+
+# Slack 集成
+slack = SlackConnector(config=SlackConfig(bot_token="xoxb-..."))
+manager.register_connector(slack)
+
+# GitHub 集成
+github = GitHubConnector(config=GitHubConfig(app_id="123", private_key="..."))
+manager.register_connector(github)
+
+await manager.start()
 ```
 
-### Phase 5: Loop Orchestrator（统一编排）
+详见 [12-connectors.md](./12-connectors.md)。
+
+### Phase 5: Loop Orchestrator（统一编排）✅ 已实现
 
 整合所有组件的统一 API。
 
 ```python
-# 计划 API
-from harness import LoopOrchestrator
+from harness.orchestrator import (
+    LoopOrchestrator,
+    WorkflowConfig,
+    WorkflowStep,
+)
 
-orchestrator = LoopOrchestrator()
-orchestrator.schedule("0 9 * * *", "生成每日报告")
-orchestrator.on_webhook("/github", "Review PR")
-await orchestrator.start()
+orchestrator = LoopOrchestrator(agent)
+
+# 创建工作流
+workflow = WorkflowConfig(
+    name="code-review",
+    steps=[
+        WorkflowStep(name="analyze", goal="分析代码"),
+        WorkflowStep(name="review", goal="代码审查", depends_on=["analyze"]),
+    ],
+)
+
+result = await orchestrator.run_workflow("code-review")
 ```
+
+详见 [13-orchestrator.md](./13-orchestrator.md)。
 
 ---
 
 ## 参考
 
 - [设计文档](../design/loop-engineering.md)
-- [06-triggers.md](./06-triggers.md) - Trigger System 详细设计
+- [06-trigger-system.md](./06-trigger-system.md) - Trigger System 详细设计
+- [11-worktrees.md](./11-worktrees.md) - Worktrees 并行隔离执行
+- [12-connectors.md](./12-connectors.md) - Connectors 外部系统集成
+- [13-orchestrator.md](./13-orchestrator.md) - Orchestrator 工作流编排

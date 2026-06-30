@@ -1,484 +1,507 @@
-# 09 - MCP 集成详解
+# 09 - 实施路线图
 
 ## 概述
 
-MCP (Model Context Protocol) 允许 Harness 连接外部工具服务器，扩展 Agent 的能力边界。通过 MCP，Agent 可以使用 GitHub、Slack、数据库等第三方服务提供的工具。
+本文档规划了 Harness 项目的实施路线图，按阶段划分，确保从 MVP 到生产就绪的渐进式开发。
 
-## 安装依赖
-
-使用 MCP 功能需要安装 `mcp` 包：
-
-```bash
-# 作为 SDK 依赖自动安装
-uv sync --all-packages
-
-# 或手动安装
-pip install mcp>=1.0.0
-```
-
-SDK 的 `pyproject.toml` 已包含 `mcp>=1.0.0` 依赖。
-
-## 架构
+## 项目结构
 
 ```
-┌─────────────────────────────────────────────────┐
-│              MCP Integration                     │
-│                                                  │
-│  ┌───────────────┐  ┌───────────────────┐       │
-│  │  MCPManager   │  │  MCP Transport    │       │
-│  │ (服务器管理)   │  │ (通信传输)         │       │
-│  └───────┬───────┘  └───────┬───────────┘       │
-│          │                  │                    │
-│          ↓                  ↓                    │
-│  ┌─────────────────────────────────────────┐    │
-│  │           MCP Servers                    │    │
-│  │  GitHub │ Slack │ Database │ Custom     │    │
-│  └─────────────────────────────────────────┘    │
-│                                                  │
-│  MCP 工具自动注册到 ToolExecutor                  │
-│  与内置工具统一调度                               │
-└─────────────────────────────────────────────────┘
+harness/
+├── src/
+│   └── harness/
+│       ├── __init__.py
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── agent_loop.py
+│       │   ├── context.py
+│       │   └── result.py
+│       ├── llm/
+│       │   ├── __init__.py
+│       │   ├── base.py
+│       │   ├── anthropic.py
+│       │   ├── openai.py
+│       │   └── local.py
+│       ├── tools/
+│       │   ├── __init__.py
+│       │   ├── base.py
+│       │   ├── registry.py
+│       │   ├── executor.py
+│       │   ├── file.py
+│       │   ├── shell.py
+│       │   ├── web.py
+│       │   └── mcp.py
+│       ├── memory/
+│       │   ├── __init__.py
+│       │   ├── session.py
+│       │   ├── store.py
+│       │   ├── context_builder.py
+│       │   └── compressor.py
+│       ├── skills/
+│       │   ├── __init__.py
+│       │   ├── skill.py
+│       │   ├── registry.py
+│       │   ├── loader.py
+│       │   └── generator.py
+│       ├── triggers/
+│       │   ├── __init__.py
+│       │   ├── base.py
+│       │   ├── cron.py
+│       │   ├── webhook.py
+│       │   └── manager.py
+│       ├── security/
+│       │   ├── __init__.py
+│       │   ├── permissions.py
+│       │   ├── sandbox.py
+│       │   ├── validator.py
+│       │   └── audit.py
+│       ├── sdk/
+│       │   ├── __init__.py
+│       │   ├── harness.py
+│       │   └── config.py
+│       └── cli/
+│           ├── __init__.py
+│           └── main.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── e2e/
+├── docs/
+├── examples/
+├── skills/
+│   └── default/
+├── pyproject.toml
+├── setup.py
+└── README.md
 ```
 
-## MCPManager
+## Phase 1: MVP 核心功能 (Week 1-3)
 
-MCPManager 管理所有 MCP 服务器的连接、工具发现和生命周期。
+### 目标
+
+构建最小可用版本，验证核心架构。
+
+### 任务清单
+
+#### Week 1: Agent Loop & LLM 客户端
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| AgentLoop 核心循环实现 | P0 | - |
+| 基础状态机 | P0 | - |
+| LLMClient 抽象接口 | P0 | - |
+| AnthropicClient 实现 | P0 | - |
+| OpenAIClient 实现 | P1 | - |
+| Token 计数器 | P1 | - |
+| 基础错误处理 | P0 | - |
+| 单元测试 | P0 | - |
+
+**交付物**:
+- `src/harness/core/agent_loop.py`
+- `src/harness/llm/`
+- `tests/unit/test_agent_loop.py`
+
+#### Week 2: 工具系统
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| Tool 基类定义 | P0 | - |
+| ToolRegistry 实现 | P0 | - |
+| ToolExecutor 实现 | P0 | - |
+| File Tools (Read, Write, Edit) | P0 | - |
+| Glob/Grep Tools | P0 | - |
+| Bash Tool (基础版) | P1 | - |
+| PermissionSet 实现 | P0 | - |
+| 工具权限检查 | P0 | - |
+
+**交付物**:
+- `src/harness/tools/`
+- `tests/unit/test_tools.py`
+
+#### Week 3: 记忆系统基础
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| Session 数据结构 | P0 | - |
+| FileSessionStore | P0 | - |
+| ContextBuilder 基础版 | P0 | - |
+| Token 预算管理 | P1 | - |
+| 会话持久化 | P0 | - |
+
+**交付物**:
+- `src/harness/memory/`
+- `tests/unit/test_memory.py`
+
+### MVP 示例代码
 
 ```python
-from harness.mcp.manager import MCPManager, MCPServerConfig
+from harness import AgentHarness
 
-class MCPManager:
-    def __init__(
-        self,
-        tool_registry: Optional["ToolRegistry"] = None,  # 工具注册表
-        auto_load_configs: bool = True,                  # 自动加载配置文件
-    )
-    
-    def add_server(self, config: MCPServerConfig) -> None:
-        """添加 MCP 服务器配置"""
-    
-    def remove_server(self, name: str) -> bool:
-        """移除 MCP 服务器配置，返回是否成功"""
-    
-    def get_server_config(self, name: str) -> Optional[MCPServerConfig]:
-        """获取服务器配置"""
-    
-    def list_server_configs(self) -> List[MCPServerConfig]:
-        """列出所有服务器配置"""
-    
-    async def connect_server(self, name: str) -> MCPClient:
-        """连接特定 MCP 服务器"""
-    
-    async def connect_all(self) -> Dict[str, MCPServerInfo]:
-        """连接所有启用的 MCP 服务器"""
-    
-    async def disconnect_server(self, name: str) -> bool:
-        """断开特定 MCP 服务器连接"""
-    
-    async def disconnect_all(self) -> None:
-        """断开所有 MCP 服务器连接"""
-```
-
-### MCPServerConfig
-
-```python
-@dataclass
-class MCPServerConfig:
-    name: str                          # 服务器名称
-    transport: str                     # 传输方式: "stdio" 或 "http"
-    command: Optional[str] = None      # Stdio 传输命令
-    args: List[str] = field(default_factory=list)  # 命令参数
-    url: Optional[str] = None          # HTTP 传输 URL
-    env: Dict[str, str] = field(default_factory=dict)  # 环境变量
-    headers: Dict[str, str] = field(default_factory=dict)  # HTTP 头
-    enabled: bool = True               # 是否启用
-    timeout: float = 30.0              # 超时时间（秒）
-```
-
-## MCP Transport
-
-MCP 支持两种传输方式：
-
-### Stdio 传输
-
-通过子进程标准输入/输出通信，适用于本地安装的 MCP 服务器：
-
-```python
-from harness.mcp.manager import MCPManager, MCPServerConfig
-
-# 创建 MCP 管理器
-mcp_manager = MCPManager()
-
-# 添加 Stdio 服务器
-config = MCPServerConfig(
-    name="github",
-    transport="stdio",
-    command="mcp-github",
-    args=["--token", "$GITHUB_TOKEN"],  # 参数作为列表传递
-    env={"GITHUB_TOKEN": "your-token-here"},  # 环境变量
+# 最简使用
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    api_key="your-key"
 )
 
-mcp_manager.add_server(config)
-
-# 连接服务器
-await mcp_manager.connect_server("github")
+# 运行
+result = await agent.run("读取 main.py 并分析其结构")
+print(result.content)
 ```
 
-### HTTP 传输
+## Phase 2: 增强功能 (Week 4-6)
 
-通过 HTTP/SSE 通信，适用于远程 MCP 服务器。HTTPTransport 支持三种 MCP HTTP 协议，自动检测服务器类型：
+### 目标
 
-#### 支持的协议
+增加高级特性，提升易用性和可靠性。
 
-| 协议 | 标准 | 发送消息 | 接收消息 | 说明 |
-|------|------|----------|----------|------|
-| **Streamable HTTP** | 2025-11-25 (最新) | POST `/mcp` | POST 响应 (JSON/SSE) + GET `/mcp` SSE | 单一端点，推荐 |
-| **HTTP+SSE** | 2024-11-05 (已弃用) | POST `/message` | GET `/sse` | 分开两个端点 |
-| **FastMCP SSE** | FastMCP 变种 | POST `/messages/?session_id=xxx` | GET `/sse` | 动态 session 发现 |
+### 任务清单
 
-#### 协议自动检测
+#### Week 4: 上下文管理增强
 
-HTTPTransport 在连接时自动检测服务器协议类型：
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 上下文压缩器 | P1 | - |
+| 会话摘要生成 | P1 | - |
+| SQLite 存储 | P1 | - |
+| 记忆检索基础 | P2 | - |
 
-1. POST `initialize` 请求到 `/mcp`
-2. 如果返回 200 OK → **Streamable HTTP**
-3. 如果返回 400/404/405 → GET `/sse` 进一步检测
-4. 解析 SSE 首个事件区分 **FastMCP** 或 **HTTP+SSE**
+#### Week 5: 技能系统
 
-#### 使用示例
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| Skill 文件格式 | P0 | - |
+| SkillRegistry | P0 | - |
+| SkillLoader | P0 | - |
+| SkillInjector | P0 | - |
+| 预置技能库 (5-10个) | P1 | - |
+
+#### Week 6: 安全增强 & Web 工具
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 沙箱执行器 | P0 | - |
+| 输入验证器 | P1 | - |
+| WebSearch Tool | P1 | - |
+| WebFetch Tool | P1 | - |
+| 审计日志 | P1 | - |
+
+### Phase 2 示例
 
 ```python
-from harness.mcp.manager import MCPManager, MCPServerConfig
-
-# 创建 MCP 管理器
-mcp_manager = MCPManager()
-
-# 添加 HTTP 服务器（自动检测协议）
-config = MCPServerConfig(
-    name="remote-tools",
-    transport="http",
-    url="https://mcp.example.com",  # 基础 URL，自动检测协议
-    headers={"Authorization": "Bearer your-token"},  # 可选：认证头
-)
-
-mcp_manager.add_server(config)
-
-# 连接服务器
-await mcp_manager.connect_server("remote-tools")
-```
-
-#### 强制指定协议
-
-如需跳过自动检测，可强制指定协议类型：
-
-```python
-from harness.mcp.transport import HTTPTransport
-
-# 强制使用 Streamable HTTP
-transport = HTTPTransport(
-    url="https://mcp.example.com",
-    protocol="streamable-http",  # 强制协议类型
-)
-
-# 可选值:
-# - "streamable-http"  (Streamable HTTP 2025-11-25)
-# - "http-sse"         (HTTP+SSE 2024-11-05, 已弃用)
-# - "fastmcp-sse"      (FastMCP SSE)
-```
-
-#### Streamable HTTP 特性
-
-Streamable HTTP (2025-11-25) 是最新的 MCP 标准，特性包括：
-
-- **单一端点**：所有通信通过 `/mcp`
-- **POST 请求**：发送 JSON-RPC 消息
-- **灵活响应**：响应可能是 JSON 对象或 SSE 流
-- **会话管理**：支持 `Mcp-Session-Id` 头
-- **服务器推送**：GET `/mcp` 可开 SSE 流接收服务器主动消息
-
-```python
-# Streamable HTTP 配置示例
-config = MCPServerConfig(
-    name="streamable-server",
-    transport="http",
-    url="https://api.example.com/mcp",
-)
-```
-
-#### FastMCP SSE 特性
-
-FastMCP 是常用的 MCP 服务器实现，使用变种 SSE 协议：
-
-- 连接 GET `/sse` 获取动态消息端点
-- SSE 首个事件：`event: endpoint\ndata: /messages/?session_id=xxx`
-- POST 到动态端点发送消息
-- 持续监听 GET `/sse` 接收响应
-
-```python
-# FastMCP 配置示例
-config = MCPServerConfig(
-    name="fastmcp-server",
-    transport="http",
-    url="http://localhost:8500",
-)
-```
-
-#### Session 自动重连
-
-FastMCP SSE session 在约 90 秒不活动后会过期。HTTPTransport 自动处理这种情况：
-
-1. POST 请求返回 404 时检测到 session 已过期
-2. 自动重新连接 `/sse` 获取新的 `session_id`
-3. 用新端点重试失败的请求
-
-用户无需手动处理 session 过期问题，SDK 会自动重连。这是 SSE 的正常行为——SSE 协议本身没有内置的 keep-alive 机制（不像 WebSocket 的 ping/pong），服务器端 session 有 TTL 限制。
-
-#### SSE 长连接超时处理
-
-SSE (Server-Sent Events) 是一种长连接协议，服务器可以持续推送事件。HTTPTransport 使用**双 Session 策略**处理超时：
-
-1. **SSE Session**: `total=None, sock_read=None` - 无超时限制，用于 GET `/sse` 长连接
-2. **Request Session**: `total=timeout` - 可配置超时，用于 POST 请求
-
-这种设计确保：
-- SSE 长连接不会因服务器静默而被断开
-- POST 请求仍有合理的超时控制，避免无限等待
-
-#### SSE Ping 处理
-
-FastMCP 服务器会定期发送 ping 消息保持连接活跃：
-
-```
-: ping - 2026-06-10 03:13:17.168728+00:00
-```
-
-这些以 `:` 开头的行是 SSE 注释（comments），HTTPTransport 会正确忽略它们，不影响正常的消息处理。
-
-#### 重连机制增强
-
-当 FastMCP session 过期（POST 返回 404）时，HTTPTransport 会自动重连：
-
-1. 检测 SSE session 是否存在/有效，必要时重建
-2. 重新启动 SSE listener 获取新的 `session_id`
-3. 用新端点重试失败的请求
-
-重连过程中如果 SSE session 已关闭，会自动创建新的 session，确保重连成功。
-
-## 工具发现与注册
-
-MCP 服务器连接后，自动发现其提供的工具并注册到 ToolExecutor：
-
-```
-1. 连接 MCP 服务器
-2. 获取工具列表 (tools/list)
-3. 为每个工具创建 MCPTool 包装器
-4. 注册到 ToolExecutor
-5. LLM 可调用 MCP 工具
-```
-
-### MCPToolWrapper 包装器
-
-MCP 工具通过 `MCPToolWrapper` 包装为标准 Tool 接口，与内置工具统一调度：
-
-```python
-class MCPToolWrapper:
-    """将 MCP 工具包装为 Harness Tool"""
-    
-    @property
-    def name(self) -> str:
-        """工具名称，格式: mcp_{server}_{tool}"""
-    
-    @property
-    def input_schema(self) -> dict:
-        """工具输入 Schema (JSON Schema 格式)"""
-    
-    def validate_arguments(self, arguments: dict) -> tuple[bool, str | None]:
-        """验证参数，返回 (是否有效, 错误信息)"""
-    
-    async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
-        """执行 MCP 工具调用"""
-```
-
-MCP 工具与内置工具使用方式完全相同，LLM 看到的是统一的工具列表：
-
-```python
-# MCP 工具自动注册，无需额外配置
-result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
-# LLM 可能调用: grep (内置) + mcp_github_create_issue (MCP)
-```
-
-## 常用 MCP 服务器
-
-| 服务器 | 安装命令 | 提供工具 |
-|--------|----------|----------|
-| GitHub | `mcp-github` | PR、Issue、代码搜索 |
-| Slack | `mcp-slack` | 发送消息、搜索 |
-| Filesystem | `mcp-filesystem` | 文件操作（与内置工具互补） |
-| Database | `mcp-database` | SQL 查询 |
-| Browser | `mcp-browser` | 网页浏览 |
-
-### 配置示例
-
-```python
-from harness import AgentHarness, MCPManager, MCPServerConfig
-
-# 创建 Agent
+# 技能激活
 agent = AgentHarness()
+agent.load_skill("skills/code-review.md")
+agent.activate_skill("code-review")
 
-# 创建 MCP 管理器并连接到工具注册表
-mcp_manager = MCPManager(tool_registry=agent._tool_registry)
-
-# 添加多个 MCP 服务器
-github_config = MCPServerConfig(
-    name="github",
-    transport="stdio",
-    command="mcp-github",
-    env={"GITHUB_TOKEN": "your-token-here"},
-)
-mcp_manager.add_server(github_config)
-
-slack_config = MCPServerConfig(
-    name="slack",
-    transport="stdio",
-    command="mcp-slack",
-    args=["--token", "$SLACK_TOKEN"],
-    env={"SLACK_TOKEN": "your-slack-token"},
-)
-mcp_manager.add_server(slack_config)
-
-# 连接所有服务器
-await mcp_manager.connect_all()
-# MCP 工具自动注册到 agent 的工具注册表
-
-# 使用
-result = await agent.run("查看最近的 GitHub issue 并在 Slack 通知团队")
+result = await agent.run("review this code")
 ```
 
-## 从配置文件自动加载
+## Phase 3: 高级特性 (Week 7-10)
 
-`MCPManager` 自动从以下路径搜索配置文件（按优先级顺序）：
+### 目标
 
-1. `.agent/mcp.json`
-2. `.agent/mcp.yaml` 
-3. `.mcp.json`
-4. `.mcp.yaml`
-5. `~/.harness/mcp.json`
-6. `~/.harness/mcp.yaml`
-7. `~/.claude/mcp.json` (Claude Code 兼容格式)
+实现自主运行、多代理协调等高级特性。
 
-### 配置文件格式
+### 任务清单
+
+#### Week 7-8: 触发器系统
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| Trigger 基类 | P0 | - |
+| CronTrigger | P0 | - |
+| WebhookTrigger | P0 | - |
+| HeartbeatTrigger | P1 | - |
+| FileWatchTrigger | P2 | - |
+| TriggerManager | P0 | - |
+| OutputHandler | P1 | - |
+
+#### Week 9: 多代理协调
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| EventBus | P1 | - |
+| AgentTeam | P2 | - |
+| MultiAgentOrchestrator | P2 | - |
+| 并行/顺序分发 | P2 | - |
+
+#### Week 10: MCP 支持
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| MCP 协议实现 | P1 | - |
+| MCP Connector | P1 | - |
+| MCP Tool 包装 | P1 | - |
+
+### Phase 3 示例
+
+```python
+# 定时任务
+agent.on_schedule("0 9 * * *", "生成每日报告")
+
+# Webhook
+agent.on_webhook("/github/pr", "Review PR changes")
+
+# 启动后台服务
+await agent.start()
+```
+
+## Phase 4: 生产就绪 (Week 11-12)
+
+### 目标
+
+完善文档、测试、性能优化，确保生产可用。
+
+### 任务清单
+
+#### Week 11: 完善与优化
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 完整类型注解 | P0 | - |
+| 文档完善 | P0 | - |
+| 性能优化 | P1 | - |
+| 错误处理完善 | P0 | - |
+| 日志系统 | P1 | - |
+| 指标收集 | P2 | - |
+
+#### Week 12: 测试与发布
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 单元测试覆盖 80%+ | P0 | - |
+| 集成测试 | P0 | - |
+| E2E 测试 | P1 | - |
+| CI/CD 配置 | P0 | - |
+| PyPI 发布准备 | P0 | - |
+| 示例项目 | P1 | - |
+
+### 发布清单
+
+- [ ] 所有单元测试通过
+- [ ] 集成测试通过
+- [ ] 文档完整
+- [ ] CHANGELOG 更新
+- [ ] 版本号确定
+- [ ] PyPI 发布
+- [ ] GitHub Release
+
+## 技术债务管理
+
+### 已知技术债务
+
+| 项目 | 描述 | 优先级 | 计划处理 |
+|------|------|--------|----------|
+| 流式输出优化 | 大文件流式处理性能 | P1 | Phase 4 |
+| Token 计数精度 | 不同模型的 token 计数 | P2 | Phase 4 |
+| 错误恢复 | 更健壮的错误恢复机制 | P1 | Phase 3 |
+| 缓存机制 | LLM 响应缓存 | P2 | Phase 3 |
+
+## 依赖管理
+
+### 核心依赖
+
+```toml
+[project]
+dependencies = [
+    "anthropic>=0.18.0",
+    "openai>=1.0.0",
+    "aiohttp>=3.9.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "jsonschema>=4.0.0",
+    "croniter>=2.0.0",
+    "watchdog>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+vector = [
+    "chromadb>=0.4.0",
+    "tiktoken>=0.5.0",
+]
+docker = [
+    "docker>=6.0.0",
+]
+```
+
+## 测试策略
+
+### 测试金字塔
+
+```
+        ┌─────────┐
+        │   E2E   │  ← 少量，关键流程
+        │  Tests  │
+        ├─────────┤
+        │Integration│ ← 中等，组件交互
+        │   Tests   │
+        ├───────────┤
+        │   Unit    │  ← 大量，函数级别
+        │   Tests   │
+        └───────────┘
+```
+
+### 测试覆盖率目标
+
+| 模块 | 目标覆盖率 |
+|------|-----------|
+| core/ | 90% |
+| llm/ | 85% |
+| tools/ | 85% |
+| memory/ | 80% |
+| skills/ | 80% |
+| triggers/ | 75% |
+| security/ | 90% |
+
+### CI/CD 流程
 
 ```yaml
-# .mcp.yaml (YAML 格式)
-mcpServers:
-  github:
-    command: mcp-github
-    env:
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-  slack:
-    command: mcp-slack
-    env:
-      SLACK_TOKEN: ${SLACK_TOKEN}
-  remote:
-    url: https://mcp.example.com/sse
-    transport: http
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run linting
+        run: |
+          ruff check src/
+          black --check src/
+          mypy src/
+
+      - name: Run tests
+        run: pytest --cov=src/harness tests/
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
 ```
 
-```json
-// .mcp.json (JSON 格式)
-{
-  "mcpServers": {
-    "github": {
-      "command": "mcp-github",
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
-    "slack": {
-      "command": "mcp-slack",
-      "env": {
-        "SLACK_TOKEN": "${SLACK_TOKEN}"
-      }
-    }
-  }
-}
-```
+## 发布计划
 
-### 使用方式
+### 版本规划
 
-```python
-from harness import AgentHarness, MCPManager
+| 版本 | 时间 | 内容 |
+|------|------|------|
+| 0.1.0 | Week 3 | MVP |
+| 0.2.0 | Week 6 | 增强功能 |
+| 0.3.0 | Week 10 | 高级特性 |
+| 1.0.0 | Week 12 | 生产就绪 |
 
-# 创建 Agent
-agent = AgentHarness()
+### 版本策略
 
-# 创建 MCP 管理器（自动加载配置文件）
-mcp_manager = MCPManager(tool_registry=agent._tool_registry)
+- **0.x.x**: 开发版本，API 可能变更
+- **1.x.x**: 稳定版本，遵循语义化版本
+- **主版本号**: 不兼容的 API 变更
+- **次版本号**: 向后兼容的功能新增
+- **修订号**: 向后兼容的问题修复
 
-# 连接所有服务器（从配置文件加载）
-await mcp_manager.connect_all()
-```
+## 风险与缓解
 
-## MCP 工具权限
+| 风险 | 影响 | 缓解措施 |
+|------|------|----------|
+| LLM API 变更 | 高 | 抽象层隔离，快速适配 |
+| 性能瓶颈 | 中 | 性能测试，优化关键路径 |
+| 安全漏洞 | 高 | 安全审计，沙箱隔离 |
+| 依赖冲突 | 低 | 版本锁定，可选依赖 |
 
-MCP 工具的权限通过 PermissionSet 控制：
+## 后续规划
 
-```python
-from harness.security.sandbox import PermissionSet, PermissionLevel
+### v1.1+ 考虑的功能
 
-# 限制 MCP 工具权限
-agent = AgentHarness(
-    permissions=PermissionSet(
-        max_permission=PermissionLevel.NETWORK,
-        denied_tools={"mcp_github_delete_repo"},  # 禁止删除仓库
-    ),
-)
-```
+- TypeScript SDK
+- Rust 核心（性能优化）
+- 更多 LLM 后端支持
+- Web UI Dashboard
+- 云端部署方案
+- 更多预置技能
+- 自学习增强
+- 多模态支持
 
-## 生命周期管理
+---
 
-MCP 服务器需要手动管理连接和断开：
+## MVP 范围定义
 
-```python
-from harness import AgentHarness, MCPManager, MCPServerConfig
+### ✅ MVP 必须有
 
-# 创建 Agent 和 MCP 管理器
-agent = AgentHarness()
-mcp_manager = MCPManager(tool_registry=agent._tool_registry)
+| 功能 | 说明 |
+|------|------|
+| Agent Loop | 核心循环 + 并行工具 + 重试 + 熔断 |
+| Tool System | 内置工具 + 权限控制 + 轻量沙箱 |
+| Memory (基础) | File/SQLite 存储 + 滑动窗口 |
+| Skills (基础) | 加载 + 激活 + 注入（无冲突解决） |
+| 成本控制 | 会话级 Token 限制 |
 
-# 运行时动态添加服务器
-config = MCPServerConfig(
-    name="github",
-    transport="stdio",
-    command="mcp-github",
-    env={"GITHUB_TOKEN": "your-token-here"},
-)
-mcp_manager.add_server(config)
+### ⚠️ MVP 简化版
 
-# 连接服务器
-await mcp_manager.connect_server("github")
+| 功能 | 简化方案 |
+|------|----------|
+| 上下文压缩 | 启发式摘要（不用 LLM） |
+| 技能激活 | 最多 1 个（无冲突处理） |
+| 触发器 | 只支持 Cron |
 
-# 使用 MCP 工具
-result = await agent.run("查看 GitHub issues")
+### ❌ MVP 不做
 
-# 断开服务器连接
-await mcp_manager.disconnect_server("github")
+| 功能 | 延后原因 |
+|------|----------|
+| 向量检索 | 复杂度高，非核心 |
+| 自动学习技能 | 实验性功能 |
+| 多代理编排 | 需要先验证单代理 |
+| Docker 沙箱 | 启动延迟高，依赖特权 |
 
-# 断开所有服务器连接
-await mcp_manager.disconnect_all()
-```
+### ✂️ 延后/移除的功能
 
-## 错误处理
+| 功能 | 原计划 | 调整 | 原因 |
+|------|--------|------|------|
+| 多代理编排 | Phase 3 | v2.0 | 掩盖底层 Bug，需先验证单代理 |
+| Skill 自学习 | Phase 2 | 独立插件 `harness-ml` | 不可控行为，实验性功能 |
+| Webhook Trigger | MVP | Phase 2 | 应由宿主应用处理，SDK 不绑定路由 |
+| FileWatch Trigger | Phase 2 | Phase 3 | 非核心，复杂度高 |
 
-| 错误类型 | 处理方式 |
-|----------|----------|
-| 服务器启动失败 | 记录错误，跳过该服务器的工具 |
-| 工具调用超时 | 返回 ToolResult(error="MCP timeout") |
-| 服务器崩溃 | 自动重连（最多 3 次） |
-| 工具不存在 | 返回 ToolResult(error="Tool not found") |
+### 🚀 MVP 必须强化的功能
 
-## 下一步
+| 功能 | 优先级 | 说明 |
+|------|--------|------|
+| 流式输出背压处理 | P0 | 定义 AsyncGenerator 缓冲行为 |
+| 中断与恢复 | P0 | 长任务优雅中断 + 状态持久化 |
+| Mock 测试工具链 | P0 | pytest 插件 |
+| OpenTelemetry 集成 | P1 | 替代自研 LoopTracer |
+| 增量 Token 计数 | P1 | 缓存历史 Token，避免重复计算 |
 
-- [03-tool-system.md](./03-tool-system.md) - 了解工具系统（MCP 工具包装器）
-- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
-- [08-security.md](./08-security.md) - 了解安全设计
+---
+
+## 性能基准
+
+### 目标指标
+
+| 指标 | MVP 目标 | 生产目标 |
+|------|----------|----------|
+| 单次请求延迟 | < 5s | < 2s |
+| 并发会话数 | 10 | 1000 |
+| 会话最大消息数 | 100 | 10000 |
+| 内存占用（空闲） | < 100MB | < 50MB |
+| 内存占用（运行） | < 500MB | < 200MB |
+
+### 测试场景
+
+1. **短会话测试**: 10 条消息，验证基础流程
+2. **长会话测试**: 1000 条消息，验证扩展性
+3. **并发测试**: 100 并发请求，验证资源隔离
+4. **成本测试**: 1000 次请求，验证成本追踪

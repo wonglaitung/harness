@@ -9,16 +9,20 @@
 - [03-tool-system.md](./03-tool-system.md) - Tool System 工具系统
 - [04-memory-system.md](./04-memory-system.md) - Memory System 记忆系统
 - [05-skills-system.md](./05-skills-system.md) - Skills System 技能系统
-- [06-triggers.md](./06-triggers.md) - Trigger & Orchestration 触发与编排
+- [06-trigger-system.md](./06-trigger-system.md) - Trigger System 触发器系统
 - [07-sdk-api.md](./07-sdk-api.md) - SDK 与 API 设计
 - [08-security.md](./08-security.md) - 安全设计
-- [09-implementation.md](./09-implementation.md) - 实施路线图
-- [10-comparison.md](./10-comparison.md) - 与 Hermes/OpenClaw 对比
-- [11-testing.md](./11-testing.md) - 测试策略
-- [12-deployment.md](./12-deployment.md) - 内嵌部署指南
-- [13-production-readiness.md](./13-production-readiness.md) - 生产就绪检查
-- [14-spring-cloud-integration.md](./14-spring-cloud-integration.md) - Spring Cloud 集成指南
-- [15-loop-engineering.md](./15-loop-engineering.md) - Loop Engineering 循环工程
+- [09-mcp-integration.md](./09-mcp-integration.md) - MCP 集成
+- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 循环工程
+- [11-worktrees.md](./11-worktrees.md) - Worktrees 并行隔离执行
+- [12-connectors.md](./12-connectors.md) - Connectors 外部系统集成
+- [13-orchestrator.md](./13-orchestrator.md) - Orchestrator 工作流编排
+- [14-deployment.md](./14-deployment.md) - 内嵌部署指南
+- [15-spring-cloud-integration.md](./15-spring-cloud-integration.md) - Spring Cloud 集成指南
+- [16-production-readiness.md](./16-production-readiness.md) - 生产就绪检查
+- [17-comparison.md](./17-comparison.md) - 与 Hermes/OpenClaw 对比
+- [18-testing.md](./18-testing.md) - 测试策略
+- [19-examples.md](./19-examples.md) - 使用示例
 
 ## 项目定位
 

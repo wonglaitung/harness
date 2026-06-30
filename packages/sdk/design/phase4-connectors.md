@@ -1406,37 +1406,37 @@ async def custom_webhook(request: Request):
 ## 实施步骤
 
 ### Step 1: 创建类型定义
-- [ ] 创建 `connectors/types.py`
-- [ ] 定义 `ConnectorType`, `ConnectorEvent`, `OutputChannel`
+- [x] 创建 `connectors/types.py`
+- [x] 定义 `ConnectorType`, `ConnectorEvent`, `OutputChannel`
 
 ### Step 2: 实现 Connector 基类
-- [ ] 创建 `connectors/base.py`
-- [ ] 实现 `Connector` ABC
+- [x] 创建 `connectors/base.py`
+- [x] 实现 `Connector` ABC
 
 ### Step 3: 实现 WebhookConnector
-- [ ] 创建 `connectors/webhook.py`
-- [ ] 支持签名验证
-- [ ] 支持 FastAPI 集成
+- [x] 创建 `connectors/webhook.py`
+- [x] 支持签名验证
+- [x] 支持 FastAPI 集成
 
 ### Step 4: 实现 SlackConnector
-- [ ] 创建 `connectors/slack.py`
-- [ ] 支持 Socket Mode
-- [ ] 支持消息发送
+- [x] 创建 `connectors/slack.py`
+- [x] 支持 Socket Mode
+- [x] 支持消息发送
 
 ### Step 5: 实现 GitHubConnector
-- [ ] 创建 `connectors/github.py`
-- [ ] 支持 GitHub App 认证
-- [ ] 支持 PR/Issue 评论
+- [x] 创建 `connectors/github.py`
+- [x] 支持 GitHub App 认证
+- [x] 支持 PR/Issue 评论
 
 ### Step 6: 实现 ConnectorManager
-- [ ] 创建 `connectors/manager.py`
-- [ ] 事件路由逻辑
-- [ ] 输出通道管理
+- [x] 创建 `connectors/manager.py`
+- [x] 事件路由逻辑
+- [x] 输出通道管理
 
 ### Step 7: 集成测试
-- [ ] 使用 Mock Server 测试 Webhook
-- [ ] 使用 Slack API 测试发送消息
-- [ ] 使用 GitHub API 测试评论创建
+- [x] 使用 Mock Server 测试 Webhook
+- [x] 使用 Slack API 测试发送消息
+- [x] 使用 GitHub API 测试评论创建
 
 ---
 
