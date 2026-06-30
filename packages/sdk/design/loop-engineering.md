@@ -29,7 +29,7 @@
 | **Phase 2** | Automations | ✅ 已实现 | 定时触发/调度 |
 | **Phase 3** | Worktrees | ✅ 已实现 | 多 Agent 并行隔离 |
 | **Phase 4** | Connectors | ✅ 已实现 | 外部系统集成 |
-| **Phase 5** | Loop Orchestrator | 📝 设计完成 | 统一编排 API |
+| **Phase 5** | Loop Orchestrator | ✅ 已实现 | 统一编排 API |
 
 ---
 
@@ -379,10 +379,11 @@ class GoalLoop:
 
 详见：`design/phase4-connectors.md`
 
-### Phase 5: Loop Orchestrator 📝 设计完成
-- `WorkflowEngine`: 多步骤工作流执行
-- `TeamOrchestrator`: 多 Agent 协作编排
+### Phase 5: Loop Orchestrator ✅ 已实现
 - `LoopOrchestrator`: 统一 API 入口
-- `MonitorService`: 可观测性
+- `WorkflowEngine`: 多步骤工作流执行（顺序/并行/依赖解析）
+- `TeamOrchestrator`: 多 Agent 协作编排（顺序/广播/层级模式）
+- `DependencyGraph`: 步骤依赖解析 + 死锁检测
+- `MonitorService`: 执行监控 + 指标收集
 
 详见：`design/phase5-orchestrator.md`
