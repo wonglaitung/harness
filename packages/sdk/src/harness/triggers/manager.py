@@ -265,6 +265,19 @@ class TriggerManager:
         """
         self._event_queue.put_nowait(event)
 
+    async def enqueue_event(self, event: TriggerEvent) -> None:
+        """
+        Async enqueue an event for processing.
+
+        Called by ConnectorManager for external events.
+        This async version is required for non-blocking operation
+        in async event loops (e.g., Slack Socket Mode).
+
+        Args:
+            event: Event to enqueue
+        """
+        await self._event_queue.put(event)
+
     async def _process_events(self) -> None:
         """
         Process events from the queue.

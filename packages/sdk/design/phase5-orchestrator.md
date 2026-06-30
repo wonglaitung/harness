@@ -125,28 +125,37 @@ class ExecutionMode(Enum):
 class WorkflowStep:
     """
     工作流步骤.
-    
+
     每个步骤是一个 Goal 执行单元。
+
+    模板变量支持：
+    - 在 goal 中使用 {{steps.analyze.exports.report_path}} 引用上游步骤导出的数据
+    - 在 condition 中使用 steps['analyze'].status == StepStatus.SUCCESS
     """
     name: str                           # 步骤名称
-    goal: str                           # 目标描述
-    
+    goal: str                           # 目标描述（支持模板变量）
+
     # 执行配置
     mode: ExecutionMode = ExecutionMode.SEQUENTIAL
     depends_on: list[str] = field(default_factory=list)  # 依赖的步骤
-    
+
     # Goal 配置
     workspace_dir: str = "."
     max_iterations: int = 50
     timeout_seconds: int = 3600
     custom_verifier: Callable | None = None
-    
+
     # 技能配置
     skills: list[str] = field(default_factory=list)
-    
+
     # 条件执行（当 mode=CONDITIONAL）
-    condition: str | None = None        # Python 表达式，如 "steps['analyze'].result.success"
-    
+    condition: str | None = None        # Python 表达式，如 "steps['analyze'].status == StepStatus.SUCCESS"
+
+    # 导出配置：定义此步骤需要导出的数据
+    # 执行后，GoalResult 中的关键信息会被提取到 exports 中
+    # 例如：{"report_path": "$.artifacts.report_file", "issue_count": "$.metrics.total_issues"}
+    exports: dict[str, str] = field(default_factory=dict)
+
     # 重试配置
     max_retries: int = 0
     retry_delay: float = 5.0
@@ -181,10 +190,22 @@ class WorkflowConfig:
 
 @dataclass
 class StepResult:
-    """步骤执行结果."""
+    """
+    步骤执行结果.
+
+    Attributes:
+        step_name: 步骤名称
+        status: 步骤状态
+        goal_result: Goal 执行结果
+        exports: 显式抽取当前步骤沉淀的核心资产（键值对），供下游 Step 轻松引用
+        error: 错误信息
+        started_at: 开始时间
+        completed_at: 完成时间
+    """
     step_name: str
     status: StepStatus
     goal_result: GoalResult | None = None
+    exports: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -277,17 +298,22 @@ class TeamResult:
 class WorkflowEngine:
     """
     工作流执行引擎.
-    
+
     负责解析和执行 WorkflowConfig。
+
+    关键特性：
+    - 模板渲染：支持在 goal 中引用前序步骤的输出
+    - 级联跳过：当步骤被跳过时，自动跳过依赖它的下游步骤
+    - 安全条件评估：使用 simpleeval 替代 eval，并设置超时
     """
-    
+
     def __init__(
         self,
         orchestrator: "LoopOrchestrator",
     ):
         self.orchestrator = orchestrator
         self._active_workflows: dict[str, asyncio.Task] = {}
-    
+
     async def run(
         self,
         config: WorkflowConfig,
@@ -295,11 +321,11 @@ class WorkflowEngine:
     ) -> WorkflowResult:
         """
         执行工作流.
-        
+
         Args:
             config: 工作流配置
             context: 执行上下文（可传递给步骤）
-        
+
         Returns:
             工作流执行结果
         """
@@ -309,44 +335,48 @@ class WorkflowEngine:
             steps={},
             started_at=datetime.now(),
         )
-        
+
         try:
             # 构建步骤依赖图
             graph = self._build_dependency_graph(config.steps)
-            
-            # 检测死锁
+
+            # 检测死锁（静态环检测）
             if graph.detect_deadlock():
                 raise RuntimeError("Deadlock detected: circular dependency in workflow")
-            
+
             # 执行步骤
             while graph.has_pending():
                 # 获取可执行的步骤（依赖已满足）
                 ready_steps = graph.get_ready_steps()
-                
+
                 if not ready_steps:
-                    # 没有可执行步骤但有未完成步骤 = 死锁
+                    # 检查是否有被跳过的步骤导致下游无法执行
+                    # 这时不抛出异常，而是标记为完成
+                    if graph.has_only_skipped_pending():
+                        break
+                    # 真正的死锁：没有可执行步骤但有未完成步骤
                     raise RuntimeError("Deadlock detected: unreachable steps in workflow")
-                
+
                 # 根据执行模式执行
                 if config.default_mode == ExecutionMode.PARALLEL:
                     await self._execute_parallel(ready_steps, config, result, context, graph)
                 else:
                     await self._execute_sequential(ready_steps, config, result, context, graph)
-            
-            # 检查所有步骤是否成功
+
+            # 检查所有步骤是否成功（SKIPPED 视为成功）
             all_success = all(
-                s.status == StepStatus.SUCCESS 
+                s.status in (StepStatus.SUCCESS, StepStatus.SKIPPED)
                 for s in result.steps.values()
             )
             result.status = WorkflowStatus.COMPLETED if all_success else WorkflowStatus.FAILED
-        
+
         except Exception as e:
             result.status = WorkflowStatus.FAILED
             result.error = str(e)
-        
+
         result.completed_at = datetime.now()
         return result
-    
+
     async def _execute_sequential(
         self,
         steps: list[WorkflowStep],
@@ -359,12 +389,17 @@ class WorkflowEngine:
         for step in steps:
             step_result = await self._execute_step(step, config, result, context)
             result.steps[step.name] = step_result
-            graph.mark_completed(step.name)
-            
+
+            # 级联跳过：如果步骤被跳过，标记依赖它的下游步骤
+            if step_result.status == StepStatus.SKIPPED:
+                graph.mark_skipped(step.name)
+            else:
+                graph.mark_completed(step.name)
+
             if step_result.status == StepStatus.FAILED:
                 # 步骤失败，停止执行
                 break
-    
+
     async def _execute_parallel(
         self,
         steps: list[WorkflowStep],
@@ -375,16 +410,22 @@ class WorkflowEngine:
     ) -> None:
         """并行执行步骤."""
         semaphore = asyncio.Semaphore(config.max_parallel_steps)
-        
+
         async def run_step(step: WorkflowStep) -> tuple[str, StepResult]:
             async with semaphore:
                 step_result = await self._execute_step(step, config, result, context)
-                graph.mark_completed(step.name)
+
+                # 级联跳过
+                if step_result.status == StepStatus.SKIPPED:
+                    graph.mark_skipped(step.name)
+                else:
+                    graph.mark_completed(step.name)
+
                 return step.name, step_result
-        
+
         tasks = [run_step(step) for step in steps]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for step_name, step_result in results:
             if isinstance(step_result, Exception):
                 result.steps[step_name] = StepResult(
@@ -394,7 +435,7 @@ class WorkflowEngine:
                 )
             else:
                 result.steps[step_name] = step_result
-    
+
     async def _execute_step(
         self,
         step: WorkflowStep,
@@ -402,77 +443,217 @@ class WorkflowEngine:
         result: WorkflowResult,
         context: dict[str, Any] | None,
     ) -> StepResult:
-        """执行单个步骤."""
+        """
+        执行单个步骤.
+
+        关键改进：
+        1. 模板渲染：将前序步骤的输出注入到当前 goal
+        2. 导出数据提取：执行后提取关键数据到 exports
+        """
         step_result = StepResult(
             step_name=step.name,
             status=StepStatus.RUNNING,
             started_at=datetime.now(),
         )
-        
+
         try:
-            # 检查条件
-            if step.condition:
-                if not self._evaluate_condition(step.condition, result, context):
+            # 检查是否有被跳过的依赖
+            graph = self._build_dependency_graph(config.steps)
+            for dep in step.depends_on:
+                dep_result = result.steps.get(dep)
+                if dep_result and dep_result.status == StepStatus.SKIPPED:
+                    # 依赖被跳过，当前步骤也跳过
                     step_result.status = StepStatus.SKIPPED
                     return step_result
-            
+
+            # 检查条件
+            if step.condition:
+                if not await self._evaluate_condition_safe(step.condition, result, context):
+                    step_result.status = StepStatus.SKIPPED
+                    return step_result
+
+            # 渲染 Goal 描述（注入前序步骤的输出）
+            rendered_goal = self._render_goal(step.goal, result, context)
+
             # 执行 Goal
             goal_config = GoalConfig(
-                description=step.goal,
+                description=rendered_goal,
                 workspace_dir=step.workspace_dir or config.workspace_dir,
                 max_iterations=step.max_iterations,
                 timeout_seconds=step.timeout_seconds,
                 custom_verifier=step.custom_verifier,
             )
-            
+
             # 激活技能
             for skill_name in step.skills:
                 self.orchestrator.agent.activate_skill(skill_name)
-            
+
             # 执行
             goal_result = await self.orchestrator.agent.run_goal(goal_config)
-            
+
             step_result.goal_result = goal_result
             step_result.status = StepStatus.SUCCESS if goal_result.achieved else StepStatus.FAILED
-        
+
+            # 提取导出数据
+            if step.exports and goal_result:
+                step_result.exports = self._extract_exports(
+                    goal_result, step.exports
+                )
+
         except Exception as e:
             step_result.status = StepStatus.FAILED
             step_result.error = str(e)
-        
+
         step_result.completed_at = datetime.now()
         return step_result
-    
+
+    def _render_goal(
+        self,
+        goal_template: str,
+        result: WorkflowResult,
+        context: dict[str, Any] | None,
+    ) -> str:
+        """
+        渲染 Goal 模板.
+
+        支持的模板语法：
+        - {{steps.analyze.exports.report_path}} - 引用步骤导出数据
+        - {{steps.analyze.goal_result.final_response}} - 引用步骤结果
+        - {{context.user_id}} - 引用上下文变量
+
+        Example:
+            goal: "根据 {{steps.analyze.exports.report_path}} 进行审查"
+        """
+        # 构建模板上下文
+        template_context = {
+            "steps": {
+                name: {
+                    "status": sr.status.value,
+                    "exports": sr.exports,
+                    "goal_result": sr.goal_result.__dict__ if sr.goal_result else None,
+                }
+                for name, sr in result.steps.items()
+            },
+            "context": context or {},
+        }
+
+        # 使用 string.Template 或 Jinja2 渲染
+        # 这里使用简单的字符串替换实现
+        import re
+        rendered = goal_template
+
+        # 匹配 {{...}} 模板变量
+        pattern = r'\{\{([^}]+)\}\}'
+        matches = re.findall(pattern, goal_template)
+
+        for match in matches:
+            path = match.strip()
+            value = self._resolve_path(path, template_context)
+            if value is not None:
+                rendered = rendered.replace(f"{{{{{match}}}}}", str(value))
+
+        return rendered
+
+    def _resolve_path(self, path: str, context: dict) -> Any:
+        """解析点分隔的路径，如 'steps.analyze.exports.report_path'."""
+        parts = path.split(".")
+        current = context
+
+        for part in parts:
+            if isinstance(current, dict):
+                current = current.get(part)
+            else:
+                return None
+
+            if current is None:
+                return None
+
+        return current
+
+    def _extract_exports(
+        self,
+        goal_result: GoalResult,
+        export_config: dict[str, str],
+    ) -> dict[str, Any]:
+        """
+        从 GoalResult 提取导出数据.
+
+        export_config 格式：
+        {
+            "report_path": "$.artifacts.report_file",
+            "issue_count": "$.metrics.total_issues"
+        }
+        """
+        exports = {}
+
+        for key, jsonpath in export_config.items():
+            # 简化实现：支持 $.field.subfield 格式
+            if jsonpath.startswith("$."):
+                path = jsonpath[2:]
+                value = self._resolve_path(path, goal_result.__dict__)
+                if value is not None:
+                    exports[key] = value
+
+        return exports
+
+    async def _evaluate_condition_safe(
+        self,
+        condition: str,
+        result: WorkflowResult,
+        context: dict[str, Any] | None,
+    ) -> bool:
+        """
+        安全评估条件表达式.
+
+        使用 simpleeval 替代 eval，并设置超时保护。
+        """
+        try:
+            # 使用 asyncio.wait_for 添加超时
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._evaluate_condition, condition, result, context),
+                timeout=5.0  # 5秒超时
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Condition evaluation timed out: {condition}")
+            return False
+        except Exception as e:
+            logger.warning(f"Condition evaluation failed: {e}")
+            return False
+
     def _evaluate_condition(
         self,
         condition: str,
         result: WorkflowResult,
         context: dict[str, Any] | None,
     ) -> bool:
-        """评估条件表达式."""
+        """评估条件表达式（同步版本，使用 simpleeval）。"""
+        from simpleeval import EvalWithCompoundTypes
+
         # 构建评估上下文
         eval_context = {
             "steps": result.steps,
             "context": context or {},
             "StepStatus": StepStatus,
         }
-        
+
         try:
-            return bool(eval(condition, {"__builtins__": {}}, eval_context))
+            evaluator = EvalWithCompoundTypes(names=eval_context)
+            return bool(evaluator.eval(condition))
         except Exception:
             return False
-    
+
     def _build_dependency_graph(
         self,
         steps: list[WorkflowStep],
     ) -> "DependencyGraph":
         """构建步骤依赖图."""
         graph = DependencyGraph()
-        
+
         for step in steps:
             graph.add_step(step)
             for dep in step.depends_on:
                 graph.add_dependency(step.name, dep)
-        
+
         return graph
 ```
 
@@ -486,10 +667,15 @@ class WorkflowEngine:
 class TeamOrchestrator:
     """
     多 Agent 团队编排器.
-    
+
     管理多个 Agent 的协作执行。
+
+    关键特性：
+    - Worktree 隔离：每个团队任务在独立的 worktree 中执行
+    - 共享记忆：可选的跨 Agent 记忆共享
+    - 三种协作模式：broadcast, sequential, hierarchical
     """
-    
+
     def __init__(
         self,
         orchestrator: "LoopOrchestrator",
@@ -497,21 +683,21 @@ class TeamOrchestrator:
         self.orchestrator = orchestrator
         self._teams: dict[str, TeamConfig] = {}
         self._agents: dict[str, AgentHarness] = {}
-    
+
     def create_team(
         self,
         config: TeamConfig,
     ) -> str:
         """创建 Agent 团队."""
         self._teams[config.name] = config
-        
+
         # 为每个角色创建 Agent
         for role in config.roles:
             agent = self._create_agent_for_role(role)
             self._agents[role.name] = agent
-        
+
         return config.name
-    
+
     def _create_agent_for_role(
         self,
         role: AgentRole,
@@ -522,19 +708,19 @@ class TeamOrchestrator:
             system_prompt=role.system_prompt or f"You are a {role.name}. {role.description}",
             max_iterations=role.max_iterations,
         )
-        
+
         # 创建 Agent
         agent = AgentHarness(
             llm_client=self.orchestrator.agent._llm_client,
             config=config,
         )
-        
+
         # 激活技能
         for skill_name in role.skills:
             agent.activate_skill(skill_name)
-        
+
         return agent
-    
+
     async def run(
         self,
         team_name: str,
@@ -543,32 +729,40 @@ class TeamOrchestrator:
     ) -> TeamResult:
         """
         让团队执行任务.
-        
+
+        关键改进：自动创建隔离的 Worktree，防止 Agent 间文件冲突。
+
         Args:
             team_name: 团队名称
             task: 任务描述
             coordination_mode: 协作模式（覆盖团队配置）
-        
+
         Returns:
             团队执行结果
         """
         config = self._teams.get(team_name)
         if not config:
             raise ValueError(f"Team not found: {team_name}")
-        
+
         mode = coordination_mode or config.coordination_mode
         start_time = datetime.now()
-        
+
+        # 创建隔离的 Worktree
+        worktree_path = None
+        if self.orchestrator.worktree_orchestrator:
+            worktree_path = await self._create_isolated_worktree(team_name, task)
+            logger.info(f"Created isolated worktree for team {team_name}: {worktree_path}")
+
         try:
             if mode == "broadcast":
-                results = await self._run_broadcast(config, task)
+                results = await self._run_broadcast(config, task, worktree_path)
             elif mode == "sequential":
-                results = await self._run_sequential(config, task)
+                results = await self._run_sequential(config, task, worktree_path)
             elif mode == "hierarchical":
-                results = await self._run_hierarchical(config, task)
+                results = await self._run_hierarchical(config, task, worktree_path)
             else:
                 raise ValueError(f"Unknown coordination mode: {mode}")
-            
+
             # 计算统计
             total_iterations = sum(
                 r.total_iterations for r in results.values()
@@ -576,7 +770,7 @@ class TeamOrchestrator:
             total_tokens = sum(
                 r.total_tokens for r in results.values()
             )
-            
+
             return TeamResult(
                 team_name=team_name,
                 success=all(r.achieved for r in results.values()),
@@ -585,7 +779,7 @@ class TeamOrchestrator:
                 total_tokens=total_tokens,
                 duration_seconds=(datetime.now() - start_time).total_seconds(),
             )
-        
+
         except Exception as e:
             return TeamResult(
                 team_name=team_name,
@@ -596,70 +790,128 @@ class TeamOrchestrator:
                 duration_seconds=(datetime.now() - start_time).total_seconds(),
                 error=str(e),
             )
-    
+
+        finally:
+            # 清理 Worktree
+            if worktree_path and self.orchestrator.worktree_orchestrator:
+                await self._cleanup_worktree(worktree_path)
+
+    async def _create_isolated_worktree(
+        self,
+        team_name: str,
+        task: str,
+    ) -> str:
+        """
+        为团队任务创建隔离的 Worktree.
+
+        这确保：
+        - 不同 Agent 的修改不会互相干扰
+        - 失败的执行不会污染主分支
+        - 可以并行执行多个团队任务
+
+        Returns:
+            Worktree 路径
+        """
+        import hashlib
+
+        # 生成唯一的 worktree 名称
+        task_hash = hashlib.md5(f"{team_name}_{task}_{datetime.now().isoformat()}".encode()).hexdigest()[:8]
+        branch_name = f"team/{team_name}/{task_hash}"
+
+        worktree = await self.orchestrator.worktree_orchestrator.create_worktree(
+            name=branch_name,
+            branch=branch_name,
+        )
+
+        return worktree.path
+
+    async def _cleanup_worktree(self, worktree_path: str) -> None:
+        """清理 Worktree."""
+        try:
+            await self.orchestrator.worktree_orchestrator.remove_worktree(worktree_path)
+            logger.info(f"Cleaned up worktree: {worktree_path}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup worktree {worktree_path}: {e}")
+
     async def _run_broadcast(
         self,
         config: TeamConfig,
         task: str,
+        worktree_path: str | None = None,
     ) -> dict[str, GoalResult]:
         """
         广播模式：所有 Agent 同时执行相同任务.
-        
+
         适用场景：多角度分析、投票决策。
+
+        并发安全：广播模式下，每个 Agent 获得专属子目录，
+        防止多个 Agent 同时写入同一文件导致冲突。
         """
         tasks = []
         for role in config.roles:
             agent = self._agents[role.name]
-            tasks.append(self._run_agent(agent, task))
-        
+            # 为每个角色创建专属子目录，防止并发写入冲突
+            role_worktree = self._get_role_worktree(worktree_path, role.name, "broadcast")
+            tasks.append(self._run_agent(agent, task, role_worktree))
+
         results = await asyncio.gather(*tasks)
-        
+
         return {
             role.name: result
             for role, result in zip(config.roles, results)
         }
-    
+
     async def _run_sequential(
         self,
         config: TeamConfig,
         task: str,
+        worktree_path: str | None = None,
     ) -> dict[str, GoalResult]:
         """
         顺序模式：Agent 按顺序执行，前者输出作为后者输入.
-        
+
         适用场景：流水线处理、多阶段审核。
+
+        每个 Agent 修改的内容会传递给下一个 Agent。
+        Worktree 提供了天然的隔离和传递机制。
         """
         results = {}
         current_task = task
-        
-        for role in config.roles:
+
+        for i, role in enumerate(config.roles):
             agent = self._agents[role.name]
-            result = await self._run_agent(agent, current_task)
+            # 顺序模式下共享同一个 worktree，前序修改对后续可见
+            result = await self._run_agent(agent, current_task, worktree_path)
             results[role.name] = result
-            
+
             # 将结果传递给下一个 Agent
             if result.achieved:
                 current_task = f"{task}\n\nPrevious agent ({role.name}) output:\n{result.final_response}"
-        
+
         return results
-    
+
     async def _run_hierarchical(
         self,
         config: TeamConfig,
         task: str,
+        worktree_path: str | None = None,
     ) -> dict[str, GoalResult]:
         """
         层级模式：Leader Agent 分配任务给其他 Agent.
-        
+
         适用场景：复杂任务分解、专家调度。
+
+        Worktree 隔离确保：
+        - Leader 可以审查 Worker 的修改
+        - 最终结果可以合并回主分支
         """
         # 假设第一个角色是 Leader
         if not config.roles:
             return {}
-        
+
         leader_role = config.roles[0]
         leader_agent = self._agents[leader_role.name]
-        
+
         # Leader 分析任务并分配
         allocation_prompt = f"""
 You are the team leader. Analyze the following task and assign subtasks to team members.
@@ -672,30 +924,75 @@ Task: {task}
 Provide your allocation in the following format:
 - [agent_name]: [subtask]
 """
-        
-        allocation_result = await leader_agent.run(allocation_prompt)
+
+        allocation_result = await self._run_agent(leader_agent, allocation_prompt, worktree_path)
         results = {leader_role.name: allocation_result}
-        
+
         # 解析分配并执行（简化版，实际应使用结构化输出）
         # ... 解析逻辑 ...
-        
-        # 执行分配的任务
+
+        # 执行分配的任务（Worker 角色共享 worktree）
         for role in config.roles[1:]:
             agent = self._agents[role.name]
             subtask = f"Complete your assigned part of: {task}"
-            result = await self._run_agent(agent, subtask)
+            result = await self._run_agent(agent, subtask, worktree_path)
             results[role.name] = result
-        
+
         return results
-    
+
+    def _get_role_worktree(
+        self,
+        worktree_path: str | None,
+        role_name: str,
+        mode: str,
+    ) -> str | None:
+        """
+        获取角色的专属工作目录.
+
+        Broadcast 模式：每个角色获得独立子目录，防止并发写入冲突。
+        Sequential/Hierarchical 模式：共享同一个目录，支持传递修改。
+
+        Args:
+            worktree_path: 团队隔离的 worktree 路径
+            role_name: 角色名称
+            mode: 协作模式
+
+        Returns:
+            角色专属的工作目录路径
+        """
+        if not worktree_path:
+            return None
+
+        if mode == "broadcast":
+            # 广播模式：创建角色专属子目录
+            import os
+            role_dir = os.path.join(worktree_path, f"agent_{role_name}")
+            os.makedirs(role_dir, exist_ok=True)
+            return role_dir
+        else:
+            # 顺序/层级模式：共享目录
+            return worktree_path
+
     async def _run_agent(
         self,
         agent: AgentHarness,
         task: str,
+        worktree_path: str | None = None,
     ) -> GoalResult:
-        """运行单个 Agent."""
-        return await agent.run_goal(task)
-    
+        """
+        运行单个 Agent.
+
+        Args:
+            agent: Agent 实例
+            task: 任务描述
+            worktree_path: 隔离的 worktree 路径（可选）
+        """
+        config = GoalConfig(
+            description=task,
+            workspace_dir=worktree_path or agent.config.workspace_dir,
+        )
+        return await agent.run_goal(config)
+
     def _format_roles(self, roles: list[AgentRole]) -> str:
         """格式化角色列表."""
         return "\n".join(
@@ -967,80 +1264,127 @@ class LoopOrchestrator:
 class DependencyGraph:
     """
     步骤依赖图.
-    
+
     用于解析 WorkflowStep 之间的依赖关系，
-    支持拓扑排序和死锁检测。
+    支持拓扑排序、死锁检测和级联跳过。
+
+    状态管理：
+    - completed: 成功完成的步骤
+    - skipped: 被跳过的步骤（条件不满足或依赖被跳过）
     """
-    
+
     def __init__(self):
         self._steps: dict[str, WorkflowStep] = {}
         self._dependencies: dict[str, set[str]] = {}
         self._completed: set[str] = set()
-    
+        self._skipped: set[str] = set()
+
     def add_step(self, step: WorkflowStep) -> None:
         """添加步骤."""
         self._steps[step.name] = step
         if step.name not in self._dependencies:
             self._dependencies[step.name] = set()
-    
+
     def add_dependency(self, step_name: str, depends_on: str) -> None:
         """添加依赖关系."""
         if step_name not in self._dependencies:
             self._dependencies[step_name] = set()
         self._dependencies[step_name].add(depends_on)
-    
+
     def has_pending(self) -> bool:
         """是否还有待执行的步骤."""
-        return len(self._completed) < len(self._steps)
-    
+        resolved = len(self._completed) + len(self._skipped)
+        return resolved < len(self._steps)
+
+    def has_only_skipped_pending(self) -> bool:
+        """
+        检查剩余未完成的步骤是否都依赖被跳过的步骤.
+
+        这种情况下不算死锁，应该优雅结束。
+        """
+        for name, step in self._steps.items():
+            if name in self._completed or name in self._skipped:
+                continue
+
+            # 检查是否所有依赖都被跳过
+            deps = self._dependencies.get(name, set())
+            if not deps or not deps.issubset(self._skipped):
+                return False
+
+        return True
+
     def get_ready_steps(self) -> list[WorkflowStep]:
         """
         获取可执行的步骤.
-        
-        可执行的条件：依赖的步骤已全部完成。
+
+        可执行的条件：依赖的步骤已全部完成（不包括跳过的）。
+
+        注意：依赖被跳过的步骤本身也应该被跳过，
+        由 WorkflowEngine 在执行前检查。
         """
         ready = []
         for name, step in self._steps.items():
-            if name in self._completed:
+            if name in self._completed or name in self._skipped:
                 continue
             deps = self._dependencies.get(name, set())
+
+            # 只检查已完成的依赖（跳过的不算）
+            completed_deps = deps.intersection(self._completed)
+            skipped_deps = deps.intersection(self._skipped)
+
+            # 如果有依赖被跳过，此步骤也应该跳过
+            if skipped_deps:
+                continue
+
+            # 所有依赖都已完成
             if deps.issubset(self._completed):
                 ready.append(step)
+
         return ready
-    
+
     def mark_completed(self, step_name: str) -> None:
         """标记步骤已完成."""
         self._completed.add(step_name)
-    
+
+    def mark_skipped(self, step_name: str) -> None:
+        """标记步骤被跳过，并级联跳过依赖它的下游步骤."""
+        self._skipped.add(step_name)
+
+        # 级联跳过：找到所有依赖此步骤的下游步骤
+        for name, deps in self._dependencies.items():
+            if step_name in deps and name not in self._completed:
+                # 这个步骤也应该被跳过
+                self._skipped.add(name)
+
     def detect_deadlock(self) -> bool:
         """
         检测是否存在死锁.
-        
+
         死锁条件：存在循环依赖。
         """
         # 使用拓扑排序检测环
         visited = set()
         rec_stack = set()
-        
+
         def has_cycle(node: str) -> bool:
             visited.add(node)
             rec_stack.add(node)
-            
+
             for dep in self._dependencies.get(node, set()):
                 if dep not in visited:
                     if has_cycle(dep):
                         return True
                 elif dep in rec_stack:
                     return True
-            
+
             rec_stack.remove(node)
             return False
-        
+
         for step_name in self._steps:
             if step_name not in visited:
                 if has_cycle(step_name):
                     return True
-        
+
         return False
 ```
 
@@ -1418,3 +1762,128 @@ await review()
 - 工作流编辑器
 - 执行可视化
 - 监控仪表板
+
+---
+
+## 设计变更日志
+
+### 2026-06-30: 深水区架构优化（基于设计评审）
+
+**问题 1: 状态共享与动态上下文的"致命盲区"**
+
+原问题：`WorkflowEngine._execute_step` 没有将前序步骤的产出注入到当前步骤的 goal 中。
+
+修复方案：
+1. 在 `WorkflowStep` 添加 `exports` 配置字段，定义需要导出的数据
+2. 在 `StepResult` 添加 `exports` 字段，存储步骤产出的核心资产
+3. 新增 `_render_goal()` 方法，支持模板语法引用前序步骤输出
+4. 新增 `_extract_exports()` 方法，从 GoalResult 提取导出数据
+
+```yaml
+# 示例：步骤间数据传递
+steps:
+  - name: analyze
+    goal: 分析代码变更
+    exports:
+      report_path: "$.artifacts.report_file"
+
+  - name: review
+    goal: 根据 {{steps.analyze.exports.report_path}} 进行审查
+    depends_on: [analyze]
+```
+
+---
+
+**问题 2: TeamOrchestrator 缺少隔离上下文与资源泄露风险**
+
+原问题：多个 Agent 共享同一个工作目录，可能互相污染。
+
+修复方案：
+1. 在 `run()` 方法开始时，自动创建隔离的 Worktree
+2. 将 `worktree_path` 传递给所有 Agent 执行
+3. 在 `finally` 块中清理 Worktree
+
+```python
+async def run(self, team_name: str, task: str, ...) -> TeamResult:
+    # 创建隔离环境
+    worktree_path = await self._create_isolated_worktree(team_name, task)
+
+    try:
+        # 执行团队任务
+        results = await self._run_broadcast(config, task, worktree_path)
+        ...
+    finally:
+        # 清理隔离环境
+        await self._cleanup_worktree(worktree_path)
+```
+
+---
+
+**问题 3: 条件评估 `eval` 的安全风险**
+
+原问题：使用内置 `eval()` 可能被恶意代码利用或死循环阻塞。
+
+修复方案：
+1. 使用 `simpleeval` 库替代 `eval()`，限制可执行的操作
+2. 使用 `asyncio.wait_for` + `asyncio.to_thread` 添加超时保护
+
+```python
+async def _evaluate_condition_safe(self, condition: str, ...) -> bool:
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(self._evaluate_condition, condition, ...),
+            timeout=5.0  # 5秒超时
+        )
+    except asyncio.TimeoutError:
+        return False
+```
+
+---
+
+**问题 4: 拓扑图死锁检测的执行时机错位**
+
+原问题：静态图检测不到动态运行时的"饿死"情况（核心节点被 SKIPPED 后，下游节点永远 pending）。
+
+修复方案：
+1. 在 `DependencyGraph` 添加 `_skipped` 集合，跟踪被跳过的步骤
+2. 新增 `mark_skipped()` 方法，支持级联跳过
+3. 新增 `has_only_skipped_pending()` 方法，检测是否所有 pending 步骤都依赖被跳过的步骤
+4. 修改 `get_ready_steps()`，排除依赖被跳过的步骤
+
+```python
+def mark_skipped(self, step_name: str) -> None:
+    """标记步骤被跳过，并级联跳过依赖它的下游步骤."""
+    self._skipped.add(step_name)
+
+    # 级联跳过
+    for name, deps in self._dependencies.items():
+        if step_name in deps and name not in self._completed:
+            self._skipped.add(name)
+```
+
+---
+
+**类型定义增强**
+
+新增 `StepResult.exports` 字段：
+
+```python
+@dataclass
+class StepResult:
+    step_name: str
+    status: StepStatus
+    goal_result: GoalResult | None = None
+    exports: dict[str, Any] = field(default_factory=dict)  # 新增
+    error: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+```
+
+新增 `WorkflowStep.exports` 配置：
+
+```python
+@dataclass
+class WorkflowStep:
+    ...
+    exports: dict[str, str] = field(default_factory=dict)  # 新增
+```

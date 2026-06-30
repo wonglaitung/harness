@@ -61,12 +61,16 @@ class TriggerEvent:
         trigger_id: Unique identifier of the trigger
         timestamp: When the event occurred
         payload: Optional data associated with the event
+        routing_metadata: Metadata for routing responses back to source
+            Example: {"slack_thread_ts": "17123456.0001", "github_pr_number": 42}
+            Used by ConnectorManager to route output to correct destination
     """
 
     trigger_type: TriggerType
     trigger_id: str
     timestamp: datetime = field(default_factory=datetime.now)
     payload: dict[str, Any] = field(default_factory=dict)
+    routing_metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_scheduled(self) -> bool:

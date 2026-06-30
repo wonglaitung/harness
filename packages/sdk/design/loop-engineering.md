@@ -28,7 +28,7 @@
 | **Phase 1** | Goal Verifier | ✅ 已实现 | 目标驱动执行 |
 | **Phase 2** | Automations | ✅ 已实现 | 定时触发/调度 |
 | **Phase 3** | Worktrees | ✅ 已实现 | 多 Agent 并行隔离 |
-| **Phase 4** | Connectors | 📝 设计完成 | 外部系统集成 |
+| **Phase 4** | Connectors | ✅ 已实现 | 外部系统集成 |
 | **Phase 5** | Loop Orchestrator | 📝 设计完成 | 统一编排 API |
 
 ---
