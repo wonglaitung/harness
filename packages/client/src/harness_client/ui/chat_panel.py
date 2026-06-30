@@ -129,15 +129,16 @@ def create_scroll_down_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    pen = QPen(color, 2.5)
+    # Use thicker stroke for visibility
+    pen = QPen(color, 3.0)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)
 
-    margin = 6
+    margin = 5
     # Chevron: two lines forming a V pointing down
-    painter.drawLine(margin, margin + 2, size // 2, size - margin - 2)
-    painter.drawLine(size // 2, size - margin - 2, size - margin, margin + 2)
+    painter.drawLine(margin, margin + 1, size // 2, size - margin - 1)
+    painter.drawLine(size // 2, size - margin - 1, size - margin, margin + 1)
 
     painter.end()
     return QIcon(pixmap)
@@ -1081,8 +1082,8 @@ class ChatPanel(QWidget):
         # --- Scroll-to-bottom floating button ---
         # Shows when user scrolls up, positioned at bottom-center of scroll area
         self._scroll_down_btn = QPushButton()
-        self._scroll_down_btn.setIcon(create_scroll_down_icon(16, QColor(theme.TEXT)))
-        self._scroll_down_btn.setIconSize(QSize(16, 16))
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(18, QColor(theme.TEXT)))
+        self._scroll_down_btn.setIconSize(QSize(18, 18))
         self._scroll_down_btn.setFixedSize(32, 32)
         self._scroll_down_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._scroll_down_btn.setToolTip("滚动到最新消息")
@@ -1628,7 +1629,7 @@ class ChatPanel(QWidget):
         """)
 
         # Update scroll-down button
-        self._scroll_down_btn.setIcon(create_scroll_down_icon(16, QColor(theme.TEXT)))
+        self._scroll_down_btn.setIcon(create_scroll_down_icon(18, QColor(theme.TEXT)))
         composer_color = QColor(theme.COMPOSER)
         self._scroll_down_btn.setStyleSheet(f"""
             QPushButton {{
