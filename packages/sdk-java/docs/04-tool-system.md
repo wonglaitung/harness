@@ -1,1226 +1,404 @@
-# 04 - 工具系统 (Java 实现)
+# 03 - 工具系统详解
 
 ## 概述
 
-工具系统是 Harness SDK 的核心组件，允许 Agent 与外部环境交互。本文档详细说明 Java 版本的工具系统设计。
+工具系统让 LLM 能够"动手操作"——读取文件、执行命令、搜索代码、访问网络。工具系统是 Agent 能力的核心扩展机制。
 
-## 工具接口
+## 架构
 
-### 核心接口
-
-```java
-package com.harness.tools;
-
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-/**
- * 工具接口 - 所有工具必须实现此接口。
- */
-public interface Tool {
-
-    /**
-     * 工具名称（唯一标识）。
-     */
-    String name();
-
-    /**
-     * 工具描述（用于 LLM 理解工具用途）。
-     */
-    String description();
-
-    /**
-     * 输入参数 Schema (JSON Schema 格式)。
-     */
-    Map<String, Object> inputSchema();
-
-    /**
-     * 执行工具。
-     *
-     * @param args 输入参数
-     * @param context 执行上下文
-     * @return 执行结果
-     */
-    CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context);
-
-    /**
-     * 验证参数（可选实现）。
-     *
-     * @param args 输入参数
-     * @return 验证结果
-     */
-    default ValidationResult validate(Map<String, Object> args) {
-        return ValidationResult.valid();
-    }
-
-    /**
-     * 是否为危险工具。
-     */
-    default boolean isDangerous() {
-        return false;
-    }
-
-    /**
-     * 工具分类。
-     */
-    default ToolCategory category() {
-        return ToolCategory.GENERAL;
-    }
-}
+```
+┌─────────────────────────────────────────────────┐
+│                 Tool System                      │
+│                                                  │
+│  ┌─────────────┐  ┌──────────────┐              │
+│  │  Tool Base  │  │Tool Registry │              │
+│  │  (抽象类)    │  │  (注册管理)   │              │
+│  └──────┬──────┘  └──────┬───────┘              │
+│         │                │                       │
+│         ↓                ↓                       │
+│  ┌─────────────────────────────────────────┐    │
+│  │           Tool Executor                  │    │
+│  │  ┌──────────┐  ┌───────────────────┐    │    │
+│  │  │ Sequential│  │ Batch (Parallel)  │    │    │
+│  │  │ Execute  │  │ Execute           │    │    │
+│  │  └──────────┘  └───────────────────┘    │    │
+│  └─────────────────────────────────────────┘    │
+│                                                  │
+│  ┌─────────────────────────────────────────┐    │
+│  │          Built-in Tools (9)              │    │
+│  │  Read │ Write │ Edit │ Glob │ Grep      │    │
+│  │  Bash │ WebSearch │ WebFetch            │    │
+│  │  WebToMarkdown                           │    │
+│  └─────────────────────────────────────────┘    │
+│                                                  │
+│  ┌─────────────────────────────────────────┐    │
+│  │        Custom + MCP Tools                │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
 ```
 
-### 执行上下文
+## Tool 基类
 
-```java
-package com.harness.tools;
+```python
+from harness.tools.base import Tool, ToolResult, ToolContext
 
-/**
- * 工具执行上下文。
- */
-public record ToolContext(
-    String sessionId,           // 会话 ID
-    String workingDirectory,    // 工作目录
-    int iteration,              // 当前迭代次数
-    TokenUsage tokenUsage,      // Token 使用统计
-    SandboxExecutor sandbox,    // 沙箱执行器（可选）
-    Map<String, Object> metadata // 额外元数据
-) {
+class Tool(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """工具名称（LLM 可见）"""
 
-    public static Builder builder() {
-        return new Builder();
-    }
+    @property
+    @abstractmethod
+    def description(self) -> str:
+        """工具描述（LLM 可见）"""
 
-    public static class Builder {
-        private String sessionId;
-        private String workingDirectory = System.getProperty("user.dir");
-        private int iteration = 0;
-        private TokenUsage tokenUsage = new TokenUsage(0, 0);
-        private SandboxExecutor sandbox;
-        private Map<String, Object> metadata = Map.of();
+    @property
+    @abstractmethod
+    def input_schema(self) -> dict:
+        """参数 JSON Schema"""
 
-        // Builder 方法...
-    }
-}
+    @property
+    def permission_level(self) -> PermissionLevel:
+        """权限级别，默认 READ"""
+        return PermissionLevel.READ
+
+    @abstractmethod
+    async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
+        """执行工具并返回结果"""
 ```
 
-### 执行结果
+### ToolResult
 
-```java
-package com.harness.tools;
+```python
+@dataclass
+class ToolResult:
+    tool_call_id: str              # 工具调用ID（用于匹配LLM调用）
+    success: bool                  # 是否成功执行
+    content: str                   # 工具输出内容
+    error: str | None = None       # 错误信息
+    metadata: dict[str, Any] = field(default_factory=dict)  # 附加元数据
 
-/**
- * 工具执行结果。
- */
-public record ToolResult(
-    boolean success,            // 是否成功
-    String output,              // 输出内容
-    String error,               // 错误信息（如果失败）
-    Map<String, Object> metadata // 额外元数据
-) {
+    def to_api_format(self) -> dict[str, Any]:
+        """转换为API格式供LLM使用"""
+        return {
+            "type": "tool_result",
+            "tool_use_id": self.tool_call_id,
+            "content": self.content if self.success else f"Error: {self.error}",
+            "is_error": not self.success,
+        }
+```
 
-    public static ToolResult success(String output) {
-        return new ToolResult(true, output, null, Map.of());
-    }
+### ToolContext
 
-    public static ToolResult success(String output, Map<String, Object> metadata) {
-        return new ToolResult(true, output, null, metadata);
-    }
+```python
+@dataclass
+class ToolContext:
+    session_id: str                # 会话 ID
+    working_directory: Path        # 当前工作目录
+    permissions: PermissionSet     # 权限集合
+    logger: Any | None = None      # 日志记录器
+    metadata: dict[str, Any] = field(default_factory=dict)  # 附加上下文
+```
 
-    public static ToolResult failure(String error) {
-        return new ToolResult(false, null, error, Map.of());
-    }
+### PermissionLevel
 
-    public static ToolResult failure(String error, Map<String, Object> metadata) {
-        return new ToolResult(false, null, error, metadata);
-    }
-}
+```python
+class PermissionLevel(Enum):
+    READ = "read"           # 只读操作（默认）
+    WRITE = "write"         # 写入操作
+    EXECUTE = "execute"     # 执行操作（如 Bash）
+    NETWORK = "network"     # 网络访问
+    DANGEROUS = "dangerous" # 危险操作（需确认）
 ```
 
 ## 内置工具
 
-### ReadTool
+### Read - 文件读取
 
-```java
-package com.harness.tools.builtin;
+```python
+class ReadTool(Tool):
+    name = "read"
+    description = "读取文件内容"
+    permission_level = PermissionLevel.READ
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-/**
- * 文件读取工具。
- */
-public class ReadTool implements Tool {
-
-    public static final String NAME = "read";
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "读取文件内容。支持文本文件和图像文件。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "file_path", Map.of(
-                    "type", "string",
-                    "description", "要读取的文件绝对路径"
-                ),
-                "offset", Map.of(
-                    "type", "integer",
-                    "description", "起始行号（可选）",
-                    "default", 0
-                ),
-                "limit", Map.of(
-                    "type", "integer",
-                    "description", "读取行数（可选）",
-                    "default", 2000
-                )
-            ),
-            "required", List.of("file_path")
-        );
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String filePath = (String) args.get("file_path");
-            int offset = args.containsKey("offset") ? ((Number) args.get("offset")).intValue() : 0;
-            int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 2000;
-
-            try {
-                Path path = Path.of(filePath);
-
-                // 安全检查
-                if (!path.isAbsolute()) {
-                    return ToolResult.failure("必须使用绝对路径");
-                }
-
-                if (!Files.exists(path)) {
-                    return ToolResult.failure("文件不存在: " + filePath);
-                }
-
-                // 检测文件类型
-                String contentType = Files.probeContentType(path);
-                if (contentType != null && contentType.startsWith("image/")) {
-                    return readImage(path);
-                }
-
-                // 读取文本文件
-                List<String> lines = Files.readAllLines(path);
-                int endLine = Math.min(offset + limit, lines.size());
-
-                StringBuilder sb = new StringBuilder();
-                for (int i = offset; i < endLine; i++) {
-                    sb.append(String.format("%6d\t%s%n", i + 1, lines.get(i)));
-                }
-
-                if (endLine < lines.size()) {
-                    sb.append(String.format("%n... 省略 %d 行 ...", lines.size() - endLine));
-                }
-
-                return ToolResult.success(sb.toString());
-
-            } catch (IOException e) {
-                return ToolResult.failure("读取文件失败: " + e.getMessage());
-            }
-        });
-    }
-
-    private ToolResult readImage(Path path) throws IOException {
-        byte[] bytes = Files.readAllBytes(path);
-        String base64 = Base64.getEncoder().encodeToString(bytes);
-        String mediaType = Files.probeContentType(path);
-        return ToolResult.success(
-            "data:" + mediaType + ";base64," + base64,
-            Map.of("is_image", true)
-        );
-    }
-}
+    # 参数:
+    #   file_path: str - 文件路径（必需）
+    #   offset: int | None - 起始行号
+    #   limit: int | None - 读取行数
 ```
 
-### WriteTool
+### Write - 文件写入
 
-```java
-package com.harness.tools.builtin;
+```python
+class WriteTool(Tool):
+    name = "write"
+    description = "创建或覆盖文件"
+    permission_level = PermissionLevel.WRITE
 
-/**
- * 文件写入工具。
- */
-public class WriteTool implements Tool {
-
-    public static final String NAME = "write";
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "写入文件内容。会覆盖已存在的文件。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "file_path", Map.of(
-                    "type", "string",
-                    "description", "要写入的文件绝对路径"
-                ),
-                "content", Map.of(
-                    "type", "string",
-                    "description", "要写入的内容"
-                )
-            ),
-            "required", List.of("file_path", "content")
-        );
-    }
-
-    @Override
-    public boolean isDangerous() {
-        return true;  // 写入操作是危险的
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String filePath = (String) args.get("file_path");
-            String content = (String) args.get("content");
-
-            try {
-                Path path = Path.of(filePath);
-
-                // 安全检查
-                if (!path.isAbsolute()) {
-                    return ToolResult.failure("必须使用绝对路径");
-                }
-
-                // 创建父目录
-                Files.createDirectories(path.getParent());
-
-                // 写入文件
-                Files.writeString(path, content);
-
-                return ToolResult.success("文件已写入: " + filePath);
-
-            } catch (IOException e) {
-                return ToolResult.failure("写入文件失败: " + e.getMessage());
-            }
-        });
-    }
-}
+    # 参数:
+    #   file_path: str - 文件路径（必需）
+    #   content: str - 文件内容（必需）
 ```
 
-### EditTool
+### Edit - 文件编辑
 
-```java
-package com.harness.tools.builtin;
+```python
+class EditTool(Tool):
+    name = "edit"
+    description = "精确替换文件中的字符串"
+    permission_level = PermissionLevel.WRITE
 
-/**
- * 文件编辑工具。
- */
-public class EditTool implements Tool {
-
-    public static final String NAME = "edit";
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "编辑文件，替换指定的文本内容。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "file_path", Map.of(
-                    "type", "string",
-                    "description", "要编辑的文件绝对路径"
-                ),
-                "old_string", Map.of(
-                    "type", "string",
-                    "description", "要替换的文本（必须唯一匹配）"
-                ),
-                "new_string", Map.of(
-                    "type", "string",
-                    "description", "替换后的文本"
-                ),
-                "replace_all", Map.of(
-                    "type", "boolean",
-                    "description", "是否替换所有匹配",
-                    "default", false
-                )
-            ),
-            "required", List.of("file_path", "old_string", "new_string")
-        );
-    }
-
-    @Override
-    public boolean isDangerous() {
-        return true;
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String filePath = (String) args.get("file_path");
-            String oldString = (String) args.get("old_string");
-            String newString = (String) args.get("new_string");
-            boolean replaceAll = args.containsKey("replace_all") && (boolean) args.get("replace_all");
-
-            try {
-                Path path = Path.of(filePath);
-                String content = Files.readString(path);
-
-                // 检查匹配
-                int count = countMatches(content, oldString);
-                if (count == 0) {
-                    return ToolResult.failure("未找到匹配的文本");
-                }
-                if (count > 1 && !replaceAll) {
-                    return ToolResult.failure("找到 " + count + " 处匹配，请使用更具体的文本或设置 replace_all=true");
-                }
-
-                // 执行替换
-                String newContent = replaceAll
-                    ? content.replace(oldString, newString)
-                    : content.replaceFirst(Pattern.quote(oldString), Matcher.quoteReplacement(newString));
-
-                Files.writeString(path, newContent);
-
-                return ToolResult.success(String.format("已替换 %d 处匹配", replaceAll ? count : 1));
-
-            } catch (IOException e) {
-                return ToolResult.failure("编辑文件失败: " + e.getMessage());
-            }
-        });
-    }
-
-    private int countMatches(String text, String pattern) {
-        int count = 0;
-        int index = 0;
-        while ((index = text.indexOf(pattern, index)) != -1) {
-            count++;
-            index += pattern.length();
-        }
-        return count;
-    }
-}
+    # 参数:
+    #   file_path: str - 文件路径（必需）
+    #   old_string: str - 要替换的字符串（必需）
+    #   new_string: str - 替换后的字符串（必需）
+    #   replace_all: bool - 是否替换所有匹配（默认 False）
 ```
 
-### BashTool
+### Glob - 文件搜索
 
-```java
-package com.harness.tools.builtin;
+```python
+class GlobTool(Tool):
+    name = "glob"
+    description = "按模式搜索文件名"
+    permission_level = PermissionLevel.READ
 
-/**
- * Shell 命令执行工具。
- */
-public class BashTool implements Tool {
-
-    public static final String NAME = "bash";
-
-    private final boolean sandboxMode;
-    private final SandboxExecutor sandbox;
-
-    public BashTool(boolean sandboxMode) {
-        this.sandboxMode = sandboxMode;
-        this.sandbox = sandboxMode ? new SandboxExecutor() : null;
-    }
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "执行 Shell 命令。" + (sandboxMode ? "（沙箱模式）" : "");
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "command", Map.of(
-                    "type", "string",
-                    "description", "要执行的命令"
-                ),
-                "timeout", Map.of(
-                    "type", "integer",
-                    "description", "超时时间（毫秒）",
-                    "default", 120000
-                )
-            ),
-            "required", List.of("command")
-        );
-    }
-
-    @Override
-    public boolean isDangerous() {
-        return true;
-    }
-
-    @Override
-    public ToolCategory category() {
-        return ToolCategory.SYSTEM;
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        String command = (String) args.get("command");
-        long timeout = args.containsKey("timeout")
-            ? ((Number) args.get("timeout")).longValue()
-            : 120000;
-
-        if (sandboxMode) {
-            return sandbox.execute(command, timeout);
-        } else {
-            return executeDirectly(command, timeout, context.workingDirectory());
-        }
-    }
-
-    private CompletableFuture<ToolResult> executeDirectly(String command, long timeout, String workDir) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
-                pb.directory(new File(workDir));
-                pb.redirectErrorStream(true);
-
-                Process process = pb.start();
-
-                boolean finished = process.waitFor(timeout, TimeUnit.MILLISECONDS);
-                if (!finished) {
-                    process.destroyForcibly();
-                    return ToolResult.failure("命令执行超时");
-                }
-
-                String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-
-                if (process.exitValue() == 0) {
-                    return ToolResult.success(output);
-                } else {
-                    return ToolResult.failure("命令执行失败 (exit code: " + process.exitValue() + ")\n" + output);
-                }
-
-            } catch (Exception e) {
-                return ToolResult.failure("命令执行异常: " + e.getMessage());
-            }
-        });
-    }
-}
+    # 参数:
+    #   pattern: str - glob 模式（必需）
+    #   path: str | None - 搜索目录
 ```
 
-### GlobTool
+### Grep - 内容搜索
 
-```java
-package com.harness.tools.builtin;
+```python
+class GrepTool(Tool):
+    name = "grep"
+    description = "搜索文件内容（支持正则表达式）"
+    permission_level = PermissionLevel.READ
 
-/**
- * 文件模式匹配工具。
- */
-public class GlobTool implements Tool {
-
-    public static final String NAME = "glob";
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "使用 glob 模式搜索文件。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "pattern", Map.of(
-                    "type", "string",
-                    "description", "Glob 模式，如 **/*.java"
-                ),
-                "path", Map.of(
-                    "type", "string",
-                    "description", "搜索目录（可选，默认当前目录）"
-                )
-            ),
-            "required", List.of("pattern")
-        );
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String pattern = (String) args.get("pattern");
-            String basePath = args.containsKey("path")
-                ? (String) args.get("path")
-                : context.workingDirectory();
-
-            try {
-                PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
-                List<String> matches = new ArrayList<>();
-
-                Files.walkFileTree(Path.of(basePath), new SimpleFileVisitor<Path>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        if (matcher.matches(file.getFileName())) {
-                            matches.add(file.toString());
-                        }
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
-
-                // 按修改时间排序
-                matches.sort((a, b) -> {
-                    try {
-                        return -Files.getLastModifiedTime(Path.of(a))
-                            .compareTo(Files.getLastModifiedTime(Path.of(b)));
-                    } catch (IOException e) {
-                        return 0;
-                    }
-                });
-
-                return ToolResult.success(String.join("\n", matches));
-
-            } catch (IOException e) {
-                return ToolResult.failure("搜索失败: " + e.getMessage());
-            }
-        });
-    }
-}
+    # 参数:
+    #   pattern: str - 正则表达式（必需）
+    #   path: str | None - 搜索路径
+    #   include: str | None - 文件名过滤（如 "*.py"）
+    #   output_mode: str - "content" | "files_with_matches" | "count"
 ```
 
-### GrepTool
+### Bash - 命令执行
 
-```java
-package com.harness.tools.builtin;
+```python
+class BashTool(Tool):
+    name = "bash"
+    description = "在沙箱中执行 shell 命令"
+    permission_level = PermissionLevel.EXECUTE
 
-/**
- * 内容搜索工具。
- */
-public class GrepTool implements Tool {
-
-    public static final String NAME = "grep";
-
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public String description() {
-        return "使用正则表达式搜索文件内容。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "pattern", Map.of(
-                    "type", "string",
-                    "description", "正则表达式模式"
-                ),
-                "path", Map.of(
-                    "type", "string",
-                    "description", "搜索目录或文件"
-                ),
-                "glob", Map.of(
-                    "type", "string",
-                    "description", "文件过滤模式（如 *.java）"
-                ),
-                "ignore_case", Map.of(
-                    "type", "boolean",
-                    "description", "忽略大小写",
-                    "default", false
-                )
-            ),
-            "required", List.of("pattern")
-        );
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String pattern = (String) args.get("pattern");
-            String basePath = args.containsKey("path")
-                ? (String) args.get("path")
-                : context.workingDirectory();
-            String glob = args.containsKey("glob") ? (String) args.get("glob") : null;
-            boolean ignoreCase = args.containsKey("ignore_case") && (boolean) args.get("ignore_case");
-
-            try {
-                Pattern regex = ignoreCase
-                    ? Pattern.compile(pattern, Pattern.CASE_INSENSITIVE)
-                    : Pattern.compile(pattern);
-
-                List<String> results = new ArrayList<>();
-                Path rootPath = Path.of(basePath);
-
-                Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                        // 检查 glob 过滤
-                        if (glob != null) {
-                            PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
-                            if (!matcher.matches(file.getFileName())) {
-                                return FileVisitResult.CONTINUE;
-                            }
-                        }
-
-                        try {
-                            List<String> lines = Files.readAllLines(file);
-                            for (int i = 0; i < lines.size(); i++) {
-                                if (regex.matcher(lines.get(i)).find()) {
-                                    results.add(String.format("%s:%d:%s",
-                                        file, i + 1, lines.get(i)));
-                                }
-                            }
-                        } catch (IOException e) {
-                            // 忽略无法读取的文件
-                        }
-
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
-
-                return ToolResult.success(String.join("\n", results));
-
-            } catch (Exception e) {
-                return ToolResult.failure("搜索失败: " + e.getMessage());
-            }
-        });
-    }
-}
+    # 参数:
+    #   command: str - 要执行的命令（必需）
+    #   timeout: int | None - 超时时间（毫秒，默认 30000）
+    #   working_dir: str | None - 工作目录
 ```
 
-### UpdateCoreMemoryTool
+### WebSearch - 网络搜索
 
-允许 Agent 自主更新 Core Memory (MEMORY.md) 的工具，遵循 Mem0 模式。
+```python
+class WebSearchTool(Tool):
+    name = "web_search"
+    description = "搜索互联网获取信息"
+    permission_level = PermissionLevel.NETWORK
 
-```java
-package com.harness.tools;
-
-import com.harness.core.Tool;
-import com.harness.core.ToolContext;
-import com.harness.memory.*;
-import com.harness.types.ToolResult;
-
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-/**
- * 更新 Core Memory 工具。
- *
- * 功能：
- * - 添加/移除记忆条目
- * - 内容提炼引导
- * - 自动去重检测
- * - UI 刷新信号
- */
-public class UpdateCoreMemoryTool implements Tool {
-
-    @Override
-    public String name() {
-        return "update_core_memory";
-    }
-
-    @Override
-    public String description() {
-        return """
-            更新用户偏好或项目约定到长期记忆。
-
-            重要规则：
-            1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述
-               - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」
-               - 用户说「我使用 Windows」→ 存储「操作系统：Windows」
-            2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加
-            3. **适用场景**：用户提到长期偏好、工作环境、项目约束等
-            """;
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "category", Map.of(
-                    "type", "string",
-                    "enum", List.of("user_profile", "key_decisions", "learned_patterns", "project_context"),
-                    "description", "记忆类别"
-                ),
-                "content", Map.of(
-                    "type", "string",
-                    "description", "记忆内容"
-                ),
-                "action", Map.of(
-                    "type", "string",
-                    "enum", List.of("add", "remove"),
-                    "description", "操作类型"
-                )
-            ),
-            "required", List.of("category", "content", "action")
-        );
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        String categoryStr = (String) args.get("category");
-        String content = (String) args.get("content");
-        String action = (String) args.get("action");
-
-        MemoryCategory category = MemoryCategory.fromValue(categoryStr);
-        MemoryFileManager manager = new MemoryFileManager();
-
-        if ("add".equals(action)) {
-            MemoryEntry entry = new MemoryEntry(category, content, MemorySource.USER_INPUT);
-            boolean added = manager.addEntry(entry);
-
-            if (added) {
-                return CompletableFuture.completedFuture(
-                    ToolResult.success("", "已添加到 " + category.getValue() + ": " + content, name(),
-                        Map.of("refresh_memory", true))
-                );
-            } else {
-                return CompletableFuture.completedFuture(
-                    ToolResult.success("", "跳过重复记忆: 已有类似内容", name())
-                );
-            }
-
-        } else if ("remove".equals(action)) {
-            List<String> entries = manager.getEntries(category);
-            for (int i = 0; i < entries.size(); i++) {
-                if (entries.get(i).contains(content)) {
-                    manager.removeEntry(category, i);
-                    return CompletableFuture.completedFuture(
-                        ToolResult.success("", "已从 " + category.getValue() + " 移除", name(),
-                            Map.of("refresh_memory", true))
-                    );
-                }
-            }
-            return CompletableFuture.completedFuture(
-                ToolResult.failure("", "未找到匹配的记忆: " + content, name())
-            );
-        }
-
-        return CompletableFuture.completedFuture(
-            ToolResult.failure("", "Invalid action: " + action, name())
-        );
-    }
-}
+    # 参数:
+    #   query: str - 搜索查询（必需）
+    #   max_results: int - 最大结果数（默认 5）
 ```
 
-#### 使用示例
+### WebFetch - 网页获取
 
-```java
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-import com.harness.tools.UpdateCoreMemoryTool;
+```python
+class WebFetchTool(Tool):
+    name = "web_fetch"
+    description = "获取网页内容"
+    permission_level = PermissionLevel.NETWORK
 
-// 创建 Agent 并添加 UpdateCoreMemoryTool
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .build();
-
-Harness agent = new Harness(config);
-agent.addTool(new UpdateCoreMemoryTool());
-
-// Agent 可以自主更新记忆
-LoopResult result = agent.run("我使用 Windows 系统，偏好深色主题");
+    # 参数:
+    #   url: str - URL（必需）
+    #   format: str - "text" | "markdown" | "html"
 ```
 
-#### Metadata 支持
+### WebToMarkdown - 网页转 Markdown
 
-ToolResult 的 `metadata` 字段用于传递 UI 刷新信号：
+```python
+class WebToMarkdownTool(Tool):
+    name = "web_to_markdown"
+    description = "获取网页并转换为干净的 Markdown 格式"
+    permission_level = PermissionLevel.NETWORK
 
-```java
-// 添加成功后返回 refresh_memory 信号
-ToolResult.success("", "已添加到 user_profile: 操作系统：Windows", name(),
-    Map.of("refresh_memory", true));
+    # 参数:
+    #   url: str - 网页 URL（必需）
+    #   selector: str | None - CSS 选择器提取特定内容
+    #   max_length: int - 最大内容长度（默认 50000）
+    #   include_links: bool - 是否保留链接（默认 True）
+    #   include_images: bool - 是否包含图片引用（默认 False）
+
+    # 特性:
+    #   - 提取主要内容（article, main, body）
+    #   - 保留代码块、表格、列表、标题
+    #   - 自动移除广告、导航、页脚
+    #   - 支持 BeautifulSoup 解析
 ```
 
-客户端收到此信号后会刷新记忆面板显示。
+## ToolExecutor
 
-## 工具执行器
+ToolExecutor 负责工具的调度和执行，支持串行和并行模式。
 
-```java
-package com.harness.tools;
+```python
+from harness.tools.executor import ToolExecutor
 
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+class ToolExecutor:
+    def __init__(
+        self,
+        tools: dict[str, Tool],   # 工具注册表
+        sandbox: Sandbox,          # 沙箱实例
+        permissions: PermissionSet,# 权限集合
+    )
 
-/**
- * 工具执行器 - 负责调度和执行工具。
- */
-public class ToolExecutor {
+    async def execute(
+        self,
+        tool_name: str,
+        args: dict,
+        ctx: ToolContext,
+    ) -> ToolResult:
+        """执行单个工具"""
 
-    private final Map<String, Tool> tools;
-    private final ExecutorService executor;
-    private final long defaultTimeout;
+    async def execute_batch(
+        self,
+        calls: list[dict],   # [{"name": ..., "arguments": ...}]
+        ctx: ToolContext,
+    ) -> list[ToolResult]:
+        """并行执行多个独立工具调用"""
 
-    public ToolExecutor(List<Tool> tools, long defaultTimeout) {
-        this.tools = new HashMap<>();
-        for (Tool tool : tools) {
-            this.tools.put(tool.name(), tool);
-        }
-        this.executor = Executors.newCachedThreadPool();
-        this.defaultTimeout = defaultTimeout;
-    }
+    async def execute_sequential(
+        self,
+        calls: list[dict],
+        ctx: ToolContext,
+    ) -> list[ToolResult]:
+        """串行执行多个工具调用（有依赖时使用）"""
+```
 
-    /**
-     * 执行单个工具。
-     */
-    public CompletableFuture<ToolResult> execute(ToolCall call, ToolContext context) {
-        Tool tool = tools.get(call.name());
-        if (tool == null) {
-            return CompletableFuture.completedFuture(
-                ToolResult.failure("未知工具: " + call.name())
-            );
-        }
+### 执行流程
 
-        // 验证参数
-        ValidationResult validation = tool.validate(call.arguments());
-        if (!validation.valid()) {
-            return CompletableFuture.completedFuture(
-                ToolResult.failure("参数验证失败: " + validation.error())
-            );
-        }
-
-        // 执行（带超时）
-        return tool.execute(call.arguments(), context)
-            .orTimeout(defaultTimeout, TimeUnit.MILLISECONDS)
-            .exceptionally(e -> ToolResult.failure("执行超时或异常: " + e.getMessage()));
-    }
-
-    /**
-     * 并行执行多个工具。
-     */
-    public CompletableFuture<List<ToolResult>> executeAll(List<ToolCall> calls, ToolContext context) {
-        List<CompletableFuture<ToolResult>> futures = calls.stream()
-            .map(call -> execute(call, context))
-            .toList();
-
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .thenApply(v -> futures.stream()
-                .map(CompletableFuture::join)
-                .toList());
-    }
-
-    /**
-     * 获取所有工具。
-     */
-    public List<Tool> listTools() {
-        return new ArrayList<>(tools.values());
-    }
-
-    /**
-     * 注册新工具。
-     */
-    public void registerTool(Tool tool) {
-        tools.put(tool.name(), tool);
-    }
-}
+```
+Tool Call(s)
+    │
+    ↓
+┌─────────────┐
+│ 权限检查     │ → 拒绝 → 返回 ToolResult(error="Permission denied")
+└──────┬──────┘
+       │
+       ↓
+┌─────────────┐
+│ 参数验证     │ → 失败 → 返回 ToolResult(error="Invalid arguments")
+└──────┬──────┘
+       │
+       ↓
+┌─────────────────────┐
+│ 单个调用 → execute  │
+│ 多个调用 → batch   │  （并行执行独立调用）
+└──────┬──────────────┘
+       │
+       ↓
+┌─────────────┐
+│ 沙箱执行     │ → 超时 → 返回 ToolResult(error="Timeout")
+└──────┬──────┘
+       │
+       ↓
+   ToolResult
 ```
 
 ## 自定义工具
 
-### 实现自定义工具
+### 方式 1：继承 Tool 类
 
-```java
-/**
- * 自定义工具示例：数据库查询工具。
- */
-public class DatabaseQueryTool implements Tool {
+```python
+from harness.tools.base import Tool, ToolResult, ToolContext, PermissionLevel
 
-    private final DataSource dataSource;
+class DatabaseQueryTool(Tool):
+    @property
+    def name(self) -> str:
+        return "db_query"
 
-    public DatabaseQueryTool(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
+    @property
+    def description(self) -> str:
+        return "执行数据库查询"
 
-    @Override
-    public String name() {
-        return "db_query";
-    }
-
-    @Override
-    public String description() {
-        return "执行只读 SQL 查询。";
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "sql", Map.of(
-                    "type", "string",
-                    "description", "SELECT 语句"
-                )
-            ),
-            "required", List.of("sql")
-        );
-    }
-
-    @Override
-    public ToolCategory category() {
-        return ToolCategory.DATABASE;
-    }
-
-    @Override
-    public ValidationResult validate(Map<String, Object> args) {
-        String sql = (String) args.get("sql");
-        if (sql == null || sql.isBlank()) {
-            return ValidationResult.invalid("SQL 不能为空");
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "SQL 查询"},
+                "database": {"type": "string", "description": "数据库名"},
+            },
+            "required": ["query"],
         }
 
-        // 安全检查：只允许 SELECT
-        String upperSql = sql.trim().toUpperCase();
-        if (!upperSql.startsWith("SELECT")) {
-            return ValidationResult.invalid("只允许 SELECT 查询");
-        }
+    @property
+    def permission_level(self) -> PermissionLevel:
+        return PermissionLevel.DANGEROUS
 
-        // 检查危险操作
-        String[] dangerousKeywords = {"DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE"};
-        for (String keyword : dangerousKeywords) {
-            if (upperSql.contains(keyword)) {
-                return ValidationResult.invalid("SQL 包含禁止的操作: " + keyword);
-            }
-        }
+    async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
+        query = args["query"]
+        db = args.get("database", "default")
+        try:
+            result = await execute_sql(db, query)
+            return ToolResult(output=str(result))
+        except Exception as e:
+            return ToolResult(output="", error=str(e))
 
-        return ValidationResult.valid();
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        return CompletableFuture.supplyAsync(() -> {
-            String sql = (String) args.get("sql");
-
-            try (Connection conn = dataSource.getConnection();
-                 Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery(sql)) {
-
-                // 转换为 JSON
-                List<Map<String, Object>> rows = new ArrayList<>();
-                ResultSetMetaData meta = rs.getMetaData();
-                int columnCount = meta.getColumnCount();
-
-                while (rs.next()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    for (int i = 1; i <= columnCount; i++) {
-                        row.put(meta.getColumnLabel(i), rs.getObject(i));
-                    }
-                    rows.add(row);
-                }
-
-                ObjectMapper mapper = new ObjectMapper();
-                return ToolResult.success(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(rows));
-
-            } catch (Exception e) {
-                return ToolResult.failure("查询失败: " + e.getMessage());
-            }
-        });
-    }
-}
+# 注册
+agent = AgentHarness()
+agent.register_tool(DatabaseQueryTool())
 ```
 
-### 使用装饰器模式
+### 方式 2：装饰器
 
-```java
-/**
- * 工具装饰器 - 添加日志功能。
- */
-public class LoggingToolDecorator implements Tool {
+```python
+agent = AgentHarness()
 
-    private final Tool delegate;
-    private final Logger logger;
+@agent.tool(description="计算两个数的和")
+def add(a: int, b: int) -> int:
+    return a + b
 
-    public LoggingToolDecorator(Tool delegate, Logger logger) {
-        this.delegate = delegate;
-        this.logger = logger;
-    }
-
-    @Override
-    public String name() {
-        return delegate.name();
-    }
-
-    @Override
-    public String description() {
-        return delegate.description();
-    }
-
-    @Override
-    public Map<String, Object> inputSchema() {
-        return delegate.inputSchema();
-    }
-
-    @Override
-    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext context) {
-        logger.info("执行工具: {} 参数: {}", name(), args);
-
-        long startTime = System.currentTimeMillis();
-
-        return delegate.execute(args, context)
-            .thenApply(result -> {
-                long duration = System.currentTimeMillis() - startTime;
-                logger.info("工具执行完成: {} 耗时: {}ms 结果: {}",
-                    name(), duration, result.success() ? "成功" : "失败");
-                return result;
-            })
-            .exceptionally(e -> {
-                logger.error("工具执行异常: {}", name(), e);
-                return ToolResult.failure(e.getMessage());
-            });
-    }
-}
-
-// 使用
-Tool tool = new LoggingToolDecorator(new ReadTool(), logger);
+@agent.tool(
+    description="发送 HTTP 请求",
+    permission_level="network",
+)
+async def http_request(url: str, method: str = "GET") -> str:
+    async with aiohttp.ClientSession() as session:
+        async with session.request(method, url) as resp:
+            return await resp.text()
 ```
 
-## 工具分类
+## 工具与 MCP 的关系
 
-```java
-package com.harness.tools;
+内置工具和 MCP 工具统一通过 ToolExecutor 调度：
 
-/**
- * 工具分类。
- */
-public enum ToolCategory {
-    FILE_SYSTEM,    // 文件系统操作
-    SYSTEM,         // 系统命令
-    DATABASE,       // 数据库操作
-    NETWORK,        // 网络请求
-    MCP,            // MCP 工具
-    GENERAL,        // 通用工具
-    CUSTOM          // 自定义工具
-}
-```
+| 工具来源 | 注册方式 | 权限控制 |
+|----------|----------|----------|
+| 内置工具 | 自动注册 | 按 PermissionLevel |
+| 自定义工具 | `register_tool()` | 按 PermissionLevel |
+| MCP 工具 | MCP 服务器自动注册 | 按 MCP 配置 |
 
-## Web 工具
+```python
+# MCP 工具和内置工具统一使用
+agent = AgentHarness()
+agent.add_mcp_server("github", command="mcp-github")
 
-### WebSearchTool
-
-使用 DuckDuckGo Instant Answer API 进行网页搜索（免费，无需 API Key）：
-
-```java
-import com.harness.tools.WebSearchTool;
-
-WebSearchTool tool = new WebSearchTool();
-
-// 执行搜索
-Map<String, Object> args = Map.of(
-    "query", "Java 21 features",
-    "num_results", 5  // 可选，默认 5
-);
-ToolResult result = tool.execute(args, context).join();
-
-// 返回 JSON 格式的搜索结果
-// [{"title": "...", "link": "...", "snippet": "..."}, ...]
-```
-
-**参数说明**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| query | String | 必填 | 搜索关键词 |
-| num_results | int | 5 | 返回结果数量 |
-
-### WebFetchTool
-
-抓取网页内容：
-
-```java
-import com.harness.tools.WebFetchTool;
-
-WebFetchTool tool = new WebFetchTool();
-
-Map<String, Object> args = Map.of(
-    "url", "https://example.com/article",
-    "timeout", 30000  // 可选，默认 30 秒
-);
-ToolResult result = tool.execute(args, context).join();
-```
-
-**参数说明**：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| url | String | 必填 | 网页 URL |
-| timeout | int | 30000 | 超时时间（毫秒） |
-
-### WebToMarkdownTool
-
-将网页转换为 Markdown 格式：
-
-```java
-import com.harness.tools.WebToMarkdownTool;
-
-WebToMarkdownTool tool = new WebToMarkdownTool();
-
-Map<String, Object> args = Map.of(
-    "url", "https://example.com/article"
-);
-ToolResult result = tool.execute(args, context).join();
-
-// 返回 Markdown 格式的内容
-// # Title\n\nContent...
-```
-
-**特性**：
-- 自动提取网页正文
-- 保留标题、列表、链接等格式
-- 过滤广告和导航栏
-
-### 使用示例
-
-```java
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-import com.harness.tools.WebSearchTool;
-import com.harness.tools.WebFetchTool;
-import com.harness.tools.WebToMarkdownTool;
-
-// 创建 Agent 并添加 Web 工具
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .tools(List.of(
-        new WebSearchTool(),
-        new WebFetchTool(),
-        new WebToMarkdownTool()
-    ))
-    .build();
-
-Harness agent = new Harness(config);
-
-// Agent 可以自主搜索和获取网页内容
-LoopResult result = agent.run("搜索最新的 Java 21 特性并总结");
+# LLM 可以同时调用内置工具和 MCP 工具
+result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
 ```
 
 ## 下一步
 
-- [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
-- [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 工具集成
+- [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
+- [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成

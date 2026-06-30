@@ -1,420 +1,232 @@
-# 13 - 生产就绪检查清单
+# 13 - 生产就绪
 
 ## 概述
 
-本文档提供 Harness SDK Java 版本在生产环境部署前的检查清单。
-
-## 检查清单概览
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                Production Readiness Checklist                │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   安全性    │  │   可靠性    │  │   性能      │         │
-│  │   □□□□□    │  │   □□□□□    │  │   □□□□□    │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   监控      │  │   文档      │  │   合规      │         │
-│  │   □□□□□    │  │   □□□□□    │  │   □□□□□    │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 安全性检查
-
-### 代码安全
-
-- [ ] **输入验证**
-  - 所有用户输入都经过验证
-  - 检查 SQL 注入、命令注入、XSS
-  - 限制输入长度
-
-- [ ] **输出清理**
-  - 敏感数据脱敏配置
-  - API Key 不出现在输出中
-  - 日志不包含敏感信息
-
-- [ ] **沙箱配置**
-  - 工具执行使用沙箱模式
-  - 文件系统路径限制
-  - 命令白名单配置
-
-### 依赖安全
-
-- [ ] **依赖扫描**
-  ```bash
-  # OWASP 依赖检查
-  ./gradlew dependencyCheckAnalyze
-  ```
-
-  - 无高危漏洞
-  - 无已知安全风险
-
-- [ ] **SBOM 生成**
-  ```bash
-  # CycloneDX SBOM
-  ./gradlew cyclonedxBom
-  ```
-
-  - 提供完整的依赖清单
-  - 包含版本和许可证信息
-
-### 密钥管理
-
-- [ ] **API Key 存储**
-  - 不硬编码在代码中
-  - 使用环境变量或密钥管理系统
-  - 支持 Vault/Azure Key Vault 集成
-
-- [ ] **密钥轮换**
-  - 支持动态更新 API Key
-  - 定期轮换策略
-
-## 可靠性检查
-
-### 错误处理
-
-- [ ] **异常捕获**
-  - 所有异步操作都有错误处理
-  - 错误信息不暴露敏感信息
-  - 错误日志记录完整
-
-- [ ] **重试机制**
-  - 网络错误自动重试
-  - Rate Limit 正确处理
-  - 最大重试次数限制
-
-- [ ] **超时配置**
-  - 工具执行超时
-  - LLM API 调用超时
-  - 整体循环超时
-
-### 资源管理
-
-- [ ] **连接池**
-  - HTTP 连接池配置
-  - 线程池配置
-  - 资源清理正确
-
-- [ ] **内存管理**
-  - 大文件处理策略
-  - 会话数据清理
-  - 避免内存泄漏
-
-- [ ] **并发控制**
-  - 最大并发数限制
-  - 工具并行执行限制
-  - 请求队列管理
-
-### 测试覆盖
-
-- [ ] **单元测试**
-  - 覆盖率 ≥ 80%
-  - 关键路径全覆盖
-  - 边界条件测试
-
-- [ ] **集成测试**
-  - 与真实 API 测试通过
-  - MCP 服务器集成测试通过
-  - 端到端测试通过
-
-- [ ] **性能测试**
-  - Token 计数性能达标
-  - 并发性能达标
-  - 内存使用合理
-
-## 性能检查
-
-### 响应时间
-
-| 操作 | 目标 | 实际 | 状态 |
-|------|------|------|------|
-| Token 计数 (1000 字) | < 50ms | - | 待测 |
-| 单次 LLM 调用 | < 10s | - | 待测 |
-| 工具执行 | < 30s | - | 待测 |
-| 完整循环 (5 次迭代) | < 60s | - | 待测 |
-
-### 吞吐量
-
-- [ ] **并发请求**
-  - 支持同时处理 10+ 会话
-  - 稳定性测试通过
-
-- [ ] **流式响应**
-  - 流式输出延迟 < 100ms
-  - 背压控制正确
-
-### 资源使用
-
-| 指标 | 目标 | 实际 | 状态 |
-|------|------|------|------|
-| 内存占用 (空闲) | < 100MB | - | 待测 |
-| 内存占用 (峰值) | < 500MB | - | 待测 |
-| CPU 使用率 (空闲) | < 5% | - | 待测 |
-| CPU 使用率 (峰值) | < 80% | - | 待测 |
-
-## 监控检查
-
-### 日志系统
-
-- [ ] **日志级别**
-  - 生产环境使用 INFO 级别
-  - 错误日志单独处理
-  - 审计日志独立存储
-
-- [ ] **日志格式**
-  - 结构化 JSON 格式
-  - 包含时间戳、会话 ID
-  - 支持日志聚合
-
-### 健康检查
-
-- [ ] **服务状态**
-  - 健康检查 API 正常
-  - 启动时自检通过
-  - 运行时监控正常
-
-- [ ] **依赖状态**
-  - LLM API 连接检查
-  - MCP 服务器连接检查
-  - 文件系统检查
-
-### 指标收集
-
-- [ ] **请求指标**
-  - 请求数量统计
-  - 响应时间统计
-  - 成功/失败率
-
-- [ ] **Token 指标**
-  - 输入 Token 统计
-  - 输出 Token 统计
-  - Token 成本估算
-
-- [ ] **工具指标**
-  - 工具调用次数
-  - 工具执行时间
-  - 工具成功/失败率
-
-## 文档检查
-
-### 用户文档
-
-- [ ] **快速开始**
-  - README.md 完整
-  - 最小示例可运行
-  - 安装说明清晰
-
-- [ ] **API 参考**
-  - 所有公共 API 有文档
-  - 参数说明完整
-  - 返回值说明完整
-
-- [ ] **集成指南**
-  - Gradle/Maven 配置示例
-  - MCP 服务器配置示例
-  - 安全配置示例
-
-### 技术文档
-
-- [ ] **架构文档**
-  - 系统架构图
-  - 模块关系图
-  - 数据流图
-
-- [ ] **设计文档**
-  - 核心类设计
-  - 接口定义
-  - 设计决策记录
-
-### 运维文档
-
-- [ ] **部署文档**
-  - 部署步骤说明
-  - 配置项说明
-  - 环境要求说明
-
-- [ ] **故障排查**
-  - 常见问题 FAQ
-  - 错误代码解释
-  - 排查流程说明
-
-## 合规检查
-
-### 许可证
-
-- [ ] **许可证兼容**
-  - 所有依赖使用宽松许可证（MIT/Apache 2.0）
-  - 无 GPL/AGPL 依赖
-  - 许可证清单完整
-
-### 银行合规
-
-- [ ] **安全扫描**
-  - OWASP 依赖检查通过
-  - 代码安全审计通过
-  - 渗透测试通过（如需要）
-
-- [ ] **审计日志**
-  - 所有操作有审计记录
-  - 审计日志格式符合要求
-  - 审计日志保留期符合要求
-
-- [ ] **数据隔离**
-  - 敏感数据不流出系统
-  - 数据脱敏规则完整
-  - 数据访问控制正确
-
-### 软件物料清单
-
-- [ ] **SBOM 内容**
-  ```json
-  {
-    "name": "harness-sdk-java",
-    "version": "1.0.0",
-    "dependencies": [
-      {
-        "name": "anthropic-java",
-        "version": "2.40.1",
-        "license": "MIT",
-        "purl": "pkg:maven/com.anthropic/anthropic-java@2.40.1"
-      },
-      ...
-    ]
-  }
-  ```
-
-## 部署检查
-
-### JAR 包验证
-
-- [ ] **完整性验证**
-  ```bash
-  # SHA256 校验
-  sha256sum harness-sdk-all-1.0.0.jar
-  ```
-
-  - 校验和文件存在
-  - 校验和验证通过
-
-- [ ] **签名验证（可选）**
-  ```bash
-  # GPG 签名验证
-  gpg --verify harness-sdk-all-1.0.0.jar.asc
-  ```
-
-### 环境检查
-
-- [ ] **Java 版本**
-  - Java 17+ 已安装
-  - JVM 参数配置正确
-
-- [ ] **系统资源**
-  - 内存 ≥ 1GB
-  - 磁盘空间 ≥ 100MB
-  - CPU ≥ 2 核心
-
-- [ ] **网络**
-  - LLM API 可访问
-  - MCP 服务器可访问（如需要）
-
-### 集成测试
-
-- [ ] **应用集成**
-  - Gradle/Maven 依赖引入成功
-  - 基本功能测试通过
-  - 性能测试通过
-
-- [ ] **银行系统集成**
-  - 密钥管理系统集成成功
-  - 审计日志系统集成成功
-  - 监控系统集成成功
-
-## 发布检查
-
-### 版本信息
-
-- [ ] **版本号**
-  - 版本号格式正确（语义化版本）
-  - CHANGELOG.md 已更新
-  - 版本标签已创建
-
-- [ ] **发布说明**
-  - 新功能说明
-  - 变更内容说明
-  - 升级指南（如有）
-
-### 交付包
-
-- [ ] **内容完整性**
-  ```
-  harness-sdk-java-1.0.0.zip/
-  ├── jars/
-  │   └── harness-sdk-all-1.0.0.jar
-  ├── docs/
-  │   ├── README.md
-  │   ├── API-reference.md
-  │   └── integration-guide.md
-  ├── reports/
-  │   ├── dependency-check-report.html
-  │   └── sbom.json
-  ├── metadata.json
-  ├── checksums.sha256
-  └── LICENSE
-  ```
-
-  - 所有文件存在
-  - 文件结构正确
-  - 无遗漏内容
-
-## 检查报告模板
-
-```markdown
-# Harness SDK Java 版本生产就绪检查报告
-
-**版本**: 1.0.0
-**检查日期**: YYYY-MM-DD
-**检查人员**: XXX
-
-## 检查结果摘要
-
-| 类别 | 检查项数 | 通过数 | 未通过数 | 通过率 |
-|------|---------|--------|----------|--------|
-| 安全性 | XX | XX | XX | XX% |
-| 可靠性 | XX | XX | XX | XX% |
-| 性能 | XX | XX | XX | XX% |
-| 监控 | XX | XX | XX | XX% |
-| 文档 | XX | XX | XX | XX% |
-| 合规 | XX | XX | XX | XX% |
-
-## 未通过项详情
-
-### 安全性
-- [X] XXX - 原因: XXX
-
-### 可靠性
-- [X] XXX - 原因: XXX
-
-## 建议措施
-
-1. XXX
-2. XXX
-
-## 结论
-
-- [ ] 可以发布
-- [ ] 需修复后发布
-- [ ] 不建议发布
-
----
-
-签名: ________________  日期: ________________
+本文档评估 Harness SDK 的生产就绪程度，列出已实现和待实现的功能，以及部署最佳实践。
+
+## Production Harness 组件状态
+
+基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 11 个核心组件。
+
+### 组件实现状态
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| **Orchestration Loop** | ✅ | ReAct 循环、中断恢复、熔断器、卡住检测 |
+| **Tools** | ✅ | 8 内置工具 (Read/Write/Edit/Glob/Grep/Bash/WebSearch/WebFetch) + MCP |
+| **Filesystem** | ✅ | 通过工具实现，支持权限检查 |
+| **Bash & Code Execution** | ✅ | 沙箱执行、命令黑名单、超时控制 |
+| **Sandbox** | ✅ | LightweightSandbox + SandboxExecutor |
+| **Memory** | ✅ | 四层记忆 + 向量检索 + MEMORY.md 标准 + 动态系统提示 |
+| **Context Management** | ✅ | ContextBuilder + SystemPromptBuilder 动态组装 |
+| **Context Rot Defense** | ✅ | 渐进式技能加载 + 上下文压缩 |
+| **Long-Horizon Execution** | ✅ | Lifecycle Hooks + Ralph Loop + 自验证 + Sub-Agent |
+| **Error Handling** | ✅ | 熔断器 + 成本控制 + 卡住检测 |
+| **Serving Layer** | ✅ | `harness.service` 模块：FastAPI 服务、健康检查、Prometheus 指标、WebSocket |
+
+### 功能实现状态
+
+| # | 功能 | 优先级 | 状态 | 说明 |
+|---|------|--------|------|------|
+| 1 | **Lifecycle Hooks** | P0 | ✅ | 8 个钩子点，支持拦截、修改、注入 |
+| 2 | **动态系统提示组装** | P0 | ✅ | SystemPromptBuilder 多源组装、AGENTS.md 支持 |
+| 3 | **Sub-Agent 管理** | P1 | ✅ | 创建子代理处理子任务，支持并行执行 |
+| 4 | **Ralph Loop** | P1 | ✅ | 长任务循环，自动摘要 + 压缩，防止上下文焦虑 |
+| 5 | **自验证钩子** | P2 | ✅ | write-code → run-tests → fix-errors 循环 |
+| 6 | **渐进式技能加载** | P2 | ✅ | 三级加载：Frontmatter → Full → Reference |
+| 7 | **MEMORY.md 标准** | P2 | ✅ | 持久记忆文件格式，4 种记忆类型 |
+| 8 | **向量检索** | P2 | ✅ | VectorMemoryStore 语义搜索 |
+| 9 | **工具输出卸载** | P3 | ⚠️ | 上下文预算优化，待实现 |
+| 10 | **步骤预算** | P3 | ⚠️ | 成本预警，待实现 |
+
+## 部署最佳实践
+
+### 1. API 密钥管理
+
+```python
+import os
+from harness import AgentHarness
+
+# 从环境变量读取
+agent = AgentHarness(
+    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    # 或 OpenAI
+    # api_key=os.environ.get("OPENAI_API_KEY"),
+    # model="gpt-4o",
+)
 ```
 
-## 下一步
+### 2. 成本控制
 
-- [12-deployment.md](./12-deployment.md) - 部署指南
-- [14-bank-integration.md](./14-bank-integration.md) - 银行系统集成
+```python
+from harness import AgentHarness, HarnessConfig
+
+agent = AgentHarness(
+    config=HarnessConfig(
+        max_cost_per_run=5.0,      # 单次运行最多 $5
+        max_tokens_per_run=500000, # 单次运行最多 500K tokens
+        max_iterations=50,         # 最多 50 步
+    ),
+)
+```
+
+### 3. 安全配置
+
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.security.sandbox import PermissionSet, PermissionLevel
+
+agent = AgentHarness(
+    config=HarnessConfig(
+        sandbox_enabled=True,
+        bash_timeout=60000,
+        bash_blacklist=["rm -rf /", "sudo", "mkfs"],
+    ),
+    permissions=PermissionSet(
+        max_permission=PermissionLevel.EXECUTE,
+        denied_tools={"bash"},  # 按需禁用
+    ),
+)
+```
+
+### 4. 记忆管理
+
+```python
+agent = AgentHarness(
+    memory_dir="/secure/harness/memory",  # 指定安全目录
+    vector_store=True,                     # 启用向量检索
+)
+```
+
+### 5. 集成到 Web 服务
+
+```python
+from fastapi import FastAPI
+from harness import AgentHarness
+
+app = FastAPI()
+agent = AgentHarness.from_config("harness.yaml")
+
+@app.post("/ai")
+async def ai_endpoint(message: str):
+    result = await agent.run(message)
+    return {"response": result.content}
+```
+
+## 监控与可观测性
+
+### 成本监控
+
+```python
+from harness import AgentHarness
+from harness.core.hooks import HookPoint, HookContext
+
+agent = AgentHarness()
+
+cost_tracker = {"total": 0.0}
+
+@agent.hook(HookPoint.AFTER_LLM_CALL)
+async def track_cost(ctx: HookContext):
+    if ctx.response and ctx.response.usage:
+        input_cost = ctx.response.usage.input_tokens * 0.000003
+        output_cost = ctx.response.usage.output_tokens * 0.000015
+        cost_tracker["total"] += input_cost + output_cost
+    return ctx
+
+result = await agent.run("分析代码")
+print(f"本次运行成本: ${cost_tracker['total']:.4f}")
+```
+
+### 审计日志
+
+```python
+# 审计日志自动记录到 .harness/audit/
+# 包含所有工具调用、权限检查、错误事件
+```
+
+## 可靠性
+
+### 重试策略
+
+| 错误类型 | 策略 |
+|----------|------|
+| API 限流 (429) | 指数退避重试 |
+| 服务器错误 (5xx) | 重试最多 3 次 |
+| 超时 | 重试 1 次 |
+| 上下文超长 | 自动压缩 |
+
+### 熔断器
+
+```python
+# 连续 5 次失败触发熔断
+# 可通过 HarnessConfig 配置
+```
+
+### 卡住检测
+
+```python
+# 检测重复输出和循环工具调用
+# 自动注入提醒或中断
+```
+
+## 扩展性
+
+### 自定义 LLM 客户端
+
+```python
+from harness.llm.base import LLMClient, LLMResponse
+from harness import AgentHarness
+
+class CustomLLM(LLMClient):
+    @property
+    def model_name(self) -> str:
+        return "custom-model"
+
+    async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
+        # 自定义实现
+        ...
+
+agent = AgentHarness(llm_client=CustomLLM())
+```
+
+### 自定义记忆后端
+
+```python
+# 使用向量检索
+agent = AgentHarness(vector_store=True)
+
+# 自定义记忆目录
+agent = AgentHarness(memory_dir="/data/harness/memory")
+```
+
+### 自定义工具
+
+```python
+@agent.tool(description="自定义功能")
+def my_tool(param: str) -> str:
+    return f"处理: {param}"
+```
+
+## 待实现功能
+
+### P3 - 工具输出卸载
+
+当工具输出占用过多上下文空间时，自动卸载到外部存储，仅在需要时加载。
+
+### P3 - 步骤预算
+
+在执行前预估成本，并在每步检查预算余额，接近超限时发出警告。
+
+## 与行业标准对比
+
+详细对比见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
+
+| 组件 | Harness SDK | Claude Code | LangGraph |
+|------|-------------|-------------|-----------|
+| Orchestration Loop | ✅ | ✅ | ✅ |
+| Tools | ✅ 8 内置 + MCP | ✅ 6 类 | ✅ |
+| Memory | ✅ 四层 + 向量 + MEMORY.md | ✅ 四层 + MEMORY.md | ✅ 向量 |
+| Context Management | ✅ 动态组装 | ✅ 优先级栈 | ✅ |
+| Long-Horizon | ✅ Hooks + Ralph + Sub-Agent | ✅ Ralph + 自验证 | ✅ |
+| Error Handling | ✅ 熔断 + 成本控制 | ✅ 步骤预算 | ✅ |
+| Serving Layer | ✅ harness.service | ✅ CLI + Web + API | ✅ |

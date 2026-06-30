@@ -1,1253 +1,1113 @@
-# 05 - 记忆系统 (Java 实现)
+# 04 - 记忆系统详解
 
 ## 概述
 
-记忆系统允许 Agent 跨会话保持上下文，是实现长期记忆的关键组件。本文档详细说明 Java 版本的记忆系统设计。
+记忆系统解决 LLM 无状态问题，提供跨会话的持久化和上下文管理。Harness 的记忆系统包含四层记忆架构、MEMORY.md 标准格式、向量检索和动态系统提示组装。
 
-## 架构设计
+## 四层记忆架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Memory System                          │
-│                                                             │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
-│  │   MEMORY.md │ ←── │   Memory    │ ←── │   Session   │  │
-│  │   (文件)     │     │   Manager   │     │   Manager   │  │
-│  └─────────────┘     └──────┬──────┘     └─────────────┘  │
-│                             │                               │
-│                             ↓                               │
-│                    ┌────────────────┐                       │
-│                    │ ContextBuilder │                       │
-│                    │   (上下文构建)   │                       │
-│                    └────────┬───────┘                       │
-│                             │                               │
-│         ┌───────────────────┼───────────────────┐          │
-│         ↓                   ↓                   ↓          │
-│  ┌────────────┐     ┌────────────┐     ┌────────────┐     │
-│  │   Token    │     │   Memory   │     │  Working   │     │
-│  │   Counter  │     │   Types    │     │  Memory    │     │
-│  └────────────┘     └────────────┘     └────────────┘     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ Layer 1: Working Memory（工作记忆）              │
+│ - 当前会话消息列表                               │
+│ - 当前任务状态                                   │
+│ - 临时变量和上下文                               │
+├─────────────────────────────────────────────────┤
+│ Layer 2: Session Memory（会话记忆）              │
+│ - 会话摘要                                       │
+│ - 关键决策记录                                   │
+│ - 用户偏好                                       │
+├─────────────────────────────────────────────────┤
+│ Layer 3: Long-term Memory（长期记忆）            │
+│ - MEMORY.md 持久记忆文件                         │
+│ - 技能和模式                                     │
+│ - 项目知识                                       │
+│ - 历史经验                                       │
+├─────────────────────────────────────────────────┤
+│ Layer 4: Retrieved Memory（检索记忆）            │
+│ - 向量语义搜索                                   │
+│ - 历史对话检索                                   │
+│ - 技能/文档检索                                  │
+│ - 按需加载                                       │
+└─────────────────────────────────────────────────┘
 ```
 
-## 核心类设计
 
-### MemoryManager
+## MEMORY.md 标准
 
-```java
-package com.harness.memory;
+MEMORY.md 是 Harness 的持久记忆文件格式，用于跨会话保存重要信息。它采用分章节的 Markdown 格式，便于人工阅读和编辑。
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-/**
- * 记忆管理器 - 管理持久化记忆。
- */
-public class MemoryManager {
-
-    private final Path memoryDir;
-    private final Path memoryMdPath;
-    private final TokenCounter tokenCounter;
-    private MemoryIndex index;
-
-    public MemoryManager(Path memoryDir, Path memoryMdPath) {
-        this.memoryDir = memoryDir;
-        this.memoryMdPath = memoryMdPath;
-        this.tokenCounter = new TokenCounter();
-        this.index = new MemoryIndex();
-
-        // 确保目录存在
-        try {
-            Files.createDirectories(memoryDir);
-        } catch (IOException e) {
-            throw new RuntimeException("无法创建记忆目录: " + memoryDir, e);
-        }
-
-        // 加载现有记忆
-        loadMemories();
-    }
-
-    /**
-     * 添加用户记忆。
-     */
-    public void addUserMemory(String name, String description, String type, String content) {
-        Memory memory = Memory.builder()
-            .name(name)
-            .description(description)
-            .type(MemoryType.valueOf(type.toUpperCase()))
-            .content(content)
-            .createdAt(Instant.now())
-            .build();
-
-        index.addMemory(memory);
-        saveMemory(memory);
-        updateMemoryMd();
-    }
-
-    /**
-     * 添加反馈记忆。
-     */
-    public void addFeedbackMemory(String name, String description, String content) {
-        addUserMemory(name, description, "FEEDBACK", content);
-    }
-
-    /**
-     * 添加项目记忆。
-     */
-    public void addProjectMemory(String name, String description, String content) {
-        addUserMemory(name, description, "PROJECT", content);
-    }
-
-    /**
-     * 添加引用记忆。
-     */
-    public void addReferenceMemory(String name, String description, String content) {
-        addUserMemory(name, description, "REFERENCE", content);
-    }
-
-    /**
-     * 获取所有记忆。
-     */
-    public List<Memory> getAllMemories() {
-        return index.getMemories();
-    }
-
-    /**
-     * 按类型获取记忆。
-     */
-    public List<Memory> getMemoriesByType(MemoryType type) {
-        return index.getMemories().stream()
-            .filter(m -> m.type() == type)
-            .toList();
-    }
-
-    /**
-     * 搜索记忆。
-     */
-    public List<Memory> searchMemories(String query) {
-        String lowerQuery = query.toLowerCase();
-        return index.getMemories().stream()
-            .filter(m -> m.name().toLowerCase().contains(lowerQuery) ||
-                        m.description().toLowerCase().contains(lowerQuery) ||
-                        m.content().toLowerCase().contains(lowerQuery))
-            .toList();
-    }
-
-    /**
-     * 更新记忆。
-     */
-    public void updateMemory(String name, String newContent) {
-        Optional<Memory> existing = index.getMemory(name);
-        if (existing.isPresent()) {
-            Memory updated = existing.get().withContent(newContent);
-            index.updateMemory(updated);
-            saveMemory(updated);
-            updateMemoryMd();
-        }
-    }
-
-    /**
-     * 删除记忆。
-     */
-    public void deleteMemory(String name) {
-        index.removeMemory(name);
-        deleteMemoryFile(name);
-        updateMemoryMd();
-    }
-
-    /**
-     * 构建系统提示词中的记忆部分。
-     */
-    public String buildMemoryPrompt() {
-        StringBuilder sb = new StringBuilder();
-
-        List<Memory> memories = index.getMemories();
-        if (memories.isEmpty()) {
-            return "";
-        }
-
-        sb.append("## 记忆\n\n");
-        sb.append("以下是跨会话持久化的记忆信息：\n\n");
-
-        // 按类型分组
-        Map<MemoryType, List<Memory>> grouped = memories.stream()
-            .collect(Collectors.groupingBy(Memory::type));
-
-        for (Map.Entry<MemoryType, List<Memory>> entry : grouped.entrySet()) {
-            sb.append("### ").append(entry.getKey().getDisplayName()).append("\n\n");
-
-            for (Memory memory : entry.getValue()) {
-                sb.append("#### ").append(memory.name()).append("\n");
-                sb.append(memory.description()).append("\n\n");
-                sb.append(memory.content()).append("\n\n");
-            }
-        }
-
-        return sb.toString();
-    }
-
-    /**
-     * 估算记忆的 Token 数量。
-     */
-    public int estimateTokens() {
-        return tokenCounter.count(buildMemoryPrompt());
-    }
-
-    // 私有方法
-    private void loadMemories() {
-        try {
-            if (Files.exists(memoryMdPath)) {
-                String content = Files.readString(memoryMdPath);
-                index = MemoryParser.parse(content);
-            }
-        } catch (IOException e) {
-            // 忽略，使用空索引
-        }
-    }
-
-    private void saveMemory(Memory memory) {
-        Path filePath = memoryDir.resolve(memory.name() + ".md");
-        try {
-            Files.writeString(filePath, formatMemoryFile(memory));
-        } catch (IOException e) {
-            throw new RuntimeException("无法保存记忆: " + memory.name(), e);
-        }
-    }
-
-    private void updateMemoryMd() {
-        try {
-            String content = formatMemoryMd();
-            Files.writeString(memoryMdPath, content);
-        } catch (IOException e) {
-            throw new RuntimeException("无法更新 MEMORY.md", e);
-        }
-    }
-
-    private String formatMemoryFile(Memory memory) {
-        return String.format("""
-            ---
-            name: %s
-            description: %s
-            type: %s
-            created_at: %s
-            ---
-
-            %s
-            """,
-            memory.name(),
-            memory.description(),
-            memory.type().name(),
-            memory.createdAt(),
-            memory.content()
-        );
-    }
-
-    private String formatMemoryMd() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("# Memory Index\n\n");
-
-        for (Memory memory : index.getMemories()) {
-            sb.append("- [").append(memory.name()).append("](")
-              .append(memory.name()).append(".md) — ")
-              .append(memory.description()).append("\n");
-        }
-
-        return sb.toString();
-    }
-}
-```
-
-### Memory 类型
-
-```java
-package com.harness.memory;
-
-/**
- * 记忆类型枚举。
- */
-public enum MemoryType {
-    USER("用户信息"),
-    FEEDBACK("反馈指导"),
-    PROJECT("项目信息"),
-    REFERENCE("引用资源");
-
-    private final String displayName;
-
-    MemoryType(String displayName) {
-        this.displayName = displayName;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-}
-
-/**
- * 记忆实体。
- */
-public record Memory(
-    String name,
-    String description,
-    MemoryType type,
-    String content,
-    Instant createdAt,
-    Instant updatedAt
-) {
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public Memory withContent(String newContent) {
-        return new Memory(name, description, type, newContent, createdAt, Instant.now());
-    }
-
-    public static class Builder {
-        private String name;
-        private String description;
-        private MemoryType type;
-        private String content;
-        private Instant createdAt;
-        private Instant updatedAt;
-
-        public Builder name(String name) { this.name = name; return this; }
-        public Builder description(String description) { this.description = description; return this; }
-        public Builder type(MemoryType type) { this.type = type; return this; }
-        public Builder content(String content) { this.content = content; return this; }
-        public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
-        public Builder updatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
-
-        public Memory build() {
-            return new Memory(name, description, type, content, createdAt, updatedAt);
-        }
-    }
-}
-```
-
-### Token 计数器
-
-```java
-package com.harness.memory;
-
-import com.knuddelsgmbh.jtokkit.Encodings;
-import com.knuddelsgmbh.jtokkit.api.Encoding;
-import com.knuddelsgmbh.jtokkit.api.EncodingType;
-
-import java.util.concurrent.TimeUnit;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-
-/**
- * Token 计数器 - 使用 jtokkit 库。
- */
-public class TokenCounter {
-
-    private final Encoding encoding;
-    private final Cache<String, Integer> cache;
-
-    public TokenCounter() {
-        // Claude 使用 cl100k_base 编码（与 GPT-4 相同）
-        this.encoding = Encodings.newDefaultEncodingRegistry()
-            .getEncoding(EncodingType.CL100K_BASE);
-
-        // 缓存计数结果
-        this.cache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .expireAfterAccess(10, TimeUnit.MINUTES)
-            .build();
-    }
-
-    /**
-     * 计算文本的 Token 数量。
-     */
-    public int count(String text) {
-        if (text == null || text.isEmpty()) {
-            return 0;
-        }
-
-        return cache.get(text, t -> encoding.encode(t).size());
-    }
-
-    /**
-     * 批量计算。
-     */
-    public int countAll(List<String> texts) {
-        return texts.stream()
-            .mapToInt(this::count)
-            .sum();
-    }
-
-    /**
-     * 清除缓存。
-     */
-    public void clearCache() {
-        cache.invalidateAll();
-    }
-}
-```
-
-### 上下文构建器
-
-```java
-package com.harness.memory;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * 上下文构建器 - 构建发送给 LLM 的完整上下文。
- */
-public class ContextBuilder {
-
-    private final MemoryManager memoryManager;
-    private final TokenCounter tokenCounter;
-    private final int contextWindow;
-    private final int maxMemoryTokens;
-
-    public ContextBuilder(MemoryManager memoryManager, int contextWindow, double memoryRatio) {
-        this.memoryManager = memoryManager;
-        this.tokenCounter = new TokenCounter();
-        this.contextWindow = contextWindow;
-        this.maxMemoryTokens = (int) (contextWindow * memoryRatio);
-    }
-
-    /**
-     * 构建完整的上下文。
-     */
-    public Context build(Session session) {
-        List<Message> messages = new ArrayList<>();
-
-        // 1. 添加系统提示词
-        String systemPrompt = buildSystemPrompt(session);
-        messages.add(Message.system(systemPrompt));
-
-        // 2. 添加历史消息（在 Token 预算内）
-        List<Message> history = truncateHistory(session.messages());
-        messages.addAll(history);
-
-        // 3. 计算 Token 使用量
-        int totalTokens = tokenCounter.countAll(
-            messages.stream().map(Message::content).toList()
-        );
-
-        return new Context(messages, totalTokens, contextWindow - totalTokens);
-    }
-
-    /**
-     * 构建系统提示词。
-     */
-    private String buildSystemPrompt(Session session) {
-        StringBuilder sb = new StringBuilder();
-
-        // 基础系统提示
-        sb.append(session.systemPrompt()).append("\n\n");
-
-        // 添加记忆
-        String memoryPrompt = memoryManager.buildMemoryPrompt();
-        if (!memoryPrompt.isEmpty()) {
-            sb.append(memoryPrompt).append("\n");
-        }
-
-        // 添加工作目录信息
-        sb.append("工作目录: ").append(session.workingDirectory()).append("\n");
-
-        return sb.toString();
-    }
-
-    /**
-     * 截断历史消息以适应 Token 预算。
-     */
-    private List<Message> truncateHistory(List<Message> messages) {
-        int availableTokens = contextWindow - maxMemoryTokens;
-
-        List<Message> result = new ArrayList<>();
-        int currentTokens = 0;
-
-        // 从最新消息开始添加
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Message msg = messages.get(i);
-            int msgTokens = tokenCounter.count(msg.content());
-
-            if (currentTokens + msgTokens > availableTokens) {
-                // 如果超出预算，添加截断提示
-                if (i > 0) {
-                    result.add(0, Message.system(
-                        String.format("... 已省略 %d 条历史消息 ...", i)
-                    ));
-                }
-                break;
-            }
-
-            result.add(0, msg);
-            currentTokens += msgTokens;
-        }
-
-        return result;
-    }
-}
-
-/**
- * 上下文结果。
- */
-public record Context(
-    List<Message> messages,
-    int usedTokens,
-    int remainingTokens
-) {
-    public boolean isNearLimit() {
-        return remainingTokens < 1000;
-    }
-}
-```
-
-## 工作记忆
-
-```java
-package com.harness.memory;
-
-/**
- * 工作记忆 - 会话内的临时记忆。
- */
-public class WorkingMemory {
-
-    private final Map<String, Object> data;
-    private final List<String> recentActions;
-    private final int maxActions;
-
-    public WorkingMemory(int maxActions) {
-        this.data = new ConcurrentHashMap<>();
-        this.recentActions = new ArrayList<>();
-        this.maxActions = maxActions;
-    }
-
-    /**
-     * 存储数据。
-     */
-    public void put(String key, Object value) {
-        data.put(key, value);
-    }
-
-    /**
-     * 获取数据。
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T get(String key) {
-        return (T) data.get(key);
-    }
-
-    /**
-     * 记录动作。
-     */
-    public void recordAction(String action) {
-        recentActions.add(action);
-        if (recentActions.size() > maxActions) {
-            recentActions.remove(0);
-        }
-    }
-
-    /**
-     * 获取最近的动作。
-     */
-    public List<String> getRecentActions() {
-        return new ArrayList<>(recentActions);
-    }
-
-    /**
-     * 清除工作记忆。
-     */
-    public void clear() {
-        data.clear();
-        recentActions.clear();
-    }
-
-    /**
-     * 构建工作记忆摘要。
-     */
-    public String buildSummary() {
-        StringBuilder sb = new StringBuilder();
-
-        if (!recentActions.isEmpty()) {
-            sb.append("最近的操作:\n");
-            for (String action : recentActions) {
-                sb.append("- ").append(action).append("\n");
-            }
-        }
-
-        if (!data.isEmpty()) {
-            sb.append("\n已记录的数据:\n");
-            for (Map.Entry<String, Object> entry : data.entrySet()) {
-                sb.append("- ").append(entry.getKey()).append("\n");
-            }
-        }
-
-        return sb.toString();
-    }
-}
-```
-
-## 记忆文件格式
-
-### MEMORY.md 格式
+### 文件格式
 
 ```markdown
-# Memory Index
+# MEMORY.md
 
-- [user_role](user_role.md) — 用户角色和偏好
-- [project_structure](project_structure.md) — 项目结构说明
-- [coding_style](coding_style.md) — 编码风格偏好
+## User Profile
+- Role: Software Developer
+- Preferred Language: Python
+
+## Key Decisions
+- 2024-01-15: Chose SQLite for session storage due to its simplicity and performance
+- 2024-01-16: Use qasync for PyQt integration instead of QThread
+
+## Learned Patterns
+- User prefers detailed explanations with code examples
+- Avoid mocking database in integration tests
+
+## Project Context
+- This project uses Python 3.11+ with async/await patterns
+- Code style follows Black formatting with 88 character line length
 ```
 
-### 单个记忆文件格式
+### 记忆类别
 
-```markdown
----
-name: user_role
-description: 用户角色和偏好
-type: USER
-created_at: 2026-06-17T10:00:00Z
----
+Harness 定义了四种记忆类别，每种对应一个专门的章节：
 
-用户是一名高级 Java 开发工程师，专注于银行系统开发。
+| 类别 | 章节标题 | 说明 | 示例 |
+|------|----------|------|------|
+| `USER_PROFILE` | User Profile | 用户角色、偏好、技能 | 用户是后端工程师，偏好 Python |
+| `KEY_DECISIONS` | Key Decisions | 重要技术决策，带时间戳 | 2024-01-15: 选择 SQLite 作为会话存储 |
+| `LEARNED_PATTERNS` | Learned Patterns | Agent 学习到的用户模式 | 用户喜欢详细的代码示例 |
+| `PROJECT_CONTEXT` | Project Context | 项目特定约定和配置 | 代码遵循 Black 格式化，行宽 88 字符 |
 
-偏好：
-- 使用 Java 17 特性
-- 遵循阿里巴巴 Java 编码规范
-- 偏好函数式编程风格
+
+
+### 核心类型
+
+```python
+from harness.memory.memory_file import MemoryEntry, MemoryCategory, MemorySource, MemorySections, MemoryFileManager
+from pathlib import Path
+from datetime import datetime
+
+# MemoryEntry - 单个记忆条目
+entry = MemoryEntry(
+    category=MemoryCategory.KEY_DECISIONS,
+    content="Chose SQLite for session storage",
+    source=MemorySource.AGENT_OBSERVATION,
+    created_at=datetime.now(),  # 自动设置创建时间
+    metadata={"session_id": "abc123"},  # 可选元数据
+)
+
+# MemorySections - 所有记忆章节
+sections = MemorySections(
+    user_profile=["Role: Software Developer", "Preferred Language: Python"],
+    key_decisions=["2024-01-15: Chose SQLite for session storage"],
+    learned_patterns=["User prefers detailed explanations"],
+    project_context=["Project uses Python 3.11+"],
+)
+
+# MemoryFileManager - 管理 MEMORY.md 文件
+manager = MemoryFileManager(project_root=Path.cwd())
 ```
-
-## 使用示例
-
-### 初始化记忆系统
-
-```java
-import com.harness.memory.MemoryManager;
-import com.harness.memory.ContextBuilder;
-import java.nio.file.Path;
-
-// 创建记忆管理器
-Path memoryDir = Path.of(System.getProperty("user.home"), ".harness");
-Path memoryMdPath = memoryDir.resolve("MEMORY.md");
-
-MemoryManager memoryManager = new MemoryManager(memoryDir, memoryMdPath);
-
-// 添加记忆
-memoryManager.addUserMemory(
-    "user_role",
-    "用户角色和偏好",
-    "USER",
-    "用户是一名高级 Java 开发工程师，专注于银行系统开发。"
-);
-
-memoryManager.addFeedbackMemory(
-    "code_review",
-    "代码审查反馈",
-    "避免使用过时的 API，优先使用 Java 17 新特性。"
-);
-```
-
-### 集成到 Agent
-
-```java
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .memoryDir(memoryDir.toString())
-    .memoryMdPath(memoryMdPath.toString())
-    .contextWindow(200000)
-    .build();
-
-Harness agent = new Harness(config);
-
-// Agent 会自动加载记忆并注入到上下文中
-LoopResult result = agent.run("帮我优化这个方法");
-```
-
-### 动态更新记忆
-
-```java
-// 在 Agent 执行过程中更新记忆
-agent.addHook(new LifecycleHook() {
-    @Override
-    public Set<HookPoint> hookPoints() {
-        return Set.of(HookPoint.ON_LOOP_END);
-    }
-
-    @Override
-    public CompletableFuture<HookResult> execute(HookContext ctx) {
-        // 检查是否需要更新记忆
-        if (ctx.session().metadata().containsKey("new_learning")) {
-            String learning = ctx.session().metadata().get("new_learning").toString();
-            memoryManager.addFeedbackMemory(
-                "auto_learning_" + System.currentTimeMillis(),
-                "自动学习",
-                learning
-            );
-        }
-        return CompletableFuture.completedFuture(HookResult.continue_());
-    }
-});
-```
-
-## 性能优化
-
-### 1. Token 计数缓存
-
-```java
-// 使用 Caffeine 缓存
-Cache<String, Integer> cache = Caffeine.newBuilder()
-    .maximumSize(10000)
-    .expireAfterAccess(10, TimeUnit.MINUTES)
-    .recordStats()  // 记录统计信息
-    .build();
-```
-
-### 2. 增量更新
-
-```java
-public class IncrementalMemoryUpdater {
-    private final MemoryManager memoryManager;
-    private final Queue<MemoryUpdate> pendingUpdates = new ConcurrentLinkedQueue<>();
-
-    public void queueUpdate(MemoryUpdate update) {
-        pendingUpdates.offer(update);
-    }
-
-    public void flush() {
-        List<MemoryUpdate> batch = new ArrayList<>();
-        MemoryUpdate update;
-        while ((update = pendingUpdates.poll()) != null) {
-            batch.add(update);
-        }
-
-        if (!batch.isEmpty()) {
-            memoryManager.batchUpdate(batch);
-        }
-    }
-}
-```
-
-### 3. 异步持久化
-
-```java
-public class AsyncMemoryPersister {
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final MemoryManager memoryManager;
-
-    public CompletableFuture<Void> saveAsync(Memory memory) {
-        return CompletableFuture.runAsync(
-            () -> memoryManager.addMemory(memory),
-            executor
-        );
-    }
-}
-```
-
-## UpdateCoreMemoryTool
-
-允许 Agent 自主更新 Core Memory 的工具，遵循 Mem0 模式。
 
 ### 使用方式
 
-```java
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-import com.harness.tools.UpdateCoreMemoryTool;
+```python
+from harness.memory.memory_file import MemoryFileManager, MemoryEntry, MemoryCategory, MemorySource
+from pathlib import Path
 
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .build();
+# 初始化管理器
+manager = MemoryFileManager(project_root=Path("/path/to/project"))
 
-Harness agent = new Harness(config);
+# 检查是否存在 MEMORY.md
+if manager.exists():
+    # 加载现有记忆
+    sections = manager.load()
+    
+    # 访问特定章节
+    for pattern in sections.learned_patterns:
+        print(f"学习到的模式: {pattern}")
+else:
+    # 创建默认记忆文件
+    from harness.memory.memory_file import create_default_memory
+    create_default_memory(Path("/path/to/project"))
 
-// 添加 UpdateCoreMemoryTool 到工具列表
-agent.addTool(new UpdateCoreMemoryTool());
+# 添加新条目
+new_entry = MemoryEntry(
+    category=MemoryCategory.KEY_DECISIONS,
+    content="Use qasync for PyQt integration",
+    source=MemorySource.AGENT_OBSERVATION,
+    created_at=datetime.now(),
+    metadata={"source": "agent_observation"},
+)
+manager.add_entry(new_entry)
 
-// Agent 现在可以自主更新记忆
-LoopResult result = agent.run("我使用 Windows 系统");
+# 获取所有条目
+key_decisions = manager.get_entries(MemoryCategory.KEY_DECISIONS)
+for i, decision in enumerate(key_decisions):
+    print(f"决策 {i}: {decision}")
+
+# 格式化为 LLM 上下文字符串
+context_string = manager.to_context_string()
+print(f"上下文长度: {len(context_string)} 字符")
+
+# 删除条目
+manager.remove_entry(MemoryCategory.KEY_DECISIONS, 0)
+
+# 清空所有记忆
+manager.clear()
 ```
 
-### 工具描述（引导内容提炼）
+## VectorMemoryStore（向量检索）
+
+向量检索提供语义搜索能力，可以搜索历史对话、技能和文档。这是一个可选功能，需要安装额外依赖：`pip install harness-ai[vector]`。
+
+### 核心协议
+
+```python
+from harness.memory.vector_store import EmbeddingModel, VectorStore, VectorSearchResult
+
+# EmbeddingModel 协议
+class EmbeddingModel(Protocol):
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """生成文本嵌入向量"""
+    
+    @property
+    def dimension(self) -> int:
+        """返回嵌入维度"""
+
+# VectorStore 协议
+class VectorStore(Protocol):
+    async def add(
+        self,
+        ids: list[str],
+        embeddings: list[list[float]],
+        metadatas: list[dict[str, Any]] | None = None,
+        documents: list[str] | None = None,
+    ) -> None:
+        """添加向量到存储"""
+    
+    async def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        filter: dict[str, Any] | None = None,
+    ) -> list[VectorSearchResult]:
+        """搜索相似向量"""
+    
+    async def delete(self, ids: list[str]) -> None:
+        """按ID删除向量"""
+    
+    async def clear(self) -> None:
+        """清空所有向量"""
+```
+
+### VectorMemoryConfig
+
+```python
+from harness.memory.vector_store import VectorMemoryConfig
+
+@dataclass
+class VectorMemoryConfig:
+    embedding_model: str = "mock"  # "mock", "openai", "sentence-transformers"
+    persist_dir: Path | None = None  # 持久化目录
+    collection_name: str = "harness_memory"  # 集合名称
+    embedding_dimension: int = 384  # 嵌入维度
+```
+
+### VectorSearchResult
+
+```python
+@dataclass
+class VectorSearchResult:
+    id: str                    # 文档唯一标识符
+    content: str               # 匹配内容
+    score: float               # 相似度分数 (0-1)
+    metadata: dict[str, Any] = field(default_factory=dict)  # 元数据
+```
+
+### VectorMemoryStore 类
+
+```python
+from harness.memory.vector_store import VectorMemoryStore, VectorMemoryConfig
+
+class VectorMemoryStore:
+    def __init__(
+        self,
+        config: VectorMemoryConfig | None = None,
+        embedding_model: EmbeddingModel | None = None,
+        vector_store: VectorStore | None = None,
+    ):
+        """初始化向量记忆存储
+        
+        Args:
+            config: 配置对象
+            embedding_model: 自定义嵌入模型（覆盖配置）
+            vector_store: 自定义向量存储（覆盖配置）
+        """
+    
+    async def add(
+        self,
+        id: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """添加单个文档到存储"""
+    
+    async def add_batch(
+        self,
+        ids: list[str],
+        contents: list[str],
+        metadatas: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """批量添加文档到存储"""
+    
+    async def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        filter: dict[str, Any] | None = None,
+    ) -> list[VectorSearchResult]:
+        """语义搜索文档"""
+    
+    async def delete(self, ids: list[str]) -> None:
+        """删除文档"""
+    
+    async def clear(self) -> None:
+        """清空所有文档"""
+    
+    async def add_conversation(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> None:
+        """添加对话消息到存储"""
+    
+    async def search_conversations(
+        self,
+        query: str,
+        session_id: str | None = None,
+        top_k: int = 10,
+    ) -> list[VectorSearchResult]:
+        """搜索对话历史"""
+    
+    async def add_skill(
+        self,
+        skill_name: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """添加技能内容到存储"""
+    
+    async def search_skills(
+        self,
+        query: str,
+        top_k: int = 5,
+    ) -> list[VectorSearchResult]:
+        """按语义相似度搜索技能"""
+```
+
+### 使用场景
+
+```python
+from harness.memory.vector_store import VectorMemoryStore, VectorMemoryConfig
+from pathlib import Path
+
+# 创建配置
+config = VectorMemoryConfig(
+    embedding_model="mock",  # 使用模拟嵌入模型（测试用）
+    # embedding_model="openai",  # 使用 OpenAI 嵌入模型
+    # embedding_model="sentence-transformers",  # 使用 sentence-transformers
+)
+
+# 创建向量存储
+store = VectorMemoryStore(config)
+
+# 添加文档
+await store.add(
+    id="doc1",
+    content="用户偏好使用 PostgreSQL 而非 MySQL",
+    metadata={"session_id": "abc123", "type": "preference"},
+)
+
+# 批量添加文档
+await store.add_batch(
+    ids=["doc2", "doc3", "doc4"],
+    contents=[
+        "项目使用 Python 3.11 和 async/await 模式",
+        "代码风格遵循 Black 格式化，行宽 88 字符",
+        "测试使用 pytest 框架，避免 mock 数据库",
+    ],
+    metadatas=[
+        {"type": "project_context"},
+        {"type": "coding_standard"},
+        {"type": "testing"},
+    ],
+)
+
+# 语义搜索
+results = await store.search("数据库选择", top_k=3)
+for result in results:
+    print(f"[{result.score:.3f}] {result.content}")
+    print(f"  元数据: {result.metadata}")
+
+# 添加对话历史
+messages = [
+    {"role": "user", "content": "如何设置 Python 异步编程？"},
+    {"role": "assistant", "content": "使用 asyncio 库和 async/await 语法。"},
+]
+await store.add_conversation("session_123", messages)
+
+# 搜索对话历史
+conversation_results = await store.search_conversations("异步编程", session_id="session_123")
+for result in conversation_results:
+    print(f"对话匹配: {result.content}")
+
+# 添加技能
+await store.add_skill(
+    skill_name="code_review",
+    content="代码审查时检查错误处理、类型注解和测试覆盖率。",
+    metadata={"category": "development"},
+)
+
+# 搜索技能
+skill_results = await store.search_skills("代码审查", top_k=2)
+for result in skill_results:
+    print(f"技能匹配: {result.content}")
+
+# 删除文档
+await store.delete(["doc1"])
+
+# 清空存储
+await store.clear()
+```
+
+## SystemPromptBuilder（动态系统提示组装）
+
+SystemPromptBuilder 负责动态组装系统提示，将多个来源的内容合并为最终系统提示。
+
+### SystemPromptSource
+
+```python
+from harness.memory.system_prompt import SystemPromptSource
+
+@dataclass
+class SystemPromptSource:
+    name: str
+    priority: int  # 优先级越高，在最终提示中越靠前
+    content: str | Callable[[], str] | None = None
+    file_path: Path | None = None
+    required: bool = False  # 如果为 True，文件不存在时抛出错误
+```
+
+### SystemPromptConfig
+
+```python
+from harness.memory.system_prompt import SystemPromptConfig, SystemPromptBuilder
+
+@dataclass
+class SystemPromptConfig:
+    base_prompt: str = ""  # 基础系统提示
+    agents_md_path: Path | None = None  # AGENTS.md 文件路径
+    memory_md_path: Path | None = None  # MEMORY.md 文件路径
+    project_root: Path | None = None  # 项目根目录
+    auto_discover: bool = True  # 自动发现 AGENTS.md 和 MEMORY.md
+    custom_sources: dict[str, SystemPromptSource] = field(default_factory=dict)  # 自定义源
+    section_separator: str = "\n\n---\n\n"  # 片段分隔符
+```
+
+### SystemPromptBuilder
+
+```python
+class SystemPromptBuilder:
+    def __init__(self, config: SystemPromptConfig | None = None):
+        """初始化系统提示构建器"""
+        self.config = config or SystemPromptConfig()
+        self._sources: list[SystemPromptSource] = []
+        self._setup_default_sources()
+
+    def add_source(self, source: SystemPromptSource) -> None:
+        """添加新的提示源"""
+
+    def remove_source(self, name: str) -> bool:
+        """通过名称移除提示源，返回是否找到并移除"""
+
+    def build(self) -> str:
+        """构建最终系统提示"""
+
+    def get_available_sources(self) -> list[str]:
+        """获取有内容的源名称列表"""
+
+    def get_source_content(self, name: str) -> str | None:
+        """获取特定源的内容"""
+```
+
+### 组装优先级
+
+```
+1. 安全规则（最高优先级）
+2. 角色定义
+3. AGENTS.md 内容
+4. 技能指令
+5. 记忆上下文
+6. 用户偏好
+7. 基础提示（最低优先级）
+```
+
+### 使用方式
+
+```python
+from harness.memory.system_prompt import SystemPromptConfig, SystemPromptBuilder, SystemPromptSource
+from pathlib import Path
+
+# 创建配置
+config = SystemPromptConfig(
+    base_prompt="You are a helpful assistant.",
+    project_root=Path.cwd(),  # 设置项目根目录以自动发现文件
+    auto_discover=True,  # 自动发现 AGENTS.md 和 MEMORY.md
+)
+
+# 创建构建器
+builder = SystemPromptBuilder(config)
+
+# 添加自定义源
+security_source = SystemPromptSource(
+    name="security",
+    priority=100,
+    content="Never execute destructive operations without confirmation.",
+)
+builder.add_source(security_source)
+
+# 构建最终提示
+system_prompt = builder.build()
+print(f"系统提示长度: {len(system_prompt)} 字符")
+```
+
+### discover_project_context() 函数
+
+```python
+from harness.memory.system_prompt import discover_project_context
+
+# 自动发现项目上下文
+context = discover_project_context(Path.cwd())
+if "AGENTS.md" in context:
+    print(f"发现 AGENTS.md: {len(context['AGENTS.md'])} 字符")
+if "MEMORY.md" in context:
+    print(f"发现 MEMORY.md: {len(context['MEMORY.md'])} 字符")
+```
+
+## 记忆后端
+
+Harness 支持多种记忆存储后端：
+
+| 后端 | 说明 | 适用场景 |
+|------|------|----------|
+| **文件系统** | 默认，使用 JSON/YAML 文件 | 开发、小规模 |
+| **SQLite** | 轻量数据库 | 中等规模 |
+| **向量存储** | 语义搜索 | 大规模、需要检索 |
+
+```python
+from harness import AgentHarness
+
+# 默认文件系统后端
+agent = AgentHarness(memory_dir=".harness/memory")
+
+# 启用向量检索
+agent = AgentHarness(
+    memory_dir=".harness/memory",
+    vector_store=True,  # 自动创建 VectorMemoryStore
+)
+```
+
+## 上下文压缩
+
+当工作记忆超过阈值时，Agent Loop 自动触发压缩：
+
+1. 保留最近 N 条消息
+2. 将更早的消息压缩为摘要
+3. 摘要替换原始消息，释放上下文空间
+4. 原始消息仍可通过向量检索访问
+
+```python
+# 在 AgentHarness 中配置压缩阈值
+from harness import AgentHarness, HarnessConfig
+
+config = HarnessConfig(
+    max_input_tokens=100000,  # 最大输入 token 数
+    # 当 token 数超过此阈值时自动触发压缩
+)
+agent = AgentHarness(config=config)
+
+# Ralph Loop 中自动压缩
+# 当 token 数超过 compression_threshold 时自动触发
+```
+
+## 与技能系统的集成
+
+记忆系统与技能系统紧密集成：
+
+1. **技能加载**：ProgressiveSkillLoader 根据上下文预算决定加载级别
+2. **MEMORY.md**：技能执行过程中的经验可保存为记忆
+3. **向量检索**：技能内容被索引用于语义搜索
+4. **系统提示**：技能指令通过 SystemPromptBuilder 注入系统提示
+
+```python
+from harness.memory.memory_file import MemoryFileManager, MemoryEntry, MemoryCategory, MemorySource
+from harness.memory.vector_store import VectorMemoryStore
+from harness.types import HookPoint, HookContext
+
+# 技能经验保存为记忆
+@agent.hook(HookPoint.AFTER_TOOL_EXECUTE)
+async def save_skill_experience(ctx: HookContext):
+    if ctx.tool_result and ctx.tool_result.is_error:
+        # 将错误经验保存到 MEMORY.md
+        manager = MemoryFileManager()
+        entry = MemoryEntry(
+            category=MemoryCategory.LEARNED_PATTERNS,
+            content=f"Avoid {ctx.tool_name} when {ctx.tool_result.error} occurs",
+            source=MemorySource.AGENT_OBSERVATION,
+            metadata={
+                "skill": "code-review",
+                "error": ctx.tool_result.error,
+                "tool": ctx.tool_name,
+            }
+        )
+        manager.add_entry(entry)
+    
+    # 向量检索技能内容
+    if ctx.tool_name == "code_review":
+        vector_store = VectorMemoryStore()
+        await vector_store.add_skill(
+            skill_name="code_review_pattern",
+            content=f"Code review pattern: {ctx.tool_result.content[:100]}...",
+            metadata={"session_id": ctx.session_id}
+        )
+    
+    return ctx
+```
+
+## 全局记忆配置
+
+Harness SDK 支持配置全局记忆文件路径，让 Agent 自动加载全局 MEMORY.md 文件。
+
+### 配置方式
+
+```python
+from harness import AgentHarness, HarnessConfig
+from pathlib import Path
+
+# 方式 1：通过 HarnessConfig 配置
+config = HarnessConfig(
+    model="claude-sonnet-4-6",
+    memory_md_path=Path.home() / ".harness" / "MEMORY.md",  # 全局记忆文件路径
+)
+agent = AgentHarness(config=config)
+
+# 方式 2：通过 ContextBuilder 添加自定义记忆源
+from harness.memory.system_prompt import SystemPromptSource
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+agent._context_builder.add_prompt_source(SystemPromptSource(
+    name="GlobalMemory",
+    priority=40,
+    file_path=Path.home() / ".harness" / "MEMORY.md",
+))
+```
+
+### 配置项说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `memory_md_path` | `Path \| None` | `None` | 全局 MEMORY.md 文件路径，设置后自动加载到上下文 |
+
+### 使用场景
+
+- **用户偏好存储**：保存用户常用的编码风格、语言偏好等
+- **跨项目知识共享**：在多个项目间共享通用的技术决策和模式
+- **客户端集成**：桌面客户端可通过 UI 管理全局记忆
+- **即时更新**：MEMORY.md 修改后在下一次 run() 调用时自动生效
+
+---
+
+## 记忆评分与衰减机制
+
+基于 Mem0 的 Recency-Aware Ranking 和 Bjork 新遗忘理论，Harness 实现了智能的记忆生命周期管理。
+
+### 核心理念
+
+**不删除记忆，只影响检索排序**。这遵循 Bjork 新遗忘理论的两个强度概念：
+
+- **Storage Strength (importance)**：创建时决定，之后不再变化，用于归档决策
+- **Retrieval Strength**：动态变化（时间衰减 + 访问恢复），用于检索排序
+
+### 分层记忆架构
+
+```
+Layer 1: Core Memory (MEMORY.md) = Agent 的 "RAM"
+- 用户偏好、项目约定
+- 始终注入系统提示（无条件可见）
+- 不需要检索，不需要 Retrieval Strength
+- 容量超限时 Archive 到 Retrieved Memory（不丢失）
+
+Layer 2: Retrieved Memory (VectorMemoryStore) = Agent 的 "Hard Drive"
+- 历史对话、特定事件、已归档记忆
+- 查询时按需检索
+- 需要 Retrieval Strength 加权排序
+```
+
+### Retrieval Strength 计算
+
+```
+检索分数 = 语义相似度 × Retrieval Strength
+
+Retrieval Strength = 时间衰减因子 × 访问奖励因子
+
+其中：
+- 时间衰减因子 = min_strength + (1 - min_strength) × e^(-λ × 未访问天数)
+  - 最近访问：≈ 1.0（接近满分）
+  - 长期未访问：→ 0.3（保底分数，默认 min_strength=0.3）
+- 访问奖励因子 = 1 + 0.5 × log(1 + access_count)
+  - 从未访问：1.0
+  - 访问 10 次：≈ 2.0
+  - 访问 100 次：≈ 2.5
+```
+
+**关键设计**：最低 0.3× 保底分数确保旧记忆仍能被检索，只是排序靠后。
+
+### MemoryEntry 增强
+
+```python
+@dataclass
+class MemoryEntry:
+    # 现有字段
+    category: MemoryCategory
+    content: str
+    source: MemorySource
+    created_at: datetime = field(default_factory=datetime.now)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    # 新增字段（向后兼容）
+    importance: float = 1.0           # Storage Strength（用于归档决策）
+    last_accessed: datetime | None = None  # 最后访问时间
+    access_count: int = 0             # 访问次数
+
+    def calculate_retrieval_strength(
+        self,
+        decay_lambda: float = 0.05,
+        min_strength: float = 0.3,
+    ) -> float:
+        """计算 Retrieval Strength（仅用于 Retrieved Memory）"""
+        ...
+
+    def touch(self) -> None:
+        """更新访问时间和计数"""
+        self.last_accessed = datetime.now()
+        self.access_count += 1
+```
+
+### MemoryScoringConfig
+
+```python
+@dataclass
+class MemoryScoringConfig:
+    """记忆评分配置"""
+    decay_lambda: float = 0.05            # 衰减速度（λ 越大衰减越快）
+    min_retrieval_strength: float = 0.3   # 最低检索强度（保底）
+    max_core_memory_tokens: int = 2000    # Core Memory 最大 token 数
+    enable_llm_evaluation: bool = False   # 是否启用 LLM 评估 importance
+    archive_fallback: Literal["file", "delete", "none"] = "file"
+    # file: 归档到 MEMORY_ARCHIVE.md（默认，不丢失数据）
+    # delete: 直接删除（不推荐）
+    # none: 禁用归档，Core Memory 无限增长
+```
+
+### 使用配置
+
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.sdk.config import MemoryScoringConfig
+
+config = HarnessConfig(
+    memory_scoring=MemoryScoringConfig(
+        decay_lambda=0.05,           # 衰减速度
+        max_core_memory_tokens=2000, # Core Memory 容量上限
+        enable_llm_evaluation=True,  # 启用 LLM 评估重要性
+        archive_fallback="file",     # 无向量数据库时归档到文件
+    ),
+)
+agent = AgentHarness(config=config)
+```
+
+---
+
+## Archive 机制
+
+当 Core Memory 超过容量限制时，自动归档低 importance 的 Entry 到 Retrieved Memory。
+
+### 触发时机
+
+**触发时机**：仅 `run()` 时检查并执行。
+
+```python
+async def run(self, prompt: str) -> LoopResult:
+    # 检查 Core Memory 容量
+    is_over, tokens = self._memory_manager.file_store.check_capacity()
+    if is_over:
+        await self._memory_manager.archive_low_importance()
+
+    # 继续执行 Agent Loop
+    ...
+```
+
+**不在 `add_entry()` 时标记**，理由：
+- 容量检查开销很小（只是计算字符串长度/token）
+- 每次都检查确保不遗漏
+- 无状态设计更可靠
+
+### 归档策略（Entry 级别）
+
+**关键设计**：归档是 Entry 级别，不是 Section 级别。即使某 Section 有 10 条 Entry，也只归档 importance 最低的那几条。
+
+```python
+async def archive_low_importance(self) -> int:
+    """
+    容量超限时，跨 section 按 importance 归档低分 Entry
+    """
+    # 收集所有 section 的所有 Entry
+    all_entries = []
+    for category in MemoryCategory:
+        entries = self._load_entries_with_metadata(category)
+        for i, entry in enumerate(entries):
+            all_entries.append({
+                "category": category,
+                "index": i,
+                "entry": entry,
+            })
+
+    # 按 importance 排序（低分优先归档）
+    all_entries.sort(key=lambda x: x["entry"].importance)
+
+    archived = 0
+    for item in all_entries:
+        # 归档到 Retrieved Memory（不丢失）
+        await self._archive_entry(item["entry"])
+
+        # 从 Core Memory 删除
+        self.remove_entry(item["category"], item["index"] - archived)
+        archived += 1
+
+        # 检查容量是否已释放足够
+        if self.check_capacity()[1] <= self.MAX_CORE_MEMORY_TOKENS * 0.8:
+            break
+
+    return archived
+```
+
+### 无向量数据库的降级方案
+
+当用户未配置 VectorMemoryStore 时，归档的 Entry 写入 `MEMORY_ARCHIVE.md` 文件：
+
+```markdown
+# Archived Memory
+
+> 以下记忆已从 Core Memory 归档。可通过全文搜索查找。
+
+## User Profile
+- [2026-01-15, importance=0.3] 旧偏好：用户曾使用 macOS
+
+## Key Decisions
+- [2025-12-01, importance=0.4] 历史决策：选择 Redis 作为缓存
+
+## Learned Patterns
+- [2025-11-15, importance=0.2] 临时模式：用户当时偏好简短回复
+
+## Project Context
+- [2025-10-01, importance=0.3] 过时信息：项目使用 Python 3.9
+```
+
+### 行为对比
+
+| 场景 | VectorMemoryStore | MEMORY_ARCHIVE.md |
+|------|-------------------|-------------------|
+| **数据丢失** | 不丢失 | 不丢失 |
+| **检索方式** | 语义搜索 | 全文搜索/手动查看 |
+| **Retrieval Strength** | 适用 | 不适用 |
+| **Agent 自动访问** | 是（通过 search()） | 否（需手动查看文件） |
+
+---
+
+## Importance 的来源与评估
+
+### Importance 的生命周期
+
+```
+1. 创建时：LLM 评估（或默认值 1.0）
+   ↓
+2. 存储后：不再变化（Storage Strength 是静态的）
+   ↓
+3. 归档决策：按 importance 排序，低分优先归档
+```
+
+### LLM 评估触发时机
+
+**异步评估**：添加 Entry 后，后台异步评估 importance，不阻塞主流程。
+
+```python
+async def add_entry_async(
+    self,
+    entry: MemoryEntry,
+    llm_client: LLMClient | None = None,
+) -> None:
+    # 先添加（importance=1.0）
+    self._entries.append(entry)
+    self._save()
+
+    # 后台评估
+    if self.config.enable_llm_evaluation and llm_client:
+        importance = await self._evaluate_importance(entry, llm_client)
+        entry.importance = importance
+        self._save()
+```
+
+### 评估示例
+
+| 记忆内容 | 类别 | LLM 评估结果 | 说明 |
+|---------|------|-------------|------|
+| "用户使用 Windows" | user_profile | 0.85 | 核心偏好，长期有效 |
+| "选择 SQLite 作为存储" | key_decisions | 0.75 | 重要决策 |
+| "用户喜欢详细的代码示例" | learned_patterns | 0.6 | 一般有用 |
+| "上次讨论了 Python 异步" | project_context | 0.4 | 可能过时 |
+| "今天天气很好" | project_context | 0.1 | 快速过时 |
+
+---
+
+## MemoryManager（统一接口）
+
+MemoryManager 是分层记忆架构的统一入口，管理 Core Memory 和 Retrieved Memory。
+
+### 核心接口
+
+```python
+class MemoryManager:
+    """统一记忆管理器"""
+
+    def __init__(
+        self,
+        file_store: MemoryFileManager,
+        vector_store: VectorMemoryStore | None = None,
+        config: MemoryScoringConfig | None = None,
+    ):
+        self.file_store = file_store
+        self.vector_store = vector_store
+        self.config = config or MemoryScoringConfig()
+
+    def get_context(self, query: str | None = None) -> str:
+        """
+        获取完整记忆上下文
+
+        1. Core Memory 永远无条件全量加载
+        2. Retrieved Memory 根据 Query 主动检索（如果提供了查询）
+        """
+        # Core Memory 全量加载
+        core_memory = self.file_store.to_context_string()
+
+        # Retrieved Memory 按需检索
+        retrieved_memory = ""
+        if query and self.vector_store:
+            results = await self.vector_store.search(
+                query,
+                top_k=5,
+                apply_decay=True,
+            )
+            retrieved_memory = self._format_retrieved(results)
+
+        return self._combine(core_memory, retrieved_memory)
+
+    async def add_memory(
+        self,
+        entry: MemoryEntry,
+        target: Literal["core", "retrieved"] = "core",
+    ) -> None:
+        """
+        添加记忆到指定层级
+
+        Args:
+            entry: 记忆条目
+            target: "core" 添加到 MEMORY.md，"retrieved" 添加到向量存储
+        """
+        if target == "core":
+            self.file_store.add_entry(entry)
+        elif target == "retrieved" and self.vector_store:
+            await self.vector_store.add(
+                id=self._generate_id(),
+                content=entry.content,
+                metadata={
+                    "category": entry.category.value,
+                    "importance": entry.importance,
+                    "created_at": entry.created_at.isoformat(),
+                },
+            )
+
+    async def archive_to_retrieved(
+        self,
+        category: MemoryCategory,
+        index: int,
+    ) -> bool:
+        """
+        将 Core Memory 条目归档到 Retrieved Memory
+
+        从 MEMORY.md 移除，存入向量存储（或文件归档），记忆不丢失
+        """
+        ...
+```
+
+---
+
+## UpdateCoreMemoryTool
+
+Agent 可通过工具更新 Core Memory（MEMORY.md）。采用 **Mem0 模式**：显式添加到工具列表。
+
+### 工具定义
+
+```python
+class UpdateCoreMemoryTool(Tool):
+    """Agent 更新用户偏好/项目约定的工具"""
+
+    @property
+    def name(self) -> str:
+        return "update_core_memory"
+
+    @property
+    def description(self) -> str:
+        return (
+            "更新用户偏好或项目约定到长期记忆。\n\n"
+            "重要规则：\n"
+            "1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述\n"
+            "   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」\n"
+            "   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」\n"
+            "2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加\n"
+            "3. **适用场景**：用户提到长期偏好、工作环境、项目约束等\n\n"
+            "示例：\n"
+            "- 用户：「我习惯用深色主题」→ category=user_profile, content=\"主题偏好：深色\"\n"
+            "- 用户：「以后回复简短一点」→ category=learned_patterns, content=\"回复风格：简洁\""
+        )
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["user_profile", "key_decisions", "learned_patterns", "project_context"],
+                },
+                "content": {"type": "string"},
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "remove"],
+                },
+            },
+            "required": ["category", "content", "action"],
+        }
+```
+
+### 内容提炼规则
 
 工具的 description 引导 Agent 提炼用户原话，而不是直接存储：
 
-```
-更新用户偏好或项目约定到长期记忆。
+| 用户原话 | 提炼后的存储内容 |
+|---------|-----------------|
+| "使用 cmd，不要用 powershell" | `Shell：使用 cmd（不使用 PowerShell）` |
+| "我使用 Windows" | `操作系统：Windows` |
+| "我习惯用深色主题" | `主题偏好：深色` |
+| "以后回复简短一点" | `回复风格：简洁` |
 
-重要规则：
-1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述
-   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」
-   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」
-2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加
-3. **适用场景**：用户提到长期偏好、工作环境、项目约束等
-```
+### 去重机制
 
-### Input Schema
+`MemoryFileManager.add_entry()` 使用字符级 Jaccard 相似度检测重复：
 
-```java
-Map<String, Object> inputSchema() {
-    return Map.of(
-        "type", "object",
-        "properties", Map.of(
-            "category", Map.of(
-                "type", "string",
-                "enum", List.of("user_profile", "key_decisions", "learned_patterns", "project_context"),
-                "description", "记忆类别"
-            ),
-            "content", Map.of(
-                "type", "string",
-                "description", "记忆内容"
-            ),
-            "action", Map.of(
-                "type", "string",
-                "enum", List.of("add", "remove"),
-                "description", "操作类型"
-            )
-        ),
-        "required", List.of("category", "content", "action")
-    );
-}
+```python
+def add_entry(self, entry: MemoryEntry, check_duplicate: bool = True) -> bool:
+    """
+    Add a new entry to MEMORY.md.
+
+    Returns:
+        True if entry was added, False if skipped as duplicate
+    """
+    if check_duplicate:
+        for existing in section:
+            similarity = self._calculate_similarity(entry.content, existing)
+            if similarity > 0.7:  # 70% 相似度阈值
+                logger.info(f"Skipping duplicate memory: '{entry.content}'")
+                return False
+
+    section.append(entry.content)
+    self.save(sections)
+    return True
+
+def _calculate_similarity(self, text1: str, text2: str) -> float:
+    """字符级 bigram Jaccard 相似度，支持中英文混合"""
+    ngrams1 = {text1[i:i+2] for i in range(len(text1)-1)}
+    ngrams2 = {text2[i:i+2] for i in range(len(text2)-1)}
+    intersection = ngrams1 & ngrams2
+    union = ngrams1 | ngrams2
+    return len(intersection) / len(union)
 ```
 
 ### Metadata 支持
 
-ToolResult 包含 `metadata` 字段，用于传递 UI 刷新信号：
+`ToolResult.metadata` 用于传递 UI 刷新信号：
 
-```java
-// 添加成功时返回 refresh_memory 信号
-return ToolResult.success(
-    "",
-    "已添加到 user_profile: 操作系统：Windows",
-    name(),
-    Map.of("refresh_memory", true)  // UI 刷新信号
-);
+```python
+# 添加成功时返回 refresh_memory 信号
+return ToolResult(
+    tool_call_id="",
+    success=True,
+    content=f"已添加到 {category.value}: {content}",
+    metadata={"refresh_memory": True},  # UI 刷新信号
+)
 ```
 
-## 记忆去重机制
+客户端收到此信号后会刷新记忆面板显示。
 
-MemoryFileManager 使用字符级 Jaccard 相似度检测重复记忆，支持中英文混合文本。
+### 使用方式
 
-### 去重算法
+```python
+from harness import AgentHarness
+from harness.tools.builtins import UpdateCoreMemoryTool
 
-```java
-/**
- * Calculate text similarity using character-level Jaccard similarity.
- * Supports both Chinese and English text without requiring word segmentation.
- */
-private double calculateSimilarity(String text1, String text2) {
-    text1 = text1.toLowerCase();
-    text2 = text2.toLowerCase();
-
-    if (text1.isEmpty() || text2.isEmpty()) {
-        return 0.0;
-    }
-
-    // 字符级 bigram（支持中文，无需分词）
-    Set<String> ngrams1 = getNgrams(text1, 2);
-    Set<String> ngrams2 = getNgrams(text2, 2);
-
-    Set<String> intersection = new HashSet<>(ngrams1);
-    intersection.retainAll(ngrams2);
-
-    Set<String> union = new HashSet<>(ngrams1);
-    union.addAll(ngrams2);
-
-    return (double) intersection.size() / union.size();
-}
-
-private Set<String> getNgrams(String text, int n) {
-    if (text.length() < n) {
-        return Set.of(text);
-    }
-    Set<String> ngrams = new HashSet<>();
-    for (int i = 0; i <= text.length() - n; i++) {
-        ngrams.add(text.substring(i, i + n));
-    }
-    return ngrams;
-}
+# 显式添加工具
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=[
+        UpdateCoreMemoryTool(),  # 显式添加
+    ],
+)
 ```
 
-### 使用示例
+### 触发机制
 
-```java
-MemoryFileManager manager = new MemoryFileManager();
+**主机制**：Agent 在对话过程中自主判断是否需要更新 Core Memory。
 
-// 添加第一条记忆
-MemoryEntry entry1 = new MemoryEntry(
-    MemoryCategory.USER_PROFILE,
-    "操作系统：Windows",
-    MemorySource.USER_INPUT
-);
-boolean added1 = manager.addEntry(entry1);  // 返回 true
+```
+用户: "我使用的是 Windows"
 
-// 尝试添加相似记忆
-MemoryEntry entry2 = new MemoryEntry(
-    MemoryCategory.USER_PROFILE,
-    "操作系统：Windows 10",  // 相似内容
-    MemorySource.USER_INPUT
-);
-boolean added2 = manager.addEntry(entry2);  // 返回 false（跳过重复）
+Agent 内部推理:
+1. 识别到这是长期偏好信息
+2. 判断应该存入 Core Memory
+3. 调用 update_core_memory 工具
 
-// 添加不同记忆
-MemoryEntry entry3 = new MemoryEntry(
-    MemoryCategory.USER_PROFILE,
-    "主题偏好：深色",
-    MemorySource.USER_INPUT
-);
-boolean added3 = manager.addEntry(entry3);  // 返回 true
+→ Tool 被触发，将 "Platform: Windows" 写入 MEMORY.md
 ```
 
-### 相似度阈值
-
-- 默认阈值：`0.7`（70% 相似度）
-- 阈值越高，去重越严格
-- 可通过 `addEntry(entry, false)` 跳过去重检查
-
-## Memory Scoring (Retrieval Strength)
-
-基于 Bjork's New Theory of Disuse 的记忆衰减和检索强度计算。
-
-### 概述
-
-Memory Scoring 实现了两个核心概念：
-- **Storage Strength (存储强度)**: 记忆的重要性/稳定性，由 `importance` 字段表示
-- **Retrieval Strength (检索强度)**: 当前访问该记忆的容易程度，基于时间和访问频率计算
-
-### MemoryScoringConfig
-
-```java
-package com.harness.memory;
-
-/**
- * 记忆评分配置。
- */
-public record MemoryScoringConfig(
-    double decayLambda,        // 衰减速率，默认 0.1
-    double minStrength,        // 最小强度，默认 0.1
-    int archiveThreshold       // 归档阈值（重要性低于此值的条目可归档），默认 0.3
-) {
-    public static MemoryScoringConfig defaults() {
-        return new MemoryScoringConfig(0.1, 0.1, 0.3);
-    }
-    
-    public static Builder builder() { ... }
-}
-```
-
-### MemoryEntry 扩展
-
-```java
-/**
- * 记忆条目（扩展版本，支持评分）。
- */
-public record MemoryEntry(
-    MemoryCategory category,
-    String content,
-    MemorySource source,
-    Instant timestamp,
-    double importance,          // Storage Strength (存储强度)
-    int accessCount,           // 访问次数
-    Instant lastAccessed       // 最后访问时间
-) {
-    /**
-     * 计算检索强度。
-     * 
-     * 基于时间和访问频率计算当前访问该记忆的容易程度。
-     * 
-     * @param config 评分配置
-     * @return 检索强度 (0.0 - 2.0+)
-     */
-    public double calculateRetrievalStrength(MemoryScoringConfig config) {
-        if (lastAccessed == null) {
-            return 1.0;
-        }
-        
-        // 时间衰减
-        long daysIdle = Duration.between(lastAccessed, Instant.now()).toDays();
-        double timeDecay = config.minStrength() + 
-            (1.0 - config.minStrength()) * Math.exp(-config.decayLambda() * daysIdle);
-        
-        // 访问奖励
-        double accessBonus = 1.0 + 0.5 * Math.log(1.0 + accessCount);
-        
-        return timeDecay * accessBonus;
-    }
-    
-    /**
-     * 记录访问（增加访问计数并更新时间）。
-     */
-    public MemoryEntry recordAccess() {
-        return new MemoryEntry(
-            category, content, source, timestamp,
-            importance,
-            accessCount + 1,
-            Instant.now()
-        );
-    }
-    
-    public static Builder builder() { ... }
-}
-```
-
-### 记忆归档
-
-当 Core Memory 超过 token 限制时，自动归档低 importance 条目：
-
-```java
-/**
- * 归档低重要性记忆。
- * 
- * @param archivePath 归档文件路径 (MEMORY_ARCHIVE.md)
- * @param config 评分配置
- * @return 被归档的条目数量
- */
-public int archiveLowImportance(Path archivePath, MemoryScoringConfig config) {
-    List<MemoryEntry> allEntries = getAllEntries();
-    
-    // 按重要性排序（最低优先）
-    allEntries.sort(Comparator.comparingDouble(MemoryEntry::importance));
-    
-    int archived = 0;
-    for (MemoryEntry entry : allEntries) {
-        if (entry.importance() < config.archiveThreshold()) {
-            // 归档到文件
-            archiveToFile(archivePath, entry);
-            // 从主记忆中移除
-            removeEntry(entry);
-            archived++;
-        }
-    }
-    
-    return archived;
-}
-```
-
-### 使用示例
-
-```java
-import com.harness.memory.*;
-
-// 创建带评分的记忆
-MemoryEntry entry = MemoryEntry.builder()
-    .category(MemoryCategory.KEY_DECISIONS)
-    .content("用户偏好使用 Java 17 特性")
-    .source(MemorySource.USER_INPUT)
-    .importance(0.8)  // 高重要性
-    .build();
-
-// 添加到记忆管理器
-MemoryFileManager manager = new MemoryFileManager(memoryDir);
-manager.addEntry(entry);
-
-// 计算检索强度
-MemoryScoringConfig config = MemoryScoringConfig.defaults();
-double strength = entry.calculateRetrievalStrength(config);
-System.out.println("Retrieval Strength: " + strength);
-
-// 归档低重要性记忆
-Path archivePath = memoryDir.resolve("MEMORY_ARCHIVE.md");
-int archived = manager.archiveLowImportance(archivePath, config);
-System.out.println("Archived " + archived + " entries");
-```
-
-### 归档文件格式
-
-`MEMORY_ARCHIVE.md` 存储被归档的记忆：
-
-```markdown
-# Memory Archive
-
-本文件存储被归档的低重要性记忆。
+**可选补充**：CoreMemoryExtractionHook 在对话结束后自动提取遗漏的记忆。
 
 ---
 
-## 2026-06-27
+## 设计总结
 
-### user_profile
-
-- 操作系统：Windows 10 *(archived: importance=0.2)*
-
-### learned_patterns
-
-- 偏好使用 cmd 而非 powershell *(archived: importance=0.1)*
-
----
-```
-
-## MemoryCategory 扩展
-
-### getValue() 和 fromValue()
-
-支持小写字符串格式，与 Python SDK 保持一致：
-
-```java
-public enum MemoryCategory {
-    USER_PROFILE("User Profile", "user_profile"),
-    KEY_DECISIONS("Key Decisions", "key_decisions"),
-    LEARNED_PATTERNS("Learned Patterns", "learned_patterns"),
-    PROJECT_CONTEXT("Project Context", "project_context");
-
-    private final String header;
-    private final String value;
-
-    public String getValue() {
-        return value;  // 返回 "user_profile" 等小写格式
-    }
-
-    public static MemoryCategory fromValue(String value) {
-        for (MemoryCategory cat : values()) {
-            if (cat.value.equals(value)) {
-                return cat;
-            }
-        }
-        return PROJECT_CONTEXT;
-    }
-}
-```
-
-## SessionStore 接口
-
-### 概述
-
-SessionStore 提供会话持久化能力，支持跨应用重启恢复会话状态。
-
-### 接口定义
-
-```java
-package com.harness.memory;
-
-/**
- * Session storage interface.
- */
-public interface SessionStore {
-
-    /**
-     * Save a session.
-     */
-    void save(Session session);
-
-    /**
-     * Load a session by ID.
-     */
-    Optional<Session> load(String sessionId);
-
-    /**
-     * Delete a session.
-     */
-    void delete(String sessionId);
-
-    /**
-     * Check if a session exists.
-     */
-    default boolean exists(String sessionId) {
-        return load(sessionId).isPresent();
-    }
-
-    /**
-     * List all session IDs.
-     */
-    List<String> listSessions();
-
-    /**
-     * Delete all sessions.
-     */
-    void deleteAll();
-}
-```
-
-### FileSessionStore
-
-JSON 文件存储实现：
-
-```java
-import com.harness.memory.FileSessionStore;
-
-// 创建文件存储
-Path storageDir = Path.of(System.getProperty("user.home"), ".harness", "sessions");
-SessionStore store = new FileSessionStore(storageDir);
-
-// 保存会话
-Session session = Session.builder()
-    .id("session-123")
-    .messages(messages)
-    .build();
-store.save(session);
-
-// 加载会话
-Optional<Session> loaded = store.load("session-123");
-
-// 列出所有会话
-List<String> sessionIds = store.listSessions();
-
-// 删除会话
-store.delete("session-123");
-```
-
-**文件格式**：每个会话存储为独立的 JSON 文件 `{sessionId}.json`
-
-### SQLiteSessionStore
-
-SQLite 数据库存储实现：
-
-```java
-import com.harness.memory.SQLiteSessionStore;
-
-// 创建 SQLite 存储
-Path dbPath = Path.of(System.getProperty("user.home"), ".harness", "sessions.db");
-SessionStore store = new SQLiteSessionStore(dbPath);
-
-// 使用方式与 FileSessionStore 相同
-store.save(session);
-Optional<Session> loaded = store.load("session-123");
-```
-
-**特性**：
-- 单文件数据库，便于备份
-- 支持事务操作
-- 自动创建表结构
-- 更高效的查询性能
-
-### 集成到 Agent
-
-```java
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-import com.harness.memory.FileSessionStore;
-
-// 创建会话存储
-SessionStore sessionStore = new FileSessionStore(Path.of(".harness/sessions"));
-
-// 配置 Agent
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .sessionStore(sessionStore)
-    .build();
-
-Harness agent = new Harness(config);
-
-// 恢复之前的会话
-Optional<Session> previousSession = sessionStore.load("session-123");
-if (previousSession.isPresent()) {
-    agent.resume(previousSession.get());
-}
-
-// 运行 Agent（会话会自动保存）
-LoopResult result = agent.run("继续之前的工作");
-```
+| 特性 | Core Memory (MEMORY.md) | Retrieved Memory (VectorMemoryStore) |
+|------|------------------------|-------------------------------------|
+| **加载方式** | 全量加载 | 按需检索 |
+| **access_count** | 不追踪 | 追踪，影响排序 |
+| **Retrieval Strength** | 不适用 | 适用（时间衰减 + 访问奖励） |
+| **容量管理** | 按 importance 归档低分 Entry | 无容量限制，检索时排序 |
+| **淘汰粒度** | Entry 级别（跨 section） | 不淘汰，只降权 |
+| **importance 来源** | LLM 评估（可选） | 从 Core Memory 归档时继承 |
+| **无向量数据库时** | 归档到 MEMORY_ARCHIVE.md | 不适用 |
 
 ## 下一步
 
-- [04-tool-system.md](./04-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
-- [06-mcp-integration.md](./06-mcp-integration.md) - 了解 MCP 集成
-- [07-sdk-api.md](./07-sdk-api.md) - 查看完整 API 参考
+- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [03-tool-system.md](./03-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
+- [05-skills-system.md](./05-skills-system.md) - 了解技能系统

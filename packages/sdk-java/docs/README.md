@@ -19,6 +19,14 @@
 - [13-production-readiness.md](./13-production-readiness.md) - 生产就绪检查
 - [14-bank-integration.md](./14-bank-integration.md) - 银行系统集成指南
 - [15-spring-cloud-integration.md](./15-spring-cloud-integration.md) - Spring Cloud 集成指南
+- [16-skills-system.md](./16-skills-system.md) - Skills System 技能系统
+- [17-trigger-system.md](./17-trigger-system.md) - Trigger System 触发器系统
+- [18-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 循环工程
+- [19-worktrees.md](./19-worktrees.md) - Worktrees 并行隔离执行
+- [20-connectors.md](./20-connectors.md) - Connectors 外部系统集成
+- [21-orchestrator.md](./21-orchestrator.md) - Orchestrator 工作流编排
+- [22-examples.md](./22-examples.md) - 示例代码
+- [programmer_skill.md](./programmer_skill.md) - 编程规范
 
 ## 项目定位
 

@@ -1,454 +1,341 @@
-# 12 - JAR 包部署指南
+# 12 - 内嵌部署指南
 
 ## 概述
 
-本文档详细说明如何构建、交付和部署 Harness SDK Java 版本的 JAR 包。
+本文档详细说明 Harness 在不同部署拓扑下的使用方式、限制和最佳实践。
 
-## 构建方式
+---
 
-### 开发环境构建
+## 支持的部署拓扑
 
-```bash
-# 克隆仓库
-git clone https://github.com/wonglaitung/harness.git
-cd harness/packages/sdk-java
+### 拓扑 A：单进程脚本 ✅ 支持
 
-# 构建所有模块
-./gradlew build
+```python
+# script.py
+from harness import AgentHarness
 
-# 构建聚合 JAR (Shadow JAR)
-./gradlew :harness-sdk-all:shadowJar
-
-# 输出位置
-# harness-sdk-all/build/libs/harness-sdk-all-1.0.0.jar
+agent = AgentHarness(model="claude-sonnet-4-6")
+result = await agent.run("分析代码")
 ```
 
-### 生产环境构建
+**特点**：
+- 无状态持久化需求
+- 内存存储或文件存储
+- 无并发问题
 
-```bash
-# 完整构建（包含测试）
-./gradlew clean build shadowJar
+**推荐配置**：
+```python
+from harness import HarnessConfig
 
-# 跳过测试（更快）
-./gradlew build shadowJar -x test
-
-# 构建并生成校验和
-./gradlew shadowJar && sha256sum harness-sdk-all/build/libs/*.jar > checksums.sha256
+config = HarnessConfig(
+    model="claude-sonnet-4-6",
+    memory_dir="./sessions",
+)
+agent = AgentHarness(config=config)
 ```
 
-## JAR 包类型
+---
 
-### 1. Shadow JAR (All-in-One)
+### 拓扑 B：FastAPI + 单 Worker ✅ 支持
 
-**文件名**: `harness-sdk-all-1.0.0.jar`
+```python
+# app.py
+from fastapi import FastAPI
+from harness import AgentHarness
 
-**包含内容**:
-- 所有模块代码
-- 所有依赖库
-- 配置文件
+app = FastAPI()
+agent = AgentHarness(model="claude-sonnet-4-6")
 
-**大小**: ~15 MB
+@app.post("/chat")
+async def chat(message: str, session_id: str = None):
+    result = await agent.run(message, session_id=session_id)
+    return {"response": result.content}
 
-**适用场景**: 
-- 银行离线环境
-- 快速集成
-- 无需管理依赖
-
-**使用方式**:
-```kotlin
-// Gradle
-implementation(files("libs/harness-sdk-all-1.0.0.jar"))
+# 启动：uvicorn app:app --workers 1
 ```
 
-### 2. 模块化 JAR
+**特点**：
+- 支持 WebSocket 流式响应
+- SQLite WAL 模式可支持一定并发
+- Cron Trigger 进程内运行
 
-**文件结构**:
-```
-libs/
-├── harness-sdk-core-1.0.0.jar       # 核心 (~500 KB)
-├── harness-sdk-anthropic-1.0.0.jar  # Anthropic 集成
-├── harness-sdk-mcp-1.0.0.jar        # MCP 集成
-├── harness-sdk-tools-1.0.0.jar      # 内置工具
-├── harness-sdk-memory-1.0.0.jar     # 记忆系统
-└── harness-sdk-skills-1.0.0.jar     # 技能系统
-```
+---
 
-**适用场景**:
-- 已有部分依赖的项目
-- 需要精细化控制依赖
-- 减少重复依赖
+### 拓扑 C：FastAPI + Gunicorn（多 Worker）✅ 支持
 
-**使用方式**:
-```kotlin
-// Gradle
-implementation(files("libs/harness-sdk-core-1.0.0.jar"))
-implementation(files("libs/harness-sdk-anthropic-1.0.0.jar"))
-// ... 根据需要引入其他模块
+多 Worker 模式需要使用 Redis 作为共享存储：
+
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.service.store_redis import RedisSessionStore
+
+# 配置 Redis 存储
+store = RedisSessionStore("redis://localhost:6379")
+agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
+
+# 或使用 harness.service 完整服务
+# 见 14-spring-cloud-integration.md
 ```
 
-## Gradle 配置详解
+**关键问题及解决方案**：
 
-### Shadow JAR 插件配置
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| Trigger 重复执行 | 每个 Worker 都启动 CronTrigger | 独立 Trigger Worker 或 Celery Beat |
+| Session 缓存不一致 | Worker A 的缓存，Worker B 无法访问 | Redis 共享存储 |
+| SQLite 锁竞争 | 多进程写入冲突 | 使用 PostgreSQL 或 Redis |
 
-```kotlin
-// harness-sdk-all/build.gradle.kts
+**推荐方案**：
 
-plugins {
-    id("java-library")
-    id("com.github.johnrengelman.shadow") version "8.1.1"
-}
+```python
+# 方案 1：使用 harness.service（推荐）
+# 完整的 FastAPI 服务，支持多 Worker
+from harness.service import app
 
-dependencies {
-    // 引入所有模块
-    implementation(project(":harness-sdk-core"))
-    implementation(project(":harness-sdk-anthropic"))
-    implementation(project(":harness-sdk-mcp"))
-    implementation(project(":harness-sdk-tools"))
-    implementation(project(":harness-sdk-memory"))
-    implementation(project(":harness-sdk-skills"))
-}
+# 启动：gunicorn -w 4 -k uvicorn.workers.UvicornWorker harness.service:app
 
-tasks.shadowJar {
-    // 不添加 classifier，直接使用主版本号
-    archiveClassifier.set("")
-    
-    // 合并服务文件
-    mergeServiceFiles()
-    
-    // 排除签名文件（避免冲突）
-    exclude("META-INF/*.SF")
-    exclude("META-INF/*.DSA")
-    exclude("META-INF/*.RSA")
-    
-    // 排除不需要的模块
-    exclude("META-INF/DEPENDENCIES")
-    exclude("META-INF/LICENSE*")
-    exclude("META-INF/NOTICE*")
-    
-    // 最小化依赖
-    minimize()
-}
+# 方案 2：独立 Trigger Worker
+# trigger_worker.py
+agent = AgentHarness(...)
+agent.start_trigger_worker()  # 独立进程
 
-// 构建后自动生成校验和
-tasks.register("generateChecksum") {
-    dependsOn(tasks.shadowJar)
-    
-    doLast {
-        val jarFile = tasks.shadowJar.get().archiveFile.get().asFile
-        val checksumFile = File(jarFile.parentFile, "${jarFile.name}.sha256")
-        
-        checksumFile.writeText(
-            java.security.MessageDigest.getInstance("SHA-256")
-                .digest(jarFile.readBytes())
-                .joinToString("") { "%02x".format(it) }
-        )
-    }
-}
-```
+# 方案 3：Celery Beat 集成
+from celery import Celery
+from celery.schedules import crontab
 
-## 项目集成方式
+app = Celery()
+agent = AgentHarness(...)
 
-### 方式一：直接引入 JAR 文件
+@app.task
+def run_agent_task(prompt):
+    asyncio.run(agent.run(prompt))
 
-**Gradle (Kotlin DSL)**:
-```kotlin
-// build.gradle.kts
-
-dependencies {
-    // 单个 JAR 文件
-    implementation(files("libs/harness-sdk-all-1.0.0.jar"))
-    
-    // 或使用目录
-    implementation(fileTree("libs") { include("*.jar") })
-}
-```
-
-**Gradle (Groovy DSL)**:
-```groovy
-// build.gradle
-
-dependencies {
-    implementation files("libs/harness-sdk-all-1.0.0.jar")
-    
-    // 或使用目录
-    implementation fileTree(dir: "libs", include: "*.jar")
-}
-```
-
-**Maven**:
-```xml
-<!-- pom.xml -->
-
-<dependencies>
-    <dependency>
-        <groupId>com.harness</groupId>
-        <artifactId>harness-sdk</artifactId>
-        <version>1.0.0</version>
-        <scope>system</scope>
-        <systemPath>${project.basedir}/libs/harness-sdk-all-1.0.0.jar</systemPath>
-    </dependency>
-</dependencies>
-```
-
-### 方式二：本地 Maven 仓库
-
-```bash
-# 安装到本地 Maven 仓库
-./gradlew publishToMavenLocal
-```
-
-**Gradle 使用**:
-```kotlin
-repositories {
-    mavenLocal()
-}
-
-dependencies {
-    implementation("com.harness:harness-sdk-all:1.0.0")
-}
-```
-
-**Maven 使用**:
-```xml
-<repositories>
-    <repository>
-        <id>local-maven-repo</id>
-        <url>file://${user.home}/.m2/repository</url>
-    </repository>
-</repositories>
-
-<dependencies>
-    <dependency>
-        <groupId>com.harness</groupId>
-        <artifactId>harness-sdk-all</artifactId>
-        <version>1.0.0</version>
-    </dependency>
-</dependencies>
-```
-
-## 交付包结构
-
-### 标准交付包
-
-```
-harness-sdk-java-1.0.0.zip
-├── jars/
-│   ├── harness-sdk-all-1.0.0.jar      # 聚合 JAR（推荐使用）
-│   ├── harness-sdk-core-1.0.0.jar     # 核心模块
-│   ├── harness-sdk-anthropic-1.0.0.jar
-│   ├── harness-sdk-mcp-1.0.0.jar
-│   ├── harness-sdk-tools-1.0.0.jar
-│   ├── harness-sdk-memory-1.0.0.jar
-│   └── harness-sdk-skills-1.0.0.jar
-├── docs/
-│   ├── README.md                       # 快速入门
-│   ├── API-reference.md                # API 参考
-│   ├── integration-guide.md            # 集成指南
-│   └── examples/                       # 示例代码
-│       ├── simple-agent/
-│       └── mcp-integration/
-├── lib/                                # 第三方依赖（可选）
-│   └── (如果需要单独引入)
-├── reports/
-│   ├── dependency-check-report.html    # OWASP 依赖扫描
-│   └── sbom.json                       # SBOM
-├── metadata.json                       # 版本信息
-├── checksums.sha256                    # SHA256 校验和
-└── LICENSE                             # MIT 许可证
-```
-
-### metadata.json 内容
-
-```json
-{
-  "name": "harness-sdk-java",
-  "version": "1.0.0",
-  "buildDate": "2026-06-17",
-  "javaVersion": "17",
-  "gradleVersion": "8.5",
-  "modules": [
-    "harness-sdk-core",
-    "harness-sdk-anthropic",
-    "harness-sdk-mcp",
-    "harness-sdk-tools",
-    "harness-sdk-memory",
-    "harness-sdk-skills"
-  ],
-  "dependencies": [
-    {
-      "name": "anthropic-java",
-      "version": "2.40.1",
-      "license": "MIT"
+app.conf.beat_schedule = {
+    'daily-report': {
+        'task': 'run_agent_task',
+        'schedule': crontab(hour=9, minute=0),
+        'args': ('生成每日报告',),
     },
-    {
-      "name": "mcp-java-sdk",
-      "version": "0.5.0",
-      "license": "MIT"
-    },
-    {
-      "name": "jtokkit",
-      "version": "1.0.0",
-      "license": "MIT"
-    },
-    {
-      "name": "jackson-databind",
-      "version": "2.17.0",
-      "license": "Apache-2.0"
-    },
-    {
-      "name": "okhttp",
-      "version": "4.12.0",
-      "license": "Apache-2.0"
-    }
-  ],
-  "checksums": {
-    "harness-sdk-all-1.0.0.jar": "sha256:abc123..."
-  }
 }
 ```
 
-## 安全与合规
+---
 
-### 1. 依赖扫描
+### 拓扑 D：Kubernetes 多副本 ✅ 支持
 
-```bash
-# OWASP 依赖检查
-./gradlew dependencyCheckAnalyze
-
-# 输出报告
-# build/reports/dependency-check-report.html
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness-agent
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: agent
+        image: harness-agent:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: NACOS_SERVER
+          value: "nacos-service:8848"  # 可选
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
 ```
 
-### 2. SBOM 生成
+**关键配置**：
+- 使用 Redis 作为 Session 和 Lock 存储
+- `POD_IP` 环境变量用于服务注册
+- 健康检查端点 `/health`
+- 可选：Nacos/Eureka 服务发现
 
-```kotlin
-// build.gradle.kts
+---
 
-plugins {
-    id("org.cyclonedx.bom") version "1.8.2"
-}
+## 存储后端选型矩阵
 
-cyclonedxBom {
-    includeConfigs.set(listOf("runtimeClasspath"))
-}
+| 存储类型 | 单进程 | 多 Worker | K8s 多副本 | 延迟 | 持久化 | 成本 |
+|----------|--------|-----------|------------|------|--------|------|
+| 内存 | ✅ | ❌ | ❌ | 最低 | ❌ | 低 |
+| 文件 | ✅ | ⚠️ 加锁 | ❌ | 低 | ✅ | 低 |
+| SQLite (WAL) | ✅ | ⚠️ 有限并发 | ❌ | 低 | ✅ | 低 |
+| Redis | ✅ | ✅ | ✅ | 中 | ⚠️ 需配置 | 中 |
+| PostgreSQL | ✅ | ✅ | ✅ | 中 | ✅ | 中-高 |
+
+---
+
+## 常见陷阱
+
+### 陷阱 1：在 Jupyter 中使用 run_sync()
+
+```python
+# ❌ 错误
+result = agent.run_sync("hello")
+# RuntimeError: Event loop is already running
+
+# ✅ 正确
+result = await agent.run("hello")
+
+# 或安装 nest_asyncio
+import nest_asyncio
+nest_asyncio.apply()
+result = agent.run_sync("hello")  # 现在可以工作
 ```
 
-```bash
-# 生成 SBOM
-./gradlew cyclonedxBom
+### 陷阱 2：热重载丢失状态
 
-# 输出
-# build/reports/bom.json
+```python
+# 开发环境热重载会重置内存状态
+# 解决：使用持久化存储
+agent = AgentHarness(
+    memory_dir="./persistent_memory"  # 持久化到磁盘
+)
 ```
 
-### 3. 签名验证（可选）
+### 陷阱 3：Gunicorn Worker 数量 > 1 导致 Trigger 重复
 
-```bash
-# 生成 GPG 签名
-gpg --armor --detach-sign harness-sdk-all-1.0.0.jar
-
-# 验证签名
-gpg --verify harness-sdk-all-1.0.0.jar.asc harness-sdk-all-1.0.0.jar
+```python
+# ❌ 错误：每个 Worker 都会执行定时任务
+# 解决：使用独立 Trigger Worker 或 Celery Beat
 ```
 
-## 银行环境部署
+### 陷阱 4：MCP 子进程孤儿问题
 
-### 部署检查清单
+宿主应用崩溃时，MCP 子进程可能变为孤儿进程。解决方案见 [03-tool-system.md](./03-tool-system.md) 的 MCP 子进程生命周期管理章节。
 
-- [ ] JAR 文件 SHA256 校验通过
-- [ ] OWASP 依赖扫描无高危漏洞
-- [ ] SBOM 文件已提供
-- [ ] 许可证兼容性确认（MIT/Apache 2.0）
-- [ ] 离线环境测试通过
-- [ ] 与现有系统集成测试通过
+---
 
-### 集成示例
+## 安全配置清单
 
-```java
-// 在银行项目中使用
+| 配置项 | 开发环境 | 生产环境 |
+|--------|----------|----------|
+| 沙箱模式 | `full_access` | `sandbox` |
+| 允许的路径 | `["./"]` | 显式白名单 |
+| 网络访问 | 无限制 | 仅内网 |
+| 资源限制 | 无 | CPU/Memory/Time |
+| 日志级别 | DEBUG | INFO |
+| 审计日志 | 可选 | 必须 |
 
-import com.harness.Harness;
-import com.harness.HarnessConfig;
-import com.harness.core.LoopResult;
+---
 
-public class BankAgentService {
-    
-    private final Harness agent;
-    
-    public BankAgentService() {
-        // 从配置文件加载
-        HarnessConfig config = HarnessConfig.builder()
-            .model("claude-sonnet-4-6")
-            .apiKey(getApiKeyFromVault())  // 从银行密钥管理系统获取
-            .tools(List.of(
-                new ReadTool(),
-                new BashTool(true)  // 沙箱模式
-            ))
-            .workingDirectory("/secure/workspace")
-            .auditEnabled(true)     // 启用审计
-            .build();
-        
-        this.agent = new Harness(config);
-    }
-    
-    public String analyzeTransaction(String transactionData) {
-        LoopResult result = agent.run(
-            "分析以下交易数据是否存在异常: " + transactionData
-        );
-        
-        if (result.isCompleted()) {
-            return result.content();
-        } else {
-            throw new AgentException(result.error());
-        }
-    }
-    
-    private String getApiKeyFromVault() {
-        // 从银行密钥管理系统获取 API Key
-        // 例如：HashiCorp Vault、Azure Key Vault 等
-        return System.getenv("ANTHROPIC_API_KEY");
-    }
-}
+## 监控与告警
+
+### 推荐指标
+
+- `harness_loop_iterations_total`：循环迭代次数
+- `harness_tool_calls_total{tool, success}`：工具调用计数
+- `harness_llm_tokens_total{type}`：Token 使用量
+- `harness_session_duration_seconds`：会话持续时间
+
+### Prometheus 告警规则
+
+```yaml
+groups:
+- name: harness
+  rules:
+  - alert: AgentLoopStuck
+    expr: harness_loop_iterations_total > 20
+    for: 5m
+    annotations:
+      summary: "Agent 循环可能卡住"
+
+  - alert: HighTokenUsage
+    expr: rate(harness_llm_tokens_total{type="output"}[5m]) > 10000
+    annotations:
+      summary: "Token 使用率过高"
+
+  - alert: ToolFailure
+    expr: rate(harness_tool_calls_total{success="false"}[5m]) > 0.1
+    annotations:
+      summary: "工具调用失败率过高"
 ```
 
-## 常见问题
+---
 
-### Q: 如何确认 JAR 文件完整性？
+## 已知限制
 
-```bash
-# 验证 SHA256
-sha256sum -c checksums.sha256
+1. **单进程模式**: SQLite 适合低并发，高并发需切换 WAL 模式
+2. **多进程模式**: 必须使用 Redis/PostgreSQL，且 Trigger 需要 Leader 选举
+3. **热重载**: 开发环境热重载会丢失内存状态，需要持久化存储
+4. **Windows**: 部分信号处理和沙箱功能（如 `setrlimit`）受限
+5. **MCP 进程组**: `preexec_fn` 在 Windows 上不可用
 
-# 输出
-# harness-sdk-all-1.0.0.jar: OK
+---
+
+## 拓扑 E：Spring Cloud 微服务架构 ✅ 支持
+
+适用场景：将 Agent 集成到 Spring Cloud 微服务生态。
+
+### 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Spring Cloud Gateway                      │
+│  (路由、熔断、限流、JWT 认证、链路追踪、服务发现)             │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ HTTP/WebSocket
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Harness Agent Service (Python)               │
+│  - FastAPI 服务包装                                          │
+│  - 健康检查 /health                                          │
+│  - TraceID 提取                                              │
+│  - AgentHarness 核心                                         │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  外部存储 (Redis/PostgreSQL)                                 │
+│  - Session 状态                                               │
+│  - 分布式锁                                                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Q: 如何在离线环境使用？
+### 已实现功能
 
-1. 下载 `harness-sdk-java-1.0.0.zip`
-2. 解压到项目目录
-3. 按上述方式引入 JAR 文件
-4. 无需网络连接
+| 功能 | 模块 | 状态 |
+|-----|------|------|
+| HTTP 服务包装 | `harness.service` | ✅ |
+| 健康检查 `/health` | `harness.service` | ✅ |
+| Prometheus 指标 `/metrics` | `harness.service.metrics` | ✅ |
+| TraceID 传播 | `harness.service.tracing` | ✅ |
+| WebSocket 流式执行 | `harness.service` | ✅ |
+| Redis 分布式会话 | `harness.service.store_redis` | ✅ |
+| Redis 分布式锁 | `harness.service.store_redis` | ✅ |
+| Nacos 服务注册 | `harness.service.discovery` | ✅ |
+| Eureka 服务注册 | `harness.service.discovery` | ✅ |
+| 统一错误响应 | `harness.service.error_handler` | ✅ |
 
-### Q: 如何处理依赖冲突？
+### 长时任务处理
 
-使用模块化 JAR 方式，排除已有依赖：
+Agent 的 ReAct 循环可能耗时较长，推荐使用 **WebSocket 流式模式**：
 
-```kotlin
-// 如果项目已有 Jackson
-implementation(files("libs/harness-sdk-core-1.0.0.jar"))
-implementation(files("libs/harness-sdk-anthropic-1.0.0.jar"))
-// 排除包含 Jackson 的模块
+```
+Java Client -> WebSocket /ws/run
+              <- ProgressEvent (LOOP_START)
+              <- ProgressEvent (LLM_CALL)
+              <- ProgressEvent (TOOL_CALL)
+              ...
+              <- ProgressEvent (LOOP_END) + 最终结果
 ```
 
-### Q: 如何更新版本？
+SDK 已有 `ProgressEvent` 机制，天然支持 WebSocket 推送。
 
-1. 下载新版本 ZIP 包
-2. 替换 libs 目录中的 JAR 文件
-3. 更新版本号引用
-4. 重新构建项目
+### 详细设计
 
-## 下一步
+完整的实施指南（含 Java 客户端示例、K8s 配置、安全设计等）见：
 
-- [13-production-readiness.md](./13-production-readiness.md) - 生产就绪检查
-- [14-bank-integration.md](./14-bank-integration.md) - 银行系统集成指南
+**👉 [14-spring-cloud-integration.md](./14-spring-cloud-integration.md)**
