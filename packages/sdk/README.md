@@ -489,12 +489,12 @@ print(result.redacted)  # 脱敏后的文本
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
 - **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
-- **Loop Engineering (Phase 1-5 全部实现)**:
-  - Phase 1: Goal-Driven Execution - 目标驱动执行
-  - Phase 2: Automations - 定时触发/调度
-  - Phase 3: Worktrees - 并行隔离执行
-  - Phase 4: Connectors - 外部系统集成（Slack、GitHub、Webhook）
-  - Phase 5: Orchestrator - 工作流编排（支持 YAML 定义）
+- **Loop Engineering**:
+  - Goal-Driven Execution - 目标驱动执行
+  - Automations - 定时触发/调度
+  - Worktrees - 并行隔离执行
+  - Connectors - 外部系统集成（Slack、GitHub、Webhook）
+  - Orchestrator - 工作流编排（支持 YAML 定义）
 - **Streaming**: 流式输出与背压控制
 - **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
 - **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
