@@ -129,8 +129,8 @@ def create_scroll_down_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Use thicker stroke for visibility
-    pen = QPen(color, 3.0)
+    # Use visible stroke
+    pen = QPen(color, 2.4)
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)
