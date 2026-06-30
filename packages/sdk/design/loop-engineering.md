@@ -353,14 +353,21 @@ class GoalLoop:
 
 ## 后续 Phase
 
-### Phase 2: Automations
-- `TriggerConfig`: cron / interval / event 触发
-- `AutomationConfig`: 自动化配置
-- `LoopOrchestrator`: 调度管理器
+### Phase 2: Automations ✅ 已实现
+- `TriggerType`: cron / interval / event 触发
+- `TriggerAction`: 触发后动作，映射到 GoalConfig
+- `TriggerManager`: 触发器管理器
+- `Automation`: 简化 API，整合 Trigger + Goal
 
-### Phase 3: Worktrees
-- `WorktreeManager`: 隔离环境管理
-- 支持并行执行多个 Goal
+详见：`design/phase2-automations.md`
+
+### Phase 3: Worktrees ❌ 待实现
+- `WorktreeManager`: git worktree 生命周期管理
+- `ParallelGoalExecutor`: 并行 Goal 执行器
+- `WorktreeOrchestrator`: 顶层 API
+- 支持并行执行多个 Goal，每个在隔离的 git worktree 中
+
+详见：`design/phase3-worktrees.md`
 
 ### Phase 4: Connectors
 - `Connector` 基类
