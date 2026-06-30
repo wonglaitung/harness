@@ -489,7 +489,12 @@ print(result.redacted)  # 脱敏后的文本
 
 - **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
 - **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
-- **Loop Engineering**: 目标驱动执行，Agent 自主运行直到目标达成
+- **Loop Engineering (Phase 1-5 全部实现)**:
+  - Phase 1: Goal-Driven Execution - 目标驱动执行
+  - Phase 2: Automations - 定时触发/调度
+  - Phase 3: Worktrees - 并行隔离执行
+  - Phase 4: Connectors - 外部系统集成（Slack、GitHub、Webhook）
+  - Phase 5: Orchestrator - 工作流编排（支持 YAML 定义）
 - **Streaming**: 流式输出与背压控制
 - **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
 - **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
@@ -505,7 +510,7 @@ print(result.redacted)  # 脱敏后的文本
 
 **Loop Engineering** 是一种新的 Agent 编排范式：不再逐轮手动提示，而是设计自动化循环系统驱动 Agent 自主运行。
 
-### Goal-Driven Execution
+### Goal-Driven Execution（目标驱动执行）
 
 让 Agent 自主运行直到目标达成：
 
@@ -520,11 +525,129 @@ result = await agent.run_goal("修复所有类型错误")
 # 检查结果
 if result.status == GoalStatus.ACHIEVED:
     print(f"目标达成！共 {result.total_iterations} 轮迭代")
-else:
-    print(f"未达成: {result.status}")
 ```
 
-### 自定义验证
+### Automations（定时触发）
+
+定时或按间隔触发 Agent 执行：
+
+```python
+from harness.loop import Automation
+
+# Cron 定时任务
+automation = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",  # 每天 9:00
+    goal="生成每日报告",
+)
+
+# 间隔任务
+health_check = Automation(
+    name="health-check",
+    interval_seconds=300,  # 每 5 分钟
+    goal="检查系统健康状态",
+)
+
+await automation.start(agent)
+```
+
+### Worktrees（并行隔离执行）
+
+在独立的 git worktree 中并行执行多个 Goal：
+
+```python
+from harness.loop import WorktreeOrchestrator, WorktreeConfig
+
+orchestrator = WorktreeOrchestrator(agent, ".")
+
+# 并行执行多个任务
+results = await orchestrator.run_parallel([
+    WorktreeConfig(name="feature-a", goal="实现功能 A"),
+    WorktreeConfig(name="feature-b", goal="实现功能 B"),
+])
+
+# 合并成功的分支
+merge_result = await orchestrator.merge_successful(results)
+```
+
+### Connectors（外部系统集成）
+
+与 Slack、GitHub 等外部系统双向交互：
+
+```python
+from harness.connectors import ConnectorManager, SlackConnector, SlackConfig
+
+manager = ConnectorManager(trigger_manager)
+
+slack = SlackConnector(config=SlackConfig(
+    bot_token="xoxb-...",
+    app_token="xapp-...",
+))
+manager.register_connector(slack)
+
+await manager.start()
+```
+
+### Orchestrator（工作流编排）
+
+#### 声明式工作流
+
+```python
+from harness.orchestrator import LoopOrchestrator, WorkflowConfig, WorkflowStep
+
+orchestrator = LoopOrchestrator(agent)
+
+workflow = WorkflowConfig(
+    name="code-review",
+    steps=[
+        WorkflowStep(name="analyze", goal="分析代码结构"),
+        WorkflowStep(name="lint", goal="运行 lint 检查"),
+        WorkflowStep(name="review", goal="代码审查", depends_on=["analyze", "lint"]),
+    ],
+)
+
+result = await orchestrator.run_workflow("code-review")
+```
+
+#### YAML 工作流
+
+```yaml
+# cicd.yaml
+name: cicd
+default_mode: parallel
+
+steps:
+  - name: lint
+    goal: "运行 ruff check"
+  - name: test
+    goal: "运行 pytest"
+  - name: deploy
+    goal: "部署"
+    depends_on: [lint, test]
+```
+
+```python
+result = await orchestrator.run_workflow("cicd.yaml")
+```
+
+#### 多 Agent 团队协作
+
+```python
+from harness.orchestrator import TeamConfig, AgentRole, CoordinationMode
+
+team = TeamConfig(
+    name="dev-team",
+    roles=[
+        AgentRole(name="architect", description="系统设计", skills=["architecture"]),
+        AgentRole(name="developer", description="实现", skills=["coding"]),
+    ],
+    coordination_mode=CoordinationMode.SEQUENTIAL,
+)
+
+result = await orchestrator.run_team("dev-team", "实现登录功能")
+```
+
+### 详细配置
 
 提供自定义验证函数判断目标是否达成：
 
