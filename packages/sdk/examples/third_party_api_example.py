@@ -3890,7 +3890,7 @@ async def demo_loop_engineering_basic():
     print(f"目标状态: {result.status.value}")
     print(f"迭代次数: {result.total_iterations}")
     print(f"执行时长: {result.duration_seconds:.1f}秒")
-    print(f"Token 使用: 输入 {result.total_tokens.input_tokens}, 输出 {result.total_tokens.output_tokens}")
+    print(f"Token 使用: 输入 {result.total_tokens['input']}, 输出 {result.total_tokens['output']}")
 
     if result.status == GoalStatus.ACHIEVED:
         print("\n✅ 目标达成！")
