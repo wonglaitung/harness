@@ -327,10 +327,15 @@ class MainWindow(QMainWindow):
 
     # === Message Handling ===
 
-    @asyncSlot(str)
-    async def _on_message_sent(self, message: str):
-        """Handle message sent from chat panel."""
-        logger.info(f"Message sent: {message[:50]}...")
+    @asyncSlot(str, bool)
+    async def _on_message_sent(self, message: str, goal_mode: bool):
+        """Handle message sent from chat panel.
+
+        Args:
+            message: User message
+            goal_mode: If True, use run_goal() for multi-iteration autonomous execution
+        """
+        logger.info(f"Message sent: {message[:50]}..., goal_mode={goal_mode}")
 
         if self.chat_controller.is_busy():
             self.statusbar.showMessage("正在处理中，请稍候...", 2000)
@@ -338,14 +343,18 @@ class MainWindow(QMainWindow):
 
         self._is_processing = True
         self.chat_panel.set_streaming_state(True)
-        self.statusbar.showMessage("正在思考...")
+
+        if goal_mode:
+            self.statusbar.showMessage("执行任务中...")
+        else:
+            self.statusbar.showMessage("正在思考...")
 
         config = self.chat_controller.config
         logger.info(f"Current config: provider={config.provider}, model={config.model}")
 
         try:
             response = ""
-            async for chunk in self.chat_controller.send_message(message):
+            async for chunk in self.chat_controller.send_message(message, goal_mode=goal_mode):
                 response = chunk
             self._on_response_received(response)
         except Exception as e:

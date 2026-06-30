@@ -34,6 +34,7 @@ from harness_client.ui.interactive import GlowButton
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.skill_completer import SkillCompleter
 from harness_client.ui.file_completer import FileCompleter
+from harness_client.ui.toggle_switch import ModeToggleSwitch
 
 
 # Cache for avatar base64 data
@@ -763,7 +764,8 @@ class MessagesContainer(QWidget):
 class ChatPanel(QWidget):
     """Panel for displaying chat messages and input."""
 
-    message_sent = pyqtSignal(str)
+    message_sent = pyqtSignal(str, bool)  # (message, goal_mode)
+    mode_changed = pyqtSignal(bool)  # (is_goal_mode)
     stop_requested = pyqtSignal()
     clear_chat_requested = pyqtSignal()
 
@@ -771,6 +773,7 @@ class ChatPanel(QWidget):
         super().__init__()
         self._streaming_text = ""
         self._is_streaming = False
+        self._goal_mode = False  # False = Chat mode, True = Task mode
         self._setup_ui()
         # Register theme listener
         register_theme_listener(self._on_theme_changed)
@@ -825,6 +828,11 @@ class ChatPanel(QWidget):
         header_layout.addWidget(self._session_title_label)
 
         header_layout.addStretch()
+
+        # Mode toggle switch (Chat / Task)
+        self._mode_toggle = ModeToggleSwitch()
+        self._mode_toggle.mode_changed.connect(self._on_mode_changed)
+        header_layout.addWidget(self._mode_toggle)
 
         # Clear context button (with vector icon)
         self.clear_btn = QPushButton()
@@ -1034,7 +1042,21 @@ class ChatPanel(QWidget):
         self.messages_container.add_message(text, "user")
         self.input_field.clear()
         self._scroll_to_bottom()
-        self.message_sent.emit(text)
+        # Pass goal_mode to signal
+        self.message_sent.emit(text, self._goal_mode)
+
+    def _on_mode_changed(self, is_goal_mode: bool):
+        """Handle mode toggle change."""
+        self._goal_mode = is_goal_mode
+
+        # Update placeholder text based on mode
+        if is_goal_mode:
+            self.input_field.setPlaceholderText("描述你的任务目标... (Agent 会自主执行)")
+        else:
+            self.input_field.setPlaceholderText("输入消息…  (Enter 发送, Shift+Enter 换行)")
+
+        # Emit signal for main window
+        self.mode_changed.emit(is_goal_mode)
 
     def _on_stop(self):
         """Handle stop button click."""

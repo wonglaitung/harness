@@ -16,6 +16,7 @@ from harness import (
     ProgressEventType,
 )
 from harness.core import ConfirmationHook
+from harness.loop.types import GoalStatus
 from harness.tools.builtins import (
     BashTool,
     GlobTool,
@@ -322,17 +323,18 @@ class ChatController:
                 base_url=self.config.base_url or None,
             )
 
-    async def send_message(self, message: str) -> AsyncIterator[str]:
+    async def send_message(self, message: str, goal_mode: bool = False) -> AsyncIterator[str]:
         """
         Send a message and yield the response.
 
         Args:
             message: User message
+            goal_mode: If True, use run_goal() for multi-iteration autonomous execution
 
         Yields:
             Response text
         """
-        logger.info(f"send_message called with: {message[:50]}...")
+        logger.info(f"send_message called with: {message[:50]}..., goal_mode={goal_mode}")
 
         if not self.agent:
             logger.info("Agent not initialized, initializing now...")
@@ -366,7 +368,10 @@ class ChatController:
                 elif event.type == ProgressEventType.ITERATION:
                     if self._on_thinking:
                         iteration = event.data.get("iteration", 0)
-                        self._on_thinking(f"思考中... (第 {iteration} 步)")
+                        if goal_mode:
+                            self._on_thinking(f"执行中... (第 {iteration} 步)")
+                        else:
+                            self._on_thinking(f"思考中... (第 {iteration} 步)")
 
                 elif event.type == ProgressEventType.LLM_CALL:
                     if self._on_thinking:
@@ -384,27 +389,70 @@ class ChatController:
             if matching_skills:
                 logger.info(f"Matching skills: {[s.name for s in matching_skills]}")
 
-            logger.info("Calling agent.run()...")
-            result = await self.agent.run(
-                message,
-                session_id=session_id,
-                on_progress=on_progress,
-            )
-            logger.info(f"agent.run() returned, iterations={result.iterations}")
-
-            # Update token usage
-            if result.token_usage:
-                self.session_manager.update_token_usage(
-                    result.token_usage.input_tokens, result.token_usage.output_tokens
+            if goal_mode:
+                # Task mode: Multi-iteration autonomous execution
+                logger.info("Calling agent.run_goal()...")
+                result = await self.agent.run_goal(
+                    goal=message,
+                    session_id=session_id,
+                    max_iterations=50,
+                    on_progress=on_progress,
                 )
+                logger.info(f"agent.run_goal() returned, status={result.status.value}, iterations={result.total_iterations}")
 
-            # Cache assistant response AFTER receiving
-            response = result.content
-            if response:
-                self.session_manager.add_message_to_current("assistant", response)
+                # Update token usage
+                if result.total_tokens:
+                    self.session_manager.update_token_usage(
+                        result.total_tokens.get("input", 0),
+                        result.total_tokens.get("output", 0),
+                    )
 
-            logger.info(f"Response length: {len(response)} chars")
-            yield response
+                # Format response with status
+                response = result.final_response
+                if result.achieved:
+                    response = f"✅ 目标达成 ({result.total_iterations} 步)\n\n{response}"
+                else:
+                    # Map status to user-friendly text
+                    status_map = {
+                        GoalStatus.TIMEOUT: "⏱️ 超时",
+                        GoalStatus.MAX_ITERATIONS: "🔄 达到最大迭代",
+                        GoalStatus.MAX_RESETS: "📋 达到最大重置",
+                        GoalStatus.ERROR: "❌ 错误",
+                        GoalStatus.VERIFIER_FAULT: "⚠️ 验证器故障",
+                        GoalStatus.CANCELLED: "🚫 已取消",
+                    }
+                    status_text = status_map.get(result.status, result.status.value)
+                    response = f"{status_text}\n\n{response}"
+
+                # Cache assistant response AFTER receiving
+                if response:
+                    self.session_manager.add_message_to_current("assistant", response)
+
+                logger.info(f"Response length: {len(response)} chars")
+                yield response
+            else:
+                # Chat mode: Single-turn conversation
+                logger.info("Calling agent.run()...")
+                result = await self.agent.run(
+                    message,
+                    session_id=session_id,
+                    on_progress=on_progress,
+                )
+                logger.info(f"agent.run() returned, iterations={result.iterations}")
+
+                # Update token usage
+                if result.token_usage:
+                    self.session_manager.update_token_usage(
+                        result.token_usage.input_tokens, result.token_usage.output_tokens
+                    )
+
+                # Cache assistant response AFTER receiving
+                response = result.content
+                if response:
+                    self.session_manager.add_message_to_current("assistant", response)
+
+                logger.info(f"Response length: {len(response)} chars")
+                yield response
 
         except ValueError as e:
             logger.error(f"ValueError: {e}")
