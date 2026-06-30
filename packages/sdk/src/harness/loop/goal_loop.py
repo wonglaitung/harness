@@ -188,21 +188,12 @@ class GoalLoop:
                     )
                     return self._create_result(GoalStatus.MAX_RESETS)
 
-                # Emit progress
-                self._emit_progress(
-                    "iteration",
-                    f"Iteration {self._state.iteration + 1}/{self.config.max_iterations}",
-                    {
-                        "iteration": self._state.iteration + 1,
-                        "context_resets": self._state.context_resets,
-                    },
-                )
-
-                # Run agent
+                # Run agent - progress events from AgentLoop will be forwarded
                 logger.debug(f"Running agent iteration {self._state.iteration + 1}")
                 result = await self.agent.run(
                     prompt=current_prompt,
                     session_id=self._state.session_id,
+                    on_progress=self.on_progress,  # 传递进度回调以显示中间过程
                 )
 
                 self._state.iteration += 1
