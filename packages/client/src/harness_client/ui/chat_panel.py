@@ -1088,9 +1088,10 @@ class ChatPanel(QWidget):
         self._scroll_down_btn.setToolTip("滚动到最新消息")
         self._scroll_down_btn.setVisible(False)  # Initially hidden
         self._scroll_down_btn.clicked.connect(self._scroll_to_bottom)
+        composer_color = QColor(theme.COMPOSER)
         self._scroll_down_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: rgba({theme.COMPOSER.red()}, {theme.COMPOSER.green()}, {theme.COMPOSER.blue()}, 0.85);
+                background-color: rgba({composer_color.red()}, {composer_color.green()}, {composer_color.blue()}, 0.85);
                 border: 1px solid {theme.BORDER};
                 border-radius: 16px;
             }}
@@ -1628,9 +1629,10 @@ class ChatPanel(QWidget):
 
         # Update scroll-down button
         self._scroll_down_btn.setIcon(create_scroll_down_icon(16, QColor(theme.TEXT)))
+        composer_color = QColor(theme.COMPOSER)
         self._scroll_down_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: rgba({theme.COMPOSER.red()}, {theme.COMPOSER.green()}, {theme.COMPOSER.blue()}, 0.85);
+                background-color: rgba({composer_color.red()}, {composer_color.green()}, {composer_color.blue()}, 0.85);
                 border: 1px solid {theme.BORDER};
                 border-radius: 16px;
             }}
