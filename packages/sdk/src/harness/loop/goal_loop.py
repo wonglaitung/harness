@@ -98,6 +98,7 @@ class GoalLoopState:
     session_id: str = ""
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_agent_iterations: int = 0  # 累计 AgentLoop 内部迭代次数
     verification_log: list[VerificationRecord] = field(default_factory=list)
 
 
@@ -205,6 +206,10 @@ class GoalLoop:
                 )
 
                 self._state.iteration += 1
+
+                # 累计 AgentLoop 内部迭代次数
+                if result.iterations:
+                    self._state.total_agent_iterations += result.iterations
 
                 # Update token usage
                 if result.token_usage:
@@ -340,7 +345,7 @@ class GoalLoop:
         return GoalResult(
             goal=self.config.description,
             status=status,
-            total_iterations=self._state.iteration,
+            total_iterations=self._state.total_agent_iterations,
             context_resets=self._state.context_resets,
             total_tokens={
                 "input": self._state.total_input_tokens,
