@@ -1,10 +1,17 @@
 # 06 - 触发器系统详解
 
-> **注意**: 完整的触发器系统是计划功能，当前版本仅实现了 `SkillTrigger`（技能触发器）。CronTrigger、WebhookTrigger 等高级触发器将在后续版本中实现。
+> **状态**: ✅ 已实现 (Phase 2: Automations)
+> **相关文档**: [phase2-automations.md](../design/phase2-automations.md)
 
 ## 概述
 
-触发器系统让 Agent 能够自主运行——不仅响应用户消息，还能响应定时任务、外部事件、文件变化等触发源。
+触发器系统让 Agent 能够自主运行——不仅响应用户消息，还能响应定时任务、外部事件等触发源。
+
+**已实现的组件**：
+- `CronTrigger` - Cron 表达式调度
+- `IntervalTrigger` - 固定间隔调度
+- `TriggerManager` - 统一管理 + 并发执行
+- `Automation` - 简化 API
 
 ## 架构
 
@@ -14,13 +21,13 @@
 │                                                  │
 │  ┌───────────────┐  ┌───────────────────┐       │
 │  │TriggerManager │  │  Trigger Base     │       │
-│  │ (调度管理)     │  │  (触发器抽象类)    │       │
+│  │ (并发调度)     │  │  (触发器抽象类)    │       │
 │  └───────┬───────┘  └───────┬───────────┘       │
 │          │                  │                    │
 │          ↓                  ↓                    │
 │  ┌─────────────────────────────────────────┐    │
 │  │           Trigger Types                  │    │
-│  │  CronTrigger │ WebhookTrigger │ ...     │    │
+│  │  CronTrigger │ IntervalTrigger │ ...    │    │
 │  └─────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────┘
 ```
@@ -273,15 +280,87 @@ TriggerManager 接收 TriggerEvent
 ## 触发器管理
 
 ```python
-# 查看所有触发器
-for trigger in agent.triggers.list_triggers():
-    print(f"{trigger.name}: running={trigger.is_running}")
+from harness.triggers import TriggerManager, IntervalTrigger, TriggerAction
 
-# 停止单个触发器
-await agent.triggers.get_trigger("daily-report").stop()
+# 创建 TriggerManager（支持并发控制）
+manager = TriggerManager(agent, max_concurrent_goals=5)
+
+# 注册触发器
+trigger = IntervalTrigger(
+    interval_seconds=300,
+    action=TriggerAction(goal="健康检查"),
+)
+trigger_id = manager.register(trigger)
+
+# 启动所有触发器
+await manager.start()
+
+# 查看状态
+for info in manager.list_triggers():
+    print(f"{info['id']}: fires={info['fire_count']}")
 
 # 停止所有触发器
-await agent.triggers.stop_all()
+await manager.stop()
+```
+
+### 并发执行
+
+TriggerManager 支持并发执行多个 Goal：
+
+```python
+# 最多同时执行 3 个 Goal
+manager = TriggerManager(agent, max_concurrent_goals=3)
+
+# 当多个触发器同时触发时，并发执行
+# 超过限制的任务会等待 semaphore
+```
+
+## Automation 简化 API
+
+Automation 是触发器系统的推荐入口，整合了 Trigger + Goal：
+
+```python
+from harness.loop import Automation
+
+# 定时任务（Cron）
+daily_report = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",  # 每天 9:00
+    goal="生成每日报告并发送到 Slack",
+)
+
+# 间隔任务
+health_check = Automation(
+    name="health-check",
+    interval_seconds=300,  # 每 5 分钟
+    goal="检查系统健康状态",
+)
+
+# 启动
+await daily_report.start(agent)
+await health_check.start(agent)
+
+# 查看状态
+print(daily_report.status)  # AutomationStatus.RUNNING
+
+# 停止
+await daily_report.stop()
+```
+
+### 全局管理
+
+Automation 使用全局 TriggerManager 单例：
+
+```python
+from harness.loop.automation import get_global_manager
+
+# 所有 Automation 自动注册到全局 manager
+await automation1.start(agent)
+await automation2.start(agent)
+
+# 获取全局 manager 查看所有触发器
+manager = get_global_manager()
+print(f"Total triggers: {manager.trigger_count}")
 ```
 
 ## 下一步
@@ -289,3 +368,4 @@ await agent.triggers.stop_all()
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
 - [05-skills-system.md](./05-skills-system.md) - 了解技能系统
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
+- [../design/phase2-automations.md](../design/phase2-automations.md) - Automations 设计文档

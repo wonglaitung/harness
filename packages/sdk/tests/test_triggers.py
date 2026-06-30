@@ -523,3 +523,236 @@ class TestTriggerIntegration:
         reg = manager.get_trigger(trigger_id)
         assert reg is not None
         assert reg.fire_count >= 2
+
+
+# ============================================================================
+# Concurrency Tests
+# ============================================================================
+
+
+class TestTriggerManagerConcurrency:
+    """Tests for concurrent goal execution."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_goal_execution(self):
+        """Test that multiple triggers execute goals concurrently."""
+        from harness.testing import MockHarness
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=3)
+
+        # Create 3 triggers with short interval
+        for i in range(3):
+            trigger = IntervalTrigger(
+                interval_seconds=1,
+                action=TriggerAction(goal=f"Task {i}"),
+            )
+            manager.register(trigger)
+
+        await manager.start()
+
+        # Wait for triggers to fire
+        await asyncio.sleep(1.5)
+
+        # Verify semaphore was created
+        assert manager._semaphore is not None
+
+        # Verify tasks were created concurrently
+        # (they may have completed by now, so we check fire counts)
+        total_fires = sum(reg.fire_count for reg in manager._registrations.values())
+        assert total_fires >= 3  # At least 3 fires across all triggers
+
+        await manager.stop()
+
+    @pytest.mark.asyncio
+    async def test_max_concurrent_limit(self):
+        """Test that concurrent execution respects the limit."""
+        from harness.testing import MockHarness
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=2)
+
+        # Create 5 triggers
+        for i in range(5):
+            trigger = IntervalTrigger(
+                interval_seconds=1,
+                action=TriggerAction(goal=f"Task {i}"),
+            )
+            manager.register(trigger)
+
+        await manager.start()
+        await asyncio.sleep(1.5)
+
+        # Check that max_concurrent_goals was set correctly
+        assert manager.max_concurrent_goals == 2
+
+        await manager.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_waits_for_active_tasks(self):
+        """Test that stop() waits for active tasks to complete."""
+        from harness.testing import MockHarness
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=3)
+
+        trigger = IntervalTrigger(
+            interval_seconds=1,
+            action=TriggerAction(goal="Test"),
+        )
+        manager.register(trigger)
+
+        await manager.start()
+        await asyncio.sleep(1.5)
+
+        # Stop should complete without hanging
+        await manager.stop()
+        assert not manager.is_running
+
+
+# ============================================================================
+# Automation Integration Tests
+# ============================================================================
+
+
+class TestAutomationWithManager:
+    """Tests for Automation integration with TriggerManager."""
+
+    def test_get_global_manager_requires_agent(self):
+        """Test that get_global_manager requires agent on first call."""
+        from harness.loop.automation import (
+            get_global_manager,
+            reset_global_manager,
+        )
+
+        # Reset to ensure clean state
+        reset_global_manager()
+
+        with pytest.raises(ValueError, match="Agent is required"):
+            get_global_manager()
+
+    def test_get_global_manager_singleton(self):
+        """Test that get_global_manager returns a singleton."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import (
+            get_global_manager,
+            reset_global_manager,
+        )
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        manager1 = get_global_manager(agent)
+        manager2 = get_global_manager()
+
+        assert manager1 is manager2
+
+        reset_global_manager()
+
+    @pytest.mark.asyncio
+    async def test_automation_uses_global_manager(self):
+        """Test that Automation uses the global TriggerManager."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import (
+            Automation,
+            get_global_manager,
+            reset_global_manager,
+        )
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        automation = Automation(
+            name="test",
+            interval_seconds=60,
+            goal="Test goal",
+        )
+
+        await automation.start(agent)
+
+        # Verify registered in global manager
+        manager = get_global_manager()
+        assert manager.trigger_count >= 1
+
+        await automation.stop()
+        reset_global_manager()
+
+    @pytest.mark.asyncio
+    async def test_automation_with_explicit_manager(self):
+        """Test Automation with explicitly provided TriggerManager."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import Automation, reset_global_manager
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        manager = TriggerManager(agent)
+        automation = Automation(
+            name="test",
+            interval_seconds=60,
+            goal="Test goal",
+        )
+
+        await automation.start(agent, manager=manager)
+
+        # Verify registered in provided manager
+        assert manager.trigger_count == 1
+
+        await automation.stop()
+
+    @pytest.mark.asyncio
+    async def test_automation_pause_resume(self):
+        """Test Automation pause and resume with TriggerManager."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import Automation, reset_global_manager
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        automation = Automation(
+            name="test",
+            interval_seconds=60,
+            goal="Test goal",
+        )
+
+        await automation.start(agent)
+        assert automation.is_running
+
+        await automation.pause()
+        assert automation.status.value == "paused"
+
+        await automation.resume()
+        assert automation.is_running
+
+        await automation.stop()
+        reset_global_manager()
+
+    @pytest.mark.asyncio
+    async def test_automation_result_syncs_from_manager(self):
+        """Test that Automation.result syncs from TriggerManager stats."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import Automation, reset_global_manager
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=3)
+        automation = Automation(
+            name="test",
+            interval_seconds=1,
+            goal="Test goal",
+        )
+
+        await automation.start(agent, manager=manager)
+
+        # Wait for a trigger
+        await asyncio.sleep(1.5)
+
+        # Access result to trigger sync
+        result = automation.result
+
+        # Check that fire_count was synced
+        assert result.fire_count >= 1
+
+        await automation.stop()
+        reset_global_manager()

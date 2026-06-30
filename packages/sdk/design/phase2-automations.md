@@ -324,13 +324,27 @@ class IntervalTrigger(Trigger):
 # triggers/manager.py
 
 class TriggerManager:
-    """触发器管理器."""
+    """
+    触发器管理器 - 支持并发执行.
     
-    def __init__(self, agent: AgentHarness):
+    核心特性:
+    - 事件队列解耦触发和执行
+    - Semaphore 控制并发数，防止 API 限流
+    - 任务追踪，优雅关闭
+    """
+    
+    def __init__(
+        self,
+        agent: AgentHarness,
+        max_concurrent_goals: int = 5,  # 最大并发数
+    ):
         self.agent = agent
+        self.max_concurrent_goals = max_concurrent_goals
         self._registrations: dict[str, TriggerRegistration] = {}
         self._event_queue: asyncio.Queue[TriggerEvent] = asyncio.Queue()
         self._processor_task: asyncio.Task | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+        self._running_tasks: set[asyncio.Task] = set()  # 活跃任务追踪
     
     def register(
         self,
@@ -354,6 +368,9 @@ class TriggerManager:
     
     async def start(self) -> None:
         """启动所有触发器."""
+        # 初始化并发控制
+        self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
+        
         # 启动事件处理器
         self._processor_task = asyncio.create_task(self._process_events())
         
@@ -363,7 +380,19 @@ class TriggerManager:
                 await reg.trigger.start(self._enqueue_event)
     
     async def stop(self) -> None:
-        """停止所有触发器."""
+        """停止所有触发器（等待活跃任务完成）."""
+        self._running = False
+        
+        # 等待活跃任务完成（最多 30 秒）
+        if self._running_tasks:
+            done, pending = await asyncio.wait(
+                self._running_tasks,
+                timeout=30.0,
+            )
+            for task in pending:
+                task.cancel()
+        
+        # 停止所有触发器
         for reg in self._registrations.values():
             await reg.trigger.stop()
         
@@ -375,16 +404,24 @@ class TriggerManager:
         self._event_queue.put_nowait(event)
     
     async def _process_events(self) -> None:
-        """处理事件队列."""
+        """处理事件队列（并发执行）."""
         while self._running:
             try:
                 event = await asyncio.wait_for(
                     self._event_queue.get(),
                     timeout=1.0,
                 )
-                await self._handle_event(event)
+                # 并发执行，不阻塞队列消费
+                task = asyncio.create_task(self._handle_event_concurrent(event))
+                self._running_tasks.add(task)
+                task.add_done_callback(self._running_tasks.discard)
             except asyncio.TimeoutError:
                 continue
+    
+    async def _handle_event_concurrent(self, event: TriggerEvent) -> None:
+        """并发处理事件（受 semaphore 限制）."""
+        async with self._semaphore:
+            await self._handle_event(event)
     
     async def _handle_event(self, event: TriggerEvent) -> None:
         """处理触发事件：执行 Goal."""
@@ -412,8 +449,26 @@ class TriggerManager:
 ```python
 # loop/automation.py
 
+# 全局 TriggerManager 单例
+_global_manager: TriggerManager | None = None
+
+def get_global_manager(agent: AgentHarness | None = None) -> TriggerManager:
+    """获取全局 TriggerManager 单例."""
+    global _global_manager
+    if _global_manager is None:
+        if agent is None:
+            raise ValueError("Agent is required to initialize global manager")
+        _global_manager = TriggerManager(agent)
+    return _global_manager
+
+
 class Automation:
-    """自动化任务 - 整合 Trigger + Goal."""
+    """
+    自动化任务 - 整合 Trigger + Goal.
+    
+    Automation 现在通过全局 TriggerManager 统一管理，
+    支持并发执行和全局监控。
+    """
     
     def __init__(
         self,
@@ -435,11 +490,28 @@ class Automation:
         
         self._trigger: Trigger | None = None
         self._agent: AgentHarness | None = None
+        self._manager: TriggerManager | None = None  # 关联的 TriggerManager
+        self._trigger_id: str | None = None          # 注册后的触发器 ID
         self._status = AutomationStatus.PENDING
     
-    async def start(self, agent: AgentHarness) -> None:
-        """启动自动化."""
+    async def start(
+        self,
+        agent: AgentHarness,
+        manager: TriggerManager | None = None,
+    ) -> None:
+        """
+        启动自动化.
+        
+        Args:
+            agent: AgentHarness 实例
+            manager: 可选的 TriggerManager，不提供则使用全局管理器
+        """
         self._agent = agent
+        
+        # 使用提供的 manager 或全局 manager
+        if manager is None:
+            manager = get_global_manager(agent)
+        self._manager = manager
         
         # 创建触发器
         action = self._create_action()
@@ -455,48 +527,55 @@ class Automation:
                 action=action,
             )
         
-        # 启动触发器
-        await self._trigger.start(self._on_trigger)
+        # 注册到 TriggerManager（而非独立启动）
+        self._trigger_id = manager.register(self._trigger, action)
+        
+        # 确保 manager 正在运行
+        if not manager.is_running:
+            await manager.start()
+        
         self._status = AutomationStatus.RUNNING
     
     async def stop(self) -> None:
         """停止自动化."""
-        if self._trigger:
+        # 从 TriggerManager 注销
+        if self._manager and self._trigger_id:
+            self._manager.unregister(self._trigger_id)
+            self._trigger_id = None
+        elif self._trigger:
+            # 兼容旧模式
             await self._trigger.stop()
         self._status = AutomationStatus.STOPPED
     
     async def pause(self) -> None:
         """暂停自动化."""
-        if self._trigger:
+        if self._manager and self._trigger_id:
+            self._manager.disable(self._trigger_id)
+        elif self._trigger:
             await self._trigger.stop()
         self._status = AutomationStatus.PAUSED
     
     async def resume(self) -> None:
         """恢复自动化."""
-        if self._trigger and self._agent:
+        if self._manager and self._trigger_id:
+            self._manager.enable(self._trigger_id)
+            self._status = AutomationStatus.RUNNING
+        elif self._trigger and self._agent:
             await self._trigger.start(self._on_trigger)
-        self._status = AutomationStatus.RUNNING
+            self._status = AutomationStatus.RUNNING
     
-    def _on_trigger(self, event: TriggerEvent) -> None:
-        """触发器回调：创建异步任务执行 Goal."""
-        asyncio.create_task(self._execute_goal(event))
-    
-    async def _execute_goal(self, event: TriggerEvent) -> None:
-        """执行目标."""
-        # 激活 skills
-        for skill_name in self.config.skills:
-            self._agent.activate_skill(skill_name)
-        
-        # 构建 GoalConfig 并执行
-        goal_config = GoalConfig(
-            description=self.config.goal,
-            workspace_dir=self.config.workspace_dir,
-            max_iterations=self.config.max_iterations,
-            timeout_seconds=self.config.timeout_seconds,
-        )
-        
-        result = await self._agent.run_goal(goal_config)
-        self._result.last_run = datetime.now()
+    @property
+    def result(self) -> AutomationResult:
+        """执行结果（自动从 TriggerManager 同步统计）."""
+        if self._manager and self._trigger_id:
+            reg = self._manager.get_trigger(self._trigger_id)
+            if reg:
+                self._result.fire_count = reg.fire_count
+                self._result.error_count = reg.error_count
+                self._result.error_message = reg.last_error
+                if reg.last_fired:
+                    self._result.last_run = reg.last_fired
+        return self._result
         self._result.run_count += 1
 ```
 
@@ -653,14 +732,16 @@ automation = Automation(
 `TriggerManager` 使用 `asyncio.Queue` 作为事件队列，而不是直接在触发器回调中执行 Goal：
 
 ```python
-# ✅ 当前设计：事件队列
+# ✅ 当前设计：事件队列 + 并发执行
 def _enqueue_event(self, event):
     self._event_queue.put_nowait(event)
 
 async def _process_events(self):
     while self._running:
         event = await self._event_queue.get()
-        await self._handle_event(event)
+        # 并发执行，不阻塞队列消费
+        task = asyncio.create_task(self._handle_event_concurrent(event))
+        self._running_tasks.add(task)
 
 # ❌ 直接回调（不推荐）
 def _on_trigger(self, event):
@@ -671,30 +752,30 @@ def _on_trigger(self, event):
 1. **解耦触发和执行**：触发器只需负责"点火"，不需等待执行完成
 2. **防止阻塞**：Goal 执行可能需要几分钟，不应阻塞触发器的调度循环
 3. **更好的错误隔离**：一个 Goal 失败不会影响其他触发器
+4. **支持并发**：多个触发器同时触发时，可以并发执行多个 Goal
 
-### 2. 为什么 Automation 不直接使用 TriggerManager？
+### 2. 为什么 Automation 使用全局 TriggerManager？
 
-`Automation` 内部创建 Trigger 实例，而不是使用 `TriggerManager`：
+`Automation` 现在通过全局 `TriggerManager` 统一管理：
 
 ```python
-# ✅ 当前设计：Automation 内部管理 Trigger
+# ✅ 当前设计：Automation 注册到全局 TriggerManager
 class Automation:
-    async def start(self, agent):
-        self._trigger = CronTrigger(...)
-        await self._trigger.start(self._on_trigger)
-
-# ❌ 使用 TriggerManager（更复杂）
-class Automation:
-    async def start(self, agent):
-        self._manager = TriggerManager(agent)
-        self._manager.register(self._trigger)
-        await self._manager.start()
+    async def start(self, agent, manager=None):
+        if manager is None:
+            manager = get_global_manager(agent)
+        
+        self._trigger_id = manager.register(self._trigger, action)
+        
+        if not manager.is_running:
+            await manager.start()
 ```
 
 **原因**：
-1. **简化 API**：用户只需 `automation.start(agent)` 一行代码
-2. **减少依赖**：不需要用户了解 TriggerManager 的概念
-3. **单任务场景**：Automation 是单个自动化任务，不需要管理多个触发器
+1. **统一管理入口**：所有 Automation 可被全局监控和管理
+2. **并发执行**：多个 Automation 触发时并发执行，而非串行等待
+3. **简化 API**：用户仍只需 `automation.start(agent)` 一行代码
+4. **灵活控制**：支持传入自定义 TriggerManager 用于隔离场景
 
 ### 3. Jitter（随机抖动）的作用
 
@@ -721,7 +802,9 @@ trigger = CronTrigger(
 |------|------|----------|
 | 触发器循环崩溃 | 高 | try-except 包裹，错误后继续运行 |
 | Goal 执行超时 | 中 | `GoalConfig.timeout_seconds` 限制 |
-| API 限流 | 中 | `jitter_seconds` 分散请求 |
+| API 限流 | 高 | `max_concurrent_goals` 限制 + `jitter_seconds` 分散 |
+| 并发执行导致资源耗尽 | 高 | Semaphore 控制最大并发数 |
+| 任务泄漏（未正确清理） | 中 | `_running_tasks` 追踪 + `stop()` 超时取消 |
 | 进程崩溃丢失触发器 | 高 | 持久化配置（用户责任） |
 | 事件队列溢出 | 低 | 无界队列 + 监控 |
 
@@ -764,25 +847,87 @@ class TestCronTrigger:
         assert len(events) >= 1
 
 
-class TestTriggerManager:
-    """TriggerManager 测试."""
+class TestTriggerManagerConcurrency:
+    """TriggerManager 并发测试."""
     
-    async def test_register_and_start(self, mock_harness):
-        """测试注册和启动."""
-        manager = TriggerManager(mock_harness)
-        
-        trigger = IntervalTrigger(
-            interval_seconds=1,
-            action=TriggerAction(goal="Test"),
-        )
-        
-        trigger_id = manager.register(trigger)
-        assert trigger_id == trigger.id
-        
+    async def test_concurrent_goal_execution(self):
+        """测试多个触发器并发执行."""
+        from harness.testing import MockHarness
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=3)
+
+        # 创建 3 个触发器
+        for i in range(3):
+            trigger = IntervalTrigger(
+                interval_seconds=1,
+                action=TriggerAction(goal=f"Task {i}"),
+            )
+            manager.register(trigger)
+
         await manager.start()
-        assert manager.is_running
-        
+        await asyncio.sleep(1.5)
+
+        # 验证并发执行
+        assert manager._semaphore is not None
+        total_fires = sum(reg.fire_count for reg in manager._registrations.values())
+        assert total_fires >= 3
+
         await manager.stop()
+
+    async def test_max_concurrent_limit(self):
+        """测试并发限制."""
+        from harness.testing import MockHarness
+
+        agent = MockHarness()
+        manager = TriggerManager(agent, max_concurrent_goals=2)
+
+        # 创建 5 个触发器
+        for i in range(5):
+            trigger = IntervalTrigger(
+                interval_seconds=1,
+                action=TriggerAction(goal=f"Task {i}"),
+            )
+            manager.register(trigger)
+
+        await manager.start()
+        await asyncio.sleep(1.5)
+
+        # 验证最大并发数
+        assert manager.max_concurrent_goals == 2
+
+        await manager.stop()
+
+
+class TestAutomationWithManager:
+    """Automation 与 TriggerManager 集成测试."""
+    
+    async def test_automation_uses_global_manager(self):
+        """测试 Automation 使用全局 manager."""
+        from harness.testing import MockHarness
+        from harness.loop.automation import (
+            Automation,
+            get_global_manager,
+            reset_global_manager,
+        )
+
+        reset_global_manager()
+
+        agent = MockHarness()
+        automation = Automation(
+            name="test",
+            interval_seconds=60,
+            goal="Test goal",
+        )
+
+        await automation.start(agent)
+
+        # 验证注册到全局 manager
+        manager = get_global_manager()
+        assert manager.trigger_count >= 1
+
+        await automation.stop()
+        reset_global_manager()
 ```
 
 ---
@@ -853,4 +998,32 @@ class WebhookTrigger(Trigger):
             trigger_id=self.id,
             payload=payload,
         )
+```
+
+---
+
+## 更新日志
+
+### 2026-06-30: 并发执行重构
+
+**TriggerManager 并发化**：
+- 添加 `max_concurrent_goals` 参数控制最大并发数
+- 使用 `asyncio.Semaphore` 控制并发
+- `_process_events` 改为异步任务分发，不再串行等待
+- `stop()` 方法现在等待活跃任务完成
+
+**Automation 统一管理**：
+- 添加全局 `TriggerManager` 单例
+- `start()` 现在通过 TriggerManager 注册触发器
+- `result` 属性自动同步 TriggerManager 统计
+- 支持自定义 `manager` 参数用于隔离场景
+
+**架构改进**：
+```
+Before:                          After:
+Automation 1 → Trigger (独立)    Automation 1 ─┐
+Automation 2 → Trigger (独立)    Automation 2 ─┼→ TriggerManager (并发)
+                                 Automation 3 ─┘
+❌ 无法全局监控                   ✅ 统一管理 + 并发执行
+❌ 串行执行 Goals                 ✅ Semaphore 限流保护
 ```

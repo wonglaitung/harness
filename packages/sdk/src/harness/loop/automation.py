@@ -15,12 +15,55 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable
 
 from harness.loop.types import GoalConfig, GoalResult
-from harness.triggers import CronTrigger, IntervalTrigger, Trigger, TriggerAction
+from harness.triggers import (
+    CronTrigger,
+    IntervalTrigger,
+    Trigger,
+    TriggerAction,
+    TriggerManager,
+)
 
 if TYPE_CHECKING:
     from harness.sdk.harness import AgentHarness
 
 logger = logging.getLogger(__name__)
+
+# Global manager singleton for Automation instances
+_global_manager: TriggerManager | None = None
+
+
+def get_global_manager(agent: "AgentHarness | None" = None) -> TriggerManager:
+    """
+    Get the global TriggerManager singleton.
+
+    Args:
+        agent: AgentHarness instance required for first initialization
+
+    Returns:
+        The global TriggerManager instance
+
+    Raises:
+        ValueError: If no agent is provided on first call
+    """
+    global _global_manager
+    if _global_manager is None:
+        if agent is None:
+            raise ValueError(
+                "Agent is required to initialize global TriggerManager. "
+                "Call get_global_manager(agent=your_agent) first."
+            )
+        _global_manager = TriggerManager(agent)
+    return _global_manager
+
+
+def reset_global_manager() -> None:
+    """
+    Reset the global TriggerManager.
+
+    This is primarily useful for testing.
+    """
+    global _global_manager
+    _global_manager = None
 
 
 class AutomationStatus(Enum):
@@ -216,6 +259,8 @@ class Automation:
 
         self._trigger: Trigger | None = None
         self._agent: AgentHarness | None = None
+        self._manager: TriggerManager | None = None
+        self._trigger_id: str | None = None
         self._status = AutomationStatus.PENDING
         self._result = AutomationResult(automation_name=name)
 
@@ -261,7 +306,16 @@ class Automation:
 
     @property
     def result(self) -> AutomationResult:
-        """Execution result."""
+        """Execution result (synced from TriggerManager if available)."""
+        # Sync stats from TriggerManager if registered
+        if self._manager and self._trigger_id:
+            reg = self._manager.get_trigger(self._trigger_id)
+            if reg:
+                self._result.fire_count = reg.fire_count
+                self._result.error_count = reg.error_count
+                self._result.error_message = reg.last_error
+                if reg.last_fired:
+                    self._result.last_run = reg.last_fired
         return self._result
 
     @property
@@ -269,12 +323,18 @@ class Automation:
         """Check if automation is running."""
         return self._status == AutomationStatus.RUNNING
 
-    async def start(self, agent: "AgentHarness") -> None:
+    async def start(
+        self,
+        agent: "AgentHarness",
+        manager: TriggerManager | None = None,
+    ) -> None:
         """
         Start the automation.
 
         Args:
             agent: AgentHarness instance to use for execution
+            manager: Optional TriggerManager to register with.
+                If not provided, uses the global manager.
 
         Raises:
             ValueError: If no valid trigger configuration
@@ -284,6 +344,12 @@ class Automation:
             return
 
         self._agent = agent
+
+        # Use provided manager or get global manager
+        if manager is None:
+            manager = get_global_manager(agent)
+
+        self._manager = manager
 
         # Create the trigger
         action = self._create_action()
@@ -306,18 +372,28 @@ class Automation:
         else:
             raise ValueError("No valid trigger configuration")
 
-        # Start the trigger
-        await self._trigger.start(self._on_trigger)
+        # Register with manager instead of starting directly
+        self._trigger_id = manager.register(self._trigger, action)
+
+        # Ensure manager is running
+        if not manager.is_running:
+            await manager.start()
+
         self._status = AutomationStatus.RUNNING
 
         logger.info(
-            f"Automation {self.name} started "
+            f"Automation {self.name} started via TriggerManager "
             f"(trigger: {self._trigger.trigger_type.value})"
         )
 
     async def stop(self) -> None:
         """Stop the automation."""
-        if self._trigger:
+        # Unregister from manager if registered
+        if self._manager and self._trigger_id:
+            self._manager.unregister(self._trigger_id)
+            self._trigger_id = None
+        elif self._trigger:
+            # Fallback: direct trigger management (legacy behavior)
             await self._trigger.stop()
             self._trigger = None
 
@@ -326,7 +402,11 @@ class Automation:
 
     async def pause(self) -> None:
         """Pause the automation."""
-        if self._trigger and self._trigger.is_running():
+        if self._manager and self._trigger_id:
+            # Disable in manager (trigger stays registered but won't fire)
+            self._manager.disable(self._trigger_id)
+        elif self._trigger and self._trigger.is_running():
+            # Fallback: direct trigger management
             await self._trigger.stop()
 
         self._status = AutomationStatus.PAUSED
@@ -338,7 +418,13 @@ class Automation:
             logger.warning(f"Automation {self.name} is not paused")
             return
 
-        if self._trigger and self._agent:
+        if self._manager and self._trigger_id:
+            # Re-enable in manager
+            self._manager.enable(self._trigger_id)
+            self._status = AutomationStatus.RUNNING
+            logger.info(f"Automation {self.name} resumed")
+        elif self._trigger and self._agent:
+            # Fallback: direct trigger management
             await self._trigger.start(self._on_trigger)
             self._status = AutomationStatus.RUNNING
             logger.info(f"Automation {self.name} resumed")

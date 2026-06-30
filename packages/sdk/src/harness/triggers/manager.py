@@ -30,6 +30,7 @@ class TriggerManager:
     - Starting and stopping all triggers
     - Executing goals when triggers fire
     - Error handling and retries
+    - Concurrent goal execution with configurable limits
 
     Example:
         ```python
@@ -37,7 +38,7 @@ class TriggerManager:
         from harness.triggers import TriggerManager, CronTrigger, TriggerAction
 
         agent = AgentHarness()
-        manager = TriggerManager(agent)
+        manager = TriggerManager(agent, max_concurrent_goals=3)
 
         # Register a trigger
         trigger = CronTrigger(
@@ -54,18 +55,27 @@ class TriggerManager:
         ```
     """
 
-    def __init__(self, agent: "AgentHarness"):
+    def __init__(
+        self,
+        agent: "AgentHarness",
+        max_concurrent_goals: int = 5,
+    ):
         """
         Initialize trigger manager.
 
         Args:
             agent: AgentHarness instance to use for goal execution
+            max_concurrent_goals: Maximum number of goals to execute concurrently.
+                This prevents API rate limiting when multiple triggers fire at once.
         """
         self.agent = agent
+        self.max_concurrent_goals = max_concurrent_goals
         self._registrations: dict[str, TriggerRegistration] = {}
         self._running = False
         self._event_queue: asyncio.Queue[TriggerEvent] = asyncio.Queue()
         self._processor_task: asyncio.Task | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+        self._running_tasks: set[asyncio.Task] = set()
 
     def register(
         self,
@@ -203,11 +213,28 @@ class TriggerManager:
     async def stop(self) -> None:
         """
         Stop all triggers and the event processor.
+
+        Waits for active goal executions to complete (with timeout)
+        before shutting down.
         """
         if not self._running:
             return
 
         self._running = False
+
+        # Wait for active tasks to complete (with timeout)
+        if self._running_tasks:
+            logger.info(
+                f"Waiting for {len(self._running_tasks)} active tasks to complete..."
+            )
+            done, pending = await asyncio.wait(
+                self._running_tasks,
+                timeout=30.0,  # Maximum wait time
+            )
+            if pending:
+                logger.warning(f"Cancelling {len(pending)} pending tasks")
+                for task in pending:
+                    task.cancel()
 
         # Stop all triggers
         for reg in self._registrations.values():
@@ -243,8 +270,10 @@ class TriggerManager:
         Process events from the queue.
 
         This is the main loop that handles trigger events
-        and executes goals.
+        and executes goals concurrently.
         """
+        self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
+
         while self._running:
             try:
                 # Wait for event with timeout
@@ -252,7 +281,11 @@ class TriggerManager:
                     self._event_queue.get(),
                     timeout=1.0,
                 )
-                await self._handle_event(event)
+
+                # Execute concurrently, not blocking queue consumption
+                task = asyncio.create_task(self._handle_event_concurrent(event))
+                self._running_tasks.add(task)
+                task.add_done_callback(self._running_tasks.discard)
 
             except asyncio.TimeoutError:
                 # No event, continue loop
@@ -261,6 +294,21 @@ class TriggerManager:
                 break
             except Exception as e:
                 logger.error(f"Error processing event: {e}")
+
+    async def _handle_event_concurrent(self, event: TriggerEvent) -> None:
+        """
+        Handle a trigger event concurrently with semaphore protection.
+
+        Args:
+            event: Event to handle
+        """
+        if self._semaphore is None:
+            # Fallback for edge cases
+            await self._handle_event(event)
+            return
+
+        async with self._semaphore:
+            await self._handle_event(event)
 
     async def _handle_event(self, event: TriggerEvent) -> None:
         """
