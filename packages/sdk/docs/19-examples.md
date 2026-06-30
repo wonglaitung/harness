@@ -570,3 +570,284 @@ manager.add_entry(MemoryEntry(
 # 第二次调用 - 自动加载更新后的记忆
 result2 = await agent.run("添加函数注释")
 ```
+
+## Loop Engineering
+
+Loop Engineering 是目标驱动执行范式：用户描述目标，Agent 自主运行直到完成。
+
+### 基础用法：目标驱动执行
+
+```python
+import asyncio
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+async def main():
+    agent = AgentHarness()
+
+    # 用户描述目标，Agent 自主运行直到完成
+    result = await agent.run_goal(
+        goal="修复 src/ 目录下所有类型错误",
+        max_iterations=50,
+    )
+
+    if result.status == GoalStatus.ACHIEVED:
+        print(f"目标达成！共 {result.total_iterations} 轮迭代")
+    elif result.status == GoalStatus.MAX_ITERATIONS:
+        print(f"达到最大迭代次数 {result.total_iterations}")
+    else:
+        print(f"目标未达成: {result.status.value}")
+
+asyncio.run(main())
+```
+
+### 自定义验证器
+
+使用自定义函数验证目标是否达成：
+
+```python
+import asyncio
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+async def check_coverage(result) -> bool:
+    """检查测试覆盖率是否达到 80%"""
+    proc = await asyncio.create_subprocess_exec(
+        "pytest", "--cov", "--cov-report=term",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    # 解析覆盖率报告
+    return "TOTAL" in stdout.decode() and "80%" in stdout.decode()
+
+async def main():
+    agent = AgentHarness()
+
+    result = await agent.run_goal(
+        goal="将测试覆盖率提升到 80%",
+        custom_verifier=check_coverage,
+        max_iterations=50,
+    )
+
+    print(f"状态: {result.status.value}")
+    print(f"迭代次数: {result.total_iterations}")
+
+asyncio.run(main())
+```
+
+### GoalConfig 完整配置
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalConfig, GoalStatus
+
+agent = AgentHarness()
+
+config = GoalConfig(
+    description="实现用户认证模块",
+    success_criteria="所有测试通过，覆盖率 >= 80%",
+    workspace_dir="./src/auth",
+
+    # 迭代控制
+    max_iterations=50,
+    max_context_resets=5,      # 上下文重置次数
+    timeout_seconds=3600,      # 1小时超时
+
+    # 成本控制
+    max_tokens=500000,
+    max_cost_usd=10.0,
+)
+
+result = await agent.run_goal(config)
+```
+
+### 定时自动化 (Phase 2)
+
+使用 Automation 创建定时任务：
+
+```python
+import asyncio
+from harness import AgentHarness
+from harness.loop import Automation
+
+async def main():
+    agent = AgentHarness()
+
+    # Cron 定时任务：每天 9:00 生成日报
+    daily_report = Automation(
+        name="daily-report",
+        schedule="0 9 * * *",
+        goal="分析昨日 Git 提交，生成工作日报",
+    )
+
+    # 间隔任务：每 5 分钟健康检查
+    health_check = Automation(
+        name="health-check",
+        interval_seconds=300,
+        goal="检查系统健康状态，如有异常发送告警",
+    )
+
+    # 启动自动化
+    await daily_report.start(agent)
+    await health_check.start(agent)
+
+    print("自动化任务已启动，按 Ctrl+C 停止")
+    try:
+        await asyncio.sleep(3600)  # 运行 1 小时
+    finally:
+        await daily_report.stop()
+        await health_check.stop()
+
+asyncio.run(main())
+```
+
+### 并行 Worktree 执行 (Phase 3)
+
+在隔离的 worktree 中并行执行多个目标：
+
+```python
+import asyncio
+from harness import AgentHarness
+from harness.loop import WorktreeOrchestrator, WorktreeConfig
+
+async def main():
+    agent = AgentHarness()
+
+    orchestrator = WorktreeOrchestrator(agent, workspace_dir=".")
+
+    # 定义并行任务
+    tasks = [
+        WorktreeConfig(
+            name="feature-auth",
+            goal="实现用户认证功能",
+            base_branch="main",
+        ),
+        WorktreeConfig(
+            name="feature-api",
+            goal="实现 REST API 端点",
+            base_branch="main",
+        ),
+        WorktreeConfig(
+            name="feature-tests",
+            goal="编写集成测试",
+            base_branch="main",
+        ),
+    ]
+
+    # 并行执行
+    results = await orchestrator.run_parallel(tasks)
+
+    # 查看结果
+    for name, result in results.items():
+        print(f"{name}: {result.status}")
+
+    # 合并成功的分支
+    for name, result in results.items():
+        if result.status == "completed":
+            await orchestrator.merge(name)
+            print(f"已合并: {name}")
+
+asyncio.run(main())
+```
+
+### 指标监控
+
+监控 Goal 执行的详细指标：
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+agent = AgentHarness()
+
+result = await agent.run_goal(
+    goal="重构数据库访问层",
+    max_iterations=30,
+)
+
+# 详细指标
+print(f"状态: {result.status.value}")
+print(f"迭代次数: {result.total_iterations}")
+print(f"上下文重置: {result.context_resets}")
+print(f"Token 使用: {result.total_tokens}")
+print(f"执行时长: {result.duration_seconds:.1f}秒")
+
+# 验证日志
+for record in result.verification_log:
+    print(f"  第{record.iteration}轮: {record.result.value}")
+    if record.reason:
+        print(f"    原因: {record.reason}")
+```
+
+### 错误处理
+
+处理各种执行状态：
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+agent = AgentHarness()
+result = await agent.run_goal("复杂任务", max_iterations=10)
+
+match result.status:
+    case GoalStatus.ACHIEVED:
+        print("目标达成")
+    case GoalStatus.TIMEOUT:
+        print(f"超时，已运行 {result.duration_seconds}秒")
+    case GoalStatus.MAX_ITERATIONS:
+        print(f"达到最大迭代次数，建议增加 max_iterations")
+    case GoalStatus.MAX_RESETS:
+        print("上下文重置次数过多，任务可能过于复杂")
+    case GoalStatus.ERROR:
+        print(f"执行错误: {result.error}")
+    case GoalStatus.VERIFIER_FAULT:
+        print("验证器故障，请检查 custom_verifier 实现")
+    case GoalStatus.CANCELLED:
+        print("用户取消")
+```
+
+### 工作流编排
+
+组合多个目标形成工作流：
+
+```python
+import asyncio
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+async def code_review_workflow(agent: AgentHarness):
+    """代码审查工作流"""
+
+    # Step 1: 静态分析
+    result1 = await agent.run_goal(
+        goal="运行静态分析，找出代码问题",
+        max_iterations=10,
+    )
+    if result1.status != GoalStatus.ACHIEVED:
+        return result1
+
+    # Step 2: 修复问题
+    result2 = await agent.run_goal(
+        goal="修复所有发现的代码问题",
+        max_iterations=30,
+    )
+    if result2.status != GoalStatus.ACHIEVED:
+        return result2
+
+    # Step 3: 运行测试
+    result3 = await agent.run_goal(
+        goal="确保所有测试通过",
+        max_iterations=20,
+    )
+
+    return result3
+
+async def main():
+    agent = AgentHarness()
+    result = await code_review_workflow(agent)
+    print(f"工作流完成: {result.status.value}")
+
+asyncio.run(main())
+```
