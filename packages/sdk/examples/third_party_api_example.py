@@ -6,7 +6,7 @@ Harness SDK 功能演示 - 开箱即用案例
 运行方式:
     python examples/third_party_api_example.py
 
-功能模块 (24 个演示):
+功能模块 (32 个演示):
     演示 1:  基础对话 - 简单问答
     演示 2:  文件工具 - ReadTool, GlobTool, GrepTool
     演示 3:  多轮对话 - Session 会话管理
@@ -35,6 +35,10 @@ Harness SDK 功能演示 - 开箱即用案例
     演示 26: Guardrails - PII 检测和内容安全 (P2)
     演示 27: CPU Router - 成本优化的请求路由 (P2)
     演示 28: Guardrails 进阶 - LLM Judge、流式拦截、中文姓名识别、异常处理 (P2)
+    演示 29: Loop Engineering - 基础用法：目标驱动执行 (P2)
+    演示 30: Loop Engineering - 自定义验证器 (P2)
+    演示 31: Loop Engineering - Automation 定时调度 (P2)
+    演示 32: Loop Engineering - 并行 Worktree 执行 (P2)
 
 作者: Harness Team
 """
@@ -227,6 +231,21 @@ from harness.core import (
     StuckDetector,           # 卡住检测器
     StuckDetectorConfig,     # 检测配置
     StuckDetectionResult,    # 检测结果
+)
+
+
+# Loop Engineering - 目标驱动执行 (P2)
+from harness.loop import (
+    GoalConfig,              # 目标配置
+    GoalResult,              # 目标执行结果
+    GoalStatus,              # 目标状态
+    GoalVerifier,            # 目标验证器
+    GoalLoop,                # 目标循环
+    Automation,              # 自动化任务
+    AutomationConfig,        # 自动化配置
+    WorktreeOrchestrator,    # Worktree 编排器
+    WorktreeConfig,          # Worktree 配置
+    WorktreeResult,          # Worktree 执行结果
 )
 
 
@@ -3811,6 +3830,599 @@ async def demo_guardrails_advanced():
 
 
 # ============================================================================
+# 演示 29: Loop Engineering - 基础用法：目标驱动执行 (P2)
+# ============================================================================
+
+async def demo_loop_engineering_basic():
+    """
+    演示 29: Loop Engineering - 基础用法：目标驱动执行 (P2)
+
+    功能:
+    - 使用 run_goal() 让 Agent 自主运行直到目标达成
+    - GoalStatus 判断执行结果状态
+    - max_iterations 控制最大迭代次数
+
+    学习要点:
+    - Loop Engineering 是目标驱动执行范式
+    - Agent 会持续运行直到目标达成或达到限制
+    - GoalStatus 包含: ACHIEVED, MAX_ITERATIONS, TIMEOUT, ERROR 等
+    """
+    print("\n" + "=" * 70)
+    print("演示 29: Loop Engineering - 基础用法：目标驱动执行 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 基础用法
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 基础用法 ---")
+
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    print("""
+    目标驱动执行的工作流程:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  用户: "修复所有类型错误"                                    │
+    │    ↓                                                        │
+    │  Agent 执行第 1 轮: 分析代码，找出问题                       │
+    │    ↓ 验证: 目标未达成                                        │
+    │  Agent 执行第 2 轮: 修复第一个问题                           │
+    │    ↓ 验证: 目标未达成                                        │
+    │  Agent 执行第 N 轮: 修复最后一个问题                         │
+    │    ↓ 验证: 目标达成 (所有测试通过)                           │
+    │  返回 GoalResult(status=ACHIEVED)                           │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # 运行一个简单的目标
+    print("执行目标: 列出项目结构并总结项目类型\n")
+    result = await agent.run_goal(
+        goal="使用 glob 列出所有 .py 文件，然后简要总结这是什么类型的项目。完成后说'目标完成'。",
+        max_iterations=10,
+    )
+
+    print(f"目标状态: {result.status.value}")
+    print(f"迭代次数: {result.total_iterations}")
+    print(f"执行时长: {result.duration_seconds:.1f}秒")
+    print(f"Token 使用: 输入 {result.total_tokens.input_tokens}, 输出 {result.total_tokens.output_tokens}")
+
+    if result.status == GoalStatus.ACHIEVED:
+        print("\n✅ 目标达成！")
+    elif result.status == GoalStatus.MAX_ITERATIONS:
+        print("\n⚠️ 达到最大迭代次数")
+    elif result.status == GoalStatus.TIMEOUT:
+        print("\n⏰ 执行超时")
+    elif result.status == GoalStatus.ERROR:
+        print(f"\n❌ 执行错误: {result.error}")
+
+    print(f"\n最终响应:\n{result.final_response[:500]}...")
+
+    # -------------------------------------------------------------------------
+    # 2. GoalStatus 状态说明
+    # -------------------------------------------------------------------------
+    print("\n--- 2. GoalStatus 状态 ---")
+
+    print("""
+    GoalStatus 包含以下状态:
+
+    - ACHIEVED: 目标已达成
+    - MAX_ITERATIONS: 达到最大迭代次数
+    - TIMEOUT: 执行超时
+    - MAX_RESETS: 上下文重置次数过多
+    - ERROR: Agent 执行错误
+    - VERIFIER_FAULT: 验证器故障
+    - CANCELLED: 用户取消
+    """)
+
+    # -------------------------------------------------------------------------
+    # 3. GoalResult 结果详情
+    # -------------------------------------------------------------------------
+    print("\n--- 3. GoalResult 结果详情 ---")
+
+    print(f"""
+    GoalResult 包含以下字段:
+
+    - goal: 目标描述
+    - status: 执行状态
+    - total_iterations: 总迭代次数
+    - context_resets: 上下文重置次数
+    - total_tokens: Token 使用量
+    - duration_seconds: 执行时长
+    - final_response: 最终响应
+    - verification_log: 验证日志
+    - error: 错误详情 (如果有)
+
+    当前执行结果:
+    - goal: {result.goal[:50]}...
+    - status: {result.status.value}
+    - total_iterations: {result.total_iterations}
+    - context_resets: {result.context_resets}
+    """)
+
+    print("\n✅ Loop Engineering 基础用法演示完成")
+
+
+# ============================================================================
+# 演示 30: Loop Engineering - 自定义验证器 (P2)
+# ============================================================================
+
+async def demo_loop_engineering_verifier():
+    """
+    演示 30: Loop Engineering - 自定义验证器 (P2)
+
+    功能:
+    - 使用 custom_verifier 参数提供自定义验证函数
+    - 根据外部条件判断目标是否达成
+    - 验证函数可以是同步或异步
+
+    学习要点:
+    - 自定义验证器允许根据业务逻辑判断目标完成
+    - 验证器接收 GoalResult 返回 bool
+    - 适用于需要外部检查的场景（测试覆盖率、构建状态等）
+    """
+    print("\n" + "=" * 70)
+    print("演示 30: Loop Engineering - 自定义验证器 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建自定义验证器
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建自定义验证器 ---")
+
+    # 定义一个简单的验证器：检查响应中是否包含特定关键词
+    async def check_completion(result: GoalResult) -> bool:
+        """检查目标是否完成的验证器"""
+        # 检查最终响应中是否包含"完成"或"done"
+        response = result.final_response.lower()
+        return "完成" in response or "done" in response or "目标达成" in response
+
+    print("""
+    自定义验证器示例:
+
+    async def check_completion(result: GoalResult) -> bool:
+        '''检查目标是否完成的验证器'''
+        response = result.final_response.lower()
+        return "完成" in response or "done" in response
+
+    验证器接收 GoalResult 参数，返回 bool 表示目标是否达成。
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. 使用自定义验证器
+    # -------------------------------------------------------------------------
+    print("\n--- 2. 使用自定义验证器 ---")
+
+    agent = AgentHarness(
+        base_url=BASE_URL,
+        api_key=API_KEY,
+        model=MODEL,
+        provider=PROVIDER,
+        tools=[ReadTool(), GlobTool()],
+    )
+
+    print("执行带自定义验证器的目标...\n")
+
+    result = await agent.run_goal(
+        goal="列出当前目录下的 Python 文件，并说明有多少个。最后说'任务完成'。",
+        custom_verifier=check_completion,
+        max_iterations=5,
+    )
+
+    print(f"目标状态: {result.status.value}")
+    print(f"迭代次数: {result.total_iterations}")
+
+    # -------------------------------------------------------------------------
+    # 3. 验证器工作流程
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 验证器工作流程 ---")
+
+    print("""
+    自定义验证器工作流程:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  Agent 执行一轮                                             │
+    │    ↓                                                        │
+    │  GoalVerifier 调用 custom_verifier(result)                  │
+    │    ↓                                                        │
+    │  如果返回 True: 目标达成，结束循环                           │
+    │  如果返回 False: 继续下一轮执行                              │
+    │    ↓                                                        │
+    │  达到 max_iterations: 返回 MAX_ITERATIONS                   │
+    └─────────────────────────────────────────────────────────────┘
+
+    常见验证器场景:
+
+    1. 测试覆盖率验证:
+       async def check_coverage(result) -> bool:
+           proc = await asyncio.create_subprocess_exec(
+               "pytest", "--cov", "--cov-report=term",
+               stdout=asyncio.subprocess.PIPE,
+           )
+           stdout, _ = await proc.communicate()
+           return "80%" in stdout.decode()
+
+    2. 构建状态验证:
+       async def check_build(result) -> bool:
+           proc = await asyncio.create_subprocess_exec("npm", "run", "build")
+           return await proc.wait() == 0
+
+    3. 文件存在验证:
+       def check_file_exists(result) -> bool:
+           return Path("output.txt").exists()
+    """)
+
+    # -------------------------------------------------------------------------
+    # 4. GoalConfig 完整配置
+    # -------------------------------------------------------------------------
+    print("\n--- 4. GoalConfig 完整配置 ---")
+
+    print("""
+    GoalConfig 支持以下配置:
+
+    config = GoalConfig(
+        description="实现用户认证模块",   # 目标描述
+        success_criteria="所有测试通过",  # 成功标准（可选）
+        workspace_dir="./src/auth",       # 工作目录
+
+        # 迭代控制
+        max_iterations=50,                # 最大迭代次数
+        max_context_resets=5,             # 最大上下文重置次数
+        timeout_seconds=3600,             # 超时时间（秒）
+
+        # 成本控制
+        max_tokens=500000,                # 最大 token 数
+        max_cost_usd=10.0,                # 最大成本（美元）
+
+        # 验证配置
+        custom_verifier=check_coverage,   # 自定义验证函数
+    )
+
+    result = await agent.run_goal(config)
+    """)
+
+    print("\n✅ Loop Engineering 自定义验证器演示完成")
+
+
+# ============================================================================
+# 演示 31: Loop Engineering - Automation 定时调度 (P2)
+# ============================================================================
+
+async def demo_loop_engineering_automation():
+    """
+    演示 31: Loop Engineering - Automation 定时调度 (P2)
+
+    功能:
+    - 创建 Automation 定时任务
+    - 使用 cron 表达式或固定间隔触发
+    - 与 AgentHarness 集成自动执行
+
+    学习要点:
+    - Automation 支持 cron 和 interval 两种触发方式
+    - 可以启动、停止、查询状态
+    - 适用于定时报告、健康检查等场景
+    """
+    print("\n" + "=" * 70)
+    print("演示 31: Loop Engineering - Automation 定时调度 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. 创建 Automation 配置
+    # -------------------------------------------------------------------------
+    print("\n--- 1. 创建 Automation 配置 ---")
+
+    # Cron 定时任务：每天 9:00 执行
+    cron_automation = Automation(
+        name="daily-report",
+        schedule="0 9 * * *",  # 每天 9:00
+        goal="分析昨日 Git 提交，生成工作日报",
+    )
+
+    print(f"""
+    Cron 定时任务:
+
+    Automation(
+        name="daily-report",
+        schedule="0 9 * * *",  # 每天 9:00
+        goal="分析昨日 Git 提交，生成工作日报",
+    )
+
+    Cron 表达式格式: 分 时 日 月 周
+    - "0 9 * * *"     → 每天 9:00
+    - "*/30 * * * *"  → 每 30 分钟
+    - "0 9 * * 1-5"   → 工作日 9:00
+    """)
+
+    # 间隔任务：每 5 分钟执行
+    interval_automation = Automation(
+        name="health-check",
+        interval_seconds=300,  # 每 5 分钟
+        goal="检查系统健康状态，如有异常发送告警",
+    )
+
+    print(f"""
+    间隔任务:
+
+    Automation(
+        name="health-check",
+        interval_seconds=300,  # 每 5 分钟
+        goal="检查系统健康状态，如有异常发送告警",
+    )
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. Automation 使用示例
+    # -------------------------------------------------------------------------
+    print("\n--- 2. Automation 使用示例 ---")
+
+    print("""
+    启动 Automation:
+
+    import asyncio
+    from harness import AgentHarness
+    from harness.loop import Automation
+
+    async def main():
+        agent = AgentHarness(model="claude-sonnet-4-6")
+
+        # 创建自动化任务
+        automation = Automation(
+            name="daily-report",
+            schedule="0 9 * * *",
+            goal="生成每日报告",
+        )
+
+        # 启动
+        await automation.start(agent)
+
+        # 运行一段时间
+        await asyncio.sleep(3600)
+
+        # 停止
+        await automation.stop()
+
+    asyncio.run(main())
+    """)
+
+    # -------------------------------------------------------------------------
+    # 3. Automation 状态管理
+    # -------------------------------------------------------------------------
+    print("\n--- 3. Automation 状态管理 ---")
+
+    print("""
+    Automation 支持以下操作:
+
+    - start(agent): 启动自动化任务
+    - stop(): 停止自动化任务
+    - status: 获取当前状态 (running/stopped)
+
+    状态转换:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  Automation 创建 (status=stopped)                           │
+    │    ↓ start(agent)                                           │
+    │  Automation 运行中 (status=running)                         │
+    │    ↓ 触发时间到达                                           │
+    │  Agent 执行目标                                             │
+    │    ↓ 执行完成                                               │
+    │  等待下次触发                                               │
+    │    ↓ stop()                                                 │
+    │  Automation 停止 (status=stopped)                           │
+    └─────────────────────────────────────────────────────────────┘
+    """)
+
+    # -------------------------------------------------------------------------
+    # 4. 多个 Automation 管理
+    # -------------------------------------------------------------------------
+    print("\n--- 4. 多个 Automation 管理 ---")
+
+    print("""
+    管理多个自动化任务:
+
+    automations = [
+        Automation(name="daily-report", schedule="0 9 * * *", goal="..."),
+        Automation(name="health-check", interval_seconds=300, goal="..."),
+        Automation(name="weekly-summary", schedule="0 9 * * 1", goal="..."),
+    ]
+
+    # 启动所有
+    for automation in automations:
+        await automation.start(agent)
+
+    # 停止所有
+    for automation in automations:
+        await automation.stop()
+    """)
+
+    print("\n✅ Loop Engineering Automation 定时调度演示完成")
+
+
+# ============================================================================
+# 演示 32: Loop Engineering - 并行 Worktree 执行 (P2)
+# ============================================================================
+
+async def demo_loop_engineering_worktree():
+    """
+    演示 32: Loop Engineering - 并行 Worktree 执行 (P2)
+
+    功能:
+    - 使用 WorktreeOrchestrator 并行执行多个目标
+    - 每个目标在独立的 git worktree 中运行
+    - 支持合并成功的分支
+
+    学习要点:
+    - Worktree 提供隔离的执行环境
+    - 并行执行可以显著提高效率
+    - 适用于多功能并行开发场景
+    """
+    print("\n" + "=" * 70)
+    print("演示 32: Loop Engineering - 并行 Worktree 执行 (P2)")
+    print("=" * 70)
+
+    # -------------------------------------------------------------------------
+    # 1. WorktreeOrchestrator 概述
+    # -------------------------------------------------------------------------
+    print("\n--- 1. WorktreeOrchestrator 概述 ---")
+
+    print("""
+    Worktree 允许在同一仓库中并行执行多个任务:
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │  主仓库 (main)                                               │
+    │    ├── worktree-a/  → Agent A 执行 "实现功能 A"              │
+    │    ├── worktree-b/  → Agent B 执行 "实现功能 B"              │
+    │    └── worktree-c/  → Agent C 执行 "编写测试"                │
+    │    ↓                                                        │
+    │  所有任务并行完成                                            │
+    │    ↓                                                        │
+    │  合并成功的分支                                              │
+    └─────────────────────────────────────────────────────────────┘
+
+    优势:
+    - 隔离执行，互不干扰
+    - 并行运行，提高效率
+    - 自动创建和清理 worktree
+    """)
+
+    # -------------------------------------------------------------------------
+    # 2. WorktreeConfig 配置
+    # -------------------------------------------------------------------------
+    print("\n--- 2. WorktreeConfig 配置 ---")
+
+    print("""
+    定义并行任务:
+
+    from harness.loop import WorktreeConfig
+
+    tasks = [
+        WorktreeConfig(
+            name="feature-auth",
+            goal="实现用户认证功能",
+            base_branch="main",
+        ),
+        WorktreeConfig(
+            name="feature-api",
+            goal="实现 REST API 端点",
+            base_branch="main",
+        ),
+        WorktreeConfig(
+            name="feature-tests",
+            goal="编写集成测试",
+            base_branch="main",
+        ),
+    ]
+    """)
+
+    # -------------------------------------------------------------------------
+    # 3. 并行执行示例
+    # -------------------------------------------------------------------------
+    print("\n--- 3. 并行执行示例 ---")
+
+    print("""
+    完整的并行执行代码:
+
+    import asyncio
+    from harness import AgentHarness
+    from harness.loop import WorktreeOrchestrator, WorktreeConfig
+
+    async def main():
+        agent = AgentHarness(model="claude-sonnet-4-6")
+
+        orchestrator = WorktreeOrchestrator(agent, workspace_dir=".")
+
+        # 定义并行任务
+        tasks = [
+            WorktreeConfig(
+                name="feature-a",
+                goal="实现功能 A",
+                base_branch="main",
+            ),
+            WorktreeConfig(
+                name="feature-b",
+                goal="实现功能 B",
+                base_branch="main",
+            ),
+        ]
+
+        # 并行执行
+        results = await orchestrator.run_parallel(tasks)
+
+        # 查看结果
+        for name, result in results.items():
+            print(f"{name}: {result.status}")
+
+        # 合并成功的分支
+        for name, result in results.items():
+            if result.status == "completed":
+                await orchestrator.merge(name)
+                print(f"已合并: {name}")
+
+    asyncio.run(main())
+    """)
+
+    # -------------------------------------------------------------------------
+    # 4. WorktreeResult 结果
+    # -------------------------------------------------------------------------
+    print("\n--- 4. WorktreeResult 结果 ---")
+
+    print("""
+    WorktreeResult 包含以下字段:
+
+    - name: Worktree 名称
+    - status: 执行状态 (pending/running/completed/failed)
+    - goal_result: GoalResult 对象（执行完成后）
+    - worktree_path: Worktree 路径
+    - branch_name: 分支名称
+    - error: 错误信息（如果失败）
+
+    结果处理:
+
+    for name, result in results.items():
+        if result.status == "completed":
+            print(f"✅ {name} 完成")
+            print(f"   迭代次数: {result.goal_result.total_iterations}")
+        else:
+            print(f"❌ {name} 失败: {result.error}")
+    """)
+
+    # -------------------------------------------------------------------------
+    # 5. 使用场景
+    # -------------------------------------------------------------------------
+    print("\n--- 5. 使用场景 ---")
+
+    print("""
+    Worktree 并行执行适合以下场景:
+
+    1. 多功能并行开发
+       - 不同功能独立开发，最后合并
+
+    2. 代码重构 + 测试
+       - 一个 Agent 重构代码
+       - 另一个 Agent 同步更新测试
+
+    3. 多模块文档生成
+       - 每个模块独立生成文档
+       - 最后合并文档
+
+    4. A/B 测试方案
+       - 不同 Agent 实现不同方案
+       - 对比效果后选择最优
+
+    注意事项:
+    - 确保 base_branch 是干净的
+    - 并行任务之间不要有依赖
+    - 合并前检查是否有冲突
+    """)
+
+    print("\n✅ Loop Engineering 并行 Worktree 演示完成")
+
+
+# ============================================================================
 # 主函数 - 运行所有演示
 # ============================================================================
 
@@ -3907,6 +4519,18 @@ async def main():
 
         # Guardrails 进阶 (P2)
         await demo_guardrails_advanced()
+
+        # Loop Engineering 基础用法 (P2)
+        await demo_loop_engineering_basic()
+
+        # Loop Engineering 自定义验证器 (P2)
+        await demo_loop_engineering_verifier()
+
+        # Loop Engineering Automation 定时调度 (P2)
+        await demo_loop_engineering_automation()
+
+        # Loop Engineering 并行 Worktree 执行 (P2)
+        await demo_loop_engineering_worktree()
 
         print("\n" + "=" * 70)
         print("✅ 所有演示完成!")
