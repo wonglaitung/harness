@@ -120,8 +120,13 @@ class ConnectorState(Enum):
 class ConnectorEvent:
     """
     标准化的外部事件.
-    
+
     所有 Connector 必须将外部事件转换为此格式。
+
+    Attributes:
+        routing_metadata: 路由元数据，用于结果原路返回
+            例如：{"slack_thread_ts": "17123456.0001", "github_pr_number": 42}
+            这些元数据会随事件流转到 GoalResult，最终由 OutputRouter 使用
     """
     connector_type: ConnectorType
     connector_id: str
@@ -129,11 +134,15 @@ class ConnectorEvent:
     source: str                        # 来源标识（如用户名、仓库名）
     timestamp: datetime = field(default_factory=datetime.now)
     payload: dict[str, Any] = field(default_factory=dict)
-    
+
     # 可选：认证信息
     user_id: str | None = None
     channel_id: str | None = None
-    
+
+    # 路由元数据：用于结果"原路返回"
+    # 例如：Slack thread_ts, GitHub PR number, Issue number 等
+    routing_metadata: dict[str, Any] = field(default_factory=dict)
+
     @property
     def is_command(self) -> bool:
         """是否是命令事件."""
@@ -176,27 +185,40 @@ class OutputResult:
 ```python
 # connectors/base.py
 
+from collections.abc import Coroutine
+from typing import Any
+
+# 异步事件回调类型
+EventCallback = Callable[[ConnectorEvent], Coroutine[Any, Any, None]]
+
+
 class Connector(ABC):
     """
     Connector 抽象基类.
-    
+
     所有外部系统集成必须继承此类。
+
+    重要：事件回调必须是异步函数，以避免阻塞事件循环。
     """
-    
+
     connector_type: ConnectorType
     id: str = ""
     state: ConnectorState = ConnectorState.IDLE
-    
+
     @abstractmethod
     async def start(
         self,
-        event_callback: Callable[[ConnectorEvent], None],
+        event_callback: EventCallback,
     ) -> None:
         """
         启动 Connector.
-        
+
         Args:
-            event_callback: 事件回调函数，用于将事件发送到 ConnectorManager
+            event_callback: 异步事件回调函数，用于将事件发送到 ConnectorManager
+
+        注意：
+            回调必须是异步函数（async def），不能是同步函数。
+            这确保了在异步事件循环（如 Slack Socket Mode）中不会阻塞。
         """
         pass
     
@@ -486,26 +508,29 @@ class SlackConnector(Connector):
         channel: str,
         text: str,
         blocks: list[dict] | None = None,
+        thread_ts: str | None = None,
     ) -> bool:
         """
         发送 Slack 消息.
-        
+
         Args:
             channel: 频道 ID 或名称
             text: 消息文本
             blocks: Slack Block Kit blocks
-        
+            thread_ts: 线程时间戳，用于回复到特定线程
+
         Returns:
             是否成功
         """
         if not self._client:
             return False
-        
+
         try:
             await self._client.chat_postMessage(
                 channel=channel,
                 text=text,
                 blocks=blocks,
+                thread_ts=thread_ts,  # 回复到原始线程
             )
             return True
         except Exception as e:
@@ -749,11 +774,14 @@ class ConnectorManager:
             except Exception as e:
                 logger.error(f"Error stopping connector {connector.id}: {e}")
     
-    def _on_connector_event(self, event: ConnectorEvent) -> None:
+    async def _on_connector_event(self, event: ConnectorEvent) -> None:
         """
         处理 Connector 事件.
-        
+
         将 ConnectorEvent 转换为 TriggerEvent 并发送到 TriggerManager。
+
+        注意：此方法是异步的，确保在 Slack Socket Mode 等
+        异步事件循环中不会阻塞。
         """
         # 转换为 TriggerEvent
         trigger_event = TriggerEvent(
@@ -765,84 +793,129 @@ class ConnectorManager:
                 "source": event.source,
                 **event.payload,
             },
+            # 传递路由元数据，用于结果"原路返回"
+            routing_metadata=event.routing_metadata,
         )
-        
-        # 发送到 TriggerManager
-        self.trigger_manager._enqueue_event(trigger_event)
-    
+
+        # 发送到 TriggerManager（异步）
+        await self.trigger_manager.enqueue_event(trigger_event)
+
     async def route_output(
         self,
         result: GoalResult,
         channels: list[str],
+        routing_metadata: dict[str, Any] | None = None,
     ) -> list[OutputResult]:
         """
         将结果路由到指定通道.
-        
+
         Args:
             result: Goal 执行结果
             channels: 输出通道名称列表
-        
+            routing_metadata: 路由元数据，用于"原路返回"
+                例如：{"slack_thread_ts": "17123456.0001", "github_pr_number": 42}
+                这些数据来自原始 ConnectorEvent，允许结果回复到正确的位置
+
         Returns:
             输出结果列表
         """
         outputs = []
-        
+
         for channel_name in channels:
             channel = self._output_channels.get(channel_name)
             if not channel:
                 logger.warning(f"Output channel not found: {channel_name}")
                 continue
-            
-            output = await self._send_to_channel(result, channel)
+
+            output = await self._send_to_channel(
+                result, channel, routing_metadata
+            )
             outputs.append(output)
-        
+
         return outputs
-    
+
     async def _send_to_channel(
         self,
         result: GoalResult,
         channel: OutputChannel,
+        routing_metadata: dict[str, Any] | None = None,
     ) -> OutputResult:
-        """发送结果到指定通道."""
+        """
+        发送结果到指定通道（支持路由元数据）.
+
+        routing_metadata 用于"原路返回"：
+        - Slack: 使用 thread_ts 回复到原始消息线程
+        - GitHub: 使用 pr_number 回复到正确的 PR
+        """
         try:
             if channel.type == "slack":
                 connector = self._find_connector(ConnectorType.SLACK)
                 if connector and isinstance(connector, SlackConnector):
+                    # 优先使用路由元数据中的 thread_ts
+                    thread_ts = None
+                    if routing_metadata and "slack_thread_ts" in routing_metadata:
+                        thread_ts = routing_metadata["slack_thread_ts"]
+
                     success = await connector.send_message(
                         channel=channel.config.get("channel", "#general"),
                         text=result.final_response or "Task completed",
+                        thread_ts=thread_ts,  # 回复到原始线程
                     )
                     return OutputResult(
                         channel_name=channel.name,
                         success=success,
                     )
-            
+
+            elif channel.type == "github":
+                connector = self._find_connector(ConnectorType.GITHUB)
+                if connector and isinstance(connector, GitHubConnector):
+                    # 使用路由元数据中的 PR number
+                    pr_number = None
+                    if routing_metadata and "github_pr_number" in routing_metadata:
+                        pr_number = routing_metadata["github_pr_number"]
+
+                    if pr_number:
+                        success = await connector.create_pr_comment(
+                            repo=channel.config.get("repo", ""),
+                            pr_number=pr_number,
+                            body=result.final_response or "Task completed",
+                        )
+                        return OutputResult(
+                            channel_name=channel.name,
+                            success=success,
+                        )
+
             elif channel.type == "webhook":
                 # 发送到外部 webhook
                 async with aiohttp.ClientSession() as session:
+                    payload = {
+                        "result": result.final_response,
+                        "status": result.status.value,
+                    }
+                    # 包含路由元数据
+                    if routing_metadata:
+                        payload["routing"] = routing_metadata
+
                     await session.post(
                         channel.config.get("url"),
-                        json={
-                            "result": result.final_response,
-                            "status": result.status.value,
-                        },
+                        json=payload,
                         headers=channel.config.get("headers", {}),
                     )
                 return OutputResult(channel_name=channel.name, success=True)
-            
+
             elif channel.type == "file":
                 # 写入文件
                 with open(channel.config.get("path", "output.txt"), "a") as f:
                     f.write(f"\n---\n{result.final_response}\n")
                 return OutputResult(channel_name=channel.name, success=True)
-            
+
             else:
                 return OutputResult(
                     channel_name=channel.name,
                     success=False,
                     error=f"Unknown channel type: {channel.type}",
                 )
-        
+
         except Exception as e:
             return OutputResult(
                 channel_name=channel.name,
@@ -928,22 +1001,40 @@ await connector_manager.start()
 
 ### 与 Automation 集成
 
+使用 `EventTrigger` 绑定 Connector 事件：
+
 ```python
 from harness.loop import Automation
+from harness.triggers import EventTrigger, TriggerAction
 
-# 当 GitHub PR 打开时自动审查
+# 定义事件触发器
+pr_trigger = EventTrigger(
+    source_connector="github_main",  # Connector ID
+    event_type="github.pull_request.opened",
+    action=TriggerAction(
+        goal="Review the pull request changes and provide feedback",
+        skills=["code-review"],
+        output_channels=["slack:alerts"],
+        reply_to_source=True,  # 自动回复到 PR
+    ),
+)
+
+# 注册到 TriggerManager
+trigger_manager.register(pr_trigger)
+
+# 或使用 Automation 简化 API
 pr_review = Automation(
     name="pr-review",
-    trigger=github.create_trigger(
-        event_type="github.pull_request.opened",
-    ),
-    goal="Review the pull request changes and provide feedback",
-    skills=["code-review"],
-    output_channels=["slack:alerts"],
+    event_trigger=pr_trigger,  # 传入 EventTrigger
 )
 
 await pr_review.start(agent, manager=trigger_manager)
 ```
+
+**设计说明**：
+- Connector 职责单一：只负责接收外部事件
+- EventTrigger 负责：定义事件匹配规则和触发动作
+- 这种分离确保了"关注点分离"，Connector 可被多个 EventTrigger 复用
 
 ---
 
@@ -954,7 +1045,13 @@ await pr_review.start(agent, manager=trigger_manager)
 ```python
 # ConnectorManager 内部
 
-def _on_connector_event(self, event: ConnectorEvent) -> None:
+async def _on_connector_event(self, event: ConnectorEvent) -> None:
+    """
+    异步处理 Connector 事件.
+
+    注意：必须是异步方法，确保在 Slack Socket Mode 等
+    异步事件循环中不会阻塞。
+    """
     # 转换为 TriggerEvent
     trigger_event = TriggerEvent(
         trigger_type=TriggerType.EVENT,
@@ -965,10 +1062,30 @@ def _on_connector_event(self, event: ConnectorEvent) -> None:
             "source": event.source,
             **event.payload,
         },
+        # 传递路由元数据，用于结果"原路返回"
+        routing_metadata=event.routing_metadata,
     )
-    
-    # 发送到 TriggerManager 的事件队列
-    self.trigger_manager._enqueue_event(trigger_event)
+
+    # 异步发送到 TriggerManager 的事件队列
+    await self.trigger_manager.enqueue_event(trigger_event)
+```
+
+### TriggerEvent 扩展（Phase 2）
+
+```python
+# triggers/types.py
+
+@dataclass
+class TriggerEvent:
+    """触发事件."""
+    trigger_type: TriggerType
+    trigger_id: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    # Phase 4: 路由元数据
+    # 用于将结果回复到正确的位置（如 Slack 线程、GitHub PR）
+    routing_metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
 ### TriggerAction 扩展
@@ -978,12 +1095,160 @@ def _on_connector_event(self, event: ConnectorEvent) -> None:
 class TriggerAction:
     goal: str
     # ... 现有字段 ...
-    
+
     # Phase 4: 输出配置
     output_channels: list[str] = field(default_factory=list)
-    
+
     # Phase 4: 回复配置（用于 Slack/GitHub 回复）
     reply_to_source: bool = False  # 是否回复到事件来源
+```
+
+---
+
+## EventTrigger（Phase 4 新增）
+
+```python
+# triggers/event.py
+
+@dataclass
+class EventFilter:
+    """事件过滤器."""
+    source_connector: str              # Connector ID
+    event_type: str | list[str]        # 事件类型（支持通配符）
+    payload_filter: dict[str, Any] = field(default_factory=dict)  # payload 字段过滤
+
+    def matches(self, event: TriggerEvent) -> bool:
+        """检查事件是否匹配."""
+        # 检查 connector ID
+        if event.trigger_id != self.source_connector:
+            return False
+
+        # 检查事件类型
+        if isinstance(self.event_type, list):
+            if event.payload.get("event_type") not in self.event_type:
+                return False
+        else:
+            if event.payload.get("event_type") != self.event_type:
+                return False
+
+        # 检查 payload 过滤条件
+        for key, value in self.payload_filter.items():
+            if event.payload.get(key) != value:
+                return False
+
+        return True
+
+
+class EventTrigger(Trigger):
+    """
+    事件触发器.
+
+    用于响应 Connector 产生的事件。
+
+    Example:
+        ```python
+        trigger = EventTrigger(
+            source_connector="github_main",
+            event_type="github.pull_request.opened",
+            action=TriggerAction(
+                goal="Review the PR",
+                output_channels=["slack:reviews"],
+            ),
+        )
+        ```
+    """
+
+    trigger_type = TriggerType.EVENT
+
+    def __init__(
+        self,
+        source_connector: str,
+        event_type: str | list[str],
+        action: TriggerAction,
+        payload_filter: dict[str, Any] | None = None,
+        trigger_id: str = "",
+    ):
+        self.filter = EventFilter(
+            source_connector=source_connector,
+            event_type=event_type,
+            payload_filter=payload_filter or {},
+        )
+        self.action = action
+        self.id = trigger_id or f"event_{source_connector}_{uuid.uuid4().hex[:8]}"
+
+        # EventTrigger 不启动独立循环，由 TriggerManager 的事件队列驱动
+        self._running = False
+
+    async def start(
+        self,
+        callback: Callable[[TriggerEvent], Coroutine[Any, Any, None]],
+    ) -> None:
+        """
+        启动触发器.
+
+        注意：EventTrigger 不启动独立循环。
+        它通过 TriggerManager 的事件队列接收事件，
+        在 should_trigger() 中过滤匹配的事件。
+        """
+        self._running = True
+        self._callback = callback
+
+    async def stop(self) -> None:
+        """停止触发器."""
+        self._running = False
+
+    def should_trigger(self, event: TriggerEvent) -> bool:
+        """
+        检查事件是否应该触发此触发器.
+
+        由 TriggerManager 在处理事件时调用。
+        """
+        return self._running and self.filter.matches(event)
+
+    def create_event(self, payload: dict | None = None) -> TriggerEvent:
+        """创建触发事件（EventTrigger 由外部事件驱动，通常不调用此方法）."""
+        return TriggerEvent(
+            trigger_type=self.trigger_type,
+            trigger_id=self.id,
+            payload=payload or {},
+        )
+```
+
+### TriggerManager 集成 EventTrigger
+
+```python
+# triggers/manager.py
+
+class TriggerManager:
+    async def _handle_event(self, event: TriggerEvent) -> None:
+        """处理触发事件."""
+        # 对于 EVENT 类型，检查所有 EventTrigger
+        if event.trigger_type == TriggerType.EVENT:
+            for reg in self._registrations.values():
+                if isinstance(reg.trigger, EventTrigger):
+                    if reg.trigger.should_trigger(event):
+                        # 触发匹配的 EventTrigger
+                        goal_config = reg.action.to_goal_config(event)
+
+                        # 传递路由元数据
+                        if event.routing_metadata:
+                            goal_config.routing_metadata = event.routing_metadata
+
+                        result = await self.agent.run_goal(goal_config)
+
+                        # 路由输出
+                        if reg.action.output_channels:
+                            await self.connector_manager.route_output(
+                                result,
+                                reg.action.output_channels,
+                                event.routing_metadata,
+                            )
+        else:
+            # 处理其他类型的触发器
+            reg = self._registrations.get(event.trigger_id)
+            if reg and reg.enabled:
+                goal_config = reg.action.to_goal_config(event)
+                result = await self.agent.run_goal(goal_config)
 ```
 
 ---
@@ -1100,3 +1365,73 @@ async def custom_webhook(request: Request):
 - OAuth 认证流程
 - 多租户支持
 - 审计日志
+
+---
+
+## 设计变更日志
+
+### 2026-06-30: 架构审查修复
+
+**问题 1: 事件回调同步/异步阻塞风险**
+
+修复前：
+```python
+def _on_connector_event(self, event: ConnectorEvent) -> None:
+    self.trigger_manager._enqueue_event(trigger_event)
+```
+
+修复后：
+```python
+async def _on_connector_event(self, event: ConnectorEvent) -> None:
+    await self.trigger_manager.enqueue_event(trigger_event)
+```
+
+**原因**：Slack Socket Mode 等 async 事件循环中，同步回调会导致阻塞或线程错误。
+
+---
+
+**问题 2: 缺乏会话上下文穿透**
+
+新增 `routing_metadata` 字段：
+
+```python
+@dataclass
+class ConnectorEvent:
+    # ... 其他字段 ...
+    routing_metadata: dict[str, Any] = field(default_factory=dict)
+    # 例如：{"slack_thread_ts": "17123456.0001", "github_pr_number": 42}
+```
+
+数据流：
+```
+ConnectorEvent.routing_metadata
+    → TriggerEvent.routing_metadata
+    → GoalConfig.routing_metadata
+    → OutputRouter.route_output(routing_metadata=...)
+    → SlackConnector.send_message(thread_ts=...)
+```
+
+**效果**：结果可以"原路返回"到正确的 Slack 线程或 GitHub PR。
+
+---
+
+**问题 3: Automation 示例中的 API 矛盾**
+
+修复前（错误）：
+```python
+trigger=github.create_trigger(event_type="...")  # Connector 不应有此方法
+```
+
+修复后（正确）：
+```python
+trigger = EventTrigger(
+    source_connector="github_main",
+    event_type="github.pull_request.opened",
+    action=TriggerAction(...),
+)
+```
+
+新增 `EventTrigger` 类：
+- 保持 Connector 职责单一
+- EventTrigger 负责事件匹配和触发动作
+- 支持事件类型过滤和 payload 过滤
