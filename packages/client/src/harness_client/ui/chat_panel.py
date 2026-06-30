@@ -61,7 +61,7 @@ def get_assistant_avatar_base64() -> str:
 
 
 def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
-    """Create a play/arrow icon (filled equilateral triangle pointing right)."""
+    """Create a play/arrow icon (filled triangle pointing right, like cassette play button)."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -71,17 +71,13 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     painter.setPen(pen)
     painter.setBrush(QBrush(color))
 
-    # Equilateral triangle pointing right, centered
-    margin = 5
-    cx, cy = size / 2, size / 2
-    r = (size - 2 * margin) / 2  # radius
-
-    import math
-    # Triangle pointing right (0°): vertices at 90°, 210°, 330°
+    # Triangle pointing right: left vertex, right-top vertex, right-bottom vertex
+    # Increase size by 20%: reduce margin from 5 to 2
+    margin = 2
     triangle = [
-        QPointF(cx + r * math.cos(math.radians(90)), cy + r * math.sin(math.radians(90))),
-        QPointF(cx + r * math.cos(math.radians(210)), cy + r * math.sin(math.radians(210))),
-        QPointF(cx + r * math.cos(math.radians(330)), cy + r * math.sin(math.radians(330))),
+        QPointF(margin, margin),                    # top-left
+        QPointF(size - margin - 2, size / 2),       # right (center)
+        QPointF(margin, size - margin),             # bottom-left
     ]
     polygon = QPolygonF(triangle)
     painter.drawPolygon(polygon)
