@@ -388,7 +388,8 @@ class MainWindow(QMainWindow):
 
         # Update token usage display
         self._update_token_display()
-        self.statusbar.showMessage(f"完成 | Token: {self.chat_controller.get_token_usage()}")
+        usage = self.chat_controller.get_token_usage()
+        self.statusbar.showMessage(f"完成 | Token: {usage.get('input', 0)} 输入, {usage.get('output', 0)} 输出")
         self.chat_panel.set_streaming_state(False)
         self._is_processing = False
 
