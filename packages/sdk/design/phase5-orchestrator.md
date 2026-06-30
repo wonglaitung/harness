@@ -387,17 +387,12 @@ class WorkflowEngine:
     ) -> None:
         """顺序执行步骤."""
         for step in steps:
-            step_result = await self._execute_step(step, config, result, context)
+            step_result = await self._execute_step(step, config, result, context, graph)
             result.steps[step.name] = step_result
 
-            # 级联跳过：如果步骤被跳过，标记依赖它的下游步骤
-            if step_result.status == StepStatus.SKIPPED:
-                graph.mark_skipped(step.name)
-            else:
-                graph.mark_completed(step.name)
-
+            # 注意：_execute_step 内部已调用 graph.mark_completed/mark_skipped
+            # 这里仅处理失败后的执行终止
             if step_result.status == StepStatus.FAILED:
-                # 步骤失败，停止执行
                 break
 
     async def _execute_parallel(
@@ -413,14 +408,8 @@ class WorkflowEngine:
 
         async def run_step(step: WorkflowStep) -> tuple[str, StepResult]:
             async with semaphore:
-                step_result = await self._execute_step(step, config, result, context)
-
-                # 级联跳过
-                if step_result.status == StepStatus.SKIPPED:
-                    graph.mark_skipped(step.name)
-                else:
-                    graph.mark_completed(step.name)
-
+                step_result = await self._execute_step(step, config, result, context, graph)
+                # 注意：_execute_step 内部已调用 graph.mark_completed/mark_skipped
                 return step.name, step_result
 
         tasks = [run_step(step) for step in steps]
@@ -428,11 +417,13 @@ class WorkflowEngine:
 
         for step_name, step_result in results:
             if isinstance(step_result, Exception):
+                # 异常情况，手动标记失败
                 result.steps[step_name] = StepResult(
                     step_name=step_name,
                     status=StepStatus.FAILED,
                     error=str(step_result),
                 )
+                graph.mark_completed(step_name)  # 标记为已处理
             else:
                 result.steps[step_name] = step_result
 
@@ -442,6 +433,7 @@ class WorkflowEngine:
         config: WorkflowConfig,
         result: WorkflowResult,
         context: dict[str, Any] | None,
+        graph: DependencyGraph,
     ) -> StepResult:
         """
         执行单个步骤.
@@ -449,6 +441,14 @@ class WorkflowEngine:
         关键改进：
         1. 模板渲染：将前序步骤的输出注入到当前 goal
         2. 导出数据提取：执行后提取关键数据到 exports
+        3. 图状态实时同步：在第一现场更新 graph 状态，确保并发安全
+
+        Args:
+            step: 步骤配置
+            config: 工作流配置
+            result: 工作流结果（累积中）
+            context: 执行上下文
+            graph: 依赖图（用于实时状态同步）
         """
         step_result = StepResult(
             step_name=step.name,
@@ -458,18 +458,21 @@ class WorkflowEngine:
 
         try:
             # 检查是否有被跳过的依赖
-            graph = self._build_dependency_graph(config.steps)
             for dep in step.depends_on:
                 dep_result = result.steps.get(dep)
                 if dep_result and dep_result.status == StepStatus.SKIPPED:
                     # 依赖被跳过，当前步骤也跳过
                     step_result.status = StepStatus.SKIPPED
+                    # 立即更新图状态，确保并发可见性
+                    graph.mark_skipped(step.name)
                     return step_result
 
             # 检查条件
             if step.condition:
                 if not await self._evaluate_condition_safe(step.condition, result, context):
                     step_result.status = StepStatus.SKIPPED
+                    # 立即更新图状态
+                    graph.mark_skipped(step.name)
                     return step_result
 
             # 渲染 Goal 描述（注入前序步骤的输出）
@@ -500,9 +503,14 @@ class WorkflowEngine:
                     goal_result, step.exports
                 )
 
+            # 执行完成，立即更新图状态
+            graph.mark_completed(step.name)
+
         except Exception as e:
             step_result.status = StepStatus.FAILED
             step_result.error = str(e)
+            # 失败也要标记为已处理
+            graph.mark_completed(step.name)
 
         step_result.completed_at = datetime.now()
         return step_result
@@ -1886,4 +1894,67 @@ class StepResult:
 class WorkflowStep:
     ...
     exports: dict[str, str] = field(default_factory=dict)  # 新增
+```
+
+---
+
+### 2026-06-30: 一公里边界优化（第二轮评审）
+
+**问题 5: Broadcast 模式下的 Worktree 并发冲突**
+
+原问题：广播模式下多个 Agent 共享同一 worktree，高并发写入可能引发 `PermissionError` 或内容损坏。
+
+修复方案：
+新增 `_get_role_worktree()` 方法，广播模式下为每个角色创建专属子目录。
+
+```python
+def _get_role_worktree(self, worktree_path: str | None, role_name: str, mode: str) -> str | None:
+    if mode == "broadcast":
+        # 广播模式：创建角色专属子目录
+        role_dir = os.path.join(worktree_path, f"agent_{role_name}")
+        os.makedirs(role_dir, exist_ok=True)
+        return role_dir
+    else:
+        # 顺序/层级模式：共享目录
+        return worktree_path
+```
+
+---
+
+**问题 6: 图状态更新时机与并发可见性**
+
+原问题：`_execute_step` 返回后才更新图状态，并行执行时可能存在状态同步延迟。
+
+修复方案：
+1. 将 `graph: DependencyGraph` 参数传递给 `_execute_step`
+2. 在决定跳过/完成的第一现场立即调用 `graph.mark_skipped/mark_completed`
+3. 移除外层循环中的冗余状态更新代码
+
+```python
+async def _execute_step(
+    self,
+    step: WorkflowStep,
+    config: WorkflowConfig,
+    result: WorkflowResult,
+    context: dict[str, Any] | None,
+    graph: DependencyGraph,  # 新增参数
+) -> StepResult:
+    # 依赖被跳过时
+    if dep_result.status == StepStatus.SKIPPED:
+        step_result.status = StepStatus.SKIPPED
+        graph.mark_skipped(step.name)  # 立即更新
+        return step_result
+
+    # 条件不满足时
+    if not await self._evaluate_condition_safe(...):
+        step_result.status = StepStatus.SKIPPED
+        graph.mark_skipped(step.name)  # 立即更新
+        return step_result
+
+    # 执行成功后
+    graph.mark_completed(step.name)  # 立即更新
+
+    # 异常时
+    except Exception:
+        graph.mark_completed(step.name)  # 标记为已处理
 ```
