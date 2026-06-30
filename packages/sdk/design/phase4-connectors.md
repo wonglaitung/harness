@@ -332,13 +332,50 @@ class WebhookConnector(Connector):
         self._callback = None
 
 
+# =============================================================================
 # 使用示例
+# =============================================================================
+
+# 方式 1: 注入现有 FastAPI 应用（推荐）
+from fastapi import FastAPI
+
+app = FastAPI()
 webhook = WebhookConnector(
     config=WebhookConfig(
         endpoint="/webhook/github",
         secret="whsec_...",
     )
 )
+webhook._app = app  # 注入应用
+await webhook.start(callback)
+
+# 方式 2: 独立使用，手动处理请求
+webhook = WebhookConnector(
+    config=WebhookConfig(
+        endpoint="/webhook/custom",
+        secret="whsec_...",
+    )
+)
+await webhook.start(callback)  # 不注入 _app
+
+# 在你自己的路由中调用:
+# @app.post("/webhook/custom")
+# async def custom_webhook(request: Request):
+#     return await webhook._handle_request(request)
+
+# 方式 3: 与 ConnectorManager 配合使用
+from harness.connectors import ConnectorManager
+
+manager = ConnectorManager(trigger_manager)
+webhook = WebhookConnector(
+    config=WebhookConfig(
+        endpoint="/webhook/github",
+        secret="whsec_...",
+    )
+)
+webhook._app = existing_fastapi_app  # 可选
+manager.register_connector(webhook)
+await manager.start()
 ```
 
 ### 2. SlackConnector

@@ -1,6 +1,6 @@
 # Phase 3: Worktrees 设计文档
 
-> **状态**: 待实现
+> **状态**: ✅ 已实现
 > **创建时间**: 2026-06-30
 > **最后更新**: 2026-06-30
 
@@ -115,6 +115,10 @@ await orchestrator.merge_successful(results)
 ```python
 # loop/worktree_types.py
 
+# 全局常量：Worktree 存储目录
+WORKTREES_DIR = ".worktrees"
+
+
 @dataclass
 class WorktreeConfig:
     """Worktree 配置."""
@@ -179,6 +183,7 @@ class WorktreeManager:
     def __init__(self, repo_root: str):
         self.repo_root = repo_root
         self._worktrees: dict[str, str] = {}  # name -> path
+        self._recover_orphaned_worktrees()
     
     async def create_worktree(
         self,
@@ -194,8 +199,8 @@ class WorktreeManager:
         """
         branch_name = f"{name}" if create_branch else base_branch
         
-        # 使用 subprocess 异步执行 git 命令
-        worktree_path = f"{self.repo_root}/.worktrees/{name}"
+        # 使用全局常量构建路径
+        worktree_path = f"{self.repo_root}/{WORKTREES_DIR}/{name}"
         
         cmd = ["git", "worktree", "add"]
         if create_branch:
@@ -500,6 +505,9 @@ class WorktreeManager:
     
     def _recover_orphaned_worktrees(self):
         """从 git worktree list 恢复状态，清理孤儿目录."""
+        import os
+        from pathlib import Path
+        
         result = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
             cwd=self.repo_root,
@@ -507,13 +515,18 @@ class WorktreeManager:
             text=True,
         )
         
+        # 精确匹配路径前缀，避免误吞其他 worktree
+        expected_prefix = f"{self.repo_root}/{WORKTREES_DIR}/"
+        
         # 解析输出，重建 _worktrees 状态
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):
                 path = line.split(" ", 1)[1]
-                if ".worktrees/" in path:
+                # 精确前缀匹配，只恢复本系统创建的 worktree
+                if path.startswith(expected_prefix):
                     name = Path(path).name
                     self._worktrees[name] = path
+                    logger.info(f"Recovered orphan worktree: {name}")
 ```
 
 ### 3. 合并前的脏状态检查
@@ -543,9 +556,12 @@ async def merge_successful(self, results, target_branch="main") -> MergeResult:
     # 执行合并
     merged = []
     conflicts = []
+    skipped = []
     
     for name, result in results.items():
         if not result.goal_result.achieved:
+            # 未达成目标的分支，跳过合并
+            skipped.append(result.branch_name)
             continue
         
         proc = await asyncio.create_subprocess_exec(
@@ -564,7 +580,7 @@ async def merge_successful(self, results, target_branch="main") -> MergeResult:
                 cwd=self.repo_root,
             ).wait()
     
-    return MergeResult(merged=merged, conflicts=conflicts)
+    return MergeResult(merged=merged, conflicts=conflicts, skipped=skipped)
 ```
 
 ### 4. 返回详细的合并结果
@@ -585,37 +601,39 @@ class MergeResult:
 
 ## 实施步骤
 
-### Step 1: 创建类型定义
-- [ ] 创建 `loop/worktree_types.py`
-- [ ] 定义 `WorktreeConfig`, `WorktreeResult`, `WorktreeError`
+### Step 1: 创建类型定义 ✅
+- [x] 创建 `loop/worktree_types.py`
+- [x] 定义 `WorktreeConfig`, `WorktreeResult`, `WorktreeError`, `MergeResult`
 
-### Step 2: 实现 WorktreeManager
-- [ ] 创建 `loop/worktree_manager.py`
-- [ ] 实现 `create_worktree()`, `cleanup_worktree()`
-- [ ] 异步 git 命令执行
-- [ ] 实现 `_recover_orphaned_worktrees()` 孤儿恢复
+### Step 2: 实现 WorktreeManager ✅
+- [x] 创建 `loop/worktree_manager.py`
+- [x] 实现 `create_worktree()`, `cleanup_worktree()`
+- [x] 异步 git 命令执行
+- [x] 实现 `_recover_orphaned_worktrees()` 孤儿恢复
 
-### Step 3: 实现 ParallelGoalExecutor
-- [ ] 创建 `loop/parallel_executor.py`
-- [ ] 实现 `spawn_goal()`, `run_all()`
-- [ ] 集成 GoalLoop
-- [ ] 使用 `return_exceptions=True` 防止单个崩溃影响整体
+### Step 3: 实现 ParallelGoalExecutor ✅
+- [x] 创建 `loop/parallel_executor.py`
+- [x] 实现 `spawn_goal()`, `run_all()`
+- [x] 集成 GoalLoop
+- [x] 使用 `return_exceptions=True` 防止单个崩溃影响整体
 
-### Step 4: 实现 WorktreeOrchestrator
-- [ ] 创建 `loop/worktree_orchestrator.py`
-- [ ] 整合 WorktreeManager + ParallelGoalExecutor
-- [ ] 实现 `run_parallel()`, `merge_successful()`
-- [ ] 添加 `asyncio.Lock()` 串行化 worktree 创建
-- [ ] 实现脏状态检查和冲突分支返回
+### Step 4: 实现 WorktreeOrchestrator ✅
+- [x] 创建 `loop/worktree_orchestrator.py`
+- [x] 整合 WorktreeManager + ParallelGoalExecutor
+- [x] 实现 `run_parallel()`, `merge_successful()`
+- [x] 添加 `asyncio.Lock()` 串行化 worktree 创建
+- [x] 实现脏状态检查和冲突分支返回
 
-### Step 5: 编写测试
-- [ ] `test_worktree_manager.py` - WorktreeManager 测试
-- [ ] `test_parallel_executor.py` - 并行执行测试
-- [ ] `test_worktree_integration.py` - 集成测试
+### Step 5: 编写测试 ✅
+- [x] `test_worktree.py` - 完整测试套件 (26 tests passing)
+- [x] WorktreeConfig 验证测试
+- [x] WorktreeManager 功能测试
+- [x] WorktreeOrchestrator 集成测试
 
-### Step 6: 更新文档
-- [ ] 更新 `design/loop-engineering.md` Phase 3 状态
-- [ ] 添加 API 文档示例
+### Step 6: 更新文档 ✅
+- [x] 更新 `design/loop-engineering.md` Phase 3 状态
+- [x] 更新 `design/README.md` 文档索引
+- [x] 更新模块 `__init__.py` 导出
 
 ---
 

@@ -314,19 +314,24 @@ class WorkflowEngine:
             # 构建步骤依赖图
             graph = self._build_dependency_graph(config.steps)
             
+            # 检测死锁
+            if graph.detect_deadlock():
+                raise RuntimeError("Deadlock detected: circular dependency in workflow")
+            
             # 执行步骤
             while graph.has_pending():
                 # 获取可执行的步骤（依赖已满足）
                 ready_steps = graph.get_ready_steps()
                 
                 if not ready_steps:
-                    raise RuntimeError("Deadlock detected in workflow")
+                    # 没有可执行步骤但有未完成步骤 = 死锁
+                    raise RuntimeError("Deadlock detected: unreachable steps in workflow")
                 
                 # 根据执行模式执行
                 if config.default_mode == ExecutionMode.PARALLEL:
-                    await self._execute_parallel(ready_steps, config, result, context)
+                    await self._execute_parallel(ready_steps, config, result, context, graph)
                 else:
-                    await self._execute_sequential(ready_steps, config, result, context)
+                    await self._execute_sequential(ready_steps, config, result, context, graph)
             
             # 检查所有步骤是否成功
             all_success = all(
@@ -348,11 +353,13 @@ class WorkflowEngine:
         config: WorkflowConfig,
         result: WorkflowResult,
         context: dict[str, Any] | None,
+        graph: DependencyGraph,
     ) -> None:
         """顺序执行步骤."""
         for step in steps:
             step_result = await self._execute_step(step, config, result, context)
             result.steps[step.name] = step_result
+            graph.mark_completed(step.name)
             
             if step_result.status == StepStatus.FAILED:
                 # 步骤失败，停止执行
@@ -364,6 +371,7 @@ class WorkflowEngine:
         config: WorkflowConfig,
         result: WorkflowResult,
         context: dict[str, Any] | None,
+        graph: DependencyGraph,
     ) -> None:
         """并行执行步骤."""
         semaphore = asyncio.Semaphore(config.max_parallel_steps)
@@ -371,6 +379,7 @@ class WorkflowEngine:
         async def run_step(step: WorkflowStep) -> tuple[str, StepResult]:
             async with semaphore:
                 step_result = await self._execute_step(step, config, result, context)
+                graph.mark_completed(step.name)
                 return step.name, step_result
         
         tasks = [run_step(step) for step in steps]
@@ -950,10 +959,106 @@ class LoopOrchestrator:
 
 ---
 
+## DependencyGraph
+
+```python
+# orchestrator/dependency_graph.py
+
+class DependencyGraph:
+    """
+    步骤依赖图.
+    
+    用于解析 WorkflowStep 之间的依赖关系，
+    支持拓扑排序和死锁检测。
+    """
+    
+    def __init__(self):
+        self._steps: dict[str, WorkflowStep] = {}
+        self._dependencies: dict[str, set[str]] = {}
+        self._completed: set[str] = set()
+    
+    def add_step(self, step: WorkflowStep) -> None:
+        """添加步骤."""
+        self._steps[step.name] = step
+        if step.name not in self._dependencies:
+            self._dependencies[step.name] = set()
+    
+    def add_dependency(self, step_name: str, depends_on: str) -> None:
+        """添加依赖关系."""
+        if step_name not in self._dependencies:
+            self._dependencies[step_name] = set()
+        self._dependencies[step_name].add(depends_on)
+    
+    def has_pending(self) -> bool:
+        """是否还有待执行的步骤."""
+        return len(self._completed) < len(self._steps)
+    
+    def get_ready_steps(self) -> list[WorkflowStep]:
+        """
+        获取可执行的步骤.
+        
+        可执行的条件：依赖的步骤已全部完成。
+        """
+        ready = []
+        for name, step in self._steps.items():
+            if name in self._completed:
+                continue
+            deps = self._dependencies.get(name, set())
+            if deps.issubset(self._completed):
+                ready.append(step)
+        return ready
+    
+    def mark_completed(self, step_name: str) -> None:
+        """标记步骤已完成."""
+        self._completed.add(step_name)
+    
+    def detect_deadlock(self) -> bool:
+        """
+        检测是否存在死锁.
+        
+        死锁条件：存在循环依赖。
+        """
+        # 使用拓扑排序检测环
+        visited = set()
+        rec_stack = set()
+        
+        def has_cycle(node: str) -> bool:
+            visited.add(node)
+            rec_stack.add(node)
+            
+            for dep in self._dependencies.get(node, set()):
+                if dep not in visited:
+                    if has_cycle(dep):
+                        return True
+                elif dep in rec_stack:
+                    return True
+            
+            rec_stack.remove(node)
+            return False
+        
+        for step_name in self._steps:
+            if step_name not in visited:
+                if has_cycle(step_name):
+                    return True
+        
+        return False
+```
+
+---
+
 ## MonitorService
 
 ```python
 # orchestrator/monitor.py
+
+@dataclass
+class OrchestratorConfig:
+    """Orchestrator 配置."""
+    max_concurrent_goals: int = 5       # 最大并发 Goal 数
+    max_parallel_steps: int = 5         # 最大并行步骤数
+    max_teams: int = 10                 # 最大团队数
+    metrics_retention: int = 1000       # 保留最近 N 条指标
+
 
 @dataclass
 class OrchestratorStatus:
@@ -1045,12 +1150,12 @@ class MonitorService:
 ```
 packages/sdk/src/harness/orchestrator/
 ├── __init__.py           # 模块入口
-├── types.py              # WorkflowConfig, TeamConfig 等
+├── types.py              # OrchestratorConfig, WorkflowConfig, TeamConfig 等
 ├── core.py               # LoopOrchestrator 主类
 ├── workflow_engine.py    # WorkflowEngine
 ├── team_orchestrator.py  # TeamOrchestrator
-├── monitor.py            # MonitorService
-└── dependency_graph.py   # 依赖图解析
+├── dependency_graph.py   # DependencyGraph - 步骤依赖图
+└── monitor.py            # MonitorService
 ```
 
 ---

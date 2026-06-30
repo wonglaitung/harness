@@ -12,6 +12,7 @@ Core components:
 - GoalVerifier: Verifies if a goal has been achieved
 - GoalLoop: Executes the goal-driven loop
 - Automation: Simplified API for scheduled/periodic execution (Phase 2)
+- WorktreeOrchestrator: Parallel execution in isolated worktrees (Phase 3)
 
 Example:
     ```python
@@ -41,6 +42,17 @@ Example:
     await automation.start(agent)
     ```
 
+    ```python
+    # Phase 3: Parallel Worktrees
+    from harness.loop import WorktreeOrchestrator, WorktreeConfig
+
+    orchestrator = WorktreeOrchestrator(agent, ".")
+    results = await orchestrator.run_parallel([
+        WorktreeConfig(name="feature-a", goal="Implement feature A"),
+        WorktreeConfig(name="feature-b", goal="Implement feature B"),
+    ])
+    ```
+
 For more details, see the design document:
     packages/sdk/design/loop-engineering.md
 """
@@ -61,6 +73,15 @@ from harness.loop.types import (
     VerificationRecord,
     VerificationResult,
 )
+from harness.loop.worktree_manager import WorktreeManager
+from harness.loop.worktree_orchestrator import WorktreeOrchestrator
+from harness.loop.worktree_types import (
+    WORKTREES_DIR,
+    MergeResult,
+    WorktreeConfig,
+    WorktreeError,
+    WorktreeResult,
+)
 
 __all__ = [
     # Types
@@ -79,4 +100,12 @@ __all__ = [
     "AutomationConfig",
     "AutomationResult",
     "AutomationStatus",
+    # Phase 3: Worktrees
+    "WorktreeManager",
+    "WorktreeOrchestrator",
+    "WorktreeConfig",
+    "WorktreeResult",
+    "WorktreeError",
+    "MergeResult",
+    "WORKTREES_DIR",
 ]

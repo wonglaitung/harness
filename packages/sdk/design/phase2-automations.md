@@ -576,7 +576,6 @@ class Automation:
                 if reg.last_fired:
                     self._result.last_run = reg.last_fired
         return self._result
-        self._result.run_count += 1
 ```
 
 ---
