@@ -368,71 +368,58 @@ class MessageBubble(QWidget):
 
         return "".join(parser.result)
 
-    def _build_bubble_path(self, rect: QRectF, radii: dict) -> "QPainterPath":
-        """Build a QPainterPath with per-corner radii for speech-bubble shape.
-
-        radii: {"top_left": float, "top_right": float, "bottom_right": float, "bottom_left": float}
-        """
-        tl = radii["top_left"]
-        tr = radii["top_right"]
-        br = radii["bottom_right"]
-        bl = radii["bottom_left"]
-
-        path = QPainterPath()
-        # Start at top-left corner
-        path.moveTo(rect.left() + tl, rect.top())
-        # Top edge → top-right corner
-        path.lineTo(rect.right() - tr, rect.top())
-        path.arcTo(rect.right() - 2 * tr, rect.top(), 2 * tr, 2 * tr, 90, -90)
-        # Right edge → bottom-right corner
-        path.lineTo(rect.right(), rect.bottom() - br)
-        path.arcTo(rect.right() - 2 * br, rect.bottom() - 2 * br, 2 * br, 2 * br, 0, -90)
-        # Bottom edge → bottom-left corner
-        path.lineTo(rect.left() + bl, rect.bottom())
-        path.arcTo(rect.left(), rect.bottom() - 2 * bl, 2 * bl, 2 * bl, 90, -90)
-        # Left edge → top-left corner
-        path.lineTo(rect.left(), rect.top() + tl)
-        path.arcTo(rect.left(), rect.top(), 2 * tl, 2 * tl, 180, -90)
-        path.closeSubpath()
-        return path
-
     def paintEvent(self, event):
-        """Paint the rounded background with subtle border."""
+        """Paint the rounded background with subtle border.
+
+        Strategy: draw a uniform rounded rect, then overlay a same-color
+        triangle at the sharp corner to flatten it.
+        """
         theme = get_theme()
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Bubble colors
+        rect = QRectF(0, 0, self.width(), self.height())
+
         if self._role == "user":
             bg_color = QColor(theme.USER_BUBBLE)
             border_color = QColor(theme.ACCENT)
-            border_alpha = 60
-            # User: sharp bottom-right, rounded elsewhere
-            radii = {
-                "top_left": self._border_radius,
-                "top_right": self._border_radius,
-                "bottom_right": 2.0,
-                "bottom_left": self._border_radius,
-            }
         else:
             bg_color = QColor(theme.ASSISTANT_BUBBLE)
             border_color = QColor(theme.BORDER)
-            border_alpha = 255
-            # Assistant: sharp bottom-left, rounded elsewhere
-            radii = {
-                "top_left": self._border_radius,
-                "top_right": self._border_radius,
-                "bottom_right": self._border_radius,
-                "bottom_left": 2.0,
-            }
 
-        # Build bubble shape with per-corner radii
-        rect = QRectF(0, 0, self.width(), self.height())
-        path = self._build_bubble_path(rect, radii)
-        painter.setPen(QPen(border_color, 1))
+        # 1) Fill: uniform rounded rect
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(bg_color))
-        painter.drawPath(path)
+        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+
+        # 2) Overlay triangle to create sharp corner
+        #    Triangle covers the rounded arc and extends to the corner point
+        sharp = self._border_radius  # size matches the rounded arc we're covering
+        if self._role == "user":
+            # Sharp bottom-right: triangle from BR corner inward
+            tri = QPainterPath()
+            tri.moveTo(rect.right() - sharp, rect.bottom())
+            tri.lineTo(rect.right(), rect.bottom())
+            tri.lineTo(rect.right(), rect.bottom() - sharp)
+            tri.closeSubpath()
+        else:
+            # Sharp bottom-left: triangle from BL corner inward
+            tri = QPainterPath()
+            tri.moveTo(rect.left() + sharp, rect.bottom())
+            tri.lineTo(rect.left(), rect.bottom())
+            tri.lineTo(rect.left(), rect.bottom() - sharp)
+            tri.closeSubpath()
+
+        painter.setBrush(QBrush(bg_color))
+        painter.drawPath(tri)
+
+        # 3) Border: draw the rounded rect border, then draw triangle edges
+        painter.setPen(QPen(border_color, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
+        # Draw the sharp corner's two edges (they would be missing from rounded rect border)
+        painter.drawPath(tri)
 
         painter.end()
 
