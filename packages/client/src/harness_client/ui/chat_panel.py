@@ -71,13 +71,13 @@ def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon
     painter.setPen(pen)
     painter.setBrush(QBrush(color))
 
-    # Triangle pointing right: left vertex, right-top vertex, right-bottom vertex
-    # Increase size by 20%: reduce margin from 5 to 2
-    margin = 2
+    # Triangle pointing right, centered in the canvas
+    # Height = size, width = size * 0.8 (proportion of play button)
+    cx = size * 0.35  # center x offset for visual balance
     triangle = [
-        QPointF(margin, margin),                    # top-left
-        QPointF(size - margin - 2, size / 2),       # right (center)
-        QPointF(margin, size - margin),             # bottom-left
+        QPointF(cx, size * 0.15),           # top-left
+        QPointF(cx + size * 0.6, size / 2), # right (center)
+        QPointF(cx, size * 0.85),           # bottom-left
     ]
     polygon = QPolygonF(triangle)
     painter.drawPolygon(polygon)
