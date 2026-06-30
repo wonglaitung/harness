@@ -40,10 +40,8 @@ for name, result in results.items():
 
 # 合并成功的分支
 for name, result in results.items():
-    if result.status == "completed":
-        merge_result = await orchestrator.merge(name)
-        if merge_result.merged:
-            print(f"{name}: merged successfully")
+    if result.achieved:
+        print(f"{name}: merged successfully")
 ```
 
 ## 配置选项
@@ -119,20 +117,14 @@ async def main():
     results = await orchestrator.run_parallel(tasks)
 
     # 汇总结果
-    achieved = sum(1 for r in results.values() if r.goal_result.achieved)
+    achieved = sum(1 for r in results.values() if r.achieved)
     print(f"\n完成: {achieved}/{len(tasks)} 个任务达成目标")
 
-    # 合并成功的分支
-    for name, result in results.items():
-        if result.goal_result.achieved:
-            print(f"\n合并分支: {result.branch_name}")
-            merge_result = await orchestrator.merge(name)
-            if merge_result.merged:
-                print(f"  ✅ 合并成功")
-            elif merge_result.conflicts:
-                print(f"  ⚠️ 有冲突，需要手动处理")
-            else:
-                print(f"  ❌ 合并失败: {merge_result.error}")
+    # 合并所有成功的分支
+    merge_result = await orchestrator.merge_successful(results)
+    print(f"合并成功: {merge_result.merged}")
+    print(f"有冲突: {merge_result.conflicts}")
+    print(f"跳过: {merge_result.skipped}")
 
 asyncio.run(main())
 ```
@@ -176,7 +168,7 @@ results = await orchestrator.run_parallel(tasks)
 │      │                                                       │
 │      └─► asyncio.gather() → parallel execution              │
 │                                                              │
-│  merge("feature-a")                                          │
+│  merge_successful(results)                                   │
 │      └─► git merge feature-a → main                         │
 │      └─► git worktree remove .worktrees/feature-a           │
 └─────────────────────────────────────────────────────────────┘
