@@ -176,6 +176,41 @@ class OutputResult:
     message: str | None = None
     error: str | None = None
     timestamp: datetime = field(default_factory=datetime.now)
+
+
+class RoutingKeys:
+    """
+    路由元数据标准 Key 常量.
+
+    用于 routing_metadata 字典，确保跨 Connector 的命名一致性。
+    防止拼写错误和 key 冲突。
+
+    Example:
+        ```python
+        event = ConnectorEvent(
+            ...,
+            routing_metadata={
+                RoutingKeys.SLACK_THREAD_TS: "17123456.0001",
+            }
+        )
+        ```
+    """
+
+    # Slack 相关
+    SLACK_THREAD_TS = "slack_thread_ts"       # 消息线程时间戳
+    SLACK_CHANNEL_ID = "slack_channel_id"     # 频道 ID
+
+    # GitHub 相关
+    GITHUB_PR_NUMBER = "github_pr_number"     # PR 编号
+    GITHUB_ISSUE_NUMBER = "github_issue_number"  # Issue 编号
+    GITHUB_REPO = "github_repo"               # 仓库名 (owner/repo)
+
+    # Webhook 相关
+    WEBHOOK_REQUEST_ID = "webhook_request_id"  # 请求追踪 ID
+
+    # 通用
+    USER_ID = "user_id"                       # 用户 ID
+    TIMESTAMP = "timestamp"                   # 原始事件时间戳
 ```
 
 ---
@@ -233,8 +268,20 @@ class Connector(ABC):
         event_type: str,
         payload: dict[str, Any],
         source: str = "",
+        routing_metadata: dict[str, Any] | None = None,
     ) -> ConnectorEvent:
-        """创建标准化事件."""
+        """
+        创建标准化事件.
+
+        Args:
+            event_type: 事件类型
+            payload: 事件载荷
+            source: 来源标识
+            routing_metadata: 路由元数据，用于结果"原路返回"
+
+        Returns:
+            标准化的 ConnectorEvent
+        """
         pass
     
     def is_running(self) -> bool:
@@ -327,18 +374,19 @@ class WebhookConnector(Connector):
             payload=payload,
             source=request.headers.get("X-Forwarded-For", "unknown"),
         )
-        
-        # 回调
+
+        # 异步回调（确保不阻塞事件循环）
         if self._callback:
-            self._callback(event)
-        
+            await self._callback(event)
+
         return Response(status_code=200, content="OK")
-    
+
     def create_event(
         self,
         event_type: str,
         payload: dict[str, Any],
         source: str = "",
+        routing_metadata: dict[str, Any] | None = None,
     ) -> ConnectorEvent:
         return ConnectorEvent(
             connector_type=self.connector_type,
@@ -346,6 +394,7 @@ class WebhookConnector(Connector):
             event_type=event_type,
             source=source,
             payload=payload,
+            routing_metadata=routing_metadata or {},
         )
     
     async def stop(self) -> None:
@@ -476,8 +525,19 @@ class SlackConnector(Connector):
     def _parse_slack_event(self, event: dict) -> ConnectorEvent | None:
         """解析 Slack 事件."""
         event_type = event.get("type")
-        
+
         if event_type == "message":
+            # 提取路由元数据
+            routing_metadata = {}
+            if event.get("thread_ts"):
+                routing_metadata[RoutingKeys.SLACK_THREAD_TS] = event.get("thread_ts")
+            elif event.get("ts"):
+                # 如果没有 thread_ts，使用消息 ts 作为回复目标
+                routing_metadata[RoutingKeys.SLACK_THREAD_TS] = event.get("ts")
+
+            if event.get("channel"):
+                routing_metadata[RoutingKeys.SLACK_CHANNEL_ID] = event.get("channel")
+
             return self.create_event(
                 event_type="slack.message",
                 payload={
@@ -485,11 +545,17 @@ class SlackConnector(Connector):
                     "user": event.get("user"),
                     "channel": event.get("channel"),
                     "ts": event.get("ts"),
+                    "thread_ts": event.get("thread_ts"),
                 },
                 source=event.get("user", "unknown"),
+                routing_metadata=routing_metadata,
             )
-        
+
         elif event_type == "slash_command":
+            routing_metadata = {
+                RoutingKeys.SLACK_CHANNEL_ID: event.get("channel_id"),
+            }
+
             return self.create_event(
                 event_type="slack.command",
                 payload={
@@ -542,6 +608,7 @@ class SlackConnector(Connector):
         event_type: str,
         payload: dict[str, Any],
         source: str = "",
+        routing_metadata: dict[str, Any] | None = None,
     ) -> ConnectorEvent:
         return ConnectorEvent(
             connector_type=self.connector_type,
@@ -551,6 +618,7 @@ class SlackConnector(Connector):
             payload=payload,
             user_id=payload.get("user_id"),
             channel_id=payload.get("channel_id"),
+            routing_metadata=routing_metadata or {},
         )
     
     async def stop(self) -> None:
@@ -629,20 +697,40 @@ class GitHubConnector(Connector):
     ) -> None:
         """
         处理 GitHub Webhook.
-        
+
         由 WebhookConnector 调用。
         """
         if event_type not in self.config.events:
             return
-        
+
+        # 提取路由元数据
+        routing_metadata = {}
+
+        # PR 事件
+        if "pull_request" in payload:
+            pr = payload["pull_request"]
+            routing_metadata[RoutingKeys.GITHUB_PR_NUMBER] = pr.get("number")
+
+        # Issue 事件
+        elif "issue" in payload:
+            issue = payload["issue"]
+            routing_metadata[RoutingKeys.GITHUB_ISSUE_NUMBER] = issue.get("number")
+
+        # 仓库信息
+        repo = payload.get("repository", {})
+        if repo.get("full_name"):
+            routing_metadata[RoutingKeys.GITHUB_REPO] = repo.get("full_name")
+
         connector_event = self.create_event(
             event_type=f"github.{event_type}",
             payload=payload,
-            source=payload.get("repository", {}).get("full_name", "unknown"),
+            source=repo.get("full_name", "unknown"),
+            routing_metadata=routing_metadata,
         )
-        
+
+        # 异步回调
         if self._callback:
-            self._callback(connector_event)
+            await self._callback(connector_event)
     
     async def create_pr_comment(
         self,
@@ -680,6 +768,7 @@ class GitHubConnector(Connector):
         event_type: str,
         payload: dict[str, Any],
         source: str = "",
+        routing_metadata: dict[str, Any] | None = None,
     ) -> ConnectorEvent:
         return ConnectorEvent(
             connector_type=self.connector_type,
@@ -687,6 +776,7 @@ class GitHubConnector(Connector):
             event_type=event_type,
             source=source,
             payload=payload,
+            routing_metadata=routing_metadata or {},
         )
     
     async def stop(self) -> None:
@@ -1435,3 +1525,59 @@ trigger = EventTrigger(
 - 保持 Connector 职责单一
 - EventTrigger 负责事件匹配和触发动作
 - 支持事件类型过滤和 payload 过滤
+
+---
+
+### 2026-06-30: 防御性编程补强
+
+**问题 4: WebhookConnector 回调遗漏 await**
+
+修复前：
+```python
+# connectors/webhook.py
+if self._callback:
+    self._callback(event)  # ❌ 同步调用，会阻塞
+```
+
+修复后：
+```python
+# connectors/webhook.py
+if self._callback:
+    await self._callback(event)  # ✅ 异步调用
+```
+
+**原因**：保持与基类 `EventCallback` 异步签名的一致性，避免 FastAPI 异步路由中阻塞。
+
+---
+
+**问题 5: routing_metadata Key 拼写风险**
+
+新增 `RoutingKeys` 常量类：
+
+```python
+class RoutingKeys:
+    """路由元数据标准 Key 常量，防止拼写错误和 key 冲突。"""
+
+    SLACK_THREAD_TS = "slack_thread_ts"
+    SLACK_CHANNEL_ID = "slack_channel_id"
+    GITHUB_PR_NUMBER = "github_pr_number"
+    GITHUB_ISSUE_NUMBER = "github_issue_number"
+    GITHUB_REPO = "github_repo"
+    # ...
+```
+
+**使用示例**：
+```python
+# Connector 创建事件时
+routing_metadata = {
+    RoutingKeys.SLACK_THREAD_TS: event.get("thread_ts"),
+}
+
+# OutputRouter 使用时
+thread_ts = routing_metadata.get(RoutingKeys.SLACK_THREAD_TS)
+```
+
+**效果**：
+- 避免 `slack_thread_ts` vs `slack_thread_id` 等拼写错误
+- 支持 IDE 自动补全和类型检查
+- 便于跨 Connector 命名一致性
