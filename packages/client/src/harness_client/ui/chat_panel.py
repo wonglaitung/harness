@@ -391,7 +391,7 @@ class MessageBubble(QWidget):
         return "".join(parser.result)
 
     def paintEvent(self, event):
-        """Paint the rounded background with subtle border.
+        """Paint the rounded background with sharp corner.
 
         Strategy: draw a uniform rounded rect, then overlay a same-color
         triangle at the sharp corner to flatten it.
@@ -405,10 +405,8 @@ class MessageBubble(QWidget):
 
         if self._role == "user":
             bg_color = QColor(theme.USER_BUBBLE)
-            border_color = QColor(theme.ACCENT)
         else:
             bg_color = QColor(theme.ASSISTANT_BUBBLE)
-            border_color = QColor(theme.BORDER)
 
         # 1) Fill: uniform rounded rect
         painter.setPen(Qt.PenStyle.NoPen)
@@ -434,13 +432,6 @@ class MessageBubble(QWidget):
             tri.closeSubpath()
 
         painter.setBrush(QBrush(bg_color))
-        painter.drawPath(tri)
-
-        # 3) Border: draw the rounded rect border, then draw triangle edges
-        painter.setPen(QPen(border_color, 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(rect, self._border_radius, self._border_radius)
-        # Draw the sharp corner's two edges (they would be missing from rounded rect border)
         painter.drawPath(tri)
 
         painter.end()
