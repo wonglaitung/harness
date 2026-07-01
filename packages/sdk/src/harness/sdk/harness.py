@@ -572,6 +572,7 @@ class AgentHarness:
     async def run_goal(
         self,
         goal: str,
+        session_id: str | None = None,
         success_criteria: str | None = None,
         workspace_dir: str = ".",
         max_iterations: int = 50,
@@ -592,6 +593,7 @@ class AgentHarness:
 
         Args:
             goal: Description of the goal to achieve
+            session_id: Optional session ID for conversation continuity
             success_criteria: Optional specific criteria for success
             workspace_dir: Working directory for execution (for worktree isolation)
             max_iterations: Maximum iterations per context window
@@ -642,6 +644,7 @@ class AgentHarness:
 
         config = GoalConfig(
             description=goal,
+            session_id=session_id,
             success_criteria=success_criteria,
             workspace_dir=workspace_dir,
             max_iterations=max_iterations,

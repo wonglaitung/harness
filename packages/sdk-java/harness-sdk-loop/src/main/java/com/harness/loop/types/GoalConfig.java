@@ -21,6 +21,7 @@ import java.util.function.Function;
  */
 public class GoalConfig {
     private final String description;
+    private final String sessionId;
     private final String successCriteria;
     private final String workspaceDir;
     private final int maxIterations;
@@ -38,6 +39,7 @@ public class GoalConfig {
 
     private GoalConfig(Builder builder) {
         this.description = builder.description;
+        this.sessionId = builder.sessionId;
         this.successCriteria = builder.successCriteria;
         this.workspaceDir = builder.workspaceDir;
         this.maxIterations = builder.maxIterations;
@@ -84,6 +86,13 @@ public class GoalConfig {
      */
     public String getDescription() {
         return description;
+    }
+
+    /**
+     * Optional session ID for conversation continuity.
+     */
+    public String getSessionId() {
+        return sessionId;
     }
 
     /**
@@ -197,6 +206,7 @@ public class GoalConfig {
     public static Builder builder(GoalConfig config) {
         return new Builder()
                 .description(config.description)
+                .sessionId(config.sessionId)
                 .successCriteria(config.successCriteria)
                 .workspaceDir(config.workspaceDir)
                 .maxIterations(config.maxIterations)
@@ -218,6 +228,7 @@ public class GoalConfig {
      */
     public static class Builder {
         private String description;
+        private String sessionId = null;
         private String successCriteria = null;
         private String workspaceDir = ".";
         private int maxIterations = 50;
@@ -238,6 +249,14 @@ public class GoalConfig {
          */
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        /**
+         * Set the session ID for conversation continuity.
+         */
+        public Builder sessionId(String sessionId) {
+            this.sessionId = sessionId;
             return this;
         }
 

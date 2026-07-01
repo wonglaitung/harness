@@ -399,6 +399,7 @@ class ChatController:
                 logger.info("Calling agent.run_goal()...")
                 result = await self.agent.run_goal(
                     goal=message,
+                    session_id=session_id,
                     max_iterations=50,
                     on_progress=on_progress,
                 )

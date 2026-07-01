@@ -297,6 +297,7 @@ async def stream(
 async def run_goal(
     self,
     goal: str | GoalConfig,          # 目标描述或配置
+    session_id: str | None = None,   # 会话 ID（用于对话连续性）
     custom_verifier: Callable | None = None,  # 自定义验证函数
     max_iterations: int = 50,        # 最大迭代次数
     max_context_resets: int = 5,     # 最大上下文重置次数
@@ -310,10 +311,16 @@ async def run_goal(
         result = await agent.run_goal("修复所有类型错误")
         if result.status == GoalStatus.ACHIEVED:
             print(f"目标达成，共 {result.total_iterations} 轮迭代")
+        
+        # 保持会话连续性
+        result = await agent.run_goal(
+            goal="继续优化代码",
+            session_id="my-session",  # 使用相同的会话
+        )
     """
 ```
 
-详见 [15-loop-engineering.md](./15-loop-engineering.md)。
+详见 [10-loop-engineering.md](./10-loop-engineering.md)。
 
 #### tool() - 注册工具装饰器
 
@@ -1120,6 +1127,7 @@ from harness.loop import GoalConfig
 @dataclass
 class GoalConfig:
     description: str                    # 目标描述
+    session_id: str | None = None       # 会话 ID（用于对话连续性）
     success_criteria: str | None = None # 成功标准
     workspace_dir: str = "."            # 工作目录
     max_iterations: int = 50            # 最大迭代次数
@@ -1148,7 +1156,7 @@ class GoalResult:
     error: str | None = None            # 错误详情
 ```
 
-详见 [15-loop-engineering.md](./15-loop-engineering.md)。
+详见 [10-loop-engineering.md](./10-loop-engineering.md)。
 
 ## Automation API
 

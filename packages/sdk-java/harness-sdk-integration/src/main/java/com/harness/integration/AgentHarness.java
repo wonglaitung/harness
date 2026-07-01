@@ -16,6 +16,10 @@ import com.harness.core.LoopConfig;
 import com.harness.core.Tool;
 import com.harness.core.ToolRegistry;
 import com.harness.core.LifecycleHook;
+import com.harness.loop.GoalLoop;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.VerificationMethod;
 import com.harness.skills.SkillInjector;
 import com.harness.skills.SkillLoader;
 import com.harness.skills.SkillRegistry;
@@ -230,6 +234,117 @@ public class AgentHarness {
                 sessions.put(sessionId, result.session());
                 return result;
             });
+    }
+
+    /**
+     * Run the agent in goal-driven mode.
+     *
+     * <p>The agent will continue execution until the goal is achieved
+     * or a limit is reached (iterations, timeout, cost).</p>
+     *
+     * @param goal Description of the goal to achieve
+     * @return GoalResult with achievement status and execution details
+     */
+    public CompletableFuture<GoalResult> runGoal(String goal) {
+        return runGoal(goal, null, null, null);
+    }
+
+    /**
+     * Run the agent in goal-driven mode with session ID.
+     *
+     * @param goal Description of the goal to achieve
+     * @param sessionId Optional session ID for conversation continuity
+     * @return GoalResult with achievement status and execution details
+     */
+    public CompletableFuture<GoalResult> runGoal(String goal, String sessionId) {
+        return runGoal(goal, sessionId, null, null);
+    }
+
+    /**
+     * Run the agent in goal-driven mode with session ID and progress callback.
+     *
+     * @param goal Description of the goal to achieve
+     * @param sessionId Optional session ID for conversation continuity
+     * @param onProgress Optional progress callback
+     * @param customVerifier Optional custom verification function
+     * @return GoalResult with achievement status and execution details
+     */
+    public CompletableFuture<GoalResult> runGoal(
+            String goal,
+            String sessionId,
+            Consumer<Object> onProgress,
+            java.util.function.Function<GoalResult, Boolean> customVerifier) {
+        logger.info("Running goal: {}...", goal.substring(0, Math.min(50, goal.length())));
+
+        VerificationMethod verificationMethod = customVerifier != null
+                ? VerificationMethod.CUSTOM
+                : VerificationMethod.LLM;
+
+        GoalConfig config = GoalConfig.builder()
+                .description(goal)
+                .sessionId(sessionId)
+                .verificationMethod(verificationMethod)
+                .customVerifier(customVerifier)
+                .build();
+
+        GoalLoop loop = new GoalLoop(new GoalLoop.AgentRunner() {
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sid) {
+                return AgentHarness.this.run(prompt, sid);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sid, Consumer<Object> progress) {
+                return AgentHarness.this.run(prompt, sid, progress);
+            }
+
+            @Override
+            public Session getSession(String sid) {
+                return AgentHarness.this.getSession(sid);
+            }
+
+            @Override
+            public int getContextWindow() {
+                return AgentHarness.this.config.getContextWindow();
+            }
+        }, config, onProgress);
+
+        return loop.run();
+    }
+
+    /**
+     * Run the agent in goal-driven mode with full configuration.
+     *
+     * @param goalConfig Complete goal configuration
+     * @param onProgress Optional progress callback
+     * @return GoalResult with achievement status and execution details
+     */
+    public CompletableFuture<GoalResult> runGoal(GoalConfig goalConfig, Consumer<Object> onProgress) {
+        logger.info("Running goal: {}...", goalConfig.getDescription().substring(0, Math.min(50, goalConfig.getDescription().length())));
+
+        GoalLoop loop = new GoalLoop(new GoalLoop.AgentRunner() {
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sessionId) {
+                return AgentHarness.this.run(prompt, sessionId);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sessionId, Consumer<Object> progress) {
+                return AgentHarness.this.run(prompt, sessionId, progress);
+            }
+
+            @Override
+            public Session getSession(String sessionId) {
+                return AgentHarness.this.getSession(sessionId);
+            }
+
+            @Override
+            public int getContextWindow() {
+                return AgentHarness.this.config.getContextWindow();
+            }
+        }, goalConfig, onProgress);
+
+        return loop.run();
     }
 
     /**

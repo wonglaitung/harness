@@ -50,6 +50,7 @@ from harness.loop import GoalConfig
 
 config = GoalConfig(
     description="将测试覆盖率提升到 80%",  # 目标描述
+    session_id="my-session-123",            # 会话 ID（用于对话连续性，可选）
     success_criteria="测试覆盖率报告显示 >= 80%",  # 成功标准（可选）
     workspace_dir=".",                       # 工作目录
     
@@ -68,6 +69,36 @@ config = GoalConfig(
 
 result = await agent.run_goal(config)
 ```
+
+### 会话连续性
+
+默认情况下，每次调用 `run_goal()` 会创建新的会话。如果需要在多轮目标执行之间保持对话上下文，可以指定 `session_id`：
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+agent = AgentHarness()
+
+# 第一轮目标执行
+result1 = await agent.run_goal(
+    goal="分析代码库结构",
+    session_id="my-project-session",  # 指定会话 ID
+)
+
+# 第二轮目标执行（会记住第一轮的上下文）
+result2 = await agent.run_goal(
+    goal="根据分析结果生成文档",
+    session_id="my-project-session",  # 使用相同的会话 ID
+)
+```
+
+**适用场景**：
+- 多阶段任务：前一个目标的执行结果需要传递给后续目标
+- 上下文保持：在长时间任务中保持对话历史
+- 任务续接：恢复中断的任务执行
+
+**注意**：上下文重置（`max_context_resets`）会创建新的会话 ID 以防止 token 溢出，此时历史消息会被精简。
 
 ### 自定义验证器
 

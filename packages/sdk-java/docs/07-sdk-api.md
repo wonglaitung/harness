@@ -1120,6 +1120,7 @@ from harness.loop import GoalConfig
 @dataclass
 class GoalConfig:
     description: str                    # 目标描述
+    session_id: str | None = None       # 会话 ID（用于对话连续性）
     success_criteria: str | None = None # 成功标准
     workspace_dir: str = "."            # 工作目录
     max_iterations: int = 50            # 最大迭代次数

@@ -98,6 +98,9 @@ class GoalConfig:
     description: str
     success_criteria: str | None = None
 
+    # Session for context continuity
+    session_id: str | None = None
+
     # Execution environment (Phase 3 Worktrees support)
     workspace_dir: str = "."
 

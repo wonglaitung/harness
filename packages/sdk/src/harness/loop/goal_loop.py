@@ -157,12 +157,13 @@ class GoalLoop:
         Returns:
             GoalResult with execution status and details
         """
-        # Initialize state
+        # Initialize state - use session_id from config if provided
+        initial_session_id = self.config.session_id or f"goal-{uuid.uuid4().hex[:8]}"
         self._state = GoalLoopState(
             iteration=0,
             context_resets=0,
             start_time=time.time(),
-            session_id=f"goal-{uuid.uuid4().hex[:8]}",
+            session_id=initial_session_id,
         )
 
         # Build initial prompt

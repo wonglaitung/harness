@@ -173,11 +173,13 @@ Take the next step to make progress. Focus on what remains to be done.""";
      * @return CompletableFuture with GoalResult
      */
     public CompletableFuture<GoalResult> run() {
-        // Initialize state
+        // Initialize state - use sessionId from config if provided
         iteration = 0;
         contextResets = 0;
         startTime = System.currentTimeMillis();
-        sessionId = "goal-" + UUID.randomUUID().toString().substring(0, 8);
+        sessionId = config.getSessionId() != null
+                ? config.getSessionId()
+                : "goal-" + UUID.randomUUID().toString().substring(0, 8);
         totalInputTokens = 0;
         totalOutputTokens = 0;
         totalAgentIterations = 0;

@@ -81,6 +81,10 @@ harness-sdk-java/
   - `run(prompt, sessionId)`: 指定会话 ID
   - `run(prompt, sessionId, onProgress)`: 带进度回调
   - `continueSession(sessionId, prompt)`: 继续会话
+  - `runGoal(goal)`: 目标驱动执行
+  - `runGoal(goal, sessionId)`: 带会话 ID 的目标驱动执行
+  - `runGoal(goal, sessionId, onProgress, customVerifier)`: 完整参数的目标驱动执行
+  - `runGoal(goalConfig, onProgress)`: 使用 GoalConfig 的目标驱动执行
   - `registerTool(tool)`: 注册工具
   - `addHook(hook)`: 添加生命周期钩子
 - **Builder 模式**: `AgentHarness.builder().config(config).addTool(tool).build()`
