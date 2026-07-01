@@ -17,4 +17,7 @@ include("harness-sdk-skills")
 include("harness-sdk-security")
 include("harness-sdk-guardrails")
 include("harness-sdk-integration")
+include("harness-sdk-loop")
+include("harness-sdk-connectors")
+include("harness-sdk-orchestrator")
 // include("harness-sdk-all")  // Requires shadow plugin
