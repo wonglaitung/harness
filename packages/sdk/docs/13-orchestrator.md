@@ -13,6 +13,53 @@ Orchestrator 模块提供**统一的工作流编排 API**，整合 Phase 1-4 的
 - 多 Agent 协调 - 支持团队协作模式
 - 统一监控 - 执行追踪和指标
 
+## 与 Goal_run 的区别
+
+`run_goal` 和 Orchestrator 解决不同的问题：
+
+| 特性 | `run_goal` (GoalLoop) | Orchestrator |
+|------|----------------------|--------------|
+| **用途** | 单一目标驱动执行 | 多步骤工作流编排 |
+| **执行模式** | 迭代直到目标达成 | 按依赖关系调度步骤 |
+| **并行性** | 单任务顺序迭代 | 多步骤并行执行 |
+| **状态管理** | 单一 GoalResult | 每步骤独立 StepResult |
+| **适合场景** | 单一明确目标 | 预定义流水线 |
+
+### 何时使用 run_goal
+
+```python
+# 单一目标，让 Agent 自主迭代直到完成
+result = await agent.run_goal("修复所有类型错误")
+```
+
+适合：
+- 单一明确目标（如"修复 bug"、"实现功能"）
+- Agent 需要多次迭代探索
+- 不需要预定义步骤顺序
+
+### 何时使用 Orchestrator
+
+```python
+# 多步骤工作流，步骤间有依赖关系
+workflow = WorkflowConfig(
+    name="code-review",
+    steps=[
+        WorkflowStep(name="lint", goal="运行 ruff check"),
+        WorkflowStep(name="test", goal="运行 pytest"),
+        WorkflowStep(name="review", goal="代码审查", depends_on=["lint", "test"]),
+    ],
+)
+result = await orchestrator.run_workflow("code-review")
+```
+
+适合：
+- CI/CD 流水线
+- 多阶段代码审查
+- 需要并行执行多个独立任务
+- 多 Agent 协作
+
+**简单原则**：单一目标用 `run_goal`，多步骤有依赖用 Orchestrator。
+
 ## 核心 API
 
 ### LoopOrchestrator
