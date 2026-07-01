@@ -439,9 +439,13 @@ class AgentLoop:
                     "Building context",
                     {"state": LoopState.BUILDING_CONTEXT.value},
                 )
-                # Add user message to session on first iteration (fixes USER message loss)
+                # Add user message to session on first iteration if not already present
+                # This fixes USER message loss when caller doesn't add it to session
                 if iteration == 0 and prompt:
-                    session.add_message(Message(role="user", content=prompt))
+                    # Check if the last message is already the same user prompt
+                    last_msg = session.messages[-1] if session.messages else None
+                    if not (last_msg and last_msg.role == "user" and last_msg.content == prompt):
+                        session.add_message(Message(role="user", content=prompt))
 
                 # Remaining steps hint: warn model to wrap up when approaching iteration limit
                 remaining_steps = self.config.max_iterations - iteration
