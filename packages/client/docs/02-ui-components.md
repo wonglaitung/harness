@@ -784,6 +784,200 @@ class ScheduleItemWidget(QWidget):
         """)
 ```
 
+## 监控面板 (MonitoringPanel)
+
+监控面板提供实时会话指标和执行日志的可视化。
+
+### 功能
+
+- Token 使用统计（输入、输出、缓存命中）
+- 会话统计（迭代次数、工具调用、耗时）
+- 成本估算（美元）
+- Token 使用趋势柱状图
+- 执行日志实时显示
+
+### 组件结构
+
+```
+MonitoringPanel
+├── TokenSection (Token 使用)
+│   ├── InputTokensLabel
+│   ├── OutputTokensLabel
+│   └── CacheHitRateLabel
+├── StatsSection (会话统计)
+│   ├── IterationsLabel
+│   ├── ToolCallsLabel
+│   └── DurationLabel
+├── CostSection (成本估算)
+│   └── CostLabel
+├── TrendChart (趋势图)
+│   └── Custom QPainter 绘制
+└── ExecutionLogSection (执行日志)
+    ├── Header (可折叠)
+    └── LogList
+        └── LogEntryWidget[]
+```
+
+### 趋势图 (TrendChart)
+
+使用 QPainter 自定义绘制柱状图，支持主题切换：
+
+```python
+class TrendChart(QWidget):
+    """Token 使用趋势柱状图 - 主题感知绘制"""
+
+    def __init__(self, max_items: int = 10, parent=None):
+        super().__init__(parent)
+        self._data: list[int] = []
+        self._max_items = max_items
+        self.setFixedHeight(60)
+        self.setMinimumWidth(180)
+        register_theme_listener(self._on_theme_changed)
+
+    def set_data(self, data: list[int]):
+        """设置趋势数据"""
+        self._data = data[-self._max_items:] if data else []
+        self.update()
+
+    def paintEvent(self, event):
+        """绘制柱状图 - 动态获取主题"""
+        theme = get_theme()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if not self._data:
+            # 无数据时显示占位文本
+            painter.setPen(QColor(theme.TEXT_SUBTLE))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "暂无数据")
+            painter.end()
+            return
+
+        # 计算柱状图参数
+        bar_width = (self.width() - 20) / len(self._data)
+        max_value = max(self._data) if self._data else 1
+
+        for i, value in enumerate(self._data):
+            bar_height = (value / max_value) * (self.height() - 20)
+            x = 10 + i * bar_width
+            y = self.height() - 10 - bar_height
+
+            # 绘制柱子
+            bar_rect = QRectF(x, y, bar_width - 2, bar_height)
+            painter.setBrush(QBrush(QColor(theme.ACCENT)))
+            painter.setPen(QPen(Qt.PenStyle.NoPen))
+            painter.drawRoundedRect(bar_rect, 2, 2)
+
+        painter.end()
+```
+
+**关键点**：
+- 在 `paintEvent` 中动态获取主题颜色，不缓存
+- 注册主题监听器，主题切换时调用 `update()` 重绘
+- 支持无数据占位显示
+
+### 执行日志区块 (ExecutionLogSection)
+
+显示实时的执行日志：
+
+```python
+class ExecutionLogSection(CollapsibleSection):
+    """执行日志区块 - 可折叠"""
+
+    def __init__(self, controller: MonitoringController, parent=None):
+        self._controller = controller
+        self._log_widgets: list[LogEntryWidget] = []
+
+        # 连接信号
+        self._controller.log_entry_added.connect(self._add_log_entry)
+
+    def _add_log_entry(self, entry: LogEntry):
+        """添加日志条目"""
+        widget = LogEntryWidget(entry)
+        self._log_layout.addWidget(widget)
+        self._log_widgets.append(widget)
+
+        # 限制最大条目数
+        if len(self._log_widgets) > 100:
+            old_widget = self._log_widgets.pop(0)
+            self._log_layout.removeWidget(old_widget)
+            old_widget.deleteLater()
+```
+
+### 日志条目组件 (LogEntryWidget)
+
+单条日志的显示：
+
+```python
+class LogEntryWidget(QWidget):
+    """单条日志条目"""
+
+    # 图标映射
+    ICON_MAP = {
+        "llm_call": "🤖",
+        "llm_response": "💬",
+        "tool_call": "🔧",
+        "tool_result": "⚙️",
+        "iteration": "🔄",
+        "error": "❌",
+    }
+
+    def __init__(self, entry: LogEntry, parent=None):
+        super().__init__(parent)
+        self._entry = entry
+
+        # 时间戳
+        time_str = entry.timestamp.strftime("%H:%M:%S")
+        self._time_label = QLabel(time_str)
+
+        # 图标
+        icon = self.ICON_MAP.get(entry.type, "📌")
+        self._icon_label = QLabel(icon)
+
+        # 消息
+        self._message_label = QLabel(entry.message)
+
+        # 根据类型设置样式
+        self._apply_style()
+```
+
+### 与 MonitoringController 集成
+
+```python
+# MainWindow 中创建和连接
+self.monitoring_controller = MonitoringController()
+self.monitoring_panel = MonitoringPanel(self.monitoring_controller)
+
+# 连接 ChatController 进度回调
+self.chat_controller.set_progress_callback(
+    self.monitoring_controller.handle_progress_event
+)
+```
+
+### 主题适配
+
+监控面板继承 `ThemeAwareWidget`，所有子组件自动响应主题切换：
+
+```python
+class MonitoringPanel(ThemeAwareWidget):
+    def _apply_theme_style(self) -> None:
+        """主题切换时自动调用"""
+        theme = self.theme()
+
+        # 更新数值标签
+        self._input_label.setStyleSheet(f"color: {theme.TEXT};")
+        self._output_label.setStyleSheet(f"color: {theme.TEXT_SUBTLE};")
+        self._cost_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.ACCENT};
+                font-size: {theme.FONT_SIZE_MD};
+                font-weight: bold;
+            }}
+        """)
+
+        # 触发趋势图重绘
+        self._trend_chart.update()
+```
+
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构

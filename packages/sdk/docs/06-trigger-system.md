@@ -76,24 +76,49 @@ from harness.triggers.manager import TriggerManager
 class TriggerManager:
     def __init__(self, harness: AgentHarness)
 
-    def register(self, trigger: Trigger) -> None:
-        """注册触发器"""
+    def register(self, trigger: Trigger) -> str:
+        """注册触发器，返回 trigger_id"""
 
-    def unregister(self, name: str) -> None:
+    def unregister(self, trigger_id: str) -> bool:
         """注销触发器"""
 
-    async def start_all(self) -> None:
-        """启动所有注册的触发器"""
+    async def start(self) -> None:
+        """启动所有已注册且启用的触发器"""
 
-    async def stop_all(self) -> None:
+    async def stop(self) -> None:
         """停止所有触发器"""
 
-    def get_trigger(self, name: str) -> Trigger | None:
+    def get_trigger(self, trigger_id: str) -> TriggerRegistration | None:
         """获取触发器"""
 
-    def list_triggers(self) -> list[Trigger]:
-        """列出所有触发器"""
+    def list_triggers(self) -> list[dict]:
+        """列出所有触发器状态"""
 ```
+
+### 目标执行
+
+当触发器触发时，TriggerManager 会调用 `AgentHarness.run_goal()` 执行目标：
+
+```python
+# TriggerManager 内部实现
+async def _handle_event(self, event: TriggerEvent):
+    # 获取注册信息
+    reg = self._registrations[event.trigger_id]
+
+    # 构建 GoalConfig
+    goal_config = reg.action.to_goal_config(event)
+
+    # 执行目标（注意：run_goal 第一个参数是 goal 字符串）
+    result = await self.agent.run_goal(
+        goal=goal_config.description,           # goal 字符串
+        success_criteria=goal_config.success_criteria,
+        workspace_dir=goal_config.workspace_dir,
+        max_iterations=goal_config.max_iterations,
+        timeout_seconds=goal_config.timeout_seconds,
+    )
+```
+
+**重要说明**：`TriggerAction.to_goal_config()` 返回 `GoalConfig` 对象，但 `AgentHarness.run_goal()` 的第一个参数是 `goal: str` 字符串，需要使用 `goal_config.description`。
 
 ## CronTrigger（定时触发）
 

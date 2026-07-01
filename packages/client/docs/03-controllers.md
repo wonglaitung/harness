@@ -28,7 +28,14 @@
 │  │  Chat    │  │   MCP    │  │  Skill   │  │  Memory  │   │
 │  │Controller│  │Controller│  │Controller│  │Controller│   │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-└───────┼─────────────┼─────────────┼─────────────┼─────────┘
+│       │             │             │             │          │
+│       └─────────────┼─────────────┼─────────────┘          │
+│                     ↓             ↓                        │
+│              ┌──────────────────────────┐                  │
+│              │  MonitoringController    │                  │
+│              │  (指标 + 执行日志)         │                  │
+│              └──────────────────────────┘                  │
+└─────────────────────────────────────────────────────────────┘
         │             │             │             │
         ↓             ↓             ↓             ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -681,6 +688,191 @@ async def stop(self):
     """停止 TriggerManager"""
     if self._trigger_manager:
         await self._trigger_manager.stop()
+```
+
+## MonitoringController
+
+可观测性控制器，管理会话指标和执行日志。
+
+### 职责
+
+- 接收 SDK ProgressEvent 事件
+- 统计 Token 使用、迭代次数、工具调用
+- 估算 API 成本
+- 管理执行日志
+- 提供 PyQt 信号通知 UI 更新
+
+### 数据模型
+
+#### SessionMetrics
+
+```python
+@dataclass
+class SessionMetrics:
+    """当前会话的指标数据"""
+
+    # Token 使用
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+    # 执行统计
+    iterations: int = 0
+    tool_calls: int = 0
+    tool_success: int = 0
+    tool_errors: int = 0
+    errors: int = 0
+
+    # 时间
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    last_update: datetime | None = None
+    llm_call_start: float | None = None
+    total_llm_duration_ms: float = 0.0
+
+    # 成本估算 (美元)
+    cost_usd: float = 0.0
+
+    # 历史记录 (最近 N 次请求的 token 总数)
+    token_history: list[int] = field(default_factory=list)
+
+    def total_tokens(self) -> int:
+        """总 token 数"""
+        return self.input_tokens + self.output_tokens
+
+    def cache_hit_rate(self) -> float:
+        """缓存命中率"""
+        total = self.input_tokens + self.cache_read_tokens
+        if total == 0:
+            return 0.0
+        return self.cache_read_tokens / total
+
+    def duration_seconds(self) -> float:
+        """会话持续时间（秒）"""
+        if not self.start_time:
+            return 0.0
+        end = self.end_time or datetime.now()
+        return (end - self.start_time).total_seconds()
+```
+
+#### LogEntry
+
+```python
+@dataclass
+class LogEntry:
+    """执行日志条目"""
+
+    timestamp: datetime
+    type: str  # "llm_call", "tool_call", "tool_result", "iteration", "error"
+    message: str
+    details: dict = field(default_factory=dict)
+```
+
+### 核心方法
+
+```python
+class MonitoringController(QObject):
+    """可观测性控制器"""
+
+    # PyQt 信号
+    metrics_updated = pyqtSignal()  # 指标更新
+    log_entry_added = pyqtSignal(object)  # 新日志条目 (LogEntry)
+
+    def __init__(self):
+        self._metrics = SessionMetrics()
+        self._log_entries: list[LogEntry] = []
+        self._max_log_entries = 100  # 最大日志条目数
+
+    def handle_progress_event(self, event: ProgressEvent):
+        """处理 SDK ProgressEvent，更新指标
+
+        Args:
+            event: SDK 发出的进度事件
+        """
+        # 根据 event.type 更新对应指标
+        if event.type == ProgressEventType.LLM_CALL:
+            self._metrics.llm_call_start = time.time()
+            self._add_log("llm_call", "LLM 调用")
+
+        elif event.type == ProgressEventType.LLM_RESPONSE:
+            if self._metrics.llm_call_start:
+                duration = (time.time() - self._metrics.llm_call_start) * 1000
+                self._metrics.total_llm_duration_ms += duration
+            self._add_log("llm_response", f"响应 ({duration:.0f}ms)")
+
+        elif event.type == ProgressEventType.TOOL_CALL:
+            self._metrics.tool_calls += 1
+            tool_name = event.data.get("tool", "unknown")
+            self._add_log("tool_call", f"工具调用: {tool_name}")
+
+        elif event.type == ProgressEventType.TOOL_RESULT:
+            success = event.data.get("success", True)
+            if success:
+                self._metrics.tool_success += 1
+            else:
+                self._metrics.tool_errors += 1
+            self._add_log("tool_result", f"工具结果: {'成功' if success else '失败'}")
+
+        elif event.type == ProgressEventType.ITERATION:
+            self._metrics.iterations += 1
+            iteration = event.data.get("iteration", 0)
+            self._add_log("iteration", f"迭代 {iteration}")
+
+        elif event.type == ProgressEventType.TOKEN_USAGE:
+            input_tokens = event.data.get("input_tokens", 0)
+            output_tokens = event.data.get("output_tokens", 0)
+            self._metrics.input_tokens += input_tokens
+            self._metrics.output_tokens += output_tokens
+            self._metrics.update_cost()
+            # 更新历史记录
+            self._metrics.token_history.append(input_tokens + output_tokens)
+
+        self.metrics_updated.emit()
+
+    def get_metrics(self) -> SessionMetrics:
+        """获取当前指标"""
+        return self._metrics
+
+    def get_log_entries(self) -> list[LogEntry]:
+        """获取所有日志条目"""
+        return self._log_entries
+
+    def reset_metrics(self):
+        """重置指标（新会话时调用）"""
+        self._metrics.reset()
+        self._log_entries.clear()
+        self.metrics_updated.emit()
+```
+
+### 与 ChatController 集成
+
+```python
+# MainWindow 中连接回调
+self.chat_controller.set_progress_callback(
+    self.monitoring_controller.handle_progress_event
+)
+```
+
+### 成本估算
+
+成本估算基于主流 LLM 提供商的定价：
+
+```python
+def update_cost(self, input_cost_per_1m: float = 3.0, output_cost_per_1m: float = 15.0):
+    """
+    更新成本估算
+
+    Args:
+        input_cost_per_1m: 每 1M input token 的成本（美元）
+        output_cost_per_1m: 每 1M output token 的成本（美元）
+
+    默认使用 Claude Sonnet 4 定价: $3/$15 per 1M tokens
+    """
+    self.cost_usd = (
+        self.input_tokens * input_cost_per_1m / 1_000_000 +
+        self.output_tokens * output_cost_per_1m / 1_000_000
+    )
 ```
 
 ## 最佳实践
