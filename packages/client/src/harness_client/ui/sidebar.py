@@ -163,7 +163,7 @@ class SidebarPanel(QWidget):
             QListWidget::item {{
                 padding: 10px 12px;
                 border-radius: {theme.RADIUS_SM};
-                margin: 2px 4px;
+                margin: 1px 4px;
             }}
             QListList::item:selected {{
                 background-color: {theme.SELECTION_ACTIVE};
@@ -357,7 +357,7 @@ class SidebarPanel(QWidget):
             QListWidget::item {{
                 padding: 10px 12px;
                 border-radius: {theme.RADIUS_SM};
-                margin: 2px 4px;
+                margin: 1px 4px;
             }}
             QListWidget::item:selected {{
                 background-color: {theme.SELECTION_ACTIVE};

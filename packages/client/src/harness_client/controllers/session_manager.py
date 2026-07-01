@@ -262,14 +262,19 @@ class SessionManager:
         return True
 
     def get_history_list(self) -> list[ClientSession]:
-        """Get list of historical sessions (excluding current)."""
+        """Get list of historical sessions sorted by updated_at (most recent first)."""
         self._ensure_loaded()
 
         if not self._current_id:
-            return list(self._sessions.values())
+            # Sort by updated_at descending
+            return sorted(self._sessions.values(), key=lambda s: s.updated_at, reverse=True)
 
-        # Return in reverse order (most recent first)
-        history = [s for s in reversed(self._sessions.values()) if s.id != self._current_id]
+        # Sort by updated_at descending, excluding current
+        history = sorted(
+            [s for s in self._sessions.values() if s.id != self._current_id],
+            key=lambda s: s.updated_at,
+            reverse=True,
+        )
         return history
 
     def add_message_to_current(self, role: str, content: str):
