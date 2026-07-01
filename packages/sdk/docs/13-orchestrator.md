@@ -351,6 +351,154 @@ asyncio.run(main())
     Triggers      Worktrees     Connectors
 ```
 
+## Java SDK 示例
+
+Java SDK 提供完整的 Orchestrator 实现，支持工作流编排和多 Agent 协调。
+
+### WorkflowEngine
+
+```java
+import com.harness.orchestrator.WorkflowEngine;
+import com.harness.orchestrator.WorkflowConfig;
+import com.harness.orchestrator.WorkflowStep;
+import com.harness.orchestrator.WorkflowResult;
+import com.harness.orchestrator.ExecutionMode;
+import com.harness.sdk.AgentHarness;
+
+AgentHarness agent = new AgentHarness(config);
+WorkflowEngine engine = new WorkflowEngine(agent);
+
+// 创建工作流
+WorkflowConfig workflow = new WorkflowConfig.Builder()
+    .name("ci-pipeline")
+    .step(new WorkflowStep.Builder()
+        .name("lint")
+        .goal("运行 ruff check 检查代码风格")
+        .build())
+    .step(new WorkflowStep.Builder()
+        .name("test")
+        .goal("运行 pytest 测试")
+        .build())
+    .step(new WorkflowStep.Builder()
+        .name("analyze")
+        .goal("分析代码质量并生成报告")
+        .dependsOn("lint", "test")
+        .build())
+    .maxParallelSteps(3)
+    .build();
+
+// 执行工作流
+WorkflowResult result = engine.execute(workflow).join();
+
+System.out.println("状态: " + result.status());
+System.out.println("耗时: " + result.durationSeconds() + "s");
+```
+
+### DependencyGraph
+
+```java
+import com.harness.orchestrator.DependencyGraph;
+import java.util.List;
+
+DependencyGraph graph = new DependencyGraph();
+
+// 添加步骤
+graph.addStep("lint", List.of());
+graph.addStep("test", List.of());
+graph.addStep("analyze", List.of("lint", "test"));
+
+// 获取执行顺序（拓扑排序）
+List<List<String>> order = graph.getExecutionOrder();
+// [[lint, test], [analyze]] - lint 和 test 可并行，analyze 需等待
+
+// 检测循环依赖
+if (graph.hasCycle()) {
+    throw new IllegalStateException("工作流包含循环依赖");
+}
+```
+
+### TeamOrchestrator
+
+```java
+import com.harness.orchestrator.TeamOrchestrator;
+import com.harness.orchestrator.TeamConfig;
+import com.harness.orchestrator.AgentRole;
+import com.harness.orchestrator.CoordinationMode;
+import com.harness.orchestrator.TeamResult;
+
+TeamConfig team = new TeamConfig.Builder()
+    .name("dev-team")
+    .description("开发团队")
+    .role(new AgentRole.Builder()
+        .name("analyzer")
+        .description("代码分析专家")
+        .skills(List.of("code-analysis"))
+        .maxIterations(10)
+        .build())
+    .role(new AgentRole.Builder()
+        .name("developer")
+        .description("开发工程师")
+        .skills(List.of("coding", "testing"))
+        .maxIterations(20)
+        .build())
+    .coordinationMode(CoordinationMode.SEQUENTIAL)
+    .build();
+
+TeamOrchestrator orchestrator = new TeamOrchestrator(agent);
+TeamResult result = orchestrator.execute(team, "实现用户登录功能").join();
+
+for (Map.Entry<String, GoalResult> entry : result.agentResults().entrySet()) {
+    System.out.println(entry.getKey() + ": " + entry.getValue().status());
+}
+```
+
+### ExecutionMonitor
+
+```java
+import com.harness.orchestrator.ExecutionMonitor;
+import com.harness.orchestrator.ExecutionMetric;
+
+ExecutionMonitor monitor = new ExecutionMonitor();
+
+// 记录开始
+monitor.recordStart("ci-pipeline");
+
+// 记录步骤完成
+monitor.recordStep("ci-pipeline", "lint", StepStatus.SUCCESS, 5.2);
+monitor.recordStep("ci-pipeline", "test", StepStatus.SUCCESS, 15.8);
+
+// 获取指标
+ExecutionMetric metrics = monitor.getMetrics("ci-pipeline");
+System.out.println("总步骤: " + metrics.totalSteps());
+System.out.println("完成: " + metrics.completedSteps());
+System.out.println("失败: " + metrics.failedSteps());
+System.out.println("耗时: " + metrics.durationSeconds() + "s");
+```
+
+### WorkflowStatus 枚举
+
+```java
+public enum WorkflowStatus {
+    PENDING,     // 等待执行
+    RUNNING,     // 执行中
+    COMPLETED,   // 已完成
+    FAILED,      // 失败
+    CANCELLED    // 已取消
+}
+```
+
+### StepStatus 枚举
+
+```java
+public enum StepStatus {
+    PENDING,    // 等待执行
+    RUNNING,    // 执行中
+    SUCCESS,    // 成功
+    FAILED,     // 失败
+    SKIPPED     // 跳过
+}
+```
+
 ## 下一步
 
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览

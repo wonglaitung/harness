@@ -363,6 +363,100 @@ manager = get_global_manager()
 print(f"Total triggers: {manager.trigger_count}")
 ```
 
+## Java SDK 示例
+
+Java SDK 提供完整的 Trigger 系统实现，使用 `CompletableFuture` 替代 Python 的 `asyncio`。
+
+### CronTrigger
+
+```java
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerAction;
+import com.harness.triggers.TriggerManager;
+import com.harness.sdk.AgentHarness;
+
+AgentHarness agent = new AgentHarness(config);
+TriggerManager manager = new TriggerManager(agent);
+
+// 创建 Cron 触发器
+CronTrigger trigger = new CronTrigger(
+    "daily-report",                    // 名称
+    "0 9 * * *",                       // cron 表达式：每天 9:00
+    new TriggerAction.Builder()
+        .goal("生成每日报告并发送到 Slack")
+        .workspaceDir(".")
+        .maxIterations(50)
+        .build()
+);
+
+// 注册并启动
+String triggerId = manager.register(trigger);
+manager.start().join();
+
+// 查看下次运行时间
+List<Instant> nextRuns = trigger.getNextRuns(5);
+
+// 停止
+manager.stop().join();
+manager.unregister(triggerId);
+```
+
+### IntervalTrigger
+
+```java
+import com.harness.triggers.IntervalTrigger;
+
+IntervalTrigger trigger = new IntervalTrigger(
+    "health-check",                    // 名称
+    300,                               // 每 300 秒（5 分钟）
+    new TriggerAction.Builder()
+        .goal("检查系统健康状态")
+        .build()
+);
+
+manager.register(trigger);
+```
+
+### TriggerManager
+
+```java
+import com.harness.triggers.TriggerManager;
+import com.harness.triggers.TriggerState;
+import com.harness.triggers.TriggerType;
+
+// 创建 TriggerManager（支持并发控制）
+TriggerManager manager = new TriggerManager(agent, 5);  // max_concurrent_goals = 5
+
+// 注册触发器
+String triggerId = manager.register(trigger);
+
+// 列出所有触发器
+for (Map<String, Object> info : manager.listTriggers()) {
+    System.out.println("ID: " + info.get("id"));
+    System.out.println("Type: " + info.get("type"));
+    System.out.println("State: " + info.get("state"));
+    System.out.println("Fire count: " + info.get("fire_count"));
+}
+
+// 启动所有触发器
+manager.start().join();
+
+// 停止所有触发器
+manager.stop().join();
+```
+
+### TriggerState 枚举
+
+```java
+public enum TriggerState {
+    IDLE,       // 空闲
+    RUNNING,    // 运行中
+    PAUSED,     // 已暂停
+    STOPPED,    // 已停止
+    ERROR       // 错误
+}
+```
+
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop

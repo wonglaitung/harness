@@ -181,6 +181,96 @@ results = await orchestrator.run_parallel(tasks)
 3. **清理策略**: `auto_cleanup=True` 时，执行完成后自动删除 worktree 目录
 4. **冲突处理**: 合并时如有冲突，需手动解决后再合并
 
+## ParallelGoalExecutor（Java SDK）
+
+Java SDK 提供 `ParallelGoalExecutor` 用于并发执行多个 Goal，每个在独立的 worktree 中运行。
+
+### 基本使用
+
+```java
+import com.harness.loop.ParallelGoalExecutor;
+import com.harness.loop.GoalLoop;
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeManager;
+import com.harness.loop.types.GoalResult;
+import com.harness.sdk.AgentHarness;
+
+// 创建 AgentHarness
+AgentHarness agent = new AgentHarness(config);
+
+// 创建 ParallelGoalExecutor
+ParallelGoalExecutor executor = new ParallelGoalExecutor(
+    agentRunner,  // GoalLoop.AgentRunner 实现
+    worktreeManager  // WorktreeManager 实例
+);
+
+// Spawn goals（异步创建 worktree）
+WorktreeConfig config1 = new WorktreeConfig.Builder()
+    .name("feature-a")
+    .goal("实现功能 A")
+    .baseBranch("main")
+    .maxIterations(50)
+    .build();
+
+WorktreeConfig config2 = new WorktreeConfig.Builder()
+    .name("feature-b")
+    .goal("实现功能 B")
+    .build();
+
+executor.spawnGoal(config1).join();
+executor.spawnGoal(config2).join();
+
+// 并行执行所有 Goal
+Map<String, GoalResult> results = executor.runAll().join();
+
+// 检查结果
+for (Map.Entry<String, GoalResult> entry : results.entrySet()) {
+    System.out.println(entry.getKey() + ": " + entry.getValue().status());
+}
+
+// 清理
+executor.shutdown();
+```
+
+### WorktreeProvider 接口
+
+用于测试或自定义 worktree 创建逻辑：
+
+```java
+// 自定义 WorktreeProvider
+ParallelGoalExecutor executor = new ParallelGoalExecutor(
+    agentRunner,
+    (name, baseBranch, createBranch) -> {
+        // 自定义 worktree 创建逻辑
+        return CompletableFuture.completedFuture(
+            new WorktreeManager.WorktreeInfo("/custom/path/" + name, name)
+        );
+    }
+);
+```
+
+### 执行状态追踪
+
+```java
+// 获取执行详情
+ParallelGoalExecutor.GoalExecution execution = executor.getExecution("feature-a");
+if (execution != null) {
+    System.out.println("Goal: " + execution.config.getGoal());
+    System.out.println("Worktree: " + execution.worktreePath);
+    System.out.println("Created at: " + execution.createdAt);
+    System.out.println("Duration: " + execution.getDurationSeconds() + "s");
+}
+
+// 列出所有执行
+List<String> executions = executor.listExecutions();
+
+// 取消执行
+boolean cancelled = executor.cancel("feature-a");
+
+// 清除所有执行
+executor.clear();
+```
+
 ## 下一步
 
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览

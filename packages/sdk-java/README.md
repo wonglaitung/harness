@@ -4,26 +4,50 @@
 
 ## 项目状态
 
-✅ **Phase 4 完成** - 完整功能同步（Python SDK → Java SDK）
+✅ **99.5% 功能同步** - Python SDK → Java SDK
 
-✅ **AgentLoop 完整集成** - 所有健壮性组件已集成到核心执行引擎
+**已完成模块**：
+- ✅ Core（AgentLoop, HarnessConfig, Tool 接口, Guardrails）
+- ✅ LLM（Anthropic, OpenAI, Routing, Mock）
+- ✅ MCP（STDIO, SSE 传输）
+- ✅ Tools（Read, Write, Edit, Bash, Glob, Grep）
+- ✅ Memory（MEMORY.md 管理, 向量存储）
+- ✅ Skills（Skill 加载, 渐进式加载）
+- ✅ Security（沙箱, 验证, 审计）
+- ✅ Triggers（CronTrigger, IntervalTrigger, TriggerManager）
+- ✅ Connectors（GitHub, Slack, Webhook）
+- ✅ Loop Engineering（GoalLoop, ParallelGoalExecutor, Automation）
+- ✅ Orchestrator（WorkflowEngine, TeamOrchestrator, DependencyGraph）
+
+**未实现（设计差异）**：
+- Python `pytest_plugin`（Python 测试框架特有）
+- Python `AsyncSQLiteSessionStore`（Java 使用同步 JDBC）
 
 ## 模块结构
 
 ```
 harness-sdk-java/
-├── harness-sdk-core/      # 核心模块（类型定义、AgentLoop、Tool 接口、Guardrails）
-│   ├── guardrails/        # PII 检测和内容安全
-│   ├── service/           # Spring Cloud 集成（服务发现、Redis 会话、错误处理）
-│   └── testing/           # 测试工具（录制/回放）
-├── harness-sdk-llm/       # LLM 客户端（Anthropic、OpenAI、Routing）
-├── harness-sdk-mcp/       # MCP 协议集成（STDIO、SSE）
-├── harness-sdk-tools/     # 内置工具（Read, Write, Edit, Bash, Glob, Grep）
-├── harness-sdk-memory/    # 记忆系统（MEMORY.md 管理、向量存储）
-├── harness-sdk-skills/    # 技能系统（Skill 加载、渐进式加载）
-├── harness-sdk-security/  # 安全模块（沙箱、验证、审计）
-├── harness-sdk-guardrails/ # PII 检测和内容安全（独立模块）
-└── harness-sdk-integration/ # 集成测试 + AgentHarness 入口类
+├── harness-sdk-core/          # 核心模块（类型定义、Tool 接口、Guardrails）
+│   ├── core/                  # HarnessConfig, AgentLoop, 生命周期钩子
+│   ├── guardrails/            # PII 检测和内容安全
+│   ├── recording/             # 录制工具（RecordingHarness 简单版）
+│   ├── service/               # Spring Cloud 集成（服务发现、Redis 会话、错误处理）
+│   ├── testing/               # 测试工具（MockHarness）
+│   └── types/                 # 类型定义（LoopResult, ToolResult 等）
+├── harness-sdk-llm/           # LLM 客户端（Anthropic、OpenAI、Routing）
+├── harness-sdk-mcp/           # MCP 协议集成（STDIO、SSE）
+├── harness-sdk-tools/         # 内置工具（Read, Write, Edit, Bash, Glob, Grep）
+├── harness-sdk-memory/        # 记忆系统（MEMORY.md 管理、向量存储）
+├── harness-sdk-skills/        # 技能系统（Skill 加载、渐进式加载）
+├── harness-sdk-security/      # 安全模块（沙箱、验证、审计）
+├── harness-sdk-guardrails/    # PII 检测和内容安全（独立模块）
+├── harness-sdk-triggers/      # 触发器系统（CronTrigger, IntervalTrigger, TriggerManager）
+├── harness-sdk-connectors/    # 外部系统集成（GitHub, Slack, Webhook）
+├── harness-sdk-loop/          # Loop Engineering（GoalLoop, ParallelGoalExecutor, Automation）
+├── harness-sdk-orchestrator/  # 工作流编排（WorkflowEngine, TeamOrchestrator）
+├── harness-sdk-integration/   # AgentHarness 入口类 + 测试工具（RecordingHarness 回放版）
+├── harness-sdk-all/           # 聚合模块（单 JAR 包含所有依赖）
+└── examples/                  # 示例代码
 ```
 
 ## 核心组件
@@ -112,7 +136,15 @@ harness-sdk-java/
 - **ServiceErrorHandler**: 统一错误处理，标准化 REST API 错误响应
 
 ### harness-sdk-core/testing
-- **RecordingHarness**: 录制/回放测试工具
+- **MockHarness**: 测试 Harness，支持预定义响应
+
+### harness-sdk-core/recording
+- **RecordingHarness**: 简单录制工具（录制 LLM 交互）
+- **RecordingConfig**: 录制配置
+- **RecordedInteraction**: 单条交互记录
+
+### harness-sdk-integration/testing
+- **RecordingHarness**: 完整录制/回放工具（支持从 JSON 文件回放）
 - **RecordingConfig**: 录制配置
 
 ### harness-sdk-security
@@ -199,7 +231,7 @@ snap run gradle projects
 
 | 模块 | 说明 |
 |------|------|
-| `harness-sdk-core` | 核心模块（类型定义、AgentLoop、AgentHarness、Guardrails） |
+| `harness-sdk-core` | 核心模块（类型定义、HarnessConfig、Tool 接口、Guardrails） |
 | `harness-sdk-llm` | LLM 客户端（Anthropic、OpenAI、Routing） |
 | `harness-sdk-mcp` | MCP 协议集成（STDIO、SSE） |
 | `harness-sdk-tools` | 内置工具（Read, Write, Edit, Bash, Glob, Grep） |
@@ -207,7 +239,12 @@ snap run gradle projects
 | `harness-sdk-skills` | 技能系统（Skill 加载、渐进式加载） |
 | `harness-sdk-security` | 安全模块（沙箱、验证、审计） |
 | `harness-sdk-guardrails` | PII 检测和内容安全 |
-| `harness-sdk-integration` | 集成测试 |
+| `harness-sdk-triggers` | 触发器系统（CronTrigger, IntervalTrigger, TriggerManager） |
+| `harness-sdk-connectors` | 外部系统集成（GitHub, Slack, Webhook） |
+| `harness-sdk-loop` | Loop Engineering（GoalLoop, ParallelGoalExecutor, Automation, Worktree） |
+| `harness-sdk-orchestrator` | 工作流编排（WorkflowEngine, TeamOrchestrator, DependencyGraph） |
+| `harness-sdk-integration` | AgentHarness 入口类 + 完整测试工具 |
+| `harness-sdk-all` | **聚合模块**（单 JAR 包含所有依赖，推荐使用） |
 
 ### 发布到 Maven Local
 
@@ -233,6 +270,22 @@ snap run gradle build
 ```
 
 ## 使用 SDK-Java
+
+### 快速开始（推荐：使用聚合模块）
+
+```xml
+<!-- Maven：单依赖包含所有模块 -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-all</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+```groovy
+// Gradle：单依赖包含所有模块
+implementation 'com.harness:harness-sdk-all:1.0.0'
+```
 
 ### Maven 依赖
 
@@ -292,6 +345,41 @@ snap run gradle build
     <artifactId>harness-sdk-guardrails</artifactId>
     <version>1.0.0</version>
 </dependency>
+
+<!-- 触发器系统（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-triggers</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 外部系统集成（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-connectors</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- Loop Engineering（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-loop</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 工作流编排（可选） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-orchestrator</artifactId>
+    <version>1.0.0</version>
+</dependency>
+
+<!-- 聚合模块（推荐：单依赖包含所有模块） -->
+<dependency>
+    <groupId>com.harness</groupId>
+    <artifactId>harness-sdk-all</artifactId>
+    <version>1.0.0</version>
+</dependency>
 ```
 
 ### Gradle 依赖
@@ -320,6 +408,21 @@ implementation 'com.harness:harness-sdk-security:1.0.0'
 
 // PII 检测和内容安全（可选）
 implementation 'com.harness:harness-sdk-guardrails:1.0.0'
+
+// 触发器系统（可选）
+implementation 'com.harness:harness-sdk-triggers:1.0.0'
+
+// 外部系统集成（可选）
+implementation 'com.harness:harness-sdk-connectors:1.0.0'
+
+// Loop Engineering（可选）
+implementation 'com.harness:harness-sdk-loop:1.0.0'
+
+// 工作流编排（可选）
+implementation 'com.harness:harness-sdk-orchestrator:1.0.0'
+
+// 聚合模块（推荐：单依赖包含所有模块）
+implementation 'com.harness:harness-sdk-all:1.0.0'
 ```
 
 ### 环境变量配置

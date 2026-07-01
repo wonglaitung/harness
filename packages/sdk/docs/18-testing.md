@@ -202,6 +202,96 @@ async def test_full_workflow():
     assert "25" in result.content or "晴" in result.content
 ```
 
+## RecordingHarness（录制与回放）
+
+RecordingHarness 用于录制真实的 LLM 交互，以便后续回放测试。
+
+### Python SDK
+
+```python
+from harness import AgentHarness
+from harness.testing import RecordingHarness
+
+# 创建 AgentHarness 和录制器
+agent = AgentHarness(model="claude-sonnet-4-6")
+recorder = RecordingHarness(agent)
+
+# 开始录制
+recorder.start_recording("test_session")
+
+# 运行 Agent（所有交互会被录制）
+result = await agent.run("读取 README.md 并分析")
+
+# 保存录制
+path = recorder.save_recording("my_test_fixture")
+print(f"录制已保存到: {path}")
+
+# 获取录制摘要
+summary = recorder.get_recording_summary()
+print(f"总交互数: {summary['total_interactions']}")
+print(f"LLM 请求: {summary['llm_requests']}")
+print(f"工具调用: {summary['tool_calls']}")
+print(f"Token 使用: 输入 {summary['total_input_tokens']}, 输出 {summary['total_output_tokens']}")
+```
+
+### Java SDK
+
+```java
+import com.harness.recording.RecordingHarness;
+import com.harness.recording.RecordingConfig;
+import com.harness.recording.RecordedInteraction;
+import com.harness.sdk.AgentHarness;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+// 创建 AgentHarness 和录制器
+AgentHarness agent = new AgentHarness(config);
+RecordingHarness recorder = new RecordingHarness(agent, new RecordingConfig.Builder()
+    .recordingDir(Path.of(".harness_recordings"))
+    .autoSave(true)
+    .maxRecordingSize(100)
+    .build());
+
+// 开始录制
+recorder.startRecording("test_session");
+
+// 录制 LLM 请求
+recorder.recordLlmRequest(messages, tools, systemPrompt);
+
+// 录制工具结果
+recorder.recordToolResult("call_123", "read", "文件内容", true);
+
+// 获取录制摘要
+Map<String, Object> summary = recorder.getRecordingSummary();
+System.out.println("总交互数: " + summary.get("total_interactions"));
+
+// 获取所有交互
+List<RecordedInteraction> interactions = recorder.getInteractions();
+for (RecordedInteraction i : interactions) {
+    System.out.println(i.getType() + " at " + i.getTimestamp());
+}
+
+// 保存录制
+Path path = recorder.saveRecording("my_test_fixture");
+```
+
+### RecordingConfig 配置
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `recording_dir` | Path | `.harness_recordings` | 录制文件存储目录 |
+| `auto_save` | bool | true | 是否自动保存 |
+| `include_metadata` | bool | true | 是否包含元数据 |
+| `max_recording_size` | int | 100 | 最大交互记录数 |
+
+### 使用场景
+
+1. **创建测试固件**: 从真实交互生成测试数据
+2. **调试 Agent 行为**: 分析 Agent 的决策过程
+3. **成本分析**: 追踪 Token 使用量
+4. **回放测试**: 使用录制数据驱动 MockHarness
+
 ## 测试最佳实践
 
 ### 1. 使用 MockHarness 进行单元测试

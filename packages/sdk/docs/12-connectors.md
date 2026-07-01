@@ -298,6 +298,102 @@ ConnectorManager.route_output()
 输出到原来源（通过 routing_metadata）
 ```
 
+## Java SDK 示例
+
+Java SDK 提供完整的 Connector 实现，支持 GitHub、Slack 和 Webhook 集成。
+
+### GitHubConnector
+
+```java
+import com.harness.connectors.GitHubConnector;
+import com.harness.connectors.GitHubConfig;
+import com.harness.connectors.ConnectorManager;
+
+// 配置 GitHub App
+GitHubConfig config = new GitHubConfig.Builder()
+    .appId("123456")
+    .privateKey("-----BEGIN RSA PRIVATE KEY-----\n...")
+    .webhookSecret("whsec_...")
+    .build();
+
+// 创建连接器
+GitHubConnector connector = new GitHubConnector(config);
+
+// 注册到管理器
+ConnectorManager manager = new ConnectorManager(triggerManager);
+manager.registerConnector(connector);
+
+// 启动
+manager.startAll().join();
+```
+
+### SlackConnector
+
+```java
+import com.harness.connectors.SlackConnector;
+import com.harness.connectors.SlackConfig;
+
+SlackConfig config = new SlackConfig.Builder()
+    .botToken("xoxb-...")
+    .appToken("xapp-...")
+    .build();
+
+SlackConnector connector = new SlackConnector(config);
+manager.registerConnector(connector);
+
+// 发送消息
+connector.sendMessage("C123456", "Hello from Harness!");
+
+// 回复到线程
+connector.replyToThread("C123456", "17123456.0001", "回复内容");
+```
+
+### WebhookConnector
+
+```java
+import com.harness.connectors.WebhookConnector;
+
+WebhookConnector webhook = new WebhookConnector();
+manager.registerConnector(webhook);
+
+// 设置 HTTP 端点
+// POST /webhook/{connector_id}
+// 接收 JSON 并转换为 ConnectorEvent
+```
+
+### RoutingKeys
+
+```java
+import com.harness.connectors.RoutingKeys;
+import com.harness.connectors.ConnectorEvent;
+import java.util.Map;
+
+// 创建带路由信息的事件
+ConnectorEvent event = new ConnectorEvent(
+    ConnectorType.SLACK,
+    "message",
+    Map.of("text", "Hello"),
+    Map.of(
+        RoutingKeys.SLACK_CHANNEL_ID, "C123456",
+        RoutingKeys.SLACK_THREAD_TS, "17123456.0001"
+    ),
+    "slack-connector"
+);
+
+// 结果会根据 routing_metadata 返回到原线程
+```
+
+### ConnectorState 枚举
+
+```java
+public enum ConnectorState {
+    IDLE,       // 空闲
+    RUNNING,    // 运行中
+    STOPPED,    // 已停止
+    ERROR       // 错误
+}
+```
+
 ## 下一步
 
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览

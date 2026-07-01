@@ -2,7 +2,20 @@
 
 > 可内嵌的 AI Agent Harness 框架
 
+## SDK 实现状态
+
+| SDK | 语言 | 定位 | 功能同步率 |
+|-----|------|------|-----------|
+| **Python SDK** | Python 3.10+ | Sidecar 微服务 | 100% |
+| **Java SDK** | Java 17+ | 嵌入式库 | 99.5% |
+
+**Java SDK 未实现的 0.5%**：
+- `pytest_plugin`（Python 测试框架特有）
+- `AsyncSQLiteSessionStore`（Java 使用同步 JDBC）
+
 ## 目录
+
+### 核心文档
 
 - [01-overview.md](./01-overview.md) - 项目概述与架构总览
 - [02-agent-loop.md](./02-agent-loop.md) - Agent Loop 代理循环引擎
@@ -13,16 +26,29 @@
 - [07-sdk-api.md](./07-sdk-api.md) - SDK 与 API 设计
 - [08-security.md](./08-security.md) - 安全设计
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 集成
-- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 循环工程
+
+### Loop Engineering（目标驱动执行）
+
+- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 循环工程总览
 - [11-worktrees.md](./11-worktrees.md) - Worktrees 并行隔离执行
 - [12-connectors.md](./12-connectors.md) - Connectors 外部系统集成
 - [13-orchestrator.md](./13-orchestrator.md) - Orchestrator 工作流编排
+
+### 部署与运维
+
 - [14-deployment.md](./14-deployment.md) - 内嵌部署指南
 - [15-spring-cloud-integration.md](./15-spring-cloud-integration.md) - Spring Cloud 集成指南
 - [16-production-readiness.md](./16-production-readiness.md) - 生产就绪检查
+
+### 其他
+
 - [17-comparison.md](./17-comparison.md) - 与 Hermes/OpenClaw 对比
-- [18-testing.md](./18-testing.md) - 测试策略
+- [18-testing.md](./18-testing.md) - 测试策略（含 RecordingHarness）
 - [19-examples.md](./19-examples.md) - 使用示例
+
+### 开发规范
+
+- [programmer_skill.md](./programmer_skill.md) - 编程规范与开发流程
 
 ## 项目定位
 
@@ -47,15 +73,15 @@ Agent = Model + Harness
 
 ## 快速预览
 
-### 最简使用示例
+### Python SDK
 
 ```python
-from harness import AgentHarness, FileTool, ShellTool
+from harness import AgentHarness, ReadTool, GlobTool
 
 # 创建 Harness 实例
 agent = AgentHarness(
     model="claude-sonnet-4-6",
-    tools=[FileTool(), ShellTool(sandbox=True)],
+    tools=[ReadTool(), GlobTool()],
     memory_dir="~/.harness/memory"
 )
 
@@ -65,6 +91,59 @@ response = agent.run("分析当前目录的代码结构")
 # 流式调用
 async for chunk in agent.stream("帮我重构这个函数"):
     print(chunk.content, end="")
+
+# 目标驱动执行（Loop Engineering）
+from harness.loop import GoalStatus
+
+result = await agent.run_goal("修复所有类型错误")
+if result.status == GoalStatus.ACHIEVED:
+    print(f"目标达成，共 {result.total_iterations} 轮迭代")
+```
+
+### Java SDK
+
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import com.harness.tools.ReadTool;
+import com.harness.tools.GlobTool;
+
+// 创建 Harness 实例
+HarnessConfig config = HarnessConfig.builder()
+    .provider("openai")
+    .apiKey("your-api-key")
+    .model("gpt-4o")
+    .maxIterations(10)
+    .build();
+
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .addTool(new ReadTool())
+    .addTool(new GlobTool())
+    .build();
+
+// 同步调用
+LoopResult result = agent.run("分析当前目录的代码结构").join();
+System.out.println(result.content());
+
+// 目标驱动执行（Loop Engineering）
+import com.harness.loop.GoalLoop;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+
+GoalConfig goalConfig = new GoalConfig.Builder()
+    .description("修复所有类型错误")
+    .maxIterations(50)
+    .build();
+
+GoalLoop loop = new GoalLoop(agent, goalConfig);
+GoalResult goalResult = loop.run().join();
+
+if (goalResult.status() == GoalStatus.ACHIEVED) {
+    System.out.println("目标达成，共 " + goalResult.totalIterations() + " 轮迭代");
+}
 ```
 
 ### CPU Router（成本优化）
