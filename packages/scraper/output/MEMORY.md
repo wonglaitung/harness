@@ -77,6 +77,30 @@
 ## 注意事项
 
 ### 港股分析
+- **美债4.48%高位运行 — 降息预期左侧布局信号**
+
+### 港股分析
+- **Momenta港股IPO-物理AI第一股政策松绑信号**
+
+### 港股分析
+- **港股K型分化-算力长牛vs消费左侧机会**
+
+### 港股分析
+- **南向资金持股创历史新高 — 左侧建仓信号**
+
+### 新范式/工具
+- **Astryx — Agent-Ready 设计系统** - https://github.com/facebook/astryx
+
+### 新范式/工具
+- **book-to-skill — 知识编译为Agent技能** - https://github.com/virgiliojr94/book-to-skill
+
+### 新范式/工具
+- **Strix — Agentic Pentesting 自主AI渗透测试** - https://github.com/usestrix/strix
+
+### 新范式/工具
+- **Prompt Steganography — AI Agent 隐写标记新范式** - https://thereallo.dev/blog/claude-code-prompt-steganography
+
+### 港股分析
 - **港股科网股走强+渣打超配科技 - 左侧信号与右侧共振**
 
 ### 港股分析
