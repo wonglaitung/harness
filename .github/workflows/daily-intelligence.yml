@@ -1,12 +1,10 @@
-name: 每日情报推送 (Goal-Driven)
+name: 每日情报推送
 
 on:
-  # 每天上午 6:00 和下午 6:00 香港时间
+  # 每天上午 6:00 香港时间
   # 6:00 HK = 22:00 UTC (前一天)
-  # 18:00 HK = 10:00 UTC
   schedule:
     - cron: '0 22 * * *'  # 上午 6:00 香港时间
-    - cron: '0 10 * * *'  # 下午 6:00 香港时间
   # 允许手动触发
   workflow_dispatch:
     inputs:
