@@ -32,6 +32,18 @@ dependencies {
     // Guardrails (内容安全)
     api(project(":harness-sdk-guardrails"))
 
+    // Loop Engineering
+    api(project(":harness-sdk-loop"))
+
+    // Connectors
+    api(project(":harness-sdk-connectors"))
+
+    // Orchestrator
+    api(project(":harness-sdk-orchestrator"))
+
+    // Triggers
+    api(project(":harness-sdk-triggers"))
+
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
 

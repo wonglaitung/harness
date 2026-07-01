@@ -21,4 +21,4 @@ include("harness-sdk-loop")
 include("harness-sdk-connectors")
 include("harness-sdk-orchestrator")
 include("harness-sdk-triggers")
-// include("harness-sdk-all")  // Requires shadow plugin
+include("harness-sdk-all")
