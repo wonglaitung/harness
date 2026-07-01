@@ -572,7 +572,7 @@ class MCPServersSection(CollapsibleSection):
                     border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
                     color: {theme.MCP_DISCONNECT_TEXT};
-                    font-size: """ + theme.FONT_SIZE_XS + """;
+                    font-size: {theme.FONT_SIZE_XS};
                 }}
                 QPushButton:hover {{
                     background-color: {theme.MCP_DISCONNECT_BG_HOVER};
@@ -588,7 +588,7 @@ class MCPServersSection(CollapsibleSection):
                     border-radius: {theme.RADIUS_SM};
                     padding: 4px 8px;
                     color: {theme.MCP_CONNECT_TEXT};
-                    font-size: """ + theme.FONT_SIZE_XS + """;
+                    font-size: {theme.FONT_SIZE_XS};
                 }}
                 QPushButton:hover {{
                     background-color: {theme.MCP_CONNECT_BG_HOVER};
