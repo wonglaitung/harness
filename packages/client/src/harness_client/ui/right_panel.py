@@ -197,8 +197,13 @@ class CollapsibleSection(QWidget):
         """
         self.content_layout.addWidget(widget, stretch)
 
-    def set_collapsed(self, collapsed: bool):
-        """Set collapsed state with animation."""
+    def set_collapsed(self, collapsed: bool, animate: bool = True):
+        """Set collapsed state.
+
+        Args:
+            collapsed: True to collapse, False to expand
+            animate: Whether to animate the transition (default True)
+        """
         if self._is_collapsed == collapsed:
             return
 
@@ -212,21 +217,30 @@ class CollapsibleSection(QWidget):
         arrow = "▶" if collapsed else "▼"
         self.header_btn.setText(f"{arrow} {self._title}")
 
-        # Animate opacity
-        self._opacity_animation = QPropertyAnimation(self._opacity_effect, QByteArray(b"opacity"))
-        self._opacity_animation.setDuration(self.ANIMATION_DURATION)
-        self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        if animate:
+            # Animate opacity
+            self._opacity_animation = QPropertyAnimation(self._opacity_effect, QByteArray(b"opacity"))
+            self._opacity_animation.setDuration(self.ANIMATION_DURATION)
+            self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-        if collapsed:
-            self._opacity_animation.setStartValue(1.0)
-            self._opacity_animation.setEndValue(0.0)
-            self._opacity_animation.finished.connect(lambda: self.content_widget.setVisible(False))
+            if collapsed:
+                self._opacity_animation.setStartValue(1.0)
+                self._opacity_animation.setEndValue(0.0)
+                self._opacity_animation.finished.connect(lambda: self.content_widget.setVisible(False))
+            else:
+                self.content_widget.setVisible(True)
+                self._opacity_animation.setStartValue(0.0)
+                self._opacity_animation.setEndValue(1.0)
+
+            self._opacity_animation.start()
         else:
-            self.content_widget.setVisible(True)
-            self._opacity_animation.setStartValue(0.0)
-            self._opacity_animation.setEndValue(1.0)
-
-        self._opacity_animation.start()
+            # No animation - directly set state
+            if collapsed:
+                self._opacity_effect.setOpacity(0.0)
+                self.content_widget.setVisible(False)
+            else:
+                self._opacity_effect.setOpacity(1.0)
+                self.content_widget.setVisible(True)
 
         # Update size policy
         if collapsed:
@@ -915,15 +929,14 @@ class RightPanel(QWidget):
         self.file_section.work_dir_changed.connect(self.work_dir_changed)
         layout.addWidget(self.file_section, 1)  # stretch=1 to fill remaining space
 
-        # Set collapsed state for sections (memory, skills, MCP collapsed by default)
-        self.memory_section.set_collapsed(True)
-        # Monitoring section stays expanded by default
+        # Set collapsed state for sections (all collapsed by default, no animation)
+        self.memory_section.set_collapsed(True, animate=False)
         if self.monitoring_section:
-            self.monitoring_section.set_collapsed(False)
+            self.monitoring_section.set_collapsed(True, animate=False)
         if self.log_section:
-            self.log_section.set_collapsed(True)
-        self.skills_section.set_collapsed(True)
-        self.mcp_section.set_collapsed(True)
+            self.log_section.set_collapsed(True, animate=False)
+        self.skills_section.set_collapsed(True, animate=False)
+        self.mcp_section.set_collapsed(True, animate=False)
 
     def update_memory(self, sections):
         """Update memory display."""

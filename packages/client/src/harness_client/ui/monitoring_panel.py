@@ -409,6 +409,7 @@ class ExecutionLogSection(CollapsibleSection):
         # 滚动区域
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: {theme.APP_BACKGROUND};
@@ -416,12 +417,20 @@ class ExecutionLogSection(CollapsibleSection):
                 border-radius: {theme.RADIUS_SM};
             }}
             QScrollBar:vertical {{
-                background-color: transparent;
-                width: 6px;
+                background-color: {theme.CHROME};
+                width: 10px;
+                margin: 0;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.BORDER};
-                border-radius: 3px;
+                background-color: {theme.TEXT_SUBTLE};
+                border-radius: 5px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {theme.TEXT};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
             }}
         """)
         scroll.setWidget(self._log_container)
