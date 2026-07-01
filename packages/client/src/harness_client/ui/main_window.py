@@ -2,10 +2,12 @@
 Main window for Harness Client - 3-column layout with header bar.
 """
 
+import asyncio
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont, QFontDatabase, QIcon
@@ -21,16 +23,19 @@ from PyQt6.QtWidgets import (
 )
 from qasync import asyncSlot
 
+if TYPE_CHECKING:
+    from harness import ConfirmationResult
+
 from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.memory_controller import MemoryController
-from harness_client.controllers.skill_controller import SkillController
+from harness_client.controllers.monitoring_controller import MonitoringController
 from harness_client.controllers.schedule_controller import ScheduleController
+from harness_client.controllers.skill_controller import SkillController
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.right_panel import RightPanel
 from harness_client.ui.sidebar import SidebarPanel
-from harness_client.ui.schedule_panel import SchedulePanel
 from harness_client.utils.settings import SettingsManager
 
 # Configure logging
@@ -61,6 +66,7 @@ class MainWindow(QMainWindow):
         self.skill_controller = SkillController()
         self.memory_controller = MemoryController()
         self.schedule_controller = ScheduleController()
+        self.monitoring_controller = MonitoringController()
 
         # Connect controller callbacks
         self.mcp_controller.set_change_callback(self._on_mcp_changed)
@@ -70,6 +76,10 @@ class MainWindow(QMainWindow):
         self.chat_controller.set_tool_result_callback(self._on_tool_result)
         self.chat_controller.set_thinking_callback(self._on_thinking)
         self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
+        self.chat_controller.set_progress_callback(self._on_progress_event)
+
+        # Set callback to start schedule controller when agent is ready
+        self.chat_controller._on_agent_ready = self._on_agent_ready
 
         # Settings
         self._stream_enabled = True
@@ -239,7 +249,7 @@ class MainWindow(QMainWindow):
         self._central_splitter.addWidget(self.chat_panel)
 
         # Right panel (skills, MCP, files)
-        self.right_panel = RightPanel()
+        self.right_panel = RightPanel(monitoring_controller=self.monitoring_controller)
         self._central_splitter.addWidget(self.right_panel)
 
         # Set initial sizes: sidebar (160), chat (640), right (200)
@@ -254,8 +264,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def _setup_statusbar(self):
-        """Setup status bar."""
+        """Setup status bar with monitoring metrics."""
+        from PyQt6.QtWidgets import QLabel
+
         from harness_client.themes import get_theme
+
         theme = get_theme()
 
         self.statusbar = QStatusBar()
@@ -266,7 +279,60 @@ class MainWindow(QMainWindow):
             }}
         """)
         self.setStatusBar(self.statusbar)
-        self.statusbar.showMessage("就绪")
+
+        # 状态消息标签（左侧）
+        self._status_msg_label = QLabel("就绪")
+        self._status_msg_label.setStyleSheet("color: white;")
+        self.statusbar.addWidget(self._status_msg_label)
+
+        # 分隔符
+        self.statusbar.addWidget(QLabel(" | "))
+
+        # Token 标签（右侧）
+        self._token_label = QLabel("Token: 0")
+        self._token_label.setStyleSheet("color: white; font-weight: bold;")
+        self.statusbar.addPermanentWidget(self._token_label)
+
+        # 成本标签
+        self._cost_label = QLabel("成本: $0.00")
+        self._cost_label.setStyleSheet("color: white;")
+        self.statusbar.addPermanentWidget(self._cost_label)
+
+        # API 模型标签
+        self._model_label = QLabel("API: -")
+        self._model_label.setStyleSheet("color: rgba(255,255,255,0.8);")
+        self.statusbar.addPermanentWidget(self._model_label)
+
+        # 延迟标签
+        self._latency_label = QLabel("延迟: -")
+        self._latency_label.setStyleSheet("color: rgba(255,255,255,0.8);")
+        self.statusbar.addPermanentWidget(self._latency_label)
+
+        # 连接监控信号
+        self.monitoring_controller.metrics_updated.connect(self._update_statusbar_metrics)
+        self.monitoring_controller.session_ended.connect(self._on_session_ended)
+
+    def _update_statusbar_metrics(self):
+        """更新状态栏监控指标"""
+        metrics = self.monitoring_controller.metrics
+
+        # 更新 Token
+        self._token_label.setText(f"Token: {metrics.total_tokens():,}")
+
+        # 更新成本
+        self._cost_label.setText(f"成本: ${metrics.cost_usd:.2f}")
+
+        # 更新延迟
+        latency = self.monitoring_controller.get_recent_latency_ms()
+        if latency:
+            self._latency_label.setText(f"延迟: {latency:.0f}ms")
+
+    def _on_session_ended(self):
+        """会话结束时的处理"""
+        metrics = self.monitoring_controller.metrics
+        self._status_msg_label.setText(
+            f"完成 | 迭代: {metrics.iterations}, 工具: {metrics.tool_calls}"
+        )
 
     # === Session Management ===
 
@@ -439,6 +505,40 @@ class MainWindow(QMainWindow):
         """Handle thinking/progress event."""
         self.chat_panel.append_thinking(message)
 
+    def _on_progress_event(self, event):
+        """Handle SDK ProgressEvent for monitoring."""
+        self.monitoring_controller.handle_progress_event(event)
+
+        # 更新状态栏消息（开始/结束事件）
+        event_type = event.type.value
+        if event_type == "loop_start":
+            self._status_msg_label.setText("执行中...")
+        elif event_type == "loop_end":
+            self._status_msg_label.setText("完成")
+
+    def _on_agent_ready(self, agent):
+        """Handle agent ready - start schedule controller."""
+
+        self.schedule_controller.set_agent(agent)
+
+        # Start schedule controller in background
+        async def start_schedule_controller():
+            try:
+                await self.schedule_controller.start()
+            except Exception as e:
+                logger.error(f"Failed to start schedule controller: {e}")
+
+        # Schedule the start on the event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(start_schedule_controller())
+            else:
+                loop.run_until_complete(start_schedule_controller())
+        except RuntimeError:
+            # No event loop, create one
+            asyncio.run(start_schedule_controller())
+
     def _confirm_dangerous_operation(self, tool_name: str, args: dict) -> "ConfirmationResult":
         """Show confirmation dialog for dangerous operations.
 
@@ -572,6 +672,11 @@ class MainWindow(QMainWindow):
         )
         self.chat_controller.configure(chat_config)
 
+        # 更新监控控制器模型名称
+        model = settings.get("model", "claude-sonnet-4-6")
+        self.monitoring_controller.set_model(model)
+        self._model_label.setText(f"API: {model}")
+
         if settings.get("work_dir"):
             self.work_dir = Path(settings["work_dir"])
             self.right_panel.set_work_dir(self.work_dir)
@@ -606,6 +711,10 @@ class MainWindow(QMainWindow):
             router_url=getattr(settings, "router_url", ""),
         )
         self.chat_controller.configure(chat_config)
+
+        # 初始化监控控制器模型名称
+        self.monitoring_controller.set_model(settings.model)
+        self._model_label.setText(f"API: {settings.model}")
 
         if settings.work_dir:
             self.work_dir = Path(settings.work_dir)
@@ -769,7 +878,6 @@ class MainWindow(QMainWindow):
 
     def _auto_connect_mcp_servers(self):
         """Auto-connect to enabled MCP servers."""
-        import asyncio
         import logging
         logger = logging.getLogger(__name__)
 
@@ -955,7 +1063,7 @@ class MainWindow(QMainWindow):
 
     def _on_schedule_panel(self):
         """Show schedule management dialog."""
-        from harness_client.ui.schedule_panel import ScheduleDialog, ScheduleSection
+        from harness_client.ui.schedule_panel import ScheduleSection
 
         # Create dialog
         dialog = QDialog(self)

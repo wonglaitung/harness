@@ -128,6 +128,7 @@ class ScheduleController:
         # If enabled, register with trigger manager
         if config.enabled and self._trigger_manager:
             self._register_trigger(config)
+            logger.info(f"Registered trigger for schedule: {config.name}")
 
         logger.info(f"Added schedule: {config.name}")
         return True
@@ -196,7 +197,10 @@ class ScheduleController:
         return True
 
     def _register_trigger(self, config: ScheduleConfig):
-        """Register a trigger with the SDK's TriggerManager."""
+        """Register a trigger with the SDK's TriggerManager.
+
+        If the manager is already running, the trigger will be started asynchronously.
+        """
         if not self._trigger_manager:
             return
 
@@ -213,20 +217,25 @@ class ScheduleController:
             if config.trigger_type == "cron":
                 from harness import CronTrigger
                 trigger = CronTrigger(
-                    name=config.id,
                     schedule=config.trigger_value,
                     action=action,
+                    trigger_id=config.id,
                 )
             else:  # interval
                 from harness import IntervalTrigger
                 interval_seconds = int(config.trigger_value)
                 trigger = IntervalTrigger(
-                    name=config.id,
                     interval_seconds=interval_seconds,
                     action=action,
+                    trigger_id=config.id,
                 )
 
             self._trigger_manager.register(trigger)
+
+            # If manager is already running, start the trigger asynchronously
+            if self._trigger_manager.is_running:
+                asyncio.create_task(trigger.start(self._trigger_manager._enqueue_event))
+
             config.status = "running"
             logger.info(f"Registered trigger for {config.name}")
 
@@ -251,16 +260,22 @@ class ScheduleController:
         if self._running:
             return
 
+        if not self._agent:
+            logger.warning("No agent set, ScheduleController will not execute tasks")
+            return
+
         try:
             from harness import TriggerManager
 
             self._trigger_manager = TriggerManager(self._agent)
-            await self._trigger_manager.start()
 
-            # Register all enabled schedules
+            # Register all enabled schedules BEFORE starting the manager
             for config in self._schedules.values():
                 if config.enabled:
                     self._register_trigger(config)
+
+            # Now start the manager (will start all registered triggers)
+            await self._trigger_manager.start()
 
             self._running = True
             logger.info("ScheduleController started")

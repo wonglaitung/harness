@@ -4,8 +4,8 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QByteArray
-from PyQt6.QtGui import QFileSystemModel, QIcon
+from PyQt6.QtCore import QByteArray, QDir, QEasingCurve, QPropertyAnimation, pyqtSignal
+from PyQt6.QtGui import QFileSystemModel
 from PyQt6.QtWidgets import (
     QApplication,
     QFileIconProvider,
@@ -559,8 +559,9 @@ class MCPServersSection(CollapsibleSection):
         layout.addStretch()
 
         # Connect/Disconnect button with glow effect
-        from harness_client.ui.interactive import GlowButton
         from PyQt6.QtGui import QColor
+
+        from harness_client.ui.interactive import GlowButton
 
         if is_connected:
             action_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
@@ -709,7 +710,6 @@ class FileTreeSection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup file tree content."""
-        from PyQt6.QtCore import QDir
         theme = get_theme()
 
         # Work directory name
@@ -831,7 +831,7 @@ class FileTreeSection(CollapsibleSection):
 
 
 class RightPanel(QWidget):
-    """Right panel with collapsible sections for memory, skills, MCP, and files."""
+    """Right panel with collapsible sections for memory, monitoring, skills, MCP, and files."""
 
     # Signals
     memory_add_requested = pyqtSignal(str)
@@ -846,8 +846,9 @@ class RightPanel(QWidget):
     file_clicked = pyqtSignal(Path)
     work_dir_changed = pyqtSignal(Path)
 
-    def __init__(self, parent=None):
+    def __init__(self, monitoring_controller=None, parent=None):
         super().__init__(parent)
+        self._monitoring_controller = monitoring_controller
         self.setMinimumWidth(220)
         self.setMaximumWidth(380)
         self._setup_ui()
@@ -883,6 +884,18 @@ class RightPanel(QWidget):
         self.memory_section.importance_changed.connect(self.memory_importance_changed)
         layout.addWidget(self.memory_section)
 
+        # Monitoring section (if controller is provided)
+        if self._monitoring_controller:
+            from harness_client.ui.monitoring_panel import ExecutionLogSection, MonitoringSection
+            self.monitoring_section = MonitoringSection(self._monitoring_controller)
+            layout.addWidget(self.monitoring_section)
+
+            self.log_section = ExecutionLogSection(self._monitoring_controller)
+            layout.addWidget(self.log_section)
+        else:
+            self.monitoring_section = None
+            self.log_section = None
+
         # Skills section
         self.skills_section = SkillsSection()
         self.skills_section.skill_double_clicked.connect(self.skill_double_clicked)
@@ -904,6 +917,11 @@ class RightPanel(QWidget):
 
         # Set collapsed state for sections (memory, skills, MCP collapsed by default)
         self.memory_section.set_collapsed(True)
+        # Monitoring section stays expanded by default
+        if self.monitoring_section:
+            self.monitoring_section.set_collapsed(False)
+        if self.log_section:
+            self.log_section.set_collapsed(True)
         self.skills_section.set_collapsed(True)
         self.mcp_section.set_collapsed(True)
 
@@ -950,6 +968,10 @@ class RightPanel(QWidget):
         # Notify sections to update their styles
         if hasattr(self.memory_section, '_on_theme_changed'):
             self.memory_section._on_theme_changed()
+        if self.monitoring_section and hasattr(self.monitoring_section, '_on_theme_changed'):
+            self.monitoring_section._on_theme_changed()
+        if self.log_section and hasattr(self.log_section, '_on_theme_changed'):
+            self.log_section._on_theme_changed()
         if hasattr(self.skills_section, '_on_theme_changed'):
             self.skills_section._on_theme_changed()
         if hasattr(self.mcp_section, '_on_theme_changed'):

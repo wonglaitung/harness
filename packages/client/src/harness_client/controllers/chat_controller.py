@@ -112,6 +112,7 @@ class ChatController:
         self._on_thinking: Callable | None = None
         self._on_text_chunk: Callable | None = None
         self._confirm_callback: Callable[[str, dict], ConfirmationResult] | None = None
+        self._on_agent_ready: Callable | None = None  # Callback when agent is initialized
 
     def set_mcp_tools(self, tools: list):
         """Set MCP tools from connected servers.
@@ -262,6 +263,10 @@ class ChatController:
             logger.info("ConfirmationHook registered with session trust support")
 
         logger.info("AgentHarness created successfully")
+
+        # Notify that agent is ready
+        if self._on_agent_ready:
+            self._on_agent_ready(self.agent)
 
     async def _create_routing_agent(self, sdk_config: HarnessConfig, tools: list):
         """Create AgentHarness with RoutingLLMClient."""
