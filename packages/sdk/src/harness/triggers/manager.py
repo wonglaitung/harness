@@ -356,8 +356,16 @@ class TriggerManager:
             # Build goal config
             goal_config = reg.action.to_goal_config(event)
 
-            # Execute goal
-            result = await self.agent.run_goal(goal_config)
+            # Execute goal (run_goal expects goal string as first arg)
+            result = await self.agent.run_goal(
+                goal=goal_config.description,
+                success_criteria=goal_config.success_criteria,
+                workspace_dir=goal_config.workspace_dir,
+                max_iterations=goal_config.max_iterations,
+                max_context_resets=goal_config.max_context_resets,
+                timeout_seconds=goal_config.timeout_seconds,
+                custom_verifier=goal_config.custom_verifier,
+            )
 
             # Update statistics
             reg.last_fired = datetime.now()
