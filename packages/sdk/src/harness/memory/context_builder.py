@@ -209,8 +209,12 @@ class ContextBuilder:
             # Add global memory source if specified
             if self.config.memory_md_path:
                 from harness.memory.system_prompt import SystemPromptSource
-                # memory_md_path is a directory, append MEMORY.md filename
-                memory_file = self.config.memory_md_path / "MEMORY.md"
+                # memory_md_path can be either a directory or full file path
+                memory_path = self.config.memory_md_path
+                if memory_path.is_dir():
+                    memory_file = memory_path / "MEMORY.md"
+                else:
+                    memory_file = memory_path
                 self._prompt_builder.add_source(SystemPromptSource(
                     name="GlobalMemory",
                     priority=40,
