@@ -216,7 +216,7 @@ def main():
         skill=args.skill,
         goal=args.goal,
         max_iterations=args.max_iterations,
-        timeout=args.timeout,
+        timeout_seconds=args.timeout,
         verbose=args.verbose,
     ))
 
