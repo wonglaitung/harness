@@ -74,7 +74,27 @@
 
 ## 2026-07-01 提取
 
+## 2026-07-02 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债4.47%高位运行-降息预期左侧布局信号**
+
+### 港股分析
+- **港股医药ETF休市涨停-创新药右侧超强确认信号**
+
+### 港股分析
+- **南向资金持股创历史新高 — 左侧建仓信号升级**
+
+### 新范式/工具
+- **Patch the Planet — AI驱动的安全补丁闭环范式** - https://openai.com/index/patch-the-planet
+
+### 新范式/工具
+- **x402 Monetization Gateway — HTTP 402 机器微支付协议** - https://blog.cloudflare.com/monetization-gateway/
+
+### 新范式/工具
+- **video-use — Text-as-Video-Surface 范式** - https://github.com/browser-use/video-use
 
 ### 港股分析
 - **美债4.48%高位运行 — 降息预期左侧布局信号**
