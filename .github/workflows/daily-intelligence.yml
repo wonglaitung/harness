@@ -1,4 +1,4 @@
-name: 每日情报推送
+name: 每日情报推送 (Goal-Driven)
 
 on:
   # 每天上午 6:00 和下午 6:00 香港时间
@@ -19,6 +19,11 @@ on:
         description: '运行特定技能 (ai-intelligence 或 hk-stocks-alpha)'
         required: false
         default: 'all'
+      max_iterations:
+        description: '最大迭代次数'
+        required: false
+        default: '25'
+        type: string
 
 permissions:
   contents: write
@@ -55,18 +60,18 @@ jobs:
         echo "HARNESS_LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
         echo "HARNESS_LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
 
-    - name: Run AI intelligence scraper
+    - name: Run AI intelligence scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
       run: |
-        echo "=== Running AI Intelligence Scraper ==="
-        uv run python packages/scraper/scripts/run_scraper.py --skill ai-intelligence --timeout 180
+        echo "=== Running AI Intelligence (Goal-Driven) ==="
+        uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800
       continue-on-error: true
 
-    - name: Run HK stocks scraper
+    - name: Run HK stocks scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'hk-stocks-alpha' || github.event.inputs.skill == '' }}
       run: |
-        echo "=== Running HK Stocks Alpha Scraper ==="
-        uv run python packages/scraper/scripts/run_scraper.py --skill hk-stocks-alpha --timeout 180
+        echo "=== Running HK Stocks Alpha (Goal-Driven) ==="
+        uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800
       continue-on-error: true
 
     - name: Send intelligence emails
@@ -92,7 +97,7 @@ jobs:
 
         # Check if there are changes to commit
         if ! git diff --staged --quiet; then
-          git commit -m "docs(scraper): Update daily intelligence reports [skip ci]"
+          git commit -m "docs(scraper): Update daily intelligence reports (Goal-Driven) [skip ci]"
           git push || echo "No changes to push"
         else
           echo "No new files to commit"
