@@ -243,8 +243,11 @@ class ContextBuilder:
         Returns:
             BuiltContext: Prepared messages for LLM
         """
-        # Calculate budget
-        budget = self._calculate_budget(tools)
+        # Build system prompt once (avoid duplicate build calls)
+        system_prompt = self._get_system_prompt()
+
+        # Calculate budget using pre-built system prompt
+        budget = self._calculate_budget(tools, system_prompt)
 
         # Get messages from session
         session_messages = session.messages.copy()
@@ -291,7 +294,7 @@ class ContextBuilder:
 
         return BuiltContext(
             messages=messages,
-            system_prompt=self._get_system_prompt(),
+            system_prompt=system_prompt,
             estimated_tokens=estimated,
             budget=budget,
             compression_needed=compression_needed,
@@ -304,9 +307,12 @@ class ContextBuilder:
             return self._prompt_builder.build()
         return self.config.system_prompt
 
-    def _calculate_budget(self, tools: list[ToolDefinition] | None = None) -> ContextBudget:
+    def _calculate_budget(self, tools: list[ToolDefinition] | None = None, system_prompt: str | None = None) -> ContextBudget:
         """Calculate token budget allocation."""
-        system_tokens = self._token_counter.count(self._get_system_prompt())
+        # Use provided system_prompt to avoid duplicate build() calls
+        if system_prompt is None:
+            system_prompt = self._get_system_prompt()
+        system_tokens = self._token_counter.count(system_prompt)
         tool_tokens = self._token_counter.estimate_tool_overhead(tools or [])
 
         return ContextBudget.allocate(
