@@ -152,6 +152,7 @@ class SidebarPanel(QWidget):
         self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.session_list.itemClicked.connect(self._on_session_clicked)
+        self.session_list.setSpacing(0)  # No extra spacing between items
         self.session_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {theme.APP_BACKGROUND};
@@ -161,11 +162,11 @@ class SidebarPanel(QWidget):
                 font-size: {theme.FONT_SIZE_SM};
             }}
             QListWidget::item {{
-                padding: 10px 12px;
+                padding: 8px 12px;
                 border-radius: {theme.RADIUS_SM};
-                margin: 1px 4px;
+                margin: 0px 4px;
             }}
-            QListList::item:selected {{
+            QListWidget::item:selected {{
                 background-color: {theme.SELECTION_ACTIVE};
                 border: 1px solid {theme.SELECTION_BORDER};
                 color: {theme.TEXT};
@@ -346,6 +347,7 @@ class SidebarPanel(QWidget):
         self.new_session_btn.setIcon(create_add_icon(18, QColor(theme.TEXT)))
 
         # Update session list
+        self.session_list.setSpacing(0)
         self.session_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {theme.APP_BACKGROUND};
@@ -355,9 +357,9 @@ class SidebarPanel(QWidget):
                 font-size: {theme.FONT_SIZE_SM};
             }}
             QListWidget::item {{
-                padding: 10px 12px;
+                padding: 8px 12px;
                 border-radius: {theme.RADIUS_SM};
-                margin: 1px 4px;
+                margin: 0px 4px;
             }}
             QListWidget::item:selected {{
                 background-color: {theme.SELECTION_ACTIVE};
