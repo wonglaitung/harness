@@ -3,10 +3,10 @@
 Harness Scraper CLI.
 
 Usage:
-    harness-scraper                           # Run with ai-intelligence skill (default)
+    harness-scraper                           # Run with ai-intelligence skill (goal-driven)
     harness-scraper --skill hk-stocks-alpha   # Run with HK stocks skill
-    harness-scraper --skill custom            # Run with custom skill
-    harness-scraper agent "prompt"            # Run agent with custom prompt
+    harness-scraper goal "extract 3 AI paradigms"  # Goal-driven execution
+    harness-scraper agent "prompt"            # One-shot agent execution
     harness-scraper config                    # Create default config
     harness-scraper config --show             # Show current config
     harness-scraper skills                    # List available skills
@@ -18,8 +18,10 @@ import logging
 import sys
 from pathlib import Path
 
+from harness import GoalStatus
 from harness_scraper.config import load_config, create_default_config_file
-from harness_scraper.agent import IntelAgent, REPO_SKILL_DIR
+from harness_scraper.goal_agent import GoalAgent, REPO_SKILL_DIR
+from harness_scraper.agent import IntelAgent
 
 # Default output directory for One-Pagers
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
@@ -35,8 +37,53 @@ def setup_logging(verbose: bool = False):
     )
 
 
+def cmd_goal(args):
+    """Run goal-driven extraction (autonomous until goal achieved)"""
+    setup_logging(args.verbose)
+    config = load_config()
+
+    # Ensure output directory exists
+    output_dir = DEFAULT_OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    agent = GoalAgent(
+        config=config,
+        skill=args.skill,
+        memory_path=output_dir / "MEMORY.md",
+    )
+
+    # Build goal from args or skill
+    if args.goal:
+        goal = args.goal
+    else:
+        # Default goals based on skill
+        if args.skill == "hk-stocks-alpha":
+            goal = "提取港股市场信号：识别 3 个以上左侧交易机会（回购潮、政策事件）"
+        elif args.skill:
+            goal = f"根据技能 {args.skill} 提取高价值信息，生成 One-Pager"
+        else:
+            goal = "提取 AI 行业情报：识别 3 个以上新范式项目，保存 One-Pager"
+
+    print(f"\n🎯 Goal: {goal}\n")
+
+    result = asyncio.run(agent.run_goal(
+        goal=goal,
+        max_iterations=args.max_iterations,
+        timeout_seconds=args.timeout,
+    ))
+
+    print("\n=== Goal Result ===")
+    print(f"Status: {result.status}")
+    print(f"Iterations: {result.total_iterations}")
+    if result.status == GoalStatus.ACHIEVED:
+        print("✅ Goal achieved!")
+    else:
+        print(f"❌ Goal not achieved: {result.status}")
+    print(f"\n{result.content}")
+
+
 def cmd_agent(args):
-    """Run SDK agent (autonomous intelligence extraction)"""
+    """Run one-shot agent (for simple cases)"""
     setup_logging(args.verbose)
     config = load_config()
 
@@ -134,21 +181,28 @@ def cmd_skills(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="harness-scraper",
-        description="AI Intelligence Extraction System (SDK Agent)",
+        description="AI Intelligence Extraction System (Goal-Driven)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument(
         "--skill",
         type=str,
         default=None,
-        help="Skill to load (e.g., ai-intelligence, hk-stocks-alpha). Default: ai-intelligence",
+        help="Skill to load (e.g., ai-intelligence, hk-stocks-alpha)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
-    # agent command (default)
-    agent_parser = subparsers.add_parser("agent", help="Run SDK agent for intelligence extraction")
-    agent_parser.add_argument("prompt", nargs="?", help="Custom prompt for the agent")
+    # goal command (default, goal-driven execution)
+    goal_parser = subparsers.add_parser("goal", help="Goal-driven extraction (autonomous)")
+    goal_parser.add_argument("goal", nargs="?", help="Goal description")
+    goal_parser.add_argument("--max-iterations", type=int, default=20, help="Max iterations")
+    goal_parser.add_argument("--timeout", type=int, default=1800, help="Timeout seconds")
+    goal_parser.set_defaults(func=cmd_goal)
+
+    # agent command (one-shot execution)
+    agent_parser = subparsers.add_parser("agent", help="One-shot agent execution")
+    agent_parser.add_argument("prompt", nargs="?", help="Custom prompt")
     agent_parser.set_defaults(func=cmd_agent)
 
     # config command
@@ -162,14 +216,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Default to agent command with ai-intelligence skill
+    # Default to goal command with ai-intelligence skill
     if not args.command:
-        args.command = "agent"
-        args.prompt = None
-        # Set default skill if not specified
+        args.command = "goal"
+        args.goal = None
+        args.max_iterations = 20
+        args.timeout = 1800
         if args.skill is None:
             args.skill = "ai-intelligence"
-        args.func = cmd_agent
+        args.func = cmd_goal
 
     args.func(args)
 
