@@ -693,8 +693,99 @@ def closeEvent(self, event):
     super().closeEvent(event)
 ```
 
+## 排程面板 (SchedulePanel)
+
+排程面板提供可视化的定时任务管理界面。
+
+### 功能
+
+- 创建 Cron 表达式或固定间隔的定时任务
+- 编辑和删除排程
+- 启动/暂停排程
+- Cron 表达式验证和下次运行时间预览
+
+### 组件结构
+
+```
+SchedulePanel
+├── ScheduleSection (可折叠区块)
+│   ├── AddButton (新建排程)
+│   └── ScheduleItemWidget[] (排程列表)
+│       ├── StatusIndicator (状态指示器)
+│       ├── ScheduleInfo (名称、触发条件)
+│       └── Controls (启动/暂停、编辑、删除)
+└── ScheduleDialog (新建/编辑对话框)
+    ├── NameInput (名称)
+    ├── GoalInput (目标)
+    ├── TriggerTypeSelector (Cron/Interval)
+    ├── CronEditor (Cron 表达式编辑器)
+    │   ├── CronInput
+    │   └── NextRunPreview (下次运行时间)
+    └── IntervalEditor (固定间隔编辑器)
+```
+
+### 状态指示器
+
+排程状态通过彩色圆点指示：
+
+| 状态 | 颜色 | 说明 |
+|------|------|------|
+| 运行中 | 绿色 `#22c55e` | 排程正在执行 |
+| 空闲 | 橙色 `#f59e0b` | 排程已启用，等待触发 |
+| 已暂停 | 灰色 `#6b7280` | 排程已禁用 |
+| 错误 | 红色 `#ef4444` | 排程执行出错 |
+
+### Cron 表达式编辑器
+
+支持标准 5 字段 Cron 表达式，并提供实时预览：
+
+```
+┌──────── 分钟 (0-59)
+│ ┌────── 小时 (0-23)
+│ │ ┌──── 日 (1-31)
+│ │ │ ┌── 月 (1-12)
+│ │ │ │ ┌ 星期 (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+常用示例：
+- `0 9 * * *` - 每天 9:00
+- `*/5 * * * *` - 每 5 分钟
+- `0 9 * * 1-5` - 工作日 9:00
+
+### 信号
+
+```python
+class ScheduleSection(CollapsibleSection):
+    add_requested = pyqtSignal()              # 新建排程
+    edit_requested = pyqtSignal(str)          # 编辑排程 (schedule_id)
+    delete_requested = pyqtSignal(str)        # 删除排程 (schedule_id)
+    toggle_requested = pyqtSignal(str)        # 切换启停 (schedule_id)
+```
+
+### 主题适配
+
+排程面板继承 `ThemeAwareWidget`，自动响应主题切换：
+
+```python
+class ScheduleItemWidget(QWidget):
+    def __init__(self, schedule_data: dict, parent=None):
+        super().__init__(parent)
+        register_theme_listener(self._on_theme_changed)
+
+    def _on_theme_changed(self):
+        theme = get_theme()
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_SM};
+            }}
+        """)
+```
+
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
-- [03-controllers.md](./03-controllers.md) - 了解控制器层设计
-- [04-configuration.md](./04-configuration.md) - 了解配置管理
+- [03-controllers.md](./03-controllers.md) - 了解控制器层设计（含 ScheduleController）
+- [04-configuration.md](./04-configuration.md) - 了解配置管理（含 schedules.json）

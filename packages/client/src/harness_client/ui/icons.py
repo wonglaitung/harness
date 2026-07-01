@@ -248,3 +248,103 @@ def create_status_dot(size: int = 12, color: QColor = QColor("#50c878")) -> QIco
 
     painter.end()
     return QIcon(pixmap)
+
+
+def create_schedule_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a schedule/calendar icon (outline style)."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    margin = size * 0.15
+    width = size - 2 * margin
+    height = size * 0.65
+    corner_radius = size * 0.08
+
+    # Calendar body
+    body_rect = QRectF(margin, margin + size * 0.12, width, height)
+    painter.drawRoundedRect(body_rect, corner_radius, corner_radius)
+
+    # Calendar top bar
+    top_bar_rect = QRectF(margin, margin + size * 0.12, width, size * 0.15)
+    painter.drawRect(top_bar_rect)
+
+    # Calendar hooks (top)
+    hook_margin = size * 0.3
+    hook_y1 = margin
+    hook_y2 = margin + size * 0.12
+    painter.drawLine(QPointF(hook_margin, hook_y1), QPointF(hook_margin, hook_y2))
+    painter.drawLine(QPointF(size - hook_margin, hook_y1), QPointF(size - hook_margin, hook_y2))
+
+    # Calendar grid lines (date indicators)
+    grid_y1 = margin + size * 0.38
+    grid_y2 = margin + size * 0.55
+    grid_margin = size * 0.25
+    dot_size = size * 0.04
+
+    # Draw small dots representing dates
+    painter.setBrush(QBrush(color))
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+
+    positions = [
+        (size * 0.32, grid_y1),
+        (size * 0.48, grid_y1),
+        (size * 0.64, grid_y1),
+        (size * 0.32, grid_y2),
+        (size * 0.48, grid_y2),
+    ]
+    for x, y in positions:
+        painter.drawEllipse(QPointF(x, y), dot_size, dot_size)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a play/triangle icon for starting schedules."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(color))
+
+    # Draw filled triangle pointing right
+    margin = size * 0.25
+    points = [
+        QPointF(margin, margin),
+        QPointF(margin, size - margin),
+        QPointF(size - margin, size / 2),
+    ]
+    painter.drawPolygon(QPolygonF(points))
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+def create_pause_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a pause icon for pausing schedules."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(color))
+
+    margin = size * 0.25
+    bar_width = size * 0.12
+    bar_height = size - 2 * margin
+
+    # Left bar
+    painter.drawRect(QRectF(margin, margin, bar_width, bar_height))
+    # Right bar
+    painter.drawRect(QRectF(size - margin - bar_width, margin, bar_width, bar_height))
+
+    painter.end()
+    return QIcon(pixmap)

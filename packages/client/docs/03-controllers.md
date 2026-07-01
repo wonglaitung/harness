@@ -565,6 +565,124 @@ self.memory_controller.add_entry(MemoryCategory.USER_PROFILE, "使用 Windows")
 result = await self.chat_controller.send_message("帮我...")
 ```
 
+## ScheduleController
+
+排程管理控制器，管理定时任务。
+
+### 职责
+
+- 管理 ScheduleConfig 配置
+- 提供 CRUD 操作
+- 集成 SDK TriggerManager（未来）
+- 持久化到 JSON 文件
+
+### 配置模型
+
+```python
+@dataclass
+class ScheduleConfig:
+    """排程配置"""
+    
+    id: str                           # 唯一标识
+    name: str                         # 排程名称
+    goal: str                         # 任务目标
+    trigger_type: str                 # "cron" 或 "interval"
+    trigger_value: str                # Cron 表达式或间隔秒数
+    enabled: bool = True              # 是否启用
+    max_iterations: int = 50          # 最大迭代次数
+    timeout_seconds: int = 3600       # 超时时间（秒）
+    skills: list[str] = field(default_factory=list)  # 关联技能
+    created_at: Optional[datetime] = None
+    last_run: Optional[datetime] = None
+    next_run: Optional[datetime] = None
+    run_count: int = 0
+    status: str = "idle"              # idle, running, paused, error
+    error_message: str = ""
+```
+
+### 核心方法
+
+```python
+class ScheduleController:
+    def __init__(self):
+        self._schedules: dict[str, ScheduleConfig] = {}
+        self._config_path: Optional[Path] = None
+    
+    def get_schedule_list(self) -> list[ScheduleConfig]:
+        """获取所有排程"""
+        
+    def get_schedule(self, schedule_id: str) -> Optional[ScheduleConfig]:
+        """获取指定排程"""
+        
+    def add_schedule(self, config: ScheduleConfig) -> bool:
+        """添加新排程"""
+        
+    def update_schedule(self, schedule_id: str, updates: dict) -> bool:
+        """更新排程"""
+        
+    def delete_schedule(self, schedule_id: str) -> bool:
+        """删除排程"""
+        
+    def toggle_schedule(self, schedule_id: str) -> bool:
+        """切换启停状态"""
+        
+    def validate_cron(self, expression: str) -> tuple[bool, str]:
+        """验证 Cron 表达式
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        
+    def get_next_run_times(self, expression: str, count: int = 5) -> list[datetime]:
+        """获取下次运行时间列表"""
+        
+    def load_from_file(self, path: Path):
+        """从 JSON 文件加载配置"""
+        
+    def save_to_file(self, path: Path):
+        """保存配置到 JSON 文件"""
+```
+
+### Cron 表达式验证
+
+```python
+def validate_cron(self, expression: str) -> tuple[bool, str]:
+    """验证 Cron 表达式"""
+    try:
+        from croniter import croniter
+        croniter(expression)
+        return True, ""
+    except ImportError:
+        # croniter 未安装，做基本验证
+        parts = expression.split()
+        if len(parts) != 5:
+            return False, "Cron 表达式必须包含 5 个字段"
+        return True, ""
+    except Exception as e:
+        return False, f"无效的 Cron 表达式: {str(e)}"
+```
+
+### 与 TriggerManager 集成（未来）
+
+```python
+async def start(self):
+    """启动 TriggerManager"""
+    from harness import TriggerManager
+    
+    self._trigger_manager = TriggerManager(self._agent)
+    await self._trigger_manager.start()
+    
+    # 注册所有启用的排程
+    for config in self._schedules.values():
+        if config.enabled:
+            self._register_trigger(config)
+
+async def stop(self):
+    """停止 TriggerManager"""
+    if self._trigger_manager:
+        await self._trigger_manager.stop()
+```
+
 ## 最佳实践
 
 ### 1. 控制器分离
@@ -577,6 +695,7 @@ self.chat_controller = ChatController()      # 对话
 self.mcp_controller = MCPController()        # MCP 服务器
 self.skill_controller = SkillController()    # 技能
 self.memory_controller = MemoryController()  # 记忆
+self.schedule_controller = ScheduleController()  # 排程
 
 # ✗ 错误：一个控制器处理所有事情
 self.controller = AllInOneController()  # 职责不清晰
@@ -628,5 +747,5 @@ self.memory_controller.memory_changed.connect(self._on_memory_changed)
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
-- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计
-- [04-configuration.md](./04-configuration.md) - 了解配置管理
+- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计（含 SchedulePanel）
+- [04-configuration.md](./04-configuration.md) - 了解配置管理（含 schedules.json）

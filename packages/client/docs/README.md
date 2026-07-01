@@ -47,7 +47,7 @@ uv run python -m harness_client
 
 ### 三栏布局
 
-- **左侧栏**：会话列表（可折叠）
+- **左侧栏**：会话列表、排程入口（可折叠）
 - **中央区**：对话面板（Markdown 渲染 + 流式输出）
 - **右侧面板**：记忆/技能/MCP 服务器/文件树（可折叠区块）
 
@@ -56,6 +56,13 @@ uv run python -m harness_client
 - 记忆文件：`~/.harness/MEMORY.md`
 - 自动注入到 Agent 上下文
 - 修改后即时生效
+
+### 排程管理
+
+- 配置文件：`~/.harness/schedules.json`
+- 支持 Cron 表达式和固定间隔
+- 可视化创建、编辑、启停排程
+- 下次运行时间预览
 
 ### MCP 集成
 
@@ -95,6 +102,7 @@ uv run python -m harness_client
 ~/.harness/
 ├── settings.json     # 应用设置
 ├── mcp.json          # MCP 服务器配置
+├── schedules.json    # 排程配置
 ├── MEMORY.md         # 全局记忆
 └── skills/           # 技能目录
 ```

@@ -4,6 +4,7 @@ Main window for Harness Client - 3-column layout with header bar.
 
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -24,10 +25,12 @@ from harness_client.controllers.chat_controller import ChatController
 from harness_client.controllers.mcp_controller import MCPController
 from harness_client.controllers.memory_controller import MemoryController
 from harness_client.controllers.skill_controller import SkillController
+from harness_client.controllers.schedule_controller import ScheduleController
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.chat_panel import ChatPanel
 from harness_client.ui.right_panel import RightPanel
 from harness_client.ui.sidebar import SidebarPanel
+from harness_client.ui.schedule_panel import SchedulePanel
 from harness_client.utils.settings import SettingsManager
 
 # Configure logging
@@ -57,6 +60,7 @@ class MainWindow(QMainWindow):
         self.mcp_controller = MCPController()
         self.skill_controller = SkillController()
         self.memory_controller = MemoryController()
+        self.schedule_controller = ScheduleController()
 
         # Connect controller callbacks
         self.mcp_controller.set_change_callback(self._on_mcp_changed)
@@ -97,6 +101,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
+        self.sidebar.schedule_requested.connect(self._on_schedule_panel)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -113,6 +118,9 @@ class MainWindow(QMainWindow):
 
         # Load MCP configuration
         self._load_mcp_config()
+
+        # Load schedule configuration
+        self._load_schedule_config()
 
         # Load skills from default directories
         self.skill_controller.load_defaults()
@@ -942,6 +950,131 @@ class MainWindow(QMainWindow):
 
         category = MemoryCategory(category_name)
         self.memory_controller.update_importance(category, index, importance)
+
+    # === Schedule Management ===
+
+    def _on_schedule_panel(self):
+        """Show schedule management dialog."""
+        from harness_client.ui.schedule_panel import ScheduleDialog, ScheduleSection
+
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("排程管理")
+        dialog.setMinimumSize(500, 500)
+
+        layout = QVBoxLayout(dialog)
+
+        # Create schedule section
+        self._schedule_section = ScheduleSection()
+        self._refresh_schedule_list()
+
+        # Connect signals
+        self._schedule_section.add_requested.connect(lambda: self._on_add_schedule(dialog))
+        self._schedule_section.edit_requested.connect(lambda sid: self._on_edit_schedule(sid, dialog))
+        self._schedule_section.delete_requested.connect(lambda sid: self._on_delete_schedule(sid, dialog))
+        self._schedule_section.toggle_requested.connect(lambda sid: self._on_toggle_schedule(sid, dialog))
+
+        layout.addWidget(self._schedule_section)
+
+        # Close button
+        from PyQt6.QtWidgets import QPushButton
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+
+        dialog.exec()
+
+    def _refresh_schedule_list(self):
+        """Refresh the schedule list in the dialog."""
+        if hasattr(self, '_schedule_section') and self._schedule_section:
+            schedules = self.schedule_controller.get_schedule_list()
+            self._schedule_section.update_schedules([s.to_dict() for s in schedules])
+
+    def _on_add_schedule(self, parent_dialog):
+        """Handle add schedule request."""
+        from harness_client.ui.schedule_panel import ScheduleDialog
+
+        dialog = ScheduleDialog(parent_dialog)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            data = dialog.get_schedule_data()
+            if not data.get("name") or not data.get("goal"):
+                QMessageBox.warning(parent_dialog, "错误", "请填写名称和目标")
+                return
+
+            from harness_client.controllers.schedule_controller import ScheduleConfig
+            config = ScheduleConfig(
+                id=f"schedule_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                name=data["name"],
+                goal=data["goal"],
+                trigger_type=data["trigger_type"],
+                trigger_value=data["trigger_value"],
+                max_iterations=data.get("max_iterations", 50),
+                timeout_seconds=data.get("timeout_seconds", 3600),
+            )
+
+            if self.schedule_controller.add_schedule(config):
+                self.statusbar.showMessage(f"排程「{config.name}」已创建", 3000)
+                self._save_schedule_config()
+                self._refresh_schedule_list()
+            else:
+                QMessageBox.warning(parent_dialog, "错误", "创建排程失败")
+
+    def _on_edit_schedule(self, schedule_id: str, parent_dialog):
+        """Handle edit schedule request."""
+        from harness_client.ui.schedule_panel import ScheduleDialog
+
+        config = self.schedule_controller.get_schedule(schedule_id)
+        if not config:
+            return
+
+        dialog = ScheduleDialog(parent_dialog, config.to_dict())
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            data = dialog.get_schedule_data()
+            if self.schedule_controller.update_schedule(schedule_id, data):
+                self.statusbar.showMessage("排程已更新", 3000)
+                self._save_schedule_config()
+                self._refresh_schedule_list()
+
+    def _on_delete_schedule(self, schedule_id: str, parent_dialog):
+        """Handle delete schedule request."""
+        config = self.schedule_controller.get_schedule(schedule_id)
+        if not config:
+            return
+
+        reply = QMessageBox.question(
+            parent_dialog,
+            "删除排程",
+            f"确定要删除排程「{config.name}」吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.schedule_controller.delete_schedule(schedule_id):
+                self.statusbar.showMessage("排程已删除", 3000)
+                self._save_schedule_config()
+                self._refresh_schedule_list()
+
+    def _on_toggle_schedule(self, schedule_id: str, parent_dialog):
+        """Handle toggle schedule enabled state."""
+        if self.schedule_controller.toggle_schedule(schedule_id):
+            config = self.schedule_controller.get_schedule(schedule_id)
+            if config:
+                state = "已启用" if config.enabled else "已暂停"
+                self.statusbar.showMessage(f"排程「{config.name}」{state}", 3000)
+            self._save_schedule_config()
+            self._refresh_schedule_list()
+
+    def _save_schedule_config(self):
+        """Save schedule configuration to file."""
+        from harness_client.utils.settings import get_config_dir
+        self.schedule_controller.save_to_file(get_config_dir() / "schedules.json")
+
+    def _load_schedule_config(self):
+        """Load schedule configuration from file."""
+        from harness_client.utils.settings import get_config_dir
+        config_path = get_config_dir() / "schedules.json"
+        self.schedule_controller.load_from_file(config_path)
 
     def closeEvent(self, event):
         """Handle window close - cleanup resources properly."""

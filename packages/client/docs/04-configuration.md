@@ -12,6 +12,7 @@
 ~/.harness/
 ├── settings.json        # 应用设置（API Key、模型等）
 ├── mcp.json             # MCP 服务器配置
+├── schedules.json       # 排程配置
 ├── MEMORY.md            # 全局记忆文件
 ├── sessions/            # 会话持久化目录
 │   ├── abc12345.json    # 单个会话文件
@@ -34,6 +35,7 @@
 |-----------|------|------|---------|
 | `settings.json` | JSON | 应用设置 | SettingsDialog |
 | `mcp.json` | JSON | MCP 服务器列表 | RightPanel MCP Section |
+| `schedules.json` | JSON | 排程配置 | ScheduleDialog |
 | `MEMORY.md` | Markdown | 全局记忆 | RightPanel Memory Section |
 | `sessions/*.json` | JSON | 会话历史（自动持久化） | Sidebar Session List |
 | `skills/*.md` | Markdown | 技能定义 | RightPanel Skills Section |
@@ -151,6 +153,83 @@ if self.config.auto_update_memory:
 | `command` | string | 启动命令（stdio 传输） |
 | `args` | array | 命令参数 |
 | `env` | object | 环境变量 |
+
+## schedules.json
+
+### 配置格式
+
+```json
+{
+  "schedules": [
+    {
+      "id": "schedule_20260628120000",
+      "name": "每日报告",
+      "goal": "生成每日工作总结并发送到 Slack",
+      "trigger_type": "cron",
+      "trigger_value": "0 9 * * *",
+      "enabled": true,
+      "max_iterations": 50,
+      "timeout_seconds": 3600,
+      "skills": [],
+      "created_at": "2026-06-28T12:00:00",
+      "last_run": null,
+      "next_run": "2026-06-29T09:00:00",
+      "run_count": 0,
+      "status": "idle",
+      "error_message": ""
+    },
+    {
+      "id": "schedule_20260628130000",
+      "name": "健康检查",
+      "goal": "检查系统健康状态",
+      "trigger_type": "interval",
+      "trigger_value": "300",
+      "enabled": true,
+      "max_iterations": 20,
+      "timeout_seconds": 600,
+      "skills": [],
+      "created_at": "2026-06-28T13:00:00",
+      "status": "running"
+    }
+  ]
+}
+```
+
+### 配置项说明
+
+| 配置项 | 类型 | 说明 |
+|--------|------|------|
+| `id` | string | 唯一标识（自动生成） |
+| `name` | string | 排程名称 |
+| `goal` | string | 任务目标描述 |
+| `trigger_type` | string | 触发类型：`"cron"` 或 `"interval"` |
+| `trigger_value` | string | Cron 表达式或间隔秒数 |
+| `enabled` | bool | 是否启用 |
+| `max_iterations` | int | 最大迭代次数 |
+| `timeout_seconds` | int | 超时时间（秒） |
+| `skills` | array | 关联技能列表 |
+| `status` | string | 当前状态：`idle`/`running`/`paused`/`error` |
+
+### Cron 表达式格式
+
+```
+┌──────── 分钟 (0-59)
+│ ┌────── 小时 (0-23)
+│ │ ┌──── 日 (1-31)
+│ │ │ ┌── 月 (1-12)
+│ │ │ │ ┌ 星期 (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+常用模式：
+| 表达式 | 说明 |
+|--------|------|
+| `*/5 * * * *` | 每 5 分钟 |
+| `0 * * * *` | 每小时整点 |
+| `0 9 * * *` | 每天 9:00 |
+| `0 9 * * 1-5` | 工作日 9:00 |
+| `0 0 1 * *` | 每月 1 日 |
 
 ## MEMORY.md
 
