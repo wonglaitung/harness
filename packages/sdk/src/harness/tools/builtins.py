@@ -1301,7 +1301,18 @@ class UpdateCoreMemoryTool(Tool):
         from harness.tools.permissions import get_harness_config_dir
 
         # Priority: 1) context metadata, 2) config default (~/.harness/)
-        global_memory_root = context.metadata.get("memory_md_path") or get_harness_config_dir()
+        memory_path = context.metadata.get("memory_md_path") or get_harness_config_dir()
+
+        # Handle both file path and directory path
+        # memory_path could be:
+        # - Directory: ~/.harness/ -> use as is
+        # - File: ~/.harness/MEMORY.md -> use parent directory
+        memory_path = Path(memory_path)
+        if memory_path.is_file() or memory_path.name == "MEMORY.md":
+            global_memory_root = memory_path.parent
+        else:
+            global_memory_root = memory_path
+
         manager = MemoryFileManager(project_root=global_memory_root)
 
         if action == "add":
