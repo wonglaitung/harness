@@ -508,6 +508,7 @@ workflow = WorkflowConfig(
         WorkflowStep(name="review", goal="Code review", depends_on=["analyze", "lint"]),
     ],
 )
+orchestrator.create_workflow(workflow)
 
 result = await orchestrator.run_workflow("code-review")
 ```
@@ -546,6 +547,7 @@ team = TeamConfig(
     ],
     coordination_mode=CoordinationMode.SEQUENTIAL,
 )
+orchestrator.create_team(team)
 
 result = await orchestrator.run_team("dev-team", "Implement login feature")
 ```
