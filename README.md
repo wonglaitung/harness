@@ -12,12 +12,16 @@ Agent = Model + Harness
 
 ## 特性
 
-- **多语言支持** — Python SDK 和 Java SDK，API 设计一致
+- **多语言支持** — Python SDK 和 Java SDK，99.5% API 一致
 - **多 LLM 支持** — Anthropic Claude、OpenAI 及兼容 API
 - **工具系统** — 内置文件操作、Web 搜索，支持自定义工具
 - **MCP 协议** — 连接外部 MCP 工具服务器扩展能力
 - **技能注入** — 根据上下文自动注入专业技能
 - **记忆系统** — 跨会话持久化记忆，支持去重和内容提炼
+- **Loop Engineering** — 目标驱动执行，Agent 自主运行直到目标达成
+- **触发器系统** — Cron/Interval 定时触发，自动化任务调度
+- **工作流编排** — 多步骤工作流，依赖解析，并行执行
+- **外部集成** — GitHub、Slack、Webhook 连接器
 - **安全沙箱** — 命令验证、注入检测、审计日志
 - **成本控制** — Token 预算管理、熔断机制
 - **中断恢复** — 保存快照、断点续传
@@ -132,6 +136,86 @@ result = asyncio.run(agent.run("我使用 Windows，偏好深色主题"))
 - **去重检测**：相似内容自动跳过，避免重复记忆
 - **分类存储**：按 User Profile、Key Decisions、Learned Patterns、Project Context 分类
 
+### 排程与自动化
+
+支持 Cron 表达式和固定间隔的定时任务：
+
+```python
+from harness import AgentHarness
+from harness.triggers import CronTrigger, IntervalTrigger, TriggerManager, TriggerAction
+from harness.loop import Automation
+
+agent = AgentHarness(model="claude-sonnet-4-6")
+
+# 方式 1：使用 Automation 简化 API
+daily_report = Automation(
+    name="daily-report",
+    schedule="0 9 * * *",  # 每天 9:00
+    goal="生成每日报告并发送到 Slack",
+)
+
+health_check = Automation(
+    name="health-check",
+    interval_seconds=300,  # 每 5 分钟
+    goal="检查系统健康状态",
+)
+
+# 启动
+import asyncio
+async def run_automations():
+    await daily_report.start(agent)
+    await health_check.start(agent)
+
+    # 保持运行
+    await asyncio.sleep(3600)
+
+    # 停止
+    await daily_report.stop()
+    await health_check.stop()
+
+asyncio.run(run_automations())
+
+# 方式 2：使用 TriggerManager 精细控制
+manager = TriggerManager(agent)
+
+cron_trigger = CronTrigger(
+    schedule="0 9 * * 1-5",  # 工作日 9:00
+    action=TriggerAction(goal="生成工作日报"),
+)
+
+interval_trigger = IntervalTrigger(
+    interval_seconds=600,  # 每 10 分钟
+    action=TriggerAction(goal="检查服务状态"),
+)
+
+manager.register(cron_trigger)
+manager.register(interval_trigger)
+
+await manager.start()
+# ... 运行中 ...
+await manager.stop()
+```
+
+**Cron 表达式格式**：
+```
+┌──────── 分钟 (0-59)
+│ ┌────── 小时 (0-23)
+│ │ ┌──── 日 (1-31)
+│ │ │ ┌── 月 (1-12)
+│ │ │ │ ┌ 星期 (0-6, 0=Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+常用模式：
+| 表达式 | 说明 |
+|--------|------|
+| `*/5 * * * *` | 每 5 分钟 |
+| `0 * * * *` | 每小时整点 |
+| `0 9 * * *` | 每天 9:00 |
+| `0 9 * * 1-5` | 工作日 9:00 |
+| `0 0 1 * *` | 每月 1 日 |
+
 ---
 
 ## Java SDK
@@ -149,6 +233,11 @@ result = asyncio.run(agent.run("我使用 Windows，偏好深色主题"))
 </dependency>
 ```
 
+```groovy
+// Gradle
+implementation 'com.harness:harness-sdk-all:1.0.0'
+```
+
 或直接使用 Shadow JAR：
 
 ```bash
@@ -160,18 +249,27 @@ result = asyncio.run(agent.run("我使用 Windows，偏好深色主题"))
 ### 快速开始
 
 ```java
-import com.harness.*;
-import com.harness.tools.*;
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import com.harness.tools.ReadTool;
+import com.harness.tools.GlobTool;
+
+import java.util.List;
 
 HarnessConfig config = HarnessConfig.builder()
     .model("claude-sonnet-4-6")
     .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .tools(List.of(new ReadTool(), new GlobTool()))
     .maxIterations(10)
     .build();
 
-Harness agent = new Harness(config);
-LoopResult result = agent.run("分析当前项目的代码结构");
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .addTool(new ReadTool())
+    .addTool(new GlobTool())
+    .build();
+
+LoopResult result = agent.run("分析当前项目的代码结构").join();
 
 if (result.isCompleted()) {
     System.out.println(result.content());
@@ -186,17 +284,26 @@ HarnessConfig config = HarnessConfig.builder()
     .model("gpt-4o")
     .apiKey(System.getenv("OPENAI_API_KEY"))
     .baseUrl("https://api.your-company.com/v1")  // 可选：自定义端点
-    .tools(List.of(new ReadTool()))
     .build();
 
-Harness agent = new Harness(config);
-LoopResult result = agent.run("读取配置文件");
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .addTool(new ReadTool())
+    .build();
+
+LoopResult result = agent.run("读取配置文件").join();
 ```
 
 ### 自定义工具
 
 ```java
-import com.harness.tools.*;
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.core.ValidationResult;
+import com.harness.types.ToolResult;
+
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class SearchTool implements Tool {
@@ -223,16 +330,37 @@ public class SearchTool implements Tool {
     }
     
     @Override
+    public ValidationResult validate(Map<String, Object> args) {
+        if (!args.containsKey("query")) {
+            return ValidationResult.invalid("query is required");
+        }
+        return ValidationResult.valid();
+    }
+    
+    @Override
     public CompletableFuture<ToolResult> execute(
         Map<String, Object> args, 
         ToolContext context
     ) {
         String query = (String) args.get("query");
-        return CompletableFuture.completedFuture(
-            new ToolResult("搜索结果: " + query, true)
-        );
+        ToolResult result = ToolResult.builder()
+            .toolCallId(context.toolCallId())
+            .content("搜索结果: " + query)
+            .toolName(name())
+            .build();
+        return CompletableFuture.completedFuture(result);
     }
 }
+
+// 使用
+AgentHarness agent = AgentHarness.builder()
+    .config(HarnessConfig.builder()
+        .provider("openai")
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .model("gpt-4o")
+        .build())
+    .addTool(new SearchTool())
+    .build();
 ```
 
 ### MCP 集成
@@ -240,20 +368,22 @@ public class SearchTool implements Tool {
 ```java
 import com.harness.mcp.*;
 
-McpConfig mcpConfig = McpConfig.builder()
+McpManager mcpManager = new McpManager();
+mcpManager.addServer("filesystem", McpServerConfig.builder()
     .transport(McpTransport.STDIO)
     .command("mcp-server-filesystem")
     .args(List.of("--root", "/workspace"))
+    .build());
+
+AgentHarness agent = AgentHarness.builder()
+    .config(HarnessConfig.builder()
+        .model("claude-sonnet-4-6")
+        .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+        .build())
+    .mcpManager(mcpManager)
     .build();
 
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .mcpServers(Map.of("filesystem", mcpConfig))
-    .build();
-
-Harness agent = new Harness(config);
-LoopResult result = agent.run("列出 /workspace 目录内容");
+LoopResult result = agent.run("列出 /workspace 目录内容").join();
 ```
 
 ### 记忆系统
@@ -261,15 +391,82 @@ LoopResult result = agent.run("列出 /workspace 目录内容");
 ```java
 import com.harness.tools.UpdateCoreMemoryTool;
 
-HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .tools(List.of(new UpdateCoreMemoryTool()))  // 允许 Agent 自主更新记忆
+AgentHarness agent = AgentHarness.builder()
+    .config(HarnessConfig.builder()
+        .model("claude-sonnet-4-6")
+        .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+        .build())
+    .addTool(new UpdateCoreMemoryTool())  // 允许 Agent 自主更新记忆
     .build();
 
-Harness agent = new Harness(config);
 // 用户说"我使用 Windows"，Agent 会提炼为"操作系统：Windows"存入 MEMORY.md
-LoopResult result = agent.run("我使用 Windows，偏好深色主题");
+LoopResult result = agent.run("我使用 Windows，偏好深色主题").join();
+```
+
+### 排程与自动化
+
+```java
+import com.harness.triggers.*;
+import com.harness.loop.Automation;
+import com.harness.loop.AutomationStatus;
+
+// 方式 1：使用 Automation 简化 API
+Automation dailyReport = new Automation(
+    "daily-report",
+    "0 9 * * *",  // 每天 9:00
+    "生成每日报告并发送到 Slack"
+);
+
+Automation healthCheck = new Automation(
+    "health-check",
+    300,  // 每 300 秒（5 分钟）
+    "检查系统健康状态"
+);
+
+// 启动
+dailyReport.start(agent).join();
+healthCheck.start(agent).join();
+
+// 查看状态
+System.out.println(dailyReport.status());  // RUNNING
+
+// 停止
+dailyReport.stop().join();
+healthCheck.stop().join();
+
+// 方式 2：使用 TriggerManager 精细控制
+TriggerManager manager = new TriggerManager(agent);
+
+CronTrigger cronTrigger = new CronTrigger(
+    "workday-report",
+    "0 9 * * 1-5",  // 工作日 9:00
+    new TriggerAction.Builder()
+        .goal("生成工作日报")
+        .maxIterations(50)
+        .build()
+);
+
+IntervalTrigger intervalTrigger = new IntervalTrigger(
+    "service-check",
+    600,  // 每 600 秒（10 分钟）
+    new TriggerAction.Builder()
+        .goal("检查服务状态")
+        .build()
+);
+
+manager.register(cronTrigger);
+manager.register(intervalTrigger);
+
+// 启动所有触发器
+manager.start().join();
+
+// 查看触发器状态
+for (Map<String, Object> info : manager.listTriggers()) {
+    System.out.println(info.get("id") + ": " + info.get("state"));
+}
+
+// 停止所有触发器
+manager.stop().join();
 ```
 
 ### Java SDK 特性
@@ -282,6 +479,8 @@ LoopResult result = agent.run("我使用 Windows，偏好深色主题");
 | 审计日志 | 内置审计系统，支持 SIEM 集成 |
 | 安全沙箱 | 工具默认沙箱模式，显式开启危险权限 |
 | Shadow JAR | 使用 Gradle Shadow 插件打包，解决依赖冲突 |
+| Loop Engineering | 目标驱动执行、并行 Worktree、工作流编排 |
+| 触发器系统 | Cron/Interval 触发、自动化任务调度 |
 
 ---
 
@@ -290,7 +489,7 @@ LoopResult result = agent.run("我使用 Windows，偏好深色主题");
 | 包 | 说明 |
 |---|------|
 | [packages/sdk/](packages/sdk/) | harness-sdk — Python SDK |
-| [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK |
+| [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK (99.5% 功能同步) |
 | [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
 | [packages/scraper/](packages/scraper/) | harness-scraper — 智能文档爬取工具 |
@@ -308,10 +507,13 @@ cd harness
 uv sync --all-packages
 PYTHONPATH=packages/sdk/src uv run pytest packages/sdk/tests/ -v
 
-# Java SDK 构建
+# Java SDK 构建（使用 snap gradle）
 cd packages/sdk-java
-./gradlew build
-./gradlew :harness-sdk-all:shadowJar
+snap run gradle build
+snap run gradle :harness-sdk-all:shadowJar
+
+# 发布到 Maven Local
+snap run gradle publishToMavenLocal
 ```
 
 ---
