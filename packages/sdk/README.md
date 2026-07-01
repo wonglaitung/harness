@@ -1,4 +1,4 @@
-# Harness
+# Harness SDK
 
 An embeddable AI Agent SDK for Python.
 
@@ -8,24 +8,24 @@ An embeddable AI Agent SDK for Python.
 pip install harness-ai
 ```
 
-### 可选扩展
+### Optional Extensions
 
 ```bash
-pip install "harness-ai[openai]"        # OpenAI 支持
-pip install "harness-ai[observability]" # OpenTelemetry 可观测性
-pip install "harness-ai[sqlite]"        # SQLite 会话存储
-pip install "harness-ai[web]"           # Web 抓取工具
-pip install "harness-ai[guardrails]"    # PII 检测和内容安全
+pip install "harness-ai[openai]"        # OpenAI support
+pip install "harness-ai[observability]" # OpenTelemetry observability
+pip install "harness-ai[sqlite]"        # SQLite session storage
+pip install "harness-ai[web]"           # Web scraping tools
+pip install "harness-ai[guardrails]"    # PII detection and content safety
 
-# 安装多个扩展
+# Install multiple extensions
 pip install "harness-ai[openai,sqlite,web,guardrails]"
 ```
 
-### 开发模式
+### Development Mode
 
 ```bash
-pip install -e ".[dev]"                    # 开发依赖
-pip install -e ".[dev,openai,observability]"  # 开发 + 所有扩展
+pip install -e ".[dev]"                    # Development dependencies
+pip install -e ".[dev,openai,observability]"  # Development + all extensions
 ```
 
 ## Quick Start
@@ -46,27 +46,25 @@ print(result.content)
 
 ## LLM Configuration
 
-### 第三方 OpenAI 格式接口（推荐）
+### Third-Party OpenAI-Compatible APIs (Recommended)
 
-Harness 支持任何兼容 OpenAI API 格式的第三方接口，只需提供 `base_url`、`api_key` 和 `model`：
+Harness supports any OpenAI-compatible API:
 
 ```python
-from harness import AgentHarness, ReadTool, GlobTool
+from harness import AgentHarness, ReadTool
 
 agent = AgentHarness(
-    base_url="https://api.your-provider.com/v1",  # 第三方接口 URL
-    api_key="your-api-key",                        # API Key
-    model="your-model-name",                       # 模型名称
-    provider="openai",                             # 使用 OpenAI 格式
-    tools=[ReadTool(), GlobTool()],
+    base_url="https://api.your-provider.com/v1",
+    api_key="your-api-key",
+    model="your-model-name",
+    provider="openai",
+    tools=[ReadTool()],
 )
 
-result = await agent.run("你的问题")
+result = await agent.run("Your question")
 ```
 
-#### 环境变量配置
-
-也可以通过环境变量配置：
+#### Environment Variables
 
 ```bash
 export OPENAI_API_KEY=your-api-key
@@ -74,90 +72,84 @@ export OPENAI_BASE_URL=https://api.your-provider.com/v1
 ```
 
 ```python
-from harness import AgentHarness, ReadTool
+from harness import AgentHarness
 
-# 自动读取环境变量
 agent = AgentHarness(
     model="your-model-name",
     provider="openai",
-    tools=[ReadTool()],
 )
 ```
 
-#### 配置文件方式
-
-创建 `config.yaml`：
+#### Config File
 
 ```yaml
+# config.yaml
 model: your-model-name
 provider: openai
 base_url: https://api.your-provider.com/v1
 api_key: your-api-key
 max_tokens: 4096
 temperature: 0.7
-system_prompt: "你是一个有帮助的助手。"
+system_prompt: "You are a helpful assistant."
 ```
 
 ```python
 agent = AgentHarness.from_config("config.yaml")
 ```
 
-### 其他 LLM 提供商
+### Other LLM Providers
 
 <details>
 <summary>Anthropic Claude</summary>
 
 ```python
-from harness import AgentHarness, ReadTool
+from harness import AgentHarness
 
-# 环境变量: ANTHROPIC_API_KEY
+# Environment variable: ANTHROPIC_API_KEY
 agent = AgentHarness(
     model="claude-sonnet-4-6",
     provider="anthropic",
-    tools=[ReadTool()],
 )
 ```
 
 </details>
 
 <details>
-<summary>OpenAI 官方</summary>
+<summary>OpenAI Official</summary>
 
 ```python
-from harness import AgentHarness, ReadTool
+from harness import AgentHarness
 
-# 环境变量: OPENAI_API_KEY
+# Environment variable: OPENAI_API_KEY
 agent = AgentHarness(
     model="gpt-4o",
     provider="openai",
-    tools=[ReadTool()],
 )
 ```
 
 </details>
 
 <details>
-<summary>Ollama 本地模型</summary>
+<summary>Ollama Local Models</summary>
 
 ```python
-from harness import AgentHarness, ReadTool
+from harness import AgentHarness
 
 agent = AgentHarness(
     model="llama3",
     provider="openai",
     base_url="http://localhost:11434/v1",
-    api_key="ollama",  # Ollama 不需要真实的 key
-    tools=[ReadTool()],
+    api_key="ollama",  # Ollama doesn't need a real key
 )
 ```
 
 </details>
 
 <details>
-<summary>自定义 LLM 客户端</summary>
+<summary>Custom LLM Client</summary>
 
 ```python
-from harness import AgentHarness, LLMClient, LLMConfig, ReadTool
+from harness import AgentHarness, LLMClient, LLMConfig
 from harness.types import LLMResponse, StopReason, TokenUsage
 
 class MyCustomLLM(LLMClient):
@@ -166,7 +158,7 @@ class MyCustomLLM(LLMClient):
         return "my-custom-llm"
 
     async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
-        # 实现你的 LLM 逻辑
+        # Implement your LLM logic
         return LLMResponse(
             content="Response",
             tool_calls=[],
@@ -179,53 +171,50 @@ class MyCustomLLM(LLMClient):
 
 agent = AgentHarness(
     llm_client=MyCustomLLM(LLMConfig(model="my-custom-llm")),
-    tools=[ReadTool()],
 )
 ```
 
 </details>
 
-## 完整配置参数
+## Configuration
 
 ```python
 from harness import AgentHarness, HarnessConfig, ReadTool
 
 config = HarnessConfig(
-    # LLM 配置
-    model="your-model-name",           # 模型名称
-    provider="openai",                 # 提供商: "anthropic" 或 "openai"
-    base_url="https://api.xxx.com/v1", # 自定义 API 地址
-    api_key="your-api-key",            # API Key
-    context_window="auto",             # 上下文窗口: "auto", "32k", "64k", "128k", "200k" 或具体数值
-    max_tokens="auto",                 # 输出 token: "auto" 或具体数值
-    temperature=0.7,                   # 温度参数
+    # LLM configuration
+    model="your-model-name",
+    provider="openai",
+    base_url="https://api.xxx.com/v1",
+    api_key="your-api-key",
+    context_window="auto",  # "auto", "32k", "64k", "128k", "200k" or specific number
+    max_tokens="auto",      # "auto" or specific number
+    temperature=0.7,
 
-    # Agent 配置
-    max_iterations=100,                # 最大迭代次数
-    tool_timeout=30.0,                 # 工具超时时间（秒）
-    system_prompt="你是一个助手",      # 系统提示词
+    # Agent configuration
+    max_iterations=100,
+    tool_timeout=30.0,
+    system_prompt="You are a helpful assistant",
 
-    # Memory 配置
-    memory_dir=".harness/memory",      # 会话存储目录
+    # Memory configuration
+    memory_dir=".harness/memory",
 )
 
 agent = AgentHarness(config=config, tools=[ReadTool()])
 ```
 
-### 模型上下文窗口自动适配
-
-Harness 内置主流模型预设，自动配置上下文窗口：
+### Model Context Window Auto-Detection
 
 ```python
 from harness import AgentHarness
 
-# 自动检测（推荐）
-agent = AgentHarness(model="glm-5")  # 自动使用 64K 上下文
+# Auto-detect (recommended)
+agent = AgentHarness(model="glm-5")  # Auto-uses 64K context
 
-# 手动指定
+# Manual override
 agent = AgentHarness(
     model="unknown-model",
-    context_window="64k",  # 可选: "32k", "64k", "128k", "200k"
+    context_window="64k",  # "32k", "64k", "128k", "200k"
 )
 ```
 
@@ -233,17 +222,17 @@ agent = AgentHarness(
 
 | Tool | Description |
 |------|-------------|
-| `ReadTool` | 读取文件内容 |
-| `WriteTool` | 写入文件 |
-| `EditTool` | 编辑文件（查找替换） |
-| `GlobTool` | 按模式查找文件 |
-| `GrepTool` | 搜索文件内容 |
-| `BashTool` | 执行 shell 命令 |
-| `WebSearchTool` | Web 搜索（DuckDuckGo 免费API） |
-| `WebFetchTool` | 获取网页内容 |
-| `WebToMarkdownTool` | 获取网页并转换为 Markdown |
+| `ReadTool` | Read file contents |
+| `WriteTool` | Write to files |
+| `EditTool` | Edit files (find and replace) |
+| `GlobTool` | Find files by pattern |
+| `GrepTool` | Search file contents |
+| `BashTool` | Execute shell commands |
+| `WebSearchTool` | Web search (DuckDuckGo free API) |
+| `WebFetchTool` | Fetch web page content |
+| `WebToMarkdownTool` | Fetch and convert to Markdown |
 
-### Web Tools 示例
+### Web Tools Example
 
 ```python
 from harness import AgentHarness, WebSearchTool, WebFetchTool, WebToMarkdownTool
@@ -254,129 +243,90 @@ agent = AgentHarness(
     tools=[WebSearchTool(), WebFetchTool(), WebToMarkdownTool()],
 )
 
-# Web 搜索
-result = await agent.run("搜索 Python asyncio 最佳实践")
-
-# 获取网页内容
-result = await agent.run("获取 https://docs.python.org/3/library/asyncio.html 的内容")
-
-# 获取网页并转换为 Markdown
-result = await agent.run("将 https://blog.python.org 转换为 Markdown 格式")
+result = await agent.run("Search for Python asyncio best practices")
 ```
 
-**依赖**：
+**Dependencies**:
 ```bash
 pip install aiohttp beautifulsoup4
 ```
 
-## 自定义工具
+## Custom Tools
 
 ```python
 from harness import AgentHarness
 
 agent = AgentHarness(model="your-model", provider="openai")
 
-@agent.tool(description="计算两个数的和")
+@agent.tool(description="Calculate the sum of two numbers")
 def add(a: int, b: int) -> int:
     return a + b
 
-result = await agent.run("计算 5 + 3")
+result = await agent.run("Calculate 5 + 3")
 ```
 
-## 测试
+## Testing
 
-### MockHarness（推荐）
-
-使用 `MockHarness` 进行单元测试，无需真实 API 调用：
+### MockHarness (Recommended)
 
 ```python
 from harness.testing import MockHarness, MockResponse
 from harness.types import StopReason, ToolCall
 
-# 简单测试
+# Simple test
 mock = MockHarness(responses=[
-    MockResponse(content="这是模拟响应"),
+    MockResponse(content="This is a mock response"),
 ])
 
-result = await mock.run("测试问题")
-assert result.content == "这是模拟响应"
+result = await mock.run("Test question")
+assert result.content == "This is a mock response"
 
-# 模拟工具调用
+# Mock tool calls
 mock = MockHarness(responses=[
     MockResponse(
         tool_calls=[ToolCall(id="1", name="read", arguments={"path": "/test.txt"})],
         stop_reason=StopReason.TOOL_USE,
     ),
-    MockResponse(content="文件内容: test data"),
+    MockResponse(content="File content: test data"),
 ])
 mock.add_tool_result("read", "test data")
 
-result = await mock.run("读取文件")
+result = await mock.run("Read file")
 assert "test data" in result.content
 ```
 
-### RecordingHarness（录制真实交互）
-
-录制真实交互用于回放测试：
+### RecordingHarness (Record Real Interactions)
 
 ```python
 from harness.testing import RecordingHarness, RecordingConfig
 from harness import AgentHarness
 
-# 录制
+# Record
 agent = AgentHarness(model="claude-sonnet-4-6")
 recorder = RecordingHarness(agent)
 
-result = await recorder.run("复杂任务")
+result = await recorder.run("Complex task")
 recorder.save_recording("test_fixture")
 
-# 回放
+# Playback
 mock = MockHarness()
 mock.load_recording("test_fixture.json")
 
-result = await mock.run("复杂任务")  # 无需真实 API
+result = await mock.run("Complex task")  # No real API call
 ```
 
-### MockLLMClient（传统方式）
+## Guardrails (PII Detection)
 
-```python
-from harness import AgentHarness, ReadTool
-from harness.llm import MockLLMClient, LLMConfig
-from harness.llm.mock import MockResponse, create_tool_use_mock
+Guardrails provides two-layer protection:
+- **Layer 1: PII Rule Detection** - Fast (<1ms), regex + surname database
+- **Layer 2: LLM Judge** - Semantic detection (~100ms), optional
 
-# 创建模拟客户端
-mock_client = MockLLMClient(
-    model="mock-model",
-    responses=[
-        MockResponse(content="这是模拟响应"),
-    ]
-)
-
-# 使用模拟客户端创建 agent
-agent = AgentHarness(
-    llm_client=mock_client,
-    tools=[ReadTool()],
-)
-
-# 测试
-result = await agent.run("测试问题")
-assert result.content == "这是模拟响应"
-```
-
-## Guardrails (PII 检测和内容安全)
-
-Guardrails 提供两层安全防护：
-
-- **Layer 1: PII 规则检测** - 快速（<1ms），使用正则表达式 + 姓氏库
-- **Layer 2: LLM Judge** - 语义检测（~100ms），可选
-
-### 快速开始
+### Quick Start
 
 ```python
 from harness import AgentHarness, ReadTool
 from harness.guardrails import GuardrailConfig
 
-# 只启用 Layer 1（PII 过滤）
 agent = AgentHarness(
     model="claude-sonnet-4-6",
     tools=[ReadTool()],
@@ -387,192 +337,145 @@ agent = AgentHarness(
     ),
 )
 
-result = await agent.run("我的手机号是13812345678")
-# PII 被脱敏为: "我的手机号是<手机号>"
+result = await agent.run("My phone number is 13812345678")
+# PII redacted to: "My phone number is <手机号>"
 ```
 
-### 支持的 PII 类型
+### Supported PII Types
 
-| 类型 | 正则示例 | 占位符 |
-|------|---------|--------|
-| 中国大陆手机号 | 13812345678 | `<手机号>` |
-| 中国身份证号 | 110101199001011234 | `<身份证号>` |
-| 银行卡号 | 6222021234567890123 | `<银行卡号>` |
-| 护照号码 | G12345678 | `<护照号>` |
-| 统一社会信用代码 | 91110000000000000X | `<信用代码>` |
-| 车牌号码 | 京A12345 | `<车牌号>` |
-| 电子邮件 | test@example.com | `<邮箱>` |
-| IP 地址 | 192.168.1.1 | `<IP地址>` |
-| 香港手机号 | 5123 4567 | `<香港手机号>` |
-| 香港身份证 | A123456(7) | `<香港身份证>` |
-| 中文姓名 | 张三、欧阳锋 | `<姓名>` |
+| Type | Example | Placeholder |
+|------|---------|-------------|
+| China Mobile | 13812345678 | `<手机号>` |
+| China ID Card | 110101199001011234 | `<身份证号>` |
+| Bank Card | 6222021234567890123 | `<银行卡号>` |
+| Passport | G12345678 | `<护照号>` |
+| Social Credit Code | 91110000000000000X | `<信用代码>` |
+| License Plate | 京A12345 | `<车牌号>` |
+| Email | test@example.com | `<邮箱>` |
+| IP Address | 192.168.1.1 | `<IP地址>` |
+| Hong Kong Mobile | 5123 4567 | `<香港手机号>` |
+| Hong Kong ID | A123456(7) | `<香港身份证>` |
+| Chinese Name | 张三、欧阳锋 | `<姓名>` |
 
-### 多语言支持
+### Direct PII Functions
 
 ```python
-# 简体中文（默认）
-agent = AgentHarness(
-    guardrails=GuardrailConfig(
-        enabled=True,
-        language="zh",
-        placeholders={"手机号": "[REDACTED_PHONE]"},
-    ),
-)
+from harness.guardrails import check_pii, scan_pii, redact_pii, PIIEntity
 
-# 繁体中文
-agent = AgentHarness(
-    guardrails=GuardrailConfig(
-        enabled=True,
-        language="zh-tw",
-        placeholders={"手機號": "[REDACTED_PHONE]"},
-    ),
-)
+# check_pii() returns tuple: (safe_text, entities, has_pii)
+safe_text, entities, has_pii = check_pii("My phone is 13812345678")
 
-# 英文
-agent = AgentHarness(
-    guardrails=GuardrailConfig(
-        enabled=True,
-        language="en",
-        placeholders={"手机号": "[PHONE]"},
-    ),
-)
-```
+# PIIEntity attributes
+for entity in entities:
+    print(f"Type: {entity.entity_type}")  # "PHONE_NUMBER"
+    print(f"Text: {entity.text}")          # "13812345678"
+    print(f"Start: {entity.start}")
+    print(f"End: {entity.end}")
+    print(f"Score: {entity.score}")
 
-### Layer 2: LLM Judge
+# scan_pii() returns object
+result = scan_pii(text)
+print(result.entities)
+print(result.has_pii)
 
-启用语义层面的安全检测（需要外部 Judge 服务）：
-
-```python
-agent = AgentHarness(
-    model="claude-sonnet-4-6",
-    guardrails=GuardrailConfig(
-        enabled=True,
-        layer1_enabled=True,
-        layer2_enabled=True,
-        judge_endpoint="http://localhost:8001/v1/chat/completions",
-        judge_timeout=5.0,
-    ),
-)
-```
-
-### 依赖安装
-
-```bash
-# 只需要这两个包，不需要 spaCy 中文模型
-pip install presidio-analyzer>=2.2.0
-pip install presidio-anonymizer>=2.2.0
-
-# 或使用可选依赖
-pip install "harness-ai[guardrails]"
-```
-
-**注意**：不需要安装 `zh_core_web_sm` 或其他 spaCy 中文模型。中文 PII 使用正则表达式 + 姓氏库实现，更精准且无额外依赖。
-
-### 直接使用 PII 过滤
-
-```python
-from harness.guardrails import UniversalPIIGuardrail, redact_pii
-
-# 快速过滤
-text = "我叫张三，手机号13812345678，身份证110101199001011234"
+# Quick redact
 redacted = redact_pii(text)
-# "我叫<姓名>，手机号<手机号>，身份证<身份证号>"
-
-# 使用完整 API
-guardrail = UniversalPIIGuardrail(min_score=0.5)
-result = guardrail.detect(text)
-print(result.entities)  # 检测到的 PII 实体
-print(result.redacted)  # 脱敏后的文本
 ```
-
-## Features
-
-- **多 LLM 支持**: Anthropic Claude、OpenAI、第三方 OpenAI 格式接口、自定义 LLM
-- **Agent Loop**: ReAct 风格的执行循环，支持进度事件追踪
-- **Loop Engineering**:
-  - Goal-Driven Execution - 目标驱动执行
-  - Automations - 定时触发/调度
-  - Worktrees - 并行隔离执行
-  - Connectors - 外部系统集成（Slack、GitHub、Webhook）
-  - Orchestrator - 工作流编排（支持 YAML 定义）
-- **Streaming**: 流式输出与背压控制
-- **Interrupt/Recovery**: 中断恢复，支持从快照继续执行
-- **Tool System**: 内置工具 + 自定义工具 + JSON Schema 参数验证
-- **Memory**: 会话管理、SQLite 持久化存储、异步 WAL 模式
-- **Guardrails**: PII 检测 + LLM Judge 内容安全（简/繁/英文）
-- **Cost Control**: 多层级预算控制（会话级、用户级、全局级）
-- **Observability**: OpenTelemetry 集成，支持 Jaeger、Datadog、Langfuse
-- **Testing**: MockHarness + RecordingHarness 完整测试工具链
-- **SDK**: 简洁的 Python API
-- **Progress Events**: 执行过程可视化，支持 UI 展示和调试
 
 ## Loop Engineering
 
-**Loop Engineering** 是一种新的 Agent 编排范式：不再逐轮手动提示，而是设计自动化循环系统驱动 Agent 自主运行。
+**Loop Engineering** is a new paradigm: instead of prompting at each step, design automated loop systems to drive the agent.
 
-### Goal-Driven Execution（目标驱动执行）
+### Goal-Driven Execution
 
-让 Agent 自主运行直到目标达成：
+Let the agent run autonomously until a goal is achieved:
 
 ```python
 from harness import AgentHarness, GoalStatus
 
 agent = AgentHarness(model="claude-sonnet-4-6")
 
-# 基础用法
-result = await agent.run_goal("修复所有类型错误")
+# Basic usage
+result = await agent.run_goal("Fix all type errors in src/")
 
-# 检查结果
+# Check result
 if result.status == GoalStatus.ACHIEVED:
-    print(f"目标达成！共 {result.total_iterations} 轮迭代")
+    print(f"Goal achieved in {result.total_iterations} iterations")
 ```
 
-### Automations（定时触发）
+### Custom Verification
 
-定时或按间隔触发 Agent 执行：
+```python
+async def check_coverage(result):
+    """Check if test coverage reaches 80%"""
+    proc = await asyncio.create_subprocess_exec(
+        "pytest", "--cov", "--cov-report=term",
+        stdout=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    return "TOTAL.*80%" in stdout.decode()
+
+result = await agent.run_goal(
+    goal="Increase test coverage to 80%",
+    custom_verifier=check_coverage,
+    max_iterations=50,
+)
+```
+
+### Goal Status
+
+| Status | Description |
+|--------|-------------|
+| `ACHIEVED` | Goal achieved |
+| `TIMEOUT` | Timeout reached |
+| `MAX_ITERATIONS` | Max iterations reached |
+| `MAX_RESETS` | Max context resets reached |
+| `ERROR` | Agent execution error |
+| `VERIFIER_FAULT` | Verifier infrastructure fault |
+| `CANCELLED` | User cancelled |
+
+### Automations (Scheduled Execution)
 
 ```python
 from harness.loop import Automation
 
-# Cron 定时任务
+# Cron schedule
 automation = Automation(
     name="daily-report",
-    schedule="0 9 * * *",  # 每天 9:00
-    goal="生成每日报告",
+    schedule="0 9 * * *",  # Every day at 9:00
+    goal="Generate daily report",
 )
 
-# 间隔任务
+# Interval schedule
 health_check = Automation(
     name="health-check",
-    interval_seconds=300,  # 每 5 分钟
-    goal="检查系统健康状态",
+    interval_seconds=300,  # Every 5 minutes
+    goal="Check system health",
 )
 
 await automation.start(agent)
 ```
 
-### Worktrees（并行隔离执行）
+### Worktrees (Parallel Isolated Execution)
 
-在独立的 git worktree 中并行执行多个 Goal：
+Execute multiple goals in parallel in isolated git worktrees:
 
 ```python
 from harness.loop import WorktreeOrchestrator, WorktreeConfig
 
 orchestrator = WorktreeOrchestrator(agent, ".")
 
-# 并行执行多个任务
 results = await orchestrator.run_parallel([
-    WorktreeConfig(name="feature-a", goal="实现功能 A"),
-    WorktreeConfig(name="feature-b", goal="实现功能 B"),
+    WorktreeConfig(name="feature-a", goal="Implement feature A"),
+    WorktreeConfig(name="feature-b", goal="Implement feature B"),
 ])
 
-# 合并成功的分支
 merge_result = await orchestrator.merge_successful(results)
 ```
 
-### Connectors（外部系统集成）
+### Connectors (External System Integration)
 
-与 Slack、GitHub 等外部系统双向交互：
+Integrate with Slack, GitHub, and other external systems:
 
 ```python
 from harness.connectors import ConnectorManager, SlackConnector, SlackConfig
@@ -588,9 +491,9 @@ manager.register_connector(slack)
 await manager.start()
 ```
 
-### Orchestrator（工作流编排）
+### Orchestrator (Workflow Orchestration)
 
-#### 声明式工作流
+#### Declarative Workflow
 
 ```python
 from harness.orchestrator import LoopOrchestrator, WorkflowConfig, WorkflowStep
@@ -600,16 +503,16 @@ orchestrator = LoopOrchestrator(agent)
 workflow = WorkflowConfig(
     name="code-review",
     steps=[
-        WorkflowStep(name="analyze", goal="分析代码结构"),
-        WorkflowStep(name="lint", goal="运行 lint 检查"),
-        WorkflowStep(name="review", goal="代码审查", depends_on=["analyze", "lint"]),
+        WorkflowStep(name="analyze", goal="Analyze code structure"),
+        WorkflowStep(name="lint", goal="Run lint checks"),
+        WorkflowStep(name="review", goal="Code review", depends_on=["analyze", "lint"]),
     ],
 )
 
 result = await orchestrator.run_workflow("code-review")
 ```
 
-#### YAML 工作流
+#### YAML Workflow
 
 ```yaml
 # cicd.yaml
@@ -618,11 +521,11 @@ default_mode: parallel
 
 steps:
   - name: lint
-    goal: "运行 ruff check"
+    goal: "Run ruff check"
   - name: test
-    goal: "运行 pytest"
+    goal: "Run pytest"
   - name: deploy
-    goal: "部署"
+    goal: "Deploy"
     depends_on: [lint, test]
 ```
 
@@ -630,7 +533,7 @@ steps:
 result = await orchestrator.run_workflow("cicd.yaml")
 ```
 
-#### 多 Agent 团队协作
+#### Multi-Agent Team Collaboration
 
 ```python
 from harness.orchestrator import TeamConfig, AgentRole, CoordinationMode
@@ -638,64 +541,39 @@ from harness.orchestrator import TeamConfig, AgentRole, CoordinationMode
 team = TeamConfig(
     name="dev-team",
     roles=[
-        AgentRole(name="architect", description="系统设计", skills=["architecture"]),
-        AgentRole(name="developer", description="实现", skills=["coding"]),
+        AgentRole(name="architect", description="System design", skills=["architecture"]),
+        AgentRole(name="developer", description="Implementation", skills=["coding"]),
     ],
     coordination_mode=CoordinationMode.SEQUENTIAL,
 )
 
-result = await orchestrator.run_team("dev-team", "实现登录功能")
+result = await orchestrator.run_team("dev-team", "Implement login feature")
 ```
 
-### 详细配置
+## Features
 
-提供自定义验证函数判断目标是否达成：
-
-```python
-async def check_coverage(result):
-    """检查测试覆盖率是否达到 80%"""
-    proc = await asyncio.create_subprocess_exec(
-        "pytest", "--cov", "--cov-report=term",
-        stdout=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    return "TOTAL.*80%" in stdout.decode()
-
-result = await agent.run_goal(
-    goal="将测试覆盖率提升到 80%",
-    custom_verifier=check_coverage,
-    max_iterations=50,
-)
-```
-
-### 配置参数
-
-```python
-result = await agent.run_goal(
-    goal="你的目标",
-    success_criteria="成功标准描述",   # 可选
-    max_iterations=50,                # 最大迭代次数
-    max_context_resets=5,             # 最大上下文重置次数
-    timeout_seconds=3600,             # 超时时间（秒）
-    on_progress=my_callback,          # 进度回调
-)
-```
-
-### 目标状态
-
-| 状态 | 说明 |
-|------|------|
-| `ACHIEVED` | 目标达成 |
-| `TIMEOUT` | 超时 |
-| `MAX_ITERATIONS` | 达到最大迭代次数 |
-| `MAX_RESETS` | 达到最大上下文重置次数 |
-| `ERROR` | Agent 执行错误 |
-| `VERIFIER_FAULT` | 验证器基础设施故障 |
-| `CANCELLED` | 用户取消 |
+- **Multi-LLM Support**: Anthropic Claude, OpenAI, third-party OpenAI-compatible APIs, custom LLM
+- **Agent Loop**: ReAct-style execution loop with progress event tracking
+- **Loop Engineering**:
+  - Goal-Driven Execution - Autonomous goal achievement
+  - Automations - Scheduled/interval triggers
+  - Worktrees - Parallel isolated execution
+  - Connectors - External system integration (Slack, GitHub, Webhook)
+  - Orchestrator - Workflow orchestration (YAML support)
+- **Streaming**: Streaming output with backpressure control
+- **Interrupt/Recovery**: Interrupt and resume from snapshot
+- **Tool System**: Built-in tools + custom tools + JSON Schema validation
+- **Memory**: Session management, SQLite persistence, async WAL mode
+- **Guardrails**: PII detection + LLM Judge content safety (Simplified/Traditional/English)
+- **Cost Control**: Multi-level budget control (session, user, global)
+- **Observability**: OpenTelemetry integration (Jaeger, Datadog, Langfuse)
+- **Testing**: MockHarness + RecordingHarness complete test toolchain
+- **MCP Support**: Model Context Protocol with multi-transport (Stdio, HTTP+SSE, Streamable HTTP)
+- **Spring Cloud Integration**: W3C TraceContext, Prometheus metrics, Redis distributed storage, Nacos/Eureka service discovery
 
 ## Documentation
 
-详细设计文档见 `docs/` 目录。
+Detailed design documentation in `docs/` directory.
 
 ## License
 
