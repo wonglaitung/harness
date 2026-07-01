@@ -422,12 +422,12 @@ class ExecutionLogSection(CollapsibleSection):
                 margin: 0;
             }}
             QScrollBar::handle:vertical {{
-                background-color: {theme.TEXT_SUBTLE};
+                background-color: {theme.SCROLL_THUMB};
                 border-radius: 2px;
                 min-height: 20px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background-color: {theme.TEXT};
+                background-color: {theme.TEXT_SUBTLE};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
