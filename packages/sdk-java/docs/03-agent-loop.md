@@ -521,8 +521,30 @@ result = await agent.run("重构整个认证模块，添加 OAuth2 支持")
 @dataclass
 class RalphLoopConfig:
     max_loops: int = 5                    # 最大继续循环次数
-    task_complete_check: callable | None = None  # 自定义任务完成检测函数
+    task_complete_check: Callable[[str], bool] | None = None  # 自定义任务完成检测函数
     progress_dir: Path | None = None      # 进度保存目录
+    context_threshold: float = 0.6        # 上下文阈值（触发 Ralph Loop 的最低使用率）
+    continuation_prompt_template: str = ...  # 继续执行的提示模板
+```
+
+**Java SDK 配置**：
+
+```java
+import com.harness.core.RalphLoopConfig;
+import java.util.function.Predicate;
+
+// 使用 Builder 创建配置
+RalphLoopConfig config = RalphLoopConfig.builder()
+    .maxLoops(5)
+    .contextThreshold(0.6)
+    // 自定义任务完成检测（Java 使用 Predicate）
+    .taskCompleteCheck(response ->
+        response.contains("TASK_COMPLETE") ||
+        response.contains("所有任务已完成")
+    )
+    .progressDir(Path.of("./progress"))
+    .build();
+```
     continuation_prompt_template: str = (  # 继续提示模板
         "[任务继续] 之前的上下文已达到限制，但任务尚未完成。\n\n"
         "请继续之前的工作。以下是最后一步的输出摘要：\n\n"
@@ -648,13 +670,17 @@ class SubAgentResult:
 
 ### SubAgentManager
 
+SubAgentManager 使用 **工厂模式** 创建子代理，支持不同实现（真实 AgentHarness、Mock 等）。
+
+**Python SDK**：
+
 ```python
 from harness.core.subagent import SubAgentManager
 from harness import AgentHarness
 
 # 创建父代理和子代理管理器
 parent = AgentHarness(model="claude-sonnet-4-6")
-manager = SubAgentManager(parent)
+manager = SubAgentManager(parent)  # 自动使用真实 AgentHarness 工厂
 
 # 创建子代理配置
 config1 = SubAgentConfig(
@@ -685,6 +711,59 @@ for name, result in results.items():
     else:
         print(f"{name} failed with status: {result.status}")
 ```
+
+**Java SDK**（工厂模式）：
+
+```java
+import com.harness.core.SubAgentManager;
+import com.harness.core.SubAgentConfig;
+import com.harness.integration.HarnessAgentFactory;
+import com.harness.integration.AgentHarnessParentAdapter;
+
+// 创建父代理
+AgentHarness parent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")
+    .build();
+
+// 使用工厂创建管理器（真实 AgentHarness）
+SubAgentManager manager = new SubAgentManager(
+    new AgentHarnessParentAdapter(parent),
+    new HarnessAgentFactory()
+);
+
+// 创建子代理配置
+SubAgentConfig config1 = SubAgentConfig.builder()
+    .name("core_analyzer")
+    .task("Analyze src/core directory")
+    .tools(List.of("read", "grep"))
+    .maxIterations(15)
+    .build();
+
+// 创建子代理
+manager.spawn(config1);
+
+// 并行运行所有子代理
+Map<String, SubAgentResult> results = manager.runAll().join();
+```
+
+### 工厂模式架构
+
+SubAgentManager 使用 `AgentFactory` 接口创建子代理运行器：
+
+```
+SubAgentManager
+    ├── AgentFactory (接口)
+    │   ├── HarnessAgentFactory (真实 AgentHarness)
+    │   └── MockAgentFactory (默认模拟实现)
+    │
+    └── AgentHarnessParent (接口)
+        └── AgentHarnessParentAdapter (适配器)
+```
+
+**设计优势**：
+- **解耦**：SubAgentManager 在 `harness-sdk-core` 模块，不直接依赖 `AgentHarness`
+- **可测试**：使用 MockAgentFactory 进行单元测试
+- **可扩展**：支持其他 Agent 实现（如 MockHarness）
 
 ### 子代理状态
 
@@ -1168,6 +1247,146 @@ finally:
 **设计原则**：
 - 资源清理必须放在 `finally` 块中
 - 清理操作本身需要捕获异常，避免掩盖原始错误
+
+---
+
+## 上下文压缩（Context Compression）
+
+当对话历史超过 token 预算时，Harness 自动压缩上下文以保持响应能力。
+
+### 压缩触发条件
+
+```
+estimated_tokens > budget.available_for_input * compression_threshold
+```
+
+默认阈值：`compression_threshold = 0.9`（90% 容量时触发）
+
+### 压缩流程
+
+```
+1. 检测：ContextBuilder 估算当前 token 数
+2. 触发：超过阈值时启动压缩
+3. 压缩：ContextCompressor 保留最近消息，生成旧消息摘要
+4. 合并：摘要合并到 system prompt（确保 chat template 正确）
+5. 返回：[system(prompt + summary), user, assistant, ...]
+```
+
+### 关键设计：避免 system 消息冲突
+
+**问题**：vLLM 等推理引擎的 chat template 要求 system 消息必须在开头。错误做法：
+
+```
+[system(real_prompt), system(compression_summary), user, assistant, ...]  ❌
+```
+
+**解决方案**：压缩器只返回摘要字符串，由 ContextBuilder 合并到真正的 system prompt：
+
+```
+[system(real_prompt + summary), user, assistant, ...]  ✅
+```
+
+### ContextBuilder 压缩集成
+
+**Python SDK**：
+
+```python
+from harness.memory.context_builder import ContextBuilder, ContextConfig
+
+# 创建带压缩功能的 ContextBuilder
+builder = ContextBuilder(config=ContextConfig(
+    max_tokens=200000,
+    enable_compression=True,
+    compression_threshold=0.9,
+))
+
+# 构建上下文（自动压缩）
+context = builder.build(session)
+# context.system_prompt - 系统提示（含压缩摘要）
+# context.messages - 压缩后的消息列表
+# context.compression_result - 压缩详情（如有）
+```
+
+**Java SDK**：
+
+```java
+import com.harness.memory.ContextBuilder;
+import com.harness.memory.ContextConfig;
+
+// 创建带压缩功能的 ContextBuilder
+ContextBuilder builder = new ContextBuilder(ContextConfig.builder()
+    .maxTokens(200000)
+    .enableCompression(true)
+    .compressionThreshold(0.9)
+    .build());
+
+// 构建上下文
+BuiltContext context = builder.build(session);
+// context.systemPrompt() - 系统提示（含压缩摘要）
+// context.messages() - 压缩后的消息列表
+// context.compressionResult() - 压缩详情
+```
+
+### AgentLoop 配置
+
+通过 `LoopConfig` 配置上下文窗口和压缩：
+
+**Python SDK**：
+
+```python
+from harness import AgentHarness
+
+agent = AgentHarness(
+    context_window=200000,      # 上下文窗口大小
+    session_window=100,         # 会话滑动窗口
+    enable_compression=True,    # 启用压缩（默认 True）
+)
+```
+
+**Java SDK**：
+
+```java
+import com.harness.core.LoopConfig;
+
+LoopConfig config = LoopConfig.builder()
+    .contextWindow(200000)       // 上下文窗口
+    .sessionWindow(100)          // 滑动窗口
+    .enableCompression(true)     // 启用压缩
+    .build();
+```
+
+### LoopConfig 新增字段
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `contextWindow` | `int` | `200000` | 上下文窗口 token 数 |
+| `sessionWindow` | `int` | `100` | 会话滑动窗口消息数 |
+| `enableCompression` | `boolean` | `true` | 启用自动压缩 |
+| `systemPrompt` | `String` | `""` | 基础系统提示 |
+
+### 压缩摘要格式
+
+压缩生成的摘要包含：
+
+```text
+[Previous conversation summary]
+
+### User Requests
+- User asked: What is the project structure?
+- User asked: Analyze the authentication flow
+
+### Key Actions
+- Assistant: Read file src/auth/login.py
+- Assistant: Identified OAuth2 implementation
+
+### Tools Used
+- Tool: read
+- Tool: grep
+```
+
+摘要合并到 system prompt 后，Agent 可以理解之前的对话内容，同时释放大量 token 空间。
+
+---
 
 ## 完整流程图
 

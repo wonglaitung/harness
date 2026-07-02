@@ -405,6 +405,20 @@ public class AgentHarness {
     }
 
     /**
+     * Get LLM client.
+     */
+    public LLMClient getLLMClient() {
+        return llmClient;
+    }
+
+    /**
+     * Get all registered tools.
+     */
+    public List<Tool> getAllTools() {
+        return new ArrayList<>(toolsList);
+    }
+
+    /**
      * Get configuration.
      */
     public HarnessConfig getConfig() {

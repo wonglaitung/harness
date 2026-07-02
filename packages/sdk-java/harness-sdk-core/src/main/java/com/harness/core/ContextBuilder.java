@@ -8,7 +8,13 @@ import com.harness.types.Session;
 
 /**
  * Context builder - builds the context for LLM calls.
+ *
+ * @deprecated Use {@link com.harness.memory.ContextBuilder} instead,
+ *             which supports compression and proper summary handling.
+ *             The new ContextBuilder in harness-sdk-memory module
+ *             correctly handles system message ordering for chat templates.
  */
+@Deprecated(since = "0.2.0", forRemoval = true)
 public class ContextBuilder {
 
     private final int contextWindow;
@@ -31,7 +37,10 @@ public class ContextBuilder {
 
     /**
      * Build context from session.
+     *
+     * @deprecated Use {@link com.harness.memory.ContextBuilder#build(Session)} instead.
      */
+    @Deprecated(since = "0.2.0", forRemoval = true)
     public Context build(Session session) {
         List<Message> messages = new ArrayList<>();
 
@@ -69,7 +78,11 @@ public class ContextBuilder {
 
     /**
      * Truncate history to fit within token budget.
+     *
+     * @deprecated This method incorrectly inserts system messages in the middle
+     *             of the conversation, which violates chat template requirements.
      */
+    @Deprecated(since = "0.2.0", forRemoval = true)
     private List<Message> truncateHistory(List<Message> messages, int maxTokens) {
         List<Message> result = new ArrayList<>();
         int currentTokens = 0;
@@ -96,7 +109,10 @@ public class ContextBuilder {
 
     /**
      * Context result.
+     *
+     * @deprecated Use {@link com.harness.memory.BuiltContext} instead.
      */
+    @Deprecated(since = "0.2.0", forRemoval = true)
     public record Context(
         List<Message> messages,
         String systemPrompt,

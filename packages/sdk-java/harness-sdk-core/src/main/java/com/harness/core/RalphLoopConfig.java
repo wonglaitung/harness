@@ -1,20 +1,31 @@
 package com.harness.core;
 
+import java.nio.file.Path;
+import java.util.function.Predicate;
+
 /**
  * Configuration for Ralph Loop.
  *
  * Ralph Loop intercepts exit attempts when the agent claims completion
  * but the task is not actually done. It saves progress and reinjects
  * a continuation prompt in a clean context.
+ *
+ * @param maxLoops Maximum number of continuation loops (default: 5)
+ * @param contextThreshold Context threshold for triggering (fraction of max_tokens, default: 0.6)
+ * @param continuationPromptTemplate Custom continuation prompt template
+ * @param taskCompleteCheck Custom function to check if task is complete (return true if complete)
+ * @param progressDir Directory to save progress files
  */
 public record RalphLoopConfig(
     int maxLoops,
     double contextThreshold,
-    String continuationPromptTemplate
+    String continuationPromptTemplate,
+    Predicate<String> taskCompleteCheck,
+    Path progressDir
 ) {
 
     public RalphLoopConfig() {
-        this(5, 0.6, getDefaultContinuationTemplate());
+        this(5, 0.6, getDefaultContinuationTemplate(), null, null);
     }
 
     /**
@@ -46,6 +57,8 @@ public record RalphLoopConfig(
         private int maxLoops = 5;
         private double contextThreshold = 0.6;
         private String continuationPromptTemplate = getDefaultContinuationTemplate();
+        private Predicate<String> taskCompleteCheck = null;
+        private Path progressDir = null;
 
         public Builder maxLoops(int value) {
             this.maxLoops = value;
@@ -62,8 +75,38 @@ public record RalphLoopConfig(
             return this;
         }
 
+        /**
+         * Set custom task complete check function.
+         *
+         * The function receives the LLM response content and should return:
+         * - true if the task is complete
+         * - false if the task is incomplete and should continue
+         *
+         * Example:
+         * <pre>
+         * RalphLoopConfig.builder()
+         *     .taskCompleteCheck(response -> response.contains("TASK_COMPLETE"))
+         *     .build()
+         * </pre>
+         */
+        public Builder taskCompleteCheck(Predicate<String> value) {
+            this.taskCompleteCheck = value;
+            return this;
+        }
+
+        public Builder progressDir(Path value) {
+            this.progressDir = value;
+            return this;
+        }
+
         public RalphLoopConfig build() {
-            return new RalphLoopConfig(maxLoops, contextThreshold, continuationPromptTemplate);
+            return new RalphLoopConfig(
+                maxLoops,
+                contextThreshold,
+                continuationPromptTemplate,
+                taskCompleteCheck,
+                progressDir
+            );
         }
     }
 }

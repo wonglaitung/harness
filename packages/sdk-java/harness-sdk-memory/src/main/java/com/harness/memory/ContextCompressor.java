@@ -120,12 +120,11 @@ public class ContextCompressor {
         // Generate summary of old messages
         String summary = generateSummary(oldMessages);
 
-        // Check if we're within budget
-        List<Message> compressed = new ArrayList<>();
-        if (summary != null && !summary.isEmpty()) {
-            compressed.add(Message.system("[Previous conversation summary]\n" + summary));
-        }
-        compressed.addAll(recentMessages);
+        // Note: Do NOT insert a system message here, as it would violate
+        // the chat template requirement that system messages must be first.
+        // Instead, we return the summary separately and let the context builder
+        // handle it properly by prepending to the actual system prompt.
+        List<Message> compressed = new ArrayList<>(recentMessages);
 
         return new SummaryPair(compressed, summary);
     }

@@ -1094,6 +1094,168 @@ Agent 内部推理:
 
 ---
 
+## 上下文压缩（Context Compression）
+
+当对话历史超过 token 预算时，Harness 自动压缩上下文以保持响应能力。压缩遵循 **chat template 要求**：system 消息必须在消息列表开头。
+
+### 压缩流程
+
+```
+1. 检测：estimated_tokens > budget.available_for_input * threshold
+2. 压缩：保留最近 N 条消息，生成旧消息摘要
+3. 合并：将摘要合并到真正的 system prompt 中
+4. 返回：[system(prompt + summary), user, assistant, ...]
+```
+
+### ContextCompressor
+
+压缩器负责生成摘要，**不再插入 system 消息**：
+
+```python
+# Python SDK
+from harness.memory.compressor import ContextCompressor, CompressionConfig
+
+compressor = ContextCompressor(token_counter, CompressionConfig(
+    min_messages_before_compress=10,  # 最少消息数才触发压缩
+    keep_recent_messages=5,           # 保留最近 5 条消息
+    summary_max_tokens=500,           # 摘要最大 token 数
+))
+
+result = compressor.compress(messages, target_tokens=50000)
+
+# result.compressed_messages - 压缩后的消息列表（不含 system 消息）
+# result.summary - 摘要字符串（需要合并到 system prompt）
+```
+
+```java
+// Java SDK
+import com.harness.memory.ContextCompressor;
+import com.harness.memory.CompressionConfig;
+
+ContextCompressor compressor = new ContextCompressor(tokenCounter,
+    CompressionConfig.builder()
+        .minMessagesBeforeCompress(10)
+        .keepRecentMessages(5)
+        .summaryMaxTokens(500)
+        .build());
+
+CompressionResult result = compressor.compress(messages, targetTokens);
+
+// result.compressedMessages() - 压缩后的消息列表
+// result.summary() - 摘要字符串
+```
+
+### ContextBuilder
+
+上下文构建器负责组装消息、处理压缩，并**将摘要合并到 system prompt**：
+
+```python
+# Python SDK
+from harness.memory.context_builder import ContextBuilder, ContextConfig
+
+builder = ContextBuilder(config=ContextConfig(
+    max_tokens=200000,
+    system_prompt="You are a helpful assistant.",
+    window_size=100,              # 滑动窗口大小
+    compression_threshold=0.9,    # 90% 容量时触发压缩
+    enable_compression=True,
+))
+
+context = builder.build(session)
+# context.messages - 消息列表
+# context.system_prompt - 系统提示（包含压缩摘要，如果有）
+```
+
+```java
+// Java SDK
+import com.harness.memory.ContextBuilder;
+import com.harness.memory.ContextConfig;
+
+ContextBuilder builder = new ContextBuilder(ContextConfig.builder()
+    .maxTokens(200000)
+    .systemPrompt("You are a helpful assistant.")
+    .windowSize(100)
+    .compressionThreshold(0.9)
+    .enableCompression(true)
+    .build());
+
+BuiltContext context = builder.build(session);
+// context.messages() - 消息列表
+// context.systemPrompt() - 系统提示（包含压缩摘要）
+```
+
+### 关键设计：避免 system 消息冲突
+
+**问题**：vLLM 等推理引擎的 chat template 要求 system 消息必须在开头。如果压缩器插入 system 消息，会导致消息列表变成：
+
+```
+[system(real_prompt), system(compression_summary), user, assistant, ...]  ❌ 错误
+```
+
+**解决方案**：压缩器只返回摘要字符串，由 ContextBuilder 合并到真正的 system prompt：
+
+```
+[system(real_prompt + summary), user, assistant, ...]  ✅ 正确
+```
+
+### BuiltContext 结构
+
+```python
+@dataclass
+class BuiltContext:
+    messages: list[dict]           # 消息列表
+    system_prompt: str             # 系统提示（含摘要）
+    estimated_tokens: int          # 估算 token 数
+    budget: ContextBudget          # Token 预算
+    compression_needed: bool       # 是否触发了压缩
+    compression_result: CompressionResult | None  # 压缩结果详情
+```
+
+```java
+public record BuiltContext(
+    List<Message> messages,
+    String systemPrompt,
+    int estimatedTokens,
+    ContextBudget budget,
+    boolean compressionNeeded,
+    CompressionResult compressionResult
+) {}
+```
+
+### 使用示例
+
+```python
+# 在 AgentLoop 中自动使用
+from harness import AgentHarness
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    context_window=200000,      # 上下文窗口
+    session_window=100,         # 会话滑动窗口
+    enable_compression=True,    # 启用压缩（默认 True）
+)
+
+# 长对话会自动压缩
+result = await agent.run("分析这个大型代码库...")
+```
+
+```java
+// Java SDK 中通过 LoopConfig 配置
+import com.harness.core.LoopConfig;
+
+LoopConfig config = LoopConfig.builder()
+    .maxIterations(50)
+    .contextWindow(200000)
+    .sessionWindow(100)
+    .enableCompression(true)
+    .systemPrompt("You are a helpful assistant.")
+    .build();
+
+AgentLoop loop = new AgentLoop(llmClient, tools, config);
+```
+
+---
+
 ## 设计总结
 
 | 特性 | Core Memory (MEMORY.md) | Retrieved Memory (VectorMemoryStore) |
@@ -1111,3 +1273,4 @@ Agent 内部推理:
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
 - [03-tool-system.md](./03-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
 - [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [03-agent-loop.md](./03-agent-loop.md#上下文压缩) - 了解 AgentLoop 如何集成上下文压缩

@@ -20,6 +20,10 @@ package com.harness.core;
  * @param stuckConsecutiveFailures Consecutive failures to trigger stuck detection.
  * @param memoryMdPath Path to MEMORY.md for UpdateCoreMemoryTool (null = use ~/.harness/).
  * @param toolResultRole Role for tool result messages: "tool" (native) or "user" (compatibility mode).
+ * @param contextWindow Maximum context window size in tokens (default: 200000).
+ * @param sessionWindow Maximum number of messages to keep in session sliding window.
+ * @param enableCompression Whether to enable automatic context compression.
+ * @param systemPrompt Base system prompt for the agent.
  */
 public record LoopConfig(
     int maxIterations,
@@ -34,15 +38,22 @@ public record LoopConfig(
     int stuckMinIterations,
     int stuckConsecutiveFailures,
     String memoryMdPath,
-    String toolResultRole
+    String toolResultRole,
+    int contextWindow,
+    int sessionWindow,
+    boolean enableCompression,
+    String systemPrompt
 ) {
 
     public static final int DEFAULT_MAX_ITERATIONS = 10;
     public static final long DEFAULT_TIMEOUT_PER_TOOL = 30_000L; // 30 seconds in millis
+    public static final int DEFAULT_CONTEXT_WINDOW = 200_000;
+    public static final int DEFAULT_SESSION_WINDOW = 100;
 
     public LoopConfig() {
         this(DEFAULT_MAX_ITERATIONS, DEFAULT_TIMEOUT_PER_TOOL, true, 3, true, true, true,
-             System.getProperty("user.dir"), 2, 3, 3, null, "tool");
+             System.getProperty("user.dir"), 2, 3, 3, null, "tool",
+             DEFAULT_CONTEXT_WINDOW, DEFAULT_SESSION_WINDOW, true, "");
     }
 
     /**
@@ -73,6 +84,10 @@ public record LoopConfig(
         private int stuckConsecutiveFailures = 3;
         private String memoryMdPath = null;
         private String toolResultRole = "tool";
+        private int contextWindow = DEFAULT_CONTEXT_WINDOW;
+        private int sessionWindow = DEFAULT_SESSION_WINDOW;
+        private boolean enableCompression = true;
+        private String systemPrompt = "";
 
         public Builder maxIterations(int maxIterations) {
             this.maxIterations = maxIterations;
@@ -139,12 +154,32 @@ public record LoopConfig(
             return this;
         }
 
+        public Builder contextWindow(int contextWindow) {
+            this.contextWindow = contextWindow;
+            return this;
+        }
+
+        public Builder sessionWindow(int sessionWindow) {
+            this.sessionWindow = sessionWindow;
+            return this;
+        }
+
+        public Builder enableCompression(boolean enableCompression) {
+            this.enableCompression = enableCompression;
+            return this;
+        }
+
+        public Builder systemPrompt(String systemPrompt) {
+            this.systemPrompt = systemPrompt;
+            return this;
+        }
+
         public LoopConfig build() {
             return new LoopConfig(
                 maxIterations, timeoutPerTool, enableParallelTools, retryOnError,
                 enableProgress, enableCircuitBreaker, enableCostControl, workingDirectory,
                 maxStuckFeedbacks, stuckMinIterations, stuckConsecutiveFailures, memoryMdPath,
-                toolResultRole
+                toolResultRole, contextWindow, sessionWindow, enableCompression, systemPrompt
             );
         }
     }

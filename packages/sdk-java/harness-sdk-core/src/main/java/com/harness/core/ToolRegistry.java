@@ -109,6 +109,13 @@ public class ToolRegistry {
     }
 
     /**
+     * Get all registered tools (alias for getAll()).
+     */
+    public List<Tool> getTools() {
+        return getAll(true);
+    }
+
+    /**
      * Get tool definitions for LLM API.
      *
      * @return List of tool definitions

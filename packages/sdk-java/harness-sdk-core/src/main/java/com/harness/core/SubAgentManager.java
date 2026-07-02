@@ -6,14 +6,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.harness.types.LoopResult;
-import com.harness.types.LoopState;
-import com.harness.types.Message;
-import com.harness.types.TokenUsage;
 
 /**
  * Manages sub-agents for task delegation.
@@ -24,63 +20,148 @@ import com.harness.types.TokenUsage;
  * - Parallel processing: Run multiple sub-agents concurrently
  * - Isolation: Each sub-agent has its own context window
  *
+ * Design:
+ * This manager uses an AgentFactory interface to create sub-agent runners,
+ * allowing it to work with any agent implementation (AgentHarness, MockHarness, etc.)
+ *
  * Example:
  * <pre>
- * SubAgentManager manager = new SubAgentManager();
+ * // Create with factory that wraps AgentHarness
+ * SubAgentManager manager = new SubAgentManager(agentFactory);
  *
  * // Spawn sub-agents for parallel analysis
  * manager.spawn(SubAgentConfig.builder()
  *     .name("core_analyzer")
  *     .task("Analyze src/core directory")
- *     .build());
- * manager.spawn(SubAgentConfig.builder()
- *     .name("tools_analyzer")
- *     .task("Analyze src/tools directory")
+ *     .tools(List.of("read", "glob", "grep"))
  *     .build());
  *
  * // Run all sub-agents in parallel
  * Map&lt;String, SubAgentResult&gt; results = manager.runAll().join();
- *
- * for (Map.Entry&lt;String, SubAgentResult&gt; entry : results.entrySet()) {
- *     System.out.println(entry.getKey() + ": " + entry.getValue().summary());
- * }
  * </pre>
  */
 public class SubAgentManager {
 
     private static final Logger logger = LoggerFactory.getLogger(SubAgentManager.class);
 
-    private final Map<String, SubAgentRunner> subAgents = new ConcurrentHashMap<>();
+    // Tool aliases for common tool name mappings
+    private static final Map<String, String> TOOL_ALIASES = new HashMap<>();
+    static {
+        TOOL_ALIASES.put("read", "read");
+        TOOL_ALIASES.put("write", "write_file");
+        TOOL_ALIASES.put("edit", "edit_file");
+        TOOL_ALIASES.put("glob", "glob");
+        TOOL_ALIASES.put("grep", "grep");
+        TOOL_ALIASES.put("bash", "bash");
+        TOOL_ALIASES.put("websearch", "web_search");
+        TOOL_ALIASES.put("webfetch", "web_fetch");
+    }
+
+    private final AgentFactory agentFactory;
+    private final AgentHarnessParent parent;
+
+    private final Map<String, AgentRunner> subAgents = new ConcurrentHashMap<>();
     private final Map<String, SubAgentConfig> configs = new ConcurrentHashMap<>();
     private final Map<String, SubAgentResult> results = new ConcurrentHashMap<>();
     private final Map<String, SubAgentStatus> statuses = new ConcurrentHashMap<>();
 
+    /**
+     * Create SubAgentManager with a default mock factory.
+     *
+     * This constructor is for testing and simple use cases where
+     * real agent execution is not needed.
+     */
     public SubAgentManager() {
+        this.parent = null;
+        this.agentFactory = new MockAgentFactory();
     }
 
     /**
-     * Create a new sub-agent.
+     * Create SubAgentManager with agent factory.
+     *
+     * @param agentFactory Factory to create sub-agent runners
+     */
+    public SubAgentManager(AgentFactory agentFactory) {
+        this.agentFactory = agentFactory;
+        this.parent = null;
+    }
+
+    /**
+     * Create SubAgentManager with parent agent reference.
+     *
+     * @param parent The parent agent for tool/LLM inheritance
+     * @param agentFactory Factory to create sub-agent runners
+     */
+    public SubAgentManager(AgentHarnessParent parent, AgentFactory agentFactory) {
+        this.parent = parent;
+        this.agentFactory = agentFactory;
+    }
+
+    /**
+     * Spawn a new sub-agent.
      *
      * @param config Configuration for the sub-agent
      * @return The name of the created sub-agent
      */
     public String spawn(SubAgentConfig config) {
         String name = config.name();
-        subAgents.put(name, new SubAgentRunner(config));
-        configs.put(name, config);
-        statuses.put(name, SubAgentStatus.PENDING);
-        logger.info("Spawned sub-agent: {}", name);
-        return name;
+
+        try {
+            // Create agent runner via factory
+            List<Tool> tools = filterTools(parent != null ? parent.getAllTools() : List.of(), config.tools());
+            AgentRunner runner = agentFactory.createRunner(config, tools, parent);
+
+            subAgents.put(name, runner);
+            configs.put(name, config);
+            statuses.put(name, SubAgentStatus.PENDING);
+            logger.info("Spawned sub-agent: {} (tools: {})", name,
+                config.tools() != null ? config.tools() : "all inherited");
+            return name;
+        } catch (Exception e) {
+            logger.error("Failed to spawn sub-agent {}: {}", name, e.getMessage());
+            statuses.put(name, SubAgentStatus.FAILED);
+            results.put(name, SubAgentResult.failure(name, "Spawn failed: " + e.getMessage()));
+            return name;
+        }
+    }
+
+    /**
+     * Filter tools based on allowed tool names.
+     */
+    private List<Tool> filterTools(List<Tool> allTools, List<String> allowedNames) {
+        if (allowedNames == null) {
+            return new ArrayList<>(allTools);
+        }
+
+        // Build set of allowed tool names (including aliases)
+        Map<String, String> nameLookup = new HashMap<>();
+        for (String name : allowedNames) {
+            nameLookup.put(name, name);
+            if (TOOL_ALIASES.containsKey(name)) {
+                nameLookup.put(TOOL_ALIASES.get(name), name);
+            }
+            for (Map.Entry<String, String> entry : TOOL_ALIASES.entrySet()) {
+                if (entry.getValue().equals(name)) {
+                    nameLookup.put(entry.getKey(), name);
+                }
+            }
+        }
+
+        List<Tool> filtered = new ArrayList<>();
+        for (Tool tool : allTools) {
+            if (nameLookup.containsKey(tool.name())) {
+                filtered.add(tool);
+            }
+        }
+
+        return filtered;
     }
 
     /**
      * Run a specific sub-agent.
-     *
-     * @param name Name of the sub-agent to run
-     * @return CompletableFuture with the result
      */
     public CompletableFuture<SubAgentResult> run(String name) {
-        SubAgentRunner runner = subAgents.get(name);
+        AgentRunner runner = subAgents.get(name);
         SubAgentConfig config = configs.get(name);
 
         if (runner == null || config == null) {
@@ -94,8 +175,6 @@ public class SubAgentManager {
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Simulate sub-agent execution
-                // In a real implementation, this would create a new AgentHarness
                 SubAgentResult result = runner.run();
                 results.put(name, result);
                 statuses.put(name, result.status());
@@ -113,8 +192,6 @@ public class SubAgentManager {
 
     /**
      * Run all pending sub-agents in parallel.
-     *
-     * @return CompletableFuture with all results
      */
     public CompletableFuture<Map<String, SubAgentResult>> runAll() {
         List<String> pending = new ArrayList<>();
@@ -192,40 +269,59 @@ public class SubAgentManager {
     }
 
     /**
-     * Internal runner for sub-agents.
+     * Interface for creating agent runners.
+     *
+     * Implemented by integration module to wrap AgentHarness.
      */
-    private static class SubAgentRunner {
+    public interface AgentFactory {
+        AgentRunner createRunner(SubAgentConfig config, List<Tool> tools, AgentHarnessParent parent);
+    }
+
+    /**
+     * Interface for running a sub-agent.
+     */
+    public interface AgentRunner {
+        SubAgentResult run();
+    }
+
+    /**
+     * Interface for parent agent reference.
+     */
+    public interface AgentHarnessParent {
+        String getModel();
+        Object getLLMClient();  // Returns LLMClient but typed as Object to avoid circular dependency
+        List<Tool> getAllTools();
+    }
+
+    /**
+     * Default mock factory for testing and simple use cases.
+     */
+    private static class MockAgentFactory implements AgentFactory {
+        @Override
+        public AgentRunner createRunner(SubAgentConfig config, List<Tool> tools, AgentHarnessParent parent) {
+            return new MockAgentRunner(config);
+        }
+    }
+
+    /**
+     * Mock runner that simulates agent execution.
+     */
+    private static class MockAgentRunner implements AgentRunner {
         private final SubAgentConfig config;
 
-        SubAgentRunner(SubAgentConfig config) {
+        MockAgentRunner(SubAgentConfig config) {
             this.config = config;
         }
 
-        SubAgentResult run() {
-            // Build default prompt if not provided
-            String systemPrompt = config.systemPrompt() != null
-                ? config.systemPrompt()
-                : buildDefaultPrompt(config);
-
-            // Simulate execution
-            // In a real implementation, this would create and run an AgentHarness
+        @Override
+        public SubAgentResult run() {
+            // Simulate execution with placeholder result
             String summary = "Sub-agent '" + config.name() + "' completed task: " + config.task();
-
             return SubAgentResult.success(
                 config.name(),
                 summary,
                 1,
-                new TokenUsage(100, 50)
-            );
-        }
-
-        private String buildDefaultPrompt(SubAgentConfig config) {
-            return String.format(
-                "You are a specialized sub-agent tasked with: %s\n\n" +
-                "You are part of a larger task and should focus only on your assigned work.\n" +
-                "Complete your task thoroughly and report your findings clearly.\n\n" +
-                "When finished, provide a concise summary of what you accomplished.",
-                config.task()
+                new com.harness.types.TokenUsage(100, 50)
             );
         }
     }

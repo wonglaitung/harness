@@ -745,6 +745,264 @@ bash_timeout: 60000
 agent = AgentHarness.from_config("harness.yaml")
 ```
 
+## Java SDK 配置类
+
+Java SDK 提供与 Python SDK 功能对等的配置类，采用 Builder 模式构建。
+
+### LoopConfig
+
+Java SDK 的核心 Loop 配置类，对应 Python 的 `HarnessConfig`：
+
+```java
+import com.harness.core.LoopConfig;
+
+LoopConfig config = LoopConfig.builder()
+    .maxIterations(10)              // 最大迭代次数
+    .timeoutPerTool(30000)          // 工具超时（毫秒）
+    .enableParallelTools(true)      // 并行工具执行
+    .retryOnError(3)                // LLM 错误重试次数
+    .enableProgress(true)           // 进度事件
+    .enableCircuitBreaker(true)     // 断路器
+    .enableCostControl(true)        // 成本控制
+    .workingDirectory(".")          // 工作目录
+    .toolResultRole("tool")         // 工具结果角色："tool" (原生) 或 "user" (兼容)
+    .contextWindow(200000)          // 上下文窗口大小
+    .sessionWindow(100)             // 会话滑动窗口大小
+    .enableCompression(true)        // 自动上下文压缩
+    .systemPrompt("")               // 基础系统提示
+    .build();
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `maxIterations` | int | 10 | 最大迭代次数（LLM 调用） |
+| `timeoutPerTool` | long | 30000 | 工具超时（毫秒） |
+| `enableParallelTools` | boolean | true | 并行工具执行 |
+| `retryOnError` | int | 3 | LLM 错误重试次数 |
+| `enableProgress` | boolean | true | 进度事件 |
+| `enableCircuitBreaker` | boolean | true | 断路器（工具故障保护） |
+| `enableCostControl` | boolean | true | 成本控制 |
+| `workingDirectory` | String | user.dir | 工作目录 |
+| `memoryMdPath` | String | null | MEMORY.md 文件路径 |
+| `toolResultRole` | String | "tool" | 工具结果角色 |
+| `contextWindow` | int | 200000 | 上下文窗口大小（token） |
+| `sessionWindow` | int | 100 | 会话滑动窗口大小（消息数） |
+| `enableCompression` | boolean | true | 自动上下文压缩 |
+| `systemPrompt` | String | "" | 基础系统提示 |
+
+#### 上下文压缩配置
+
+`contextWindow`, `sessionWindow`, `enableCompression` 配置项用于控制上下文管理：
+
+- **contextWindow**: 模型上下文窗口大小（默认 200000 token）
+- **sessionWindow**: 会话滑动窗口大小（默认 100 条消息）
+- **enableCompression**: 当上下文超过预算时自动压缩
+
+```java
+// 启用自动压缩
+LoopConfig config = LoopConfig.builder()
+    .contextWindow(200000)      // Claude 默认窗口
+    .sessionWindow(50)          // 保守的会话窗口
+    .enableCompression(true)    // 启用压缩
+    .build();
+
+// 禁用压缩（适合短任务）
+LoopConfig config = LoopConfig.builder()
+    .enableCompression(false)
+    .maxIterations(3)
+    .build();
+```
+
+详见 [05-memory-system.md](./05-memory-system.md)。
+
+### RalphLoopConfig
+
+Ralph Loop 的配置类，支持自定义任务完成检查：
+
+```java
+import com.harness.core.RalphLoopConfig;
+import java.util.function.Predicate;
+
+// 使用默认任务完成检查（检查 "TASK_COMPLETE" 标记）
+RalphLoopConfig config = RalphLoopConfig.builder()
+    .goal("修复所有类型错误")
+    .maxIterations(50)
+    .build();
+
+// 使用自定义 Predicate 检查任务完成
+Predicate<String> customCheck = response ->
+    response.contains("SUCCESS") && response.contains("0 errors");
+
+RalphLoopConfig config = RalphLoopConfig.builder()
+    .goal("测试覆盖率达标")
+    .taskCompleteCheck(customCheck)  // 自定义检查
+    .progressDir(Path.of("./progress"))  // 进度记录目录
+    .build();
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `goal` | String | 必填 | 目标描述 |
+| `maxIterations` | int | 50 | 最大迭代次数 |
+| `taskCompleteCheck` | Predicate<String> | null | 自定义任务完成检查 |
+| `progressDir` | Path | null | 进度记录目录 |
+
+#### 自定义 Predicate 示例
+
+```java
+// 检查编译成功
+Predicate<String> compileCheck = response ->
+    response.contains("BUILD SUCCESS") && !response.contains("error:");
+
+// 检查测试通过
+Predicate<String> testCheck = response ->
+    response.contains("Tests run:") && response.contains("Failures: 0");
+
+// 检查覆盖率达标
+Predicate<String> coverageCheck = response -> {
+    // 解析覆盖率报告
+    if (response.contains("Line Coverage:")) {
+        String[] parts = response.split("Line Coverage:");
+        if (parts.length > 1) {
+            String coverageStr = parts[1].trim().split("%")[0];
+            double coverage = Double.parseDouble(coverageStr);
+            return coverage >= 80.0;
+        }
+    }
+    return false;
+};
+
+RalphLoopConfig config = RalphLoopConfig.builder()
+    .goal("测试覆盖率达到 80%")
+    .taskCompleteCheck(coverageCheck)
+    .build();
+```
+
+详见 [03-agent-loop.md](./03-agent-loop.md)。
+
+### ContextConfig
+
+上下文构建配置类：
+
+```java
+import com.harness.memory.ContextConfig;
+
+// 使用默认配置
+ContextConfig config = ContextConfig.defaults();
+
+// 自定义配置（使用 setter）
+ContextConfig config = new ContextConfig();
+config.setMaxTokens(200000);
+config.setSystemPrompt("你是一个代码助手");
+config.setWindowSize(100);           // 会话窗口大小
+config.setEnableCompression(true);   // 启用压缩
+config.setCompressionThreshold(0.8); // 压缩阈值（80% 上下文占用）
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `maxTokens` | int | 200000 | 最大上下文 token |
+| `systemPrompt` | String | "" | 系统提示 |
+| `windowSize` | int | 100 | 会话窗口大小 |
+| `enableCompression` | boolean | true | 启用压缩 |
+| `compressionThreshold` | double | 0.9 | 压缩阈值 |
+
+### ContextBudget
+
+Token 预算分配类：
+
+```java
+import com.harness.memory.ContextBudget;
+
+// 使用默认分配（200000 tokens，4096 response reserve）
+ContextBudget budget = new ContextBudget();
+
+// 使用自动分配方法（推荐）
+// messages 占 70%，skills 占 20%，memory 占 10%
+ContextBudget budget = ContextBudget.allocate(
+    200000,  // maxTokens
+    5000,    // systemPromptTokens
+    3000     // toolTokens
+);
+
+// 自定义比例分配
+ContextBudget budget = ContextBudget.allocate(
+    200000,  // maxTokens
+    5000,    // systemPromptTokens
+    3000,    // toolTokens
+    0.6,     // messageRatio (60%)
+    0.25,    // skillsRatio (25%)
+    0.15     // memoryRatio (15%)
+);
+
+// 查看预算使用情况
+int available = budget.availableForInput();  // 可用于输入的 token
+int used = budget.used();                    // 已分配的 token
+int remaining = budget.remaining();          // 剩余未分配的 token
+boolean needsCompress = budget.needsCompression(); // 是否需要压缩
+```
+
+### SubAgentConfig
+
+子代理配置类：
+
+```java
+import com.harness.core.SubAgentConfig;
+
+SubAgentConfig config = SubAgentConfig.builder()
+    .name("code_analyzer")
+    .task("分析 src/core 目录的代码质量")
+    .tools(List.of("read", "glob", "grep"))  // 允许的工具
+    .maxIterations(5)
+    .reportFormat("summary")   // "summary" | "full" | "structured"
+    .systemPrompt("你是一个代码分析专家")
+    .build();
+```
+
+#### reportFormat 说明
+
+| 格式 | 说明 |
+|-----|------|
+| `summary` | 返回摘要（最多 500 字符） |
+| `full` | 返回完整响应 |
+| `structured` | 返回结构化数据（包含 messages） |
+
+### SubAgentManager.Factory Pattern
+
+SubAgentManager 使用工厂模式避免模块循环依赖：
+
+```java
+import com.harness.core.SubAgentManager;
+import com.harness.core.SubAgentConfig;
+import com.harness.integration.HarnessAgentFactory;
+
+// 创建真实 AgentHarness 的工厂
+HarnessAgentFactory factory = new HarnessAgentFactory();
+
+// 创建 SubAgentManager
+SubAgentManager manager = new SubAgentManager(parentAgent, factory);
+
+// 或使用 mock 工厂（测试用）
+SubAgentManager manager = new SubAgentManager();  // 默认 MockAgentFactory
+
+// 启动子代理
+manager.spawn(SubAgentConfig.builder()
+    .name("analyzer")
+    .task("分析代码")
+    .build());
+
+// 并行运行所有子代理
+Map<String, SubAgentResult> results = manager.runAll().join();
+```
+
+详见 [03-agent-loop.md](./03-agent-loop.md)。
+
 ## LLM 客户端
 
 ### LLMClient 接口
@@ -1573,6 +1831,7 @@ from harness.service import (
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [05-memory-system.md](./05-memory-system.md) - 了解上下文压缩和记忆管理
 - [06-triggers.md](./06-triggers.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成

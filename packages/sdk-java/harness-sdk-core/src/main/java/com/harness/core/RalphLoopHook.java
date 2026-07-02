@@ -131,11 +131,24 @@ public class RalphLoopHook implements LifecycleHook {
      * Check if the task is actually complete.
      *
      * Uses multiple heuristics:
-     * 1. Keyword detection (e.g., "task complete", "done", "finished")
-     * 2. Response length heuristics
-     * 3. Incompletion indicators
+     * 1. Custom task_complete_check if provided
+     * 2. Keyword detection (e.g., "task complete", "done", "finished")
+     * 3. Response length heuristics
+     * 4. Incompletion indicators
      */
     private boolean checkTaskComplete(String response, HookContext context) {
+        // Use custom check if provided
+        if (config.taskCompleteCheck() != null) {
+            try {
+                boolean customResult = config.taskCompleteCheck().test(response);
+                logger.debug("Custom taskCompleteCheck returned: {}", customResult);
+                return customResult;
+            } catch (Exception e) {
+                logger.warn("Custom taskCompleteCheck failed: {}", e.getMessage());
+                // Fall through to default heuristics
+            }
+        }
+
         String responseLower = response.toLowerCase();
 
         // Check for completion indicators

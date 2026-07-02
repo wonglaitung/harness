@@ -31,6 +31,9 @@ import com.harness.core.TracingManager;
 import com.harness.core.TraceContext;
 import com.harness.core.TracingConfig;
 import com.harness.core.ValidationResult;
+import com.harness.memory.BuiltContext;
+import com.harness.memory.ContextBuilder;
+import com.harness.memory.ContextConfig;
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
 import com.harness.types.ProgressEvent;
@@ -81,6 +84,7 @@ public class AgentLoop {
     private final StepBudgetController stepBudget;
     private final OutputOffloader outputOffloader;
     private final TracingManager tracingManager;
+    private final ContextBuilder contextBuilder;
 
     /**
      * Create AgentLoop with LLM client and tools.
@@ -124,8 +128,18 @@ public class AgentLoop {
             this.tracingManager.setup();
         }
 
-        logger.info("AgentLoop initialized with maxIterations={}, tools={}",
-            config.maxIterations(), this.tools.size());
+        // Initialize context builder for compression
+        this.contextBuilder = ContextBuilder.class.cast(
+            new ContextBuilder(ContextConfig.builder()
+                .maxTokens(config.contextWindow())
+                .systemPrompt(config.systemPrompt())
+                .windowSize(config.sessionWindow())
+                .enableCompression(config.enableCompression())
+                .build())
+        );
+
+        logger.info("AgentLoop initialized with maxIterations={}, tools={}, contextWindow={}",
+            config.maxIterations(), this.tools.size(), config.contextWindow());
     }
 
     /**
@@ -424,11 +438,29 @@ public class AgentLoop {
     }
 
     /**
-     * Call LLM with retry logic.
+     * Call LLM with retry logic and context compression.
+     *
+     * Uses ContextBuilder to:
+     * - Apply sliding window to messages
+     * - Compress context if it exceeds budget
+     * - Merge compression summary into system prompt
+     *
+     * This ensures chat template requirements are met (system message first).
      */
     private LLMResponse callLLMWithRetry(com.harness.types.Session session) {
-        List<Message> messages = session.messages();
-        String systemPrompt = session.systemPrompt();
+        // Build context using ContextBuilder (handles compression)
+        BuiltContext context = contextBuilder.build(session, null, convertToolsToObjects());
+
+        List<Message> messages = context.messages();
+        String systemPrompt = context.systemPrompt();
+
+        // Log compression info if it occurred
+        if (context.compressionNeeded() && context.compressionResult() != null) {
+            logger.info("Context compressed: {} -> {} tokens (saved {})",
+                context.compressionResult().tokensBefore(),
+                context.compressionResult().tokensAfter(),
+                context.compressionResult().compressionSaved());
+        }
 
         // Build tool definitions
         List<LLMClient.ToolDefinition> toolDefs = new ArrayList<>();
@@ -466,6 +498,17 @@ public class AgentLoop {
         }
 
         throw new RuntimeException("LLM call failed after " + retries + " retries", lastError);
+    }
+
+    /**
+     * Convert tools list to Object list for ContextBuilder.
+     */
+    private List<Object> convertToolsToObjects() {
+        List<Object> objects = new ArrayList<>();
+        for (Tool tool : tools) {
+            objects.add(tool);
+        }
+        return objects;
     }
 
     /**
