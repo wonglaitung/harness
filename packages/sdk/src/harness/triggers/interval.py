@@ -174,9 +174,13 @@ class IntervalTrigger(Trigger):
             payload={"fire_number": self._fire_count}
         )
         logger.info(
-            f"IntervalTrigger {self.id} firing event #{self._fire_count}"
+            f"IntervalTrigger {self.id} firing event #{self._fire_count}, "
+            f"callback={self._callback is not None}"
         )
-        self._callback(event)
+        if self._callback:
+            self._callback(event)
+        else:
+            logger.warning(f"IntervalTrigger {self.id} has no callback set!")
 
     @property
     def fire_count(self) -> int:

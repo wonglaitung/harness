@@ -264,6 +264,7 @@ class TriggerManager:
             event: Event to enqueue
         """
         self._event_queue.put_nowait(event)
+        logger.debug(f"Event enqueued for trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
 
     async def enqueue_event(self, event: TriggerEvent) -> None:
         """
@@ -287,6 +288,8 @@ class TriggerManager:
         """
         self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
 
+        logger.info("Event processor started, waiting for events...")
+
         while self._running:
             try:
                 # Wait for event with timeout
@@ -295,6 +298,7 @@ class TriggerManager:
                     timeout=1.0,
                 )
 
+                logger.debug(f"Processing event from trigger {event.trigger_id}")
                 # Execute concurrently, not blocking queue consumption
                 task = asyncio.create_task(self._handle_event_concurrent(event))
                 self._running_tasks.add(task)
@@ -304,9 +308,10 @@ class TriggerManager:
                 # No event, continue loop
                 continue
             except asyncio.CancelledError:
+                logger.info("Event processor cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error processing event: {e}")
+                logger.error(f"Error processing event: {e}", exc_info=True)
 
     async def _handle_event_concurrent(self, event: TriggerEvent) -> None:
         """
@@ -315,13 +320,18 @@ class TriggerManager:
         Args:
             event: Event to handle
         """
+        trigger_id = event.trigger_id
+        logger.debug(f"Waiting for semaphore to handle event from {trigger_id}")
+
         if self._semaphore is None:
             # Fallback for edge cases
             await self._handle_event(event)
             return
 
         async with self._semaphore:
+            logger.debug(f"Semaphore acquired, handling event from {trigger_id}")
             await self._handle_event(event)
+            logger.debug(f"Event handling completed for {trigger_id}")
 
     async def _handle_event(self, event: TriggerEvent) -> None:
         """

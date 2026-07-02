@@ -199,7 +199,7 @@ class ScheduleController:
     def _register_trigger(self, config: ScheduleConfig):
         """Register a trigger with the SDK's TriggerManager.
 
-        If the manager is already running, the trigger will be started asynchronously.
+        If the manager is already running, the trigger will be started by the manager.
         """
         if not self._trigger_manager:
             return
@@ -235,17 +235,21 @@ class ScheduleController:
                     f"will fire immediately then every {interval_seconds}s"
                 )
 
+            # Register with manager (this will store the trigger)
             self._trigger_manager.register(trigger)
 
-            # If manager is already running, start the trigger asynchronously
+            # If manager is already running, we need to start the trigger manually
+            # because manager.start() only starts triggers that were registered before it started
             if self._trigger_manager.is_running:
+                logger.info(f"Manager already running, starting trigger {config.id} manually")
+                # Use the manager's enqueue method as callback
                 asyncio.create_task(trigger.start(self._trigger_manager._enqueue_event))
 
             config.status = "running"
             logger.info(f"Registered trigger for {config.name}")
 
         except Exception as e:
-            logger.error(f"Failed to register trigger: {e}")
+            logger.error(f"Failed to register trigger: {e}", exc_info=True)
             config.status = "error"
             config.error_message = str(e)
 
