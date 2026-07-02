@@ -283,6 +283,11 @@ class ContextBuilder:
             windowed_messages = compression_result.compressed_messages
             estimated = compression_result.tokens_after
 
+            # If compression generated a summary, prepend it to system prompt
+            # This ensures system message stays first (required by chat templates)
+            if compression_result.summary:
+                system_prompt = f"{system_prompt}\n\n[Previous conversation summary]\n{compression_result.summary}"
+
             logger.info(
                 f"Compression complete: {compression_result.tokens_before} -> "
                 f"{compression_result.tokens_after} tokens "

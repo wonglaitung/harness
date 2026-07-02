@@ -143,16 +143,11 @@ class ContextCompressor:
         # Generate summary of old messages
         summary = self._generate_summary(old_messages)
 
-        # Check if we're within budget
-        summary_msg = Message(
-            role="system",
-            content=f"[Previous conversation summary]\n{summary}",
-        ) if summary else None
-
-        compressed = []
-        if summary_msg:
-            compressed.append(summary_msg)
-        compressed.extend(recent_messages)
+        # Note: Do NOT insert a system message here, as it would violate
+        # the chat template requirement that system messages must be first.
+        # Instead, we return the summary separately and let the context builder
+        # handle it properly by prepending to the actual system prompt.
+        compressed = list(recent_messages)
 
         return compressed, summary
 
