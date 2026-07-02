@@ -300,6 +300,6 @@ ConnectorManager.route_output()
 
 ## 下一步
 
-- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览
-- [11-worktrees.md](./11-worktrees.md) - 并行隔离执行
-- [13-orchestrator.md](./13-orchestrator.md) - 工作流编排
+- [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览
+- [11-worktrees.md](./19-worktrees.md) - 并行隔离执行
+- [13-orchestrator.md](./21-orchestrator.md) - 工作流编排

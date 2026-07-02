@@ -214,7 +214,7 @@ agent = AgentHarness(
 
 ### 陷阱 4：MCP 子进程孤儿问题
 
-宿主应用崩溃时，MCP 子进程可能变为孤儿进程。解决方案见 [03-tool-system.md](./03-tool-system.md) 的 MCP 子进程生命周期管理章节。
+宿主应用崩溃时，MCP 子进程可能变为孤儿进程。解决方案见 [03-tool-system.md](./04-tool-system.md) 的 MCP 子进程生命周期管理章节。
 
 ---
 
@@ -338,4 +338,4 @@ SDK 已有 `ProgressEvent` 机制，天然支持 WebSocket 推送。
 
 完整的实施指南（含 Java 客户端示例、K8s 配置、安全设计等）见：
 
-**👉 [14-spring-cloud-integration.md](./14-spring-cloud-integration.md)**
+**👉 [14-spring-cloud-integration.md](./15-spring-cloud-integration.md)**

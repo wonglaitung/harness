@@ -353,6 +353,6 @@ asyncio.run(main())
 
 ## 下一步
 
-- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览
-- [11-worktrees.md](./11-worktrees.md) - 并行隔离执行
-- [12-connectors.md](./12-connectors.md) - 外部系统集成
+- [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览
+- [11-worktrees.md](./19-worktrees.md) - 并行隔离执行
+- [12-connectors.md](./20-connectors.md) - 外部系统集成

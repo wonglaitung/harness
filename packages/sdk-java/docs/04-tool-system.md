@@ -399,6 +399,6 @@ result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
 
 ## 下一步
 
-- [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
-- [05-skills-system.md](./05-skills-system.md) - 了解技能系统
-- [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
+- [04-memory-system.md](./05-memory-system.md) - 了解记忆系统
+- [05-skills-system.md](./16-skills-system.md) - 了解技能系统
+- [09-mcp-integration.md](./06-mcp-integration.md) - MCP 协议集成

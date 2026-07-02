@@ -313,7 +313,7 @@ async def run_goal(
     """
 ```
 
-详见 [15-loop-engineering.md](./15-loop-engineering.md)。
+详见 [18-loop-engineering.md](./18-loop-engineering.md)。
 
 #### tool() - 注册工具装饰器
 
@@ -1407,7 +1407,7 @@ class GoalResult:
     error: str | None = None            # 错误详情
 ```
 
-详见 [15-loop-engineering.md](./15-loop-engineering.md)。
+详见 [18-loop-engineering.md](./18-loop-engineering.md)。
 
 ## Automation API
 
@@ -1493,7 +1493,7 @@ class AutomationResult:
     error_message: str | None = None
 ```
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [17-trigger-system.md](./17-trigger-system.md)。
 
 ## Trigger System API
 
@@ -1613,7 +1613,7 @@ class TriggerState(Enum):
     ERROR = "error"         # 错误
 ```
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [17-trigger-system.md](./17-trigger-system.md)。
 
 ## Service 模块 (Spring Cloud 集成)
 
@@ -1830,9 +1830,9 @@ from harness.service import (
 
 ## 下一步
 
-- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
+- [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
 - [05-memory-system.md](./05-memory-system.md) - 了解上下文压缩和记忆管理
-- [06-triggers.md](./06-triggers.md) - 了解 Trigger System
+- [17-trigger-system.md](./17-trigger-system.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
-- [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
-- [15-loop-engineering.md](./15-loop-engineering.md) - Loop Engineering 完整指南
+- [06-mcp-integration.md](./06-mcp-integration.md) - MCP 协议集成
+- [18-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 完整指南

@@ -1191,6 +1191,6 @@ Layer 1 使用 `PatternRecognizer`（正则表达式 + 上下文关键词）检�
 
 ## 下一步
 
-- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
-- [03-tool-system.md](./03-tool-system.md) - 了解工具系统
+- [02-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
+- [03-tool-system.md](./04-tool-system.md) - 了解工具系统
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

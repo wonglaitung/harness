@@ -1311,14 +1311,12 @@ context = builder.build(session)
 
 ```java
 import com.harness.memory.ContextBuilder;
-import com.harness.memory.ContextConfig;
 
-// 创建带压缩功能的 ContextBuilder
-ContextBuilder builder = new ContextBuilder(ContextConfig.builder()
-    .maxTokens(200000)
-    .enableCompression(true)
-    .compressionThreshold(0.9)
-    .build());
+// 创建带压缩功能的 ContextBuilder（使用链式调用）
+ContextBuilder builder = new ContextBuilder()
+    .withMaxTokens(200000)
+    .withCompressionEnabled(true);
+// 注意：compressionThreshold 需要通过 ContextConfig 设置
 
 // 构建上下文
 BuiltContext context = builder.build(session);
@@ -1471,7 +1469,7 @@ LoopResult
 
 ## 下一步
 
-- [03-tool-system.md](./03-tool-system.md) - 了解工具系统
-- [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
-- [15-loop-engineering.md](./15-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
+- [04-tool-system.md](./04-tool-system.md) - 了解工具系统
+- [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
+- [18-loop-engineering.md](./18-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

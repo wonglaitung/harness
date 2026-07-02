@@ -365,7 +365,7 @@ print(f"Total triggers: {manager.trigger_count}")
 
 ## 下一步
 
-- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
-- [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [02-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
+- [05-skills-system.md](./16-skills-system.md) - 了解技能系统
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
 - [../design/phase2-automations.md](../design/phase2-automations.md) - Automations 设计文档

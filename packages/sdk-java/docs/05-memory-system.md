@@ -1167,22 +1167,21 @@ context = builder.build(session)
 ```
 
 ```java
-// Java SDK
+// Java SDK - 使用链式调用方法
 import com.harness.memory.ContextBuilder;
-import com.harness.memory.ContextConfig;
 
-ContextBuilder builder = new ContextBuilder(ContextConfig.builder()
-    .maxTokens(200000)
-    .systemPrompt("You are a helpful assistant.")
-    .windowSize(100)
-    .compressionThreshold(0.9)
-    .enableCompression(true)
-    .build());
+ContextBuilder builder = new ContextBuilder()
+    .withMaxTokens(200000)
+    .withSystemPrompt("You are a helpful assistant.")
+    .withWindowSize(100)
+    .withCompressionEnabled(true);  // 默认已启用
 
 BuiltContext context = builder.build(session);
 // context.messages() - 消息列表
 // context.systemPrompt() - 系统提示（包含压缩摘要）
 ```
+
+**注意**：Java SDK 使用链式调用方法（`with*`），而不是 Builder 模式。
 
 ### 关键设计：避免 system 消息冲突
 
@@ -1270,7 +1269,7 @@ AgentLoop loop = new AgentLoop(llmClient, tools, config);
 
 ## 下一步
 
-- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
-- [03-tool-system.md](./03-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
-- [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
+- [04-tool-system.md](./04-tool-system.md) - 了解工具系统（含 UpdateCoreMemoryTool）
+- [16-skills-system.md](./16-skills-system.md) - 了解技能系统
 - [03-agent-loop.md](./03-agent-loop.md#上下文压缩) - 了解 AgentLoop 如何集成上下文压缩

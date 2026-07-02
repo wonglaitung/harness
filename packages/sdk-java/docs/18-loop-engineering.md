@@ -303,7 +303,7 @@ asyncio.run(main())
 - `TriggerManager` - 管理多个触发器
 - `Automation` - 简化 API
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [06-triggers.md](./17-trigger-system.md)。
 
 ### Phase 3: Worktrees（并行隔离）✅ 已实现
 
@@ -325,7 +325,7 @@ for name, result in results.items():
         await orchestrator.merge(name)
 ```
 
-详见 [11-worktrees.md](./11-worktrees.md)。
+详见 [11-worktrees.md](./19-worktrees.md)。
 
 ### Phase 4: Connectors（外部集成）✅ 已实现
 
@@ -351,7 +351,7 @@ manager.register_connector(github)
 await manager.start()
 ```
 
-详见 [12-connectors.md](./12-connectors.md)。
+详见 [12-connectors.md](./20-connectors.md)。
 
 ### Phase 5: Loop Orchestrator（统一编排）✅ 已实现
 
@@ -378,14 +378,14 @@ workflow = WorkflowConfig(
 result = await orchestrator.run_workflow("code-review")
 ```
 
-详见 [13-orchestrator.md](./13-orchestrator.md)。
+详见 [13-orchestrator.md](./21-orchestrator.md)。
 
 ---
 
 ## 参考
 
 - [设计文档](../design/loop-engineering.md)
-- [06-trigger-system.md](./06-trigger-system.md) - Trigger System 详细设计
-- [11-worktrees.md](./11-worktrees.md) - Worktrees 并行隔离执行
-- [12-connectors.md](./12-connectors.md) - Connectors 外部系统集成
-- [13-orchestrator.md](./13-orchestrator.md) - Orchestrator 工作流编排
+- [06-trigger-system.md](./17-trigger-system.md) - Trigger System 详细设计
+- [11-worktrees.md](./19-worktrees.md) - Worktrees 并行隔离执行
+- [12-connectors.md](./20-connectors.md) - Connectors 外部系统集成
+- [13-orchestrator.md](./21-orchestrator.md) - Orchestrator 工作流编排

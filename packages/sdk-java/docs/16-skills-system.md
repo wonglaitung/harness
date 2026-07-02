@@ -502,6 +502,6 @@ tools:
 
 ## 下一步
 
-- [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
-- [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
-- [06-trigger-system.md](./06-trigger-system.md) - 了解触发器系统
+- [02-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
+- [04-memory-system.md](./05-memory-system.md) - 了解记忆系统
+- [06-trigger-system.md](./17-trigger-system.md) - 了解触发器系统
