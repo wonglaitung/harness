@@ -227,19 +227,35 @@ class TriggerManager:
 
         self._running = False
 
+        # Stop event processor FIRST to avoid queue access on wrong event loop
+        if self._processor_task:
+            self._processor_task.cancel()
+            try:
+                await self._processor_task
+            except asyncio.CancelledError:
+                pass
+            except RuntimeError as e:
+                # qasync may raise RuntimeError about event loop binding
+                logger.debug(f"Event processor stopped (caught RuntimeError: {e})")
+            self._processor_task = None
+
         # Wait for active tasks to complete (with timeout)
         if self._running_tasks:
             logger.info(
                 f"Waiting for {len(self._running_tasks)} active tasks to complete..."
             )
-            done, pending = await asyncio.wait(
-                self._running_tasks,
-                timeout=30.0,  # Maximum wait time
-            )
-            if pending:
-                logger.warning(f"Cancelling {len(pending)} pending tasks")
-                for task in pending:
-                    task.cancel()
+            try:
+                done, pending = await asyncio.wait(
+                    self._running_tasks,
+                    timeout=30.0,  # Maximum wait time
+                )
+                if pending:
+                    logger.warning(f"Cancelling {len(pending)} pending tasks")
+                    for task in pending:
+                        task.cancel()
+            except RuntimeError as e:
+                # qasync event loop binding issue
+                logger.debug(f"Task wait interrupted (RuntimeError: {e})")
 
         # Stop all triggers
         for reg in self._registrations.values():
@@ -247,15 +263,6 @@ class TriggerManager:
                 await reg.trigger.stop()
             except Exception as e:
                 logger.error(f"Error stopping trigger {reg.trigger.id}: {e}")
-
-        # Stop event processor
-        if self._processor_task:
-            self._processor_task.cancel()
-            try:
-                await self._processor_task
-            except asyncio.CancelledError:
-                pass
-            self._processor_task = None
 
         logger.info("TriggerManager stopped")
 
