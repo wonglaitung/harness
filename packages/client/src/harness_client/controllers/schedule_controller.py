@@ -228,6 +228,11 @@ class ScheduleController:
                     interval_seconds=interval_seconds,
                     action=action,
                     trigger_id=config.id,
+                    start_immediately=True,  # Fire immediately on start for better UX
+                )
+                logger.info(
+                    f"IntervalTrigger created: interval={interval_seconds}s, "
+                    f"will fire immediately then every {interval_seconds}s"
                 )
 
             self._trigger_manager.register(trigger)
@@ -258,6 +263,7 @@ class ScheduleController:
     async def start(self):
         """Start the trigger manager."""
         if self._running:
+            logger.warning("ScheduleController already running")
             return
 
         if not self._agent:
@@ -270,18 +276,24 @@ class ScheduleController:
             self._trigger_manager = TriggerManager(self._agent)
 
             # Register all enabled schedules BEFORE starting the manager
+            enabled_count = 0
             for config in self._schedules.values():
                 if config.enabled:
                     self._register_trigger(config)
+                    enabled_count += 1
+
+            logger.info(f"Registered {enabled_count} enabled schedules")
 
             # Now start the manager (will start all registered triggers)
             await self._trigger_manager.start()
 
             self._running = True
-            logger.info("ScheduleController started")
+            logger.info(
+                f"ScheduleController started with {self._trigger_manager.trigger_count} triggers"
+            )
 
         except Exception as e:
-            logger.error(f"Failed to start ScheduleController: {e}")
+            logger.error(f"Failed to start ScheduleController: {e}", exc_info=True)
 
     async def stop(self):
         """Stop the trigger manager."""

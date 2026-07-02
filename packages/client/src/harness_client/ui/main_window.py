@@ -146,6 +146,11 @@ class MainWindow(QMainWindow):
         self._theme_callback = self._on_theme_changed
         register_theme_listener(self._theme_callback)
 
+        # Initialize agent and start schedule controller on startup
+        # Use QTimer to ensure event loop is running
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(500, self._initialize_agent_for_schedules)
+
     def _set_window_icon(self):
         """Set window icon from SVG file."""
         import sys
@@ -516,8 +521,40 @@ class MainWindow(QMainWindow):
         elif event_type == "loop_end":
             self._status_msg_label.setText("完成")
 
+    def _initialize_agent_for_schedules(self):
+        """Initialize agent on startup to enable scheduled tasks."""
+        # Only initialize if there are enabled schedules
+        enabled_schedules = [s for s in self.schedule_controller.get_schedule_list() if s.enabled]
+        if not enabled_schedules:
+            logger.info("No enabled schedules, skipping early agent initialization")
+            return
+
+        # Check if API key is configured
+        settings = self.settings_manager.get()
+        if not settings.api_key:
+            logger.warning("API key not configured, scheduled tasks will not run")
+            return
+
+        logger.info(f"Found {len(enabled_schedules)} enabled schedule(s), initializing agent...")
+
+        async def init_and_start():
+            try:
+                # Initialize agent
+                await self.chat_controller.initialize()
+
+                # ScheduleController will be started via _on_agent_ready callback
+                logger.info("Agent initialized for scheduled tasks")
+            except Exception as e:
+                logger.error(f"Failed to initialize agent for schedules: {e}", exc_info=True)
+
+        try:
+            asyncio.create_task(init_and_start())
+        except RuntimeError:
+            logger.warning("Event loop not ready, schedules will start on first message")
+
     def _on_agent_ready(self, agent):
         """Handle agent ready - start schedule controller."""
+        logger.info("Agent ready, starting ScheduleController...")
 
         self.schedule_controller.set_agent(agent)
 
@@ -525,8 +562,9 @@ class MainWindow(QMainWindow):
         async def start_schedule_controller():
             try:
                 await self.schedule_controller.start()
+                logger.info("ScheduleController started successfully")
             except Exception as e:
-                logger.error(f"Failed to start schedule controller: {e}")
+                logger.error(f"Failed to start schedule controller: {e}", exc_info=True)
 
         # Schedule the start on the event loop
         try:

@@ -173,7 +173,7 @@ class IntervalTrigger(Trigger):
         event = self.create_event(
             payload={"fire_number": self._fire_count}
         )
-        logger.debug(
+        logger.info(
             f"IntervalTrigger {self.id} firing event #{self._fire_count}"
         )
         self._callback(event)
