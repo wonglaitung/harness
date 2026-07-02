@@ -290,9 +290,12 @@ class TriggerManager:
 
         logger.info("Event processor started, waiting for events...")
 
+        loop_count = 0
         while self._running:
+            loop_count += 1
             try:
                 # Wait for event with timeout
+                logger.debug(f"Event processor loop #{loop_count}, waiting for event...")
                 event = await asyncio.wait_for(
                     self._event_queue.get(),
                     timeout=1.0,
@@ -312,6 +315,8 @@ class TriggerManager:
                 break
             except Exception as e:
                 logger.error(f"Error processing event: {e}", exc_info=True)
+
+        logger.info(f"Event processor stopped, _running={self._running}, loops={loop_count}")
 
     async def _handle_event_concurrent(self, event: TriggerEvent) -> None:
         """
