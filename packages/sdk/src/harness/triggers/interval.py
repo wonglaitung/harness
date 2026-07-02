@@ -148,16 +148,16 @@ class IntervalTrigger(Trigger):
         """Main loop that fires at regular intervals."""
         # Fire immediately if configured
         if self.start_immediately and self._running and self._callback:
-            await self._fire_event()
+            self._fire_event_sync()
 
         while self._running:
             try:
                 # Wait for interval
                 await asyncio.sleep(self.interval_seconds)
 
-                # Fire event if still running
+                # Fire event if still running (use sync version to avoid qasync issues)
                 if self._running and self._callback:
-                    await self._fire_event()
+                    self._fire_event_sync()
 
             except asyncio.CancelledError:
                 break
@@ -167,8 +167,12 @@ class IntervalTrigger(Trigger):
                 # Continue running on error
                 await asyncio.sleep(60)  # Wait before retrying
 
-    async def _fire_event(self) -> None:
-        """Fire a trigger event."""
+    def _fire_event_sync(self) -> None:
+        """Fire a trigger event synchronously (non-await).
+
+        This is used instead of async _fire_event to avoid qasync task
+        switching issues when another async task is running synchronously.
+        """
         self._fire_count += 1
         event = self.create_event(
             payload={"fire_number": self._fire_count}
