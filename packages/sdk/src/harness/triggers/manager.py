@@ -72,7 +72,8 @@ class TriggerManager:
         self.max_concurrent_goals = max_concurrent_goals
         self._registrations: dict[str, TriggerRegistration] = {}
         self._running = False
-        self._event_queue: asyncio.Queue[TriggerEvent] = asyncio.Queue()
+        # Queue will be created in start() to bind to correct event loop
+        self._event_queue: asyncio.Queue[TriggerEvent] | None = None
         self._processor_task: asyncio.Task | None = None
         self._semaphore: asyncio.Semaphore | None = None
         self._running_tasks: set[asyncio.Task] = set()
@@ -194,6 +195,10 @@ class TriggerManager:
 
         self._running = True
 
+        # Create queue in the current event loop (fixes qasync event loop binding issue)
+        self._event_queue = asyncio.Queue()
+        logger.debug("Created event queue in current event loop")
+
         # Start event processor
         self._processor_task = asyncio.create_task(self._process_events())
 
@@ -263,6 +268,9 @@ class TriggerManager:
         Args:
             event: Event to enqueue
         """
+        if self._event_queue is None:
+            logger.warning(f"Event queue not initialized, dropping event from {event.trigger_id}")
+            return
         self._event_queue.put_nowait(event)
         logger.debug(f"Event enqueued for trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
 
@@ -277,6 +285,9 @@ class TriggerManager:
         Args:
             event: Event to enqueue
         """
+        if self._event_queue is None:
+            logger.warning(f"Event queue not initialized, dropping event from {event.trigger_id}")
+            return
         await self._event_queue.put(event)
 
     async def _process_events(self) -> None:
@@ -286,6 +297,10 @@ class TriggerManager:
         This is the main loop that handles trigger events
         and executes goals concurrently.
         """
+        if self._event_queue is None:
+            logger.error("Event queue not initialized")
+            return
+
         self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
 
         logger.info("Event processor started, waiting for events...")
