@@ -406,10 +406,11 @@ class ExecutionLogSection(CollapsibleSection):
         self._log_layout.setSpacing(2)
         self._log_layout.addStretch()
 
-        # 滚动区域
+        # 滚动区域 - 设置最小高度以便能看到更多日志
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        scroll.setMinimumHeight(150)  # 最小高度，确保能看到多条日志
         scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: {theme.APP_BACKGROUND};
