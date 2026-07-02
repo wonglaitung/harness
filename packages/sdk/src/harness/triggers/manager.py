@@ -304,10 +304,6 @@ class TriggerManager:
         This is the main loop that handles trigger events
         and executes goals concurrently.
         """
-        if self._event_queue is None:
-            logger.error("Event queue not initialized")
-            return
-
         self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
 
         logger.info("Event processor started, waiting for events...")
@@ -316,11 +312,16 @@ class TriggerManager:
         while self._running:
             loop_count += 1
             try:
-                # Use queue.get() without timeout to avoid qasync task conflicts
-                # Check _running flag periodically via a separate mechanism
-                event = await self._event_queue.get()
+                # Re-create queue if it's bound to a different event loop (qasync issue)
+                queue = self._ensure_queue_for_current_loop()
+                if queue is None:
+                    logger.warning("Could not get/create event queue, waiting...")
+                    await asyncio.sleep(0.1)
+                    continue
 
-                logger.debug(f"Processing event from trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
+                event = await queue.get()
+
+                logger.debug(f"Processing event from trigger {event.trigger_id}, queue size: {queue.qsize()}")
                 # Execute concurrently, not blocking queue consumption
                 task = asyncio.create_task(self._handle_event_concurrent(event))
                 self._running_tasks.add(task)
@@ -329,10 +330,55 @@ class TriggerManager:
             except asyncio.CancelledError:
                 logger.info("Event processor cancelled")
                 break
+            except RuntimeError as e:
+                # qasync may switch event loops, causing queue access issues
+                if "bound to a different event loop" in str(e):
+                    logger.debug(f"Event loop changed, will recreate queue: {e}")
+                    self._event_queue = None  # Force recreation on next iteration
+                    await asyncio.sleep(0.01)  # Small delay before retry
+                else:
+                    logger.error(f"RuntimeError processing event: {e}", exc_info=True)
             except Exception as e:
                 logger.error(f"Error processing event: {e}", exc_info=True)
 
         logger.info(f"Event processor stopped, _running={self._running}, loops={loop_count}")
+
+    def _ensure_queue_for_current_loop(self) -> asyncio.Queue[TriggerEvent] | None:
+        """
+        Ensure we have a queue bound to the current event loop.
+
+        qasync may switch event loops during execution, causing the original
+        queue to become inaccessible. This method checks if the current queue
+        works, and creates a new one if needed.
+        """
+        if self._event_queue is None:
+            # Create new queue in current event loop
+            try:
+                self._event_queue = asyncio.Queue()
+                logger.debug("Created new event queue in current event loop")
+                return self._event_queue
+            except Exception as e:
+                logger.error(f"Failed to create event queue: {e}")
+                return None
+
+        # Test if existing queue works with current event loop
+        try:
+            # Try a non-blocking check - qsize() doesn't require event loop
+            _ = self._event_queue.qsize()
+            return self._event_queue
+        except RuntimeError as e:
+            if "bound to a different event loop" in str(e):
+                logger.debug("Queue bound to different event loop, creating new one")
+                try:
+                    self._event_queue = asyncio.Queue()
+                    logger.debug("Created new event queue after event loop change")
+                    return self._event_queue
+                except Exception as create_error:
+                    logger.error(f"Failed to create new event queue: {create_error}")
+                    return None
+            else:
+                logger.error(f"Unexpected error accessing queue: {e}")
+                return None
 
     async def _handle_event_concurrent(self, event: TriggerEvent) -> None:
         """
