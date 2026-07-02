@@ -2548,3 +2548,156 @@ Java SDK 各模块同步率不同，Core 98%、LLM 95%、Memory 95%、Skills 95%
 - **代码组织差异**：功能相同，代码位置不同（不影响使用）
 - **语言特性差异**：因语言生态不同而采用不同实现方式
 - **架构设计差异**：因定位不同而有意省略的接口
+
+---
+
+## 2026-07-02: asyncio.Queue 与 qasync event loop 切换问题
+
+### 问题
+
+客户端使用 PyQt6 + qasync 时，TriggerManager 在运行过程中报错：
+
+```
+RuntimeError: <Queue at 0x...> is bound to a different event loop
+```
+
+错误在以下场景出现：
+- TriggerManager 启动后正常运行一段时间
+- 用户关闭/打开窗口
+- 多次触发事件后
+
+### 原因分析
+
+`asyncio.Queue` 在创建时会绑定到当前的 event loop：
+
+```python
+# asyncio.Queue 源码片段
+def __init__(self):
+    self._loop = asyncio.get_event_loop()  # 创建时绑定
+    self._getters = deque()
+    self._putters = deque()
+```
+
+qasync（Qt/asyncio 集成库）可能在不同时刻切换 event loop：
+- 窗口关闭/打开时
+- 线程切换时
+- QApplication 状态变化时
+
+当 event loop 切换后，原先创建的 Queue 仍然绑定到旧的 loop，导致：
+1. `queue.put()` 可能成功（如果 loop 还存在）
+2. `await queue.get()` 报错（必须使用当前 loop）
+
+**为什么问题出现在运行过程中而非启动时？**
+
+启动时 Queue 创建在正确的 event loop 中，正常运行。问题在 event loop 切换后出现（如窗口操作），此时 Queue 已绑定到旧的 loop。
+
+### 解决方案：EventQueue
+
+使用自定义的 EventQueue，不绑定到任何特定 event loop：
+
+```python
+class EventQueue:
+    """Thread-safe event queue that works across event loop switches."""
+
+    def __init__(self):
+        self._queue: deque[TriggerEvent] = deque()
+        self._lock = threading.Lock()
+        self._notifier: asyncio.Event | None = None
+
+    def put_nowait(self, event: TriggerEvent) -> None:
+        """Add event to queue (thread-safe, non-blocking)."""
+        with self._lock:
+            self._queue.append(event)
+        # Notify waiter if exists
+        if self._notifier is not None:
+            try:
+                self._notifier.set()
+            except Exception:
+                pass  # Event might be bound to old loop
+
+    async def get(self) -> TriggerEvent:
+        """Get event from queue (async, waits if empty)."""
+        # Create notifier in CURRENT event loop (not the one at init time)
+        if self._notifier is None:
+            self._notifier = asyncio.Event()
+
+        while True:
+            with self._lock:
+                if self._queue:
+                    return self._queue.popleft()
+
+            # Wait for notification
+            self._notifier.clear()
+            try:
+                await self._notifier.wait()
+            except Exception:
+                # Event loop might have switched, create new notifier
+                self._notifier = asyncio.Event()
+```
+
+**设计要点**：
+
+1. **存储层不绑定 event loop**：
+   - `deque` + `threading.Lock` 是跨 event loop 安全的
+   - 数据存储不依赖任何特定 event loop
+
+2. **等待器动态创建**：
+   - `asyncio.Event` 在 `get()` 调用时创建，绑定到**当前** event loop
+   - 不是在 `__init__` 时创建（那时的 loop 可能已失效）
+
+3. **异常时重建**：
+   - 如果等待器失效（event loop 切换），自动创建新的等待器
+   - 不丢失队列中的事件
+
+4. **事件不丢失**：
+   - 事件存储在 `deque` 中，不受 event loop 切换影响
+   - 即使等待器失效，数据仍然安全
+
+### 关闭顺序
+
+`TriggerManager.stop()` 必须先取消 processor task，再清理其他资源：
+
+```python
+async def stop(self) -> None:
+    self._running = False
+
+    # 1. 先取消 processor task（防止访问已销毁的队列）
+    if self._processor_task:
+        self._processor_task.cancel()
+        await self._processor_task  # 等待取消完成
+
+    # 2. 再清理其他资源
+    for reg in self._registrations.values():
+        await reg.trigger.stop()
+```
+
+### 验证过程
+
+1. **查阅 qasync 文档和 GitHub Issues**：
+   - qasync 没有官方文档说明 event loop 切换行为
+   - GitHub Issues 中有类似问题报告，但无官方解决方案
+
+2. **搜索 asyncio.Queue 最佳实践**：
+   - 官方文档说明 Queue 绑定到创建时的 loop
+   - 建议在使用的 loop 中创建 Queue
+
+3. **设计验证**：
+   - 使用 `deque` + `threading.Lock` 确保存储层安全
+   - 使用 `asyncio.Event` 动态创建确保等待器绑定到当前 loop
+
+### 教训
+
+1. **asyncio.Queue 绑定到创建时的 event loop**：在 event loop 可能切换的场景中，不能直接使用
+2. **qasync 可能切换 event loop**：没有官方文档说明何时切换，需要防御性设计
+3. **存储与等待分离**：
+   - 存储层使用线程安全的数据结构（不依赖 event loop）
+   - 等待层使用 asyncio 同步原语（动态绑定到当前 loop）
+4. **动态创建优于静态初始化**：`asyncio.Event` 在需要时创建，而非初始化时创建
+5. **异常处理要健壮**：event loop 切换可能导致任何 asyncio 同步原语失效，要有重建机制
+
+### 参考
+
+- asyncio.Queue 源码：`asyncio/queues.py`
+- qasync GitHub：https://github.com/CabbageDevelopment/qasync
+- 关键文件：`packages/sdk/src/harness/triggers/manager.py`
+- 文档：`packages/sdk/docs/06-trigger-system.md`（qasync 集成注意事项章节）

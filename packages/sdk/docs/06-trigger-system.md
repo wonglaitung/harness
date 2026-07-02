@@ -488,3 +488,90 @@ public enum TriggerState {
 - [05-skills-system.md](./05-skills-system.md) - 了解技能系统
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
 - [../design/phase2-automations.md](../design/phase2-automations.md) - Automations 设计文档
+
+---
+
+## qasync 集成注意事项
+
+### 问题：asyncio.Queue 与 qasync 不兼容
+
+在 PyQt6 + qasync 环境中使用 `asyncio.Queue` 会导致以下错误：
+
+```
+RuntimeError: <Queue at 0x...> is bound to a different event loop
+```
+
+### 原因
+
+`asyncio.Queue` 在创建时会绑定到当前的 event loop。qasync 可能会在运行过程中切换 event loop（例如关闭窗口、线程切换时），导致原先创建的 Queue 无法访问。
+
+### 解决方案：EventQueue
+
+TriggerManager 使用自定义的 `EventQueue` 替代 `asyncio.Queue`：
+
+```python
+class EventQueue:
+    """
+    Thread-safe event queue that works across event loop switches.
+
+    Uses threading.Lock for thread-safety and asyncio.Event for async waiting.
+    """
+
+    def __init__(self):
+        self._queue: deque[TriggerEvent] = deque()
+        self._lock = threading.Lock()
+        self._notifier: asyncio.Event | None = None
+
+    def put_nowait(self, event: TriggerEvent) -> None:
+        with self._lock:
+            self._queue.append(event)
+        if self._notifier is not None:
+            try:
+                self._notifier.set()
+            except Exception:
+                pass  # Event might be bound to old loop
+
+    async def get(self) -> TriggerEvent:
+        if self._notifier is None:
+            self._notifier = asyncio.Event()
+
+        while True:
+            with self._lock:
+                if self._queue:
+                    return self._queue.popleft()
+
+            self._notifier.clear()
+            try:
+                await self._notifier.wait()
+            except Exception:
+                self._notifier = asyncio.Event()
+```
+
+**设计要点**：
+
+1. **存储层不绑定 event loop**：`collections.deque` + `threading.Lock` 是跨 event loop 安全的
+2. **等待器动态创建**：`asyncio.Event` 在 `get()` 调用时创建，确保绑定到当前 event loop
+3. **异常时重建**：如果等待器失效，自动创建新的等待器
+4. **事件不丢失**：队列中的事件存储在 deque 中，不受 event loop 切换影响
+
+### 关闭顺序
+
+`TriggerManager.stop()` 必须先取消 processor task，再清理其他资源：
+
+```python
+async def stop(self) -> None:
+    self._running = False
+
+    # 1. 先取消 processor task（防止访问已销毁的队列）
+    if self._processor_task:
+        self._processor_task.cancel()
+        await self._processor_task  # 等待取消完成
+
+    # 2. 再清理其他资源
+    # ...
+```
+
+### 参考
+
+- 关键文件：`packages/sdk/src/harness/triggers/manager.py`
+- 相关经验教训：`lessons.md` - "asyncio.Queue 与 qasync event loop 切换问题"
