@@ -294,22 +294,16 @@ class TriggerManager:
         while self._running:
             loop_count += 1
             try:
-                # Wait for event with timeout
-                logger.debug(f"Event processor loop #{loop_count}, waiting for event...")
-                event = await asyncio.wait_for(
-                    self._event_queue.get(),
-                    timeout=1.0,
-                )
+                # Use queue.get() without timeout to avoid qasync task conflicts
+                # Check _running flag periodically via a separate mechanism
+                event = await self._event_queue.get()
 
-                logger.debug(f"Processing event from trigger {event.trigger_id}")
+                logger.debug(f"Processing event from trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
                 # Execute concurrently, not blocking queue consumption
                 task = asyncio.create_task(self._handle_event_concurrent(event))
                 self._running_tasks.add(task)
                 task.add_done_callback(self._running_tasks.discard)
 
-            except asyncio.TimeoutError:
-                # No event, continue loop
-                continue
             except asyncio.CancelledError:
                 logger.info("Event processor cancelled")
                 break
