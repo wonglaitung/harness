@@ -76,7 +76,33 @@
 
 ## 2026-07-02 提取
 
+## 2026-07-03 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向资金持股19.53%创新高 — 左侧建仓信号升级**
+
+### 港股分析
+- **美债4.48%持续高位 — 降息预期左侧布局窗口延续**
+
+### 港股分析
+- **AI硬件板块全球暴跌 — 左侧恐慌抄底机会**
+
+### 新范式/工具
+- **Deployment Simulation — 部署前行为模拟** - https://openai.com/index/deployment-simulation
+
+### 新范式/工具
+- **Hermes Agent — 自成长Agent闭环** - https://github.com/NousResearch/hermes-agent
+
+### 新范式/工具
+- **GeneBench-Pro — "研究品味"评估范式** - https://openai.com/index/introducing-genebench-pro
+
+### 新范式/工具
+- **MCP Apps — MCP工具内嵌交互式UI协议** - https://github.com/modelcontextprotocol/ext-apps
+
+### 新范式/工具
+- **Agent Skills — Agent能力扩展的开放协议标准** - https://github.com/agentskills/agentskills
 
 ### 港股分析
 - **美债4.47%高位运行-降息预期左侧布局信号**
