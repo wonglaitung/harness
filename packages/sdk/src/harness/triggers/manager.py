@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from collections import deque
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +21,57 @@ if TYPE_CHECKING:
     from harness.triggers.base import Trigger
 
 logger = logging.getLogger(__name__)
+
+
+class EventQueue:
+    """
+    Thread-safe event queue that works across event loop switches.
+
+    Unlike asyncio.Queue which is bound to a specific event loop,
+    this implementation uses threading primitives for thread-safety
+    and asyncio.Event for async waiting, making it resilient to
+    qasync event loop switching issues.
+    """
+
+    def __init__(self):
+        self._queue: deque[TriggerEvent] = deque()
+        self._lock = threading.Lock()
+        self._notifier: asyncio.Event | None = None
+
+    def put_nowait(self, event: TriggerEvent) -> None:
+        """Add event to queue (thread-safe, non-blocking)."""
+        with self._lock:
+            self._queue.append(event)
+        # Notify waiter if exists
+        if self._notifier is not None:
+            try:
+                self._notifier.set()
+            except Exception:
+                pass  # Event might be bound to old loop
+
+    async def get(self) -> TriggerEvent:
+        """Get event from queue (async, waits if empty)."""
+        # Create notifier in current event loop
+        if self._notifier is None:
+            self._notifier = asyncio.Event()
+
+        while True:
+            with self._lock:
+                if self._queue:
+                    return self._queue.popleft()
+
+            # Wait for notification
+            self._notifier.clear()
+            try:
+                await self._notifier.wait()
+            except Exception:
+                # Event loop might have switched, create new notifier
+                self._notifier = asyncio.Event()
+
+    def qsize(self) -> int:
+        """Get queue size (thread-safe)."""
+        with self._lock:
+            return len(self._queue)
 
 
 class TriggerManager:
@@ -72,8 +125,8 @@ class TriggerManager:
         self.max_concurrent_goals = max_concurrent_goals
         self._registrations: dict[str, TriggerRegistration] = {}
         self._running = False
-        # Queue will be created in start() to bind to correct event loop
-        self._event_queue: asyncio.Queue[TriggerEvent] | None = None
+        # Use EventQueue instead of asyncio.Queue to avoid qasync event loop binding issues
+        self._event_queue: EventQueue = EventQueue()
         self._processor_task: asyncio.Task | None = None
         self._semaphore: asyncio.Semaphore | None = None
         self._running_tasks: set[asyncio.Task] = set()
@@ -195,10 +248,6 @@ class TriggerManager:
 
         self._running = True
 
-        # Create queue in the current event loop (fixes qasync event loop binding issue)
-        self._event_queue = asyncio.Queue()
-        logger.debug("Created event queue in current event loop")
-
         # Start event processor
         self._processor_task = asyncio.create_task(self._process_events())
 
@@ -275,9 +324,6 @@ class TriggerManager:
         Args:
             event: Event to enqueue
         """
-        if self._event_queue is None:
-            logger.warning(f"Event queue not initialized, dropping event from {event.trigger_id}")
-            return
         self._event_queue.put_nowait(event)
         logger.debug(f"Event enqueued for trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
 
@@ -292,10 +338,8 @@ class TriggerManager:
         Args:
             event: Event to enqueue
         """
-        if self._event_queue is None:
-            logger.warning(f"Event queue not initialized, dropping event from {event.trigger_id}")
-            return
-        await self._event_queue.put(event)
+        self._event_queue.put_nowait(event)
+        logger.debug(f"Event async enqueued for trigger {event.trigger_id}")
 
     async def _process_events(self) -> None:
         """
@@ -304,10 +348,6 @@ class TriggerManager:
         This is the main loop that handles trigger events
         and executes goals concurrently.
         """
-        if self._event_queue is None:
-            logger.error("Event queue not initialized")
-            return
-
         self._semaphore = asyncio.Semaphore(self.max_concurrent_goals)
 
         logger.info("Event processor started, waiting for events...")
@@ -316,8 +356,7 @@ class TriggerManager:
         while self._running:
             loop_count += 1
             try:
-                # Use queue.get() without timeout to avoid qasync task conflicts
-                # Check _running flag periodically via a separate mechanism
+                # EventQueue is resilient to event loop switching
                 event = await self._event_queue.get()
 
                 logger.debug(f"Processing event from trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
