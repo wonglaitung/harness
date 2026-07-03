@@ -65,6 +65,13 @@ from harness.loop.automation import (
 )
 from harness.loop.goal import GoalVerifier, VerificationError
 from harness.loop.goal_loop import GoalLoop
+from harness.loop.tool_verification import (
+    CommandResult,
+    ToolVerificationConfig,
+    VerificationCommand,
+    execute_verification_command,
+    run_tool_verification,
+)
 from harness.loop.types import (
     GoalConfig,
     GoalResult,
@@ -91,6 +98,12 @@ __all__ = [
     "VerificationMethod",
     "VerificationRecord",
     "VerificationResult",
+    # Tool Verification
+    "ToolVerificationConfig",
+    "VerificationCommand",
+    "CommandResult",
+    "execute_verification_command",
+    "run_tool_verification",
     # Implementations
     "GoalVerifier",
     "VerificationError",

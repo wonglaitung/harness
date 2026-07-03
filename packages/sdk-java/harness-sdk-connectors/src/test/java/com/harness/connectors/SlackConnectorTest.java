@@ -38,12 +38,14 @@ class SlackConnectorTest {
     }
 
     @Test
-    void testConfigValidation() {
-        // Missing botToken
-        assertThrows(IllegalArgumentException.class, () ->
-                new SlackConfig.Builder()
-                        .appToken("xapp-test")
-                        .build());
+    void testConfigWithoutBotToken() {
+        // botToken is now optional (for webhook-only mode)
+        SlackConfig noTokenConfig = new SlackConfig.Builder()
+                .appToken("xapp-test")
+                .build();
+
+        assertNull(noTokenConfig.getBotToken());
+        assertEquals("xapp-test", noTokenConfig.getAppToken());
     }
 
     @Test
@@ -174,30 +176,53 @@ class SlackConnectorTest {
     }
 
     @Test
-    void testSendMessage() {
-        SlackConnector connector = new SlackConnector(config);
+    void testSendMessageWithoutCredentials() {
+        // Without valid bot token, API calls return false
+        SlackConfig noTokenConfig = new SlackConfig.Builder()
+                .build();
+        SlackConnector connector = new SlackConnector(noTokenConfig);
         connector.start(event -> {}).join();
 
+        // Should return false since no credentials configured
         Boolean result = connector.sendMessage("C12345", "Hello!").join();
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @Test
-    void testSendMessageWithThread() {
-        SlackConnector connector = new SlackConnector(config);
+    void testSendMessageWithThreadWithoutCredentials() {
+        SlackConfig noTokenConfig = new SlackConfig.Builder()
+                .build();
+        SlackConnector connector = new SlackConnector(noTokenConfig);
         connector.start(event -> {}).join();
 
         Boolean result = connector.sendMessage("C12345", "Reply!", null, "17123456.0001").join();
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @Test
-    void testSendEphemeral() {
-        SlackConnector connector = new SlackConnector(config);
+    void testSendEphemeralWithoutCredentials() {
+        SlackConfig noTokenConfig = new SlackConfig.Builder()
+                .build();
+        SlackConnector connector = new SlackConnector(noTokenConfig);
         connector.start(event -> {}).join();
 
         Boolean result = connector.sendEphemeral("C12345", "U12345", "Private message", null).join();
-        assertTrue(result);
+        assertFalse(result);
+    }
+
+    @Test
+    void testApiMethodsExist() {
+        // Verify API methods exist and return CompletableFuture
+        SlackConnector connector = new SlackConnector(config);
+        connector.start(event -> {}).join();
+
+        // These will fail with test token, but the methods should exist
+        assertNotNull(connector.sendMessage("C12345", "test"));
+        assertNotNull(connector.replyInThread("C12345", "1234.5678", "reply"));
+        assertNotNull(connector.addReaction("C12345", "1234.5678", "thumbsup"));
+        assertNotNull(connector.getUserInfo("U12345"));
+        assertNotNull(connector.updateMessage("C12345", "1234.5678", "updated", null));
+        assertNotNull(connector.deleteMessage("C12345", "1234.5678"));
     }
 
     @Test

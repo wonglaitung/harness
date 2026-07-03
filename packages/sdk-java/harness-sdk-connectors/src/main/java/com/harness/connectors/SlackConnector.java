@@ -70,8 +70,23 @@ public class SlackConnector extends Connector {
         this.eventCallback = eventCallback;
 
         try {
-            // Initialize Slack API client
-            this.apiClient = new SlackAPIClient(config.getBotToken(), config.getAppToken());
+            // Initialize Slack API client with bot token
+            if (config.getBotToken() != null && !config.getBotToken().isEmpty()) {
+                this.apiClient = new SlackAPIClient(config.getBotToken(), config.getAppToken());
+                logger.info("SlackConnector initialized with bot token authentication");
+
+                // Test authentication
+                apiClient.authTest()
+                        .thenAccept(result -> {
+                            if (result != null) {
+                                logger.info("Slack auth test passed: {}", result);
+                            } else {
+                                logger.warn("Slack auth test failed - check bot token");
+                            }
+                        });
+            } else {
+                logger.warn("SlackConnector started without bot token - event handling only");
+            }
             this.state = ConnectorState.RUNNING;
             logger.info("SlackConnector started: {}", id);
             return CompletableFuture.completedFuture(null);
@@ -263,6 +278,101 @@ public class SlackConnector extends Connector {
                 });
     }
 
+    /**
+     * Update an existing message.
+     *
+     * @param channel Channel ID
+     * @param ts Message timestamp
+     * @param text New message text
+     * @param blocks Optional new blocks
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> updateMessage(
+            String channel,
+            String ts,
+            String text,
+            List<Map<String, Object>> blocks) {
+
+        if (apiClient == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        return apiClient.updateMessage(channel, ts, text, blocks)
+                .exceptionally(e -> {
+                    logger.error("Failed to update message: {}", e.getMessage());
+                    return false;
+                });
+    }
+
+    /**
+     * Delete a message.
+     *
+     * @param channel Channel ID
+     * @param ts Message timestamp
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> deleteMessage(String channel, String ts) {
+        if (apiClient == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        return apiClient.deleteMessage(channel, ts)
+                .exceptionally(e -> {
+                    logger.error("Failed to delete message: {}", e.getMessage());
+                    return false;
+                });
+    }
+
+    /**
+     * Add a reaction to a message.
+     *
+     * @param channel Channel ID
+     * @param ts Message timestamp
+     * @param emoji Emoji name (without colons, e.g., "thumbsup")
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> addReaction(String channel, String ts, String emoji) {
+        if (apiClient == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        return apiClient.addReaction(channel, ts, emoji)
+                .exceptionally(e -> {
+                    logger.error("Failed to add reaction: {}", e.getMessage());
+                    return false;
+                });
+    }
+
+    /**
+     * Get user info.
+     *
+     * @param userId User ID
+     * @return CompletableFuture with user data or null if not found
+     */
+    public CompletableFuture<Map<String, Object>> getUserInfo(String userId) {
+        if (apiClient == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        return apiClient.getUserInfo(userId)
+                .exceptionally(e -> {
+                    logger.error("Failed to get user info: {}", e.getMessage());
+                    return null;
+                });
+    }
+
+    /**
+     * Reply to a message in thread.
+     *
+     * @param channel Channel ID
+     * @param threadTs Thread timestamp (parent message ts)
+     * @param text Reply text
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> replyInThread(String channel, String threadTs, String text) {
+        return sendMessage(channel, text, null, threadTs);
+    }
+
     @Override
     public CompletableFuture<Void> stop() {
         this.apiClient = null;
@@ -270,42 +380,5 @@ public class SlackConnector extends Connector {
         this.state = ConnectorState.STOPPED;
         logger.info("SlackConnector stopped: {}", id);
         return CompletableFuture.completedFuture(null);
-    }
-
-    /**
-     * Internal Slack API client.
-     *
-     * <p>A lightweight client for Slack API calls.
-     * In production, this would use a library like slack-api-client.</p>
-     */
-    private static class SlackAPIClient {
-        private final String botToken;
-        private final String appToken;
-
-        SlackAPIClient(String botToken, String appToken) {
-            this.botToken = botToken;
-            this.appToken = appToken;
-        }
-
-        CompletableFuture<Boolean> postMessage(
-                String channel,
-                String text,
-                List<Map<String, Object>> blocks,
-                String threadTs) {
-
-            // In production, use: POST /api/chat.postMessage
-            logger.debug("Would send Slack message to {}: {}", channel, text);
-            return CompletableFuture.completedFuture(true);
-        }
-
-        CompletableFuture<Boolean> postEphemeral(
-                String channel,
-                String user,
-                String text,
-                List<Map<String, Object>> blocks) {
-
-            // In production, use: POST /api/chat.postEphemeral
-            return CompletableFuture.completedFuture(true);
-        }
     }
 }

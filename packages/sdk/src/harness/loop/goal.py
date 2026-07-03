@@ -26,6 +26,7 @@ from harness.loop.types import (
     VerificationRecord,
     VerificationResult,
 )
+from harness.loop.tool_verification import run_tool_verification
 
 if TYPE_CHECKING:
     from harness.llm.base import LLMClient
@@ -321,20 +322,37 @@ class GoalVerifier:
         """
         Verify using tools (tests, lint, type check).
 
-        This is a placeholder for future implementation.
-        Will run verification tools in the workspace directory.
+        Runs configured verification commands in the workspace directory.
+        All commands must succeed (exit code 0) for verification to pass.
         """
-        # TODO: Implement tool-based verification
-        # This would run commands like:
-        # - pytest
-        # - mypy
-        # - ruff check
-        # in the workspace_dir from context
+        tool_config = self.config.tool_verification_config
 
-        raise VerificationError(
-            "Tool verification not yet implemented",
-            should_retry=False,
-        )
+        if tool_config is None:
+            raise VerificationError(
+                "No tool verification config provided",
+                should_retry=False,
+            )
+
+        try:
+            all_passed, reasoning = await run_tool_verification(tool_config, context)
+
+            return VerificationResult(
+                achieved=all_passed,
+                confidence=1.0 if all_passed else 0.9,
+                reasoning=reasoning,
+            )
+
+        except Exception as e:
+            # Check for retryable errors
+            error_str = str(e).lower()
+            should_retry = any(
+                keyword in error_str
+                for keyword in ["timeout", "rate limit", "503", "502"]
+            )
+            raise VerificationError(
+                f"Tool verification error: {e}",
+                should_retry=should_retry,
+            ) from None
 
     def _build_verification_prompt(self, result: LoopResult) -> str:
         """Build the verification prompt for LLM."""

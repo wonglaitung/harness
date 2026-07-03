@@ -73,8 +73,13 @@ public class GitHubConnector extends Connector {
         this.eventCallback = eventCallback;
 
         try {
-            // Initialize GitHub API client
-            this.apiClient = new GitHubAPIClient(config.getAppId(), config.getPrivateKey());
+            // Initialize GitHub API client with GitHub App authentication
+            if (config.getAppId() != null && config.getPrivateKey() != null) {
+                this.apiClient = new GitHubAPIClient(config.getAppId(), config.getPrivateKey());
+                logger.info("GitHubConnector initialized with GitHub App authentication");
+            } else {
+                logger.warn("GitHubConnector started without API credentials - webhook handling only");
+            }
             this.state = ConnectorState.RUNNING;
             logger.info("GitHubConnector started: {}", id);
             return CompletableFuture.completedFuture(null);
@@ -217,6 +222,77 @@ public class GitHubConnector extends Connector {
                 });
     }
 
+    /**
+     * Get issue details.
+     *
+     * @param repo Repository name (owner/repo)
+     * @param issueNumber Issue number
+     * @return CompletableFuture with issue data or null if not found
+     */
+    public CompletableFuture<Map<String, Object>> getIssue(String repo, int issueNumber) {
+        if (apiClient == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        return apiClient.getIssue(repo, issueNumber)
+                .exceptionally(e -> {
+                    logger.error("Failed to get issue: {}", e.getMessage());
+                    return null;
+                });
+    }
+
+    /**
+     * Create a review on a pull request.
+     *
+     * @param repo Repository name (owner/repo)
+     * @param prNumber PR number
+     * @param event Review event (APPROVE, REQUEST_CHANGES, COMMENT)
+     * @param body Review body
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> createReview(String repo, int prNumber, String event, String body) {
+        if (apiClient == null) {
+            logger.warn("GitHub client not initialized");
+            return CompletableFuture.completedFuture(false);
+        }
+
+        return apiClient.createReview(repo, prNumber, event, body)
+                .thenApply(success -> {
+                    if (success) {
+                        logger.info("Created review on {}#{}", repo, prNumber);
+                    }
+                    return success;
+                })
+                .exceptionally(e -> {
+                    logger.error("Failed to create review: {}", e.getMessage());
+                    return false;
+                });
+    }
+
+    /**
+     * Approve a pull request.
+     *
+     * @param repo Repository name (owner/repo)
+     * @param prNumber PR number
+     * @param body Optional approval comment
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> approvePr(String repo, int prNumber, String body) {
+        return createReview(repo, prNumber, "APPROVE", body);
+    }
+
+    /**
+     * Request changes on a pull request.
+     *
+     * @param repo Repository name (owner/repo)
+     * @param prNumber PR number
+     * @param body Required explanation for requesting changes
+     * @return CompletableFuture with success status
+     */
+    public CompletableFuture<Boolean> requestChanges(String repo, int prNumber, String body) {
+        return createReview(repo, prNumber, "REQUEST_CHANGES", body);
+    }
+
     @Override
     public CompletableFuture<Void> stop() {
         this.apiClient = null;
@@ -224,37 +300,5 @@ public class GitHubConnector extends Connector {
         this.state = ConnectorState.STOPPED;
         logger.info("GitHubConnector stopped: {}", id);
         return CompletableFuture.completedFuture(null);
-    }
-
-    /**
-     * Internal GitHub API client.
-     *
-     * <p>A lightweight client for GitHub App authentication and API calls.
-     * In production, this would use a library like org.kohsuke:github-api.</p>
-     */
-    private static class GitHubAPIClient {
-        private final String appId;
-        private final String privateKey;
-
-        GitHubAPIClient(String appId, String privateKey) {
-            this.appId = appId;
-            this.privateKey = privateKey;
-        }
-
-        CompletableFuture<Boolean> createIssueComment(String repo, int issueNumber, String body) {
-            // In production, use: POST /repos/{owner}/{repo}/issues/{issue_number}/comments
-            logger.info("Would create comment on {}#{}: {}...", repo, issueNumber,
-                    body.length() > 50 ? body.substring(0, 50) : body);
-            return CompletableFuture.completedFuture(true);
-        }
-
-        CompletableFuture<Map<String, Object>> getPr(String repo, int prNumber) {
-            // In production, use: GET /repos/{owner}/{repo}/pulls/{pull_number}
-            Map<String, Object> result = new HashMap<>();
-            result.put("number", prNumber);
-            result.put("title", "PR #" + prNumber);
-            result.put("state", "open");
-            return CompletableFuture.completedFuture(result);
-        }
     }
 }

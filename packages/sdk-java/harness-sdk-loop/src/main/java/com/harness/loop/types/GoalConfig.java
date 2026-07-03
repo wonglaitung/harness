@@ -36,6 +36,7 @@ public class GoalConfig {
     private final Double maxCostUsd;
     private final double contextResetThreshold;
     private final int preserveMessages;
+    private final ToolVerificationConfig toolVerificationConfig;
 
     private GoalConfig(Builder builder) {
         this.description = builder.description;
@@ -54,6 +55,7 @@ public class GoalConfig {
         this.maxCostUsd = builder.maxCostUsd;
         this.contextResetThreshold = builder.contextResetThreshold;
         this.preserveMessages = builder.preserveMessages;
+        this.toolVerificationConfig = builder.toolVerificationConfig;
 
         validate();
     }
@@ -76,6 +78,9 @@ public class GoalConfig {
         }
         if (verificationMethod == VerificationMethod.CUSTOM && customVerifier == null) {
             throw new IllegalArgumentException("customVerifier is required when verificationMethod is CUSTOM");
+        }
+        if (verificationMethod == VerificationMethod.TOOL && toolVerificationConfig == null) {
+            throw new IllegalArgumentException("toolVerificationConfig is required when verificationMethod is TOOL");
         }
     }
 
@@ -194,6 +199,13 @@ public class GoalConfig {
     }
 
     /**
+     * Configuration for tool-based verification.
+     */
+    public ToolVerificationConfig getToolVerificationConfig() {
+        return toolVerificationConfig;
+    }
+
+    /**
      * Create a builder for GoalConfig.
      */
     public static Builder builder() {
@@ -220,7 +232,8 @@ public class GoalConfig {
                 .maxTokens(config.maxTokens)
                 .maxCostUsd(config.maxCostUsd)
                 .contextResetThreshold(config.contextResetThreshold)
-                .preserveMessages(config.preserveMessages);
+                .preserveMessages(config.preserveMessages)
+                .toolVerificationConfig(config.toolVerificationConfig);
     }
 
     /**
@@ -243,6 +256,7 @@ public class GoalConfig {
         private Double maxCostUsd = null;
         private double contextResetThreshold = 0.7;
         private int preserveMessages = 2;
+        private ToolVerificationConfig toolVerificationConfig = null;
 
         /**
          * Set the goal description (required).
@@ -369,6 +383,16 @@ public class GoalConfig {
          */
         public Builder preserveMessages(int preserveMessages) {
             this.preserveMessages = preserveMessages;
+            return this;
+        }
+
+        /**
+         * Set the tool verification configuration.
+         *
+         * Required when verificationMethod is TOOL.
+         */
+        public Builder toolVerificationConfig(ToolVerificationConfig toolVerificationConfig) {
+            this.toolVerificationConfig = toolVerificationConfig;
             return this;
         }
 

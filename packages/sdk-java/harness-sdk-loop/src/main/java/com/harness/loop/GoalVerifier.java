@@ -2,6 +2,7 @@ package com.harness.loop;
 
 import com.harness.loop.types.GoalConfig;
 import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.ToolVerificationConfig;
 import com.harness.loop.types.VerificationMethod;
 import com.harness.loop.types.VerificationRecord;
 import com.harness.loop.types.VerificationResult;
@@ -255,9 +256,148 @@ Be strict but fair. Only mark as achieved if the agent has clearly completed the
     }
 
     private CompletableFuture<VerificationResult> verifyTool(GoalResult result, Map<String, Object> context) {
-        // TODO: Implement tool-based verification
-        return CompletableFuture.failedFuture(
-                new VerificationException("Tool verification not yet implemented", false));
+        ToolVerificationConfig toolConfig = config.getToolVerificationConfig();
+
+        if (toolConfig == null) {
+            return CompletableFuture.failedFuture(
+                    new VerificationException("No tool verification config provided", false));
+        }
+
+        // Get working directory from config or context (make effectively final)
+        final String workingDir = determineWorkingDirectory(toolConfig, context);
+
+        return CompletableFuture.supplyAsync(() -> {
+            List<CommandResult> results = new ArrayList<>();
+            boolean allPassed = true;
+            String firstFailure = null;
+
+            for (ToolVerificationConfig.VerificationCommand cmd : toolConfig.getCommands()) {
+                try {
+                    CommandResult cmdResult = executeCommand(cmd, workingDir, toolConfig.getTimeoutSeconds());
+                    results.add(cmdResult);
+
+                    if (!cmdResult.success) {
+                        allPassed = false;
+                        if (firstFailure == null) {
+                            firstFailure = String.format("%s failed (exit code %d): %s",
+                                    cmd.getName(), cmdResult.exitCode, cmdResult.errorOutput);
+                        }
+
+                        if (toolConfig.isFailFast()) {
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    results.add(new CommandResult(cmd.getName(), false, -1, "", e.getMessage()));
+                    allPassed = false;
+                    if (firstFailure == null) {
+                        firstFailure = cmd.getName() + " error: " + e.getMessage();
+                    }
+                    if (toolConfig.isFailFast()) {
+                        break;
+                    }
+                }
+            }
+
+            // Build reasoning
+            StringBuilder reasoning = new StringBuilder();
+            if (allPassed) {
+                reasoning.append("All verification commands passed.\n");
+                for (CommandResult r : results) {
+                    reasoning.append(String.format("- %s: PASSED\n", r.name));
+                }
+                return new VerificationResult.Builder()
+                        .achieved(true)
+                        .confidence(1.0)
+                        .reasoning(reasoning.toString())
+                        .build();
+            } else {
+                reasoning.append("Verification failed.\n");
+                reasoning.append(firstFailure).append("\n\n");
+                reasoning.append("Command results:\n");
+                for (CommandResult r : results) {
+                    reasoning.append(String.format("- %s: %s\n", r.name, r.success ? "PASSED" : "FAILED"));
+                    if (!r.success && !r.errorOutput.isEmpty()) {
+                        // Include last few lines of error output
+                        String[] lines = r.errorOutput.split("\n");
+                        int startLine = Math.max(0, lines.length - 10);
+                        reasoning.append("  Output:\n");
+                        for (int i = startLine; i < lines.length; i++) {
+                            reasoning.append("    ").append(lines[i]).append("\n");
+                        }
+                    }
+                }
+                return new VerificationResult.Builder()
+                        .achieved(false)
+                        .confidence(0.9)
+                        .reasoning(reasoning.toString())
+                        .build();
+            }
+        });
+    }
+
+    /**
+     * Execute a verification command.
+     */
+    private CommandResult executeCommand(
+            ToolVerificationConfig.VerificationCommand cmd,
+            String workingDir,
+            int timeoutSeconds) throws Exception {
+
+        ProcessBuilder pb = new ProcessBuilder(cmd.getCommand());
+        pb.directory(new java.io.File(workingDir));
+        pb.redirectErrorStream(true);
+
+        Process process = pb.start();
+
+        boolean finished = process.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new VerificationException(cmd.getName() + " timed out after " + timeoutSeconds + "s", true);
+        }
+
+        String output = new String(process.getInputStream().readAllBytes());
+        int exitCode = process.exitValue();
+
+        return new CommandResult(
+                cmd.getName(),
+                exitCode == 0,
+                exitCode,
+                output,
+                exitCode != 0 ? output : ""
+        );
+    }
+
+    /**
+     * Result of a single verification command.
+     */
+    private static class CommandResult {
+        final String name;
+        final boolean success;
+        final int exitCode;
+        final String output;
+        final String errorOutput;
+
+        CommandResult(String name, boolean success, int exitCode, String output, String errorOutput) {
+            this.name = name;
+            this.success = success;
+            this.exitCode = exitCode;
+            this.output = output;
+            this.errorOutput = errorOutput;
+        }
+    }
+
+    /**
+     * Determine working directory from config or context.
+     */
+    private String determineWorkingDirectory(ToolVerificationConfig toolConfig, Map<String, Object> context) {
+        if (context.containsKey("workspace_dir")) {
+            return (String) context.get("workspace_dir");
+        }
+        if (config.getWorkspaceDir() != null) {
+            return config.getWorkspaceDir();
+        }
+        return toolConfig.getWorkingDirectory();
     }
 
     private String buildVerificationPrompt(GoalResult result) {

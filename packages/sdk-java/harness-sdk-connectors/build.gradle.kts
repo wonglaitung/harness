@@ -16,6 +16,11 @@ dependencies {
     // 日志
     api("org.slf4j:slf4j-api:$slf4jVersion")
 
+    // JWT for GitHub App authentication
+    api("io.jsonwebtoken:jjwt-api:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

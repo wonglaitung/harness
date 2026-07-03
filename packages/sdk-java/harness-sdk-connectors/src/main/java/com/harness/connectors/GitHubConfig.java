@@ -75,12 +75,8 @@ public class GitHubConfig {
         }
 
         public GitHubConfig build() {
-            if (appId == null || appId.isEmpty()) {
-                throw new IllegalArgumentException("appId is required");
-            }
-            if (privateKey == null || privateKey.isEmpty()) {
-                throw new IllegalArgumentException("privateKey is required");
-            }
+            // appId and privateKey are optional for webhook-only mode
+            // They are required for API calls (create comments, get PRs, etc.)
             return new GitHubConfig(this);
         }
     }

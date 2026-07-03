@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from harness.types import LoopResult, Session
+    from harness.loop.tool_verification import ToolVerificationConfig
 
 
 class GoalStatus(Enum):
@@ -126,6 +127,9 @@ class GoalConfig:
     context_reset_threshold: float = 0.7
     preserve_messages: int = 2
 
+    # Tool verification configuration
+    tool_verification_config: ToolVerificationConfig | None = None
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         if not self.description:
@@ -146,6 +150,10 @@ class GoalConfig:
         # Validate custom_verifier if verification_method is CUSTOM
         if self.verification_method == VerificationMethod.CUSTOM and self.custom_verifier is None:
             raise ValueError("custom_verifier is required when verification_method is CUSTOM")
+
+        # Validate tool_verification_config if verification_method is TOOL
+        if self.verification_method == VerificationMethod.TOOL and self.tool_verification_config is None:
+            raise ValueError("tool_verification_config is required when verification_method is TOOL")
 
 
 @dataclass

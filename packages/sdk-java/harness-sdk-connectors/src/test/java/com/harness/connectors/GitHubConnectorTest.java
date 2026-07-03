@@ -20,9 +20,8 @@ class GitHubConnectorTest {
 
     @BeforeEach
     void setUp() {
+        // Config without credentials for webhook-only testing
         config = new GitHubConfig.Builder()
-                .appId("123456")
-                .privateKey("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----")
                 .webhookSecret("whsec_test")
                 .events(Arrays.asList("push", "pull_request", "issues"))
                 .build();
@@ -30,25 +29,21 @@ class GitHubConnectorTest {
 
     @Test
     void testConfigBuilder() {
-        assertEquals("123456", config.getAppId());
         assertEquals("whsec_test", config.getWebhookSecret());
         assertEquals(3, config.getEvents().size());
         assertTrue(config.getEvents().contains("push"));
     }
 
     @Test
-    void testConfigValidation() {
-        // Missing appId
-        assertThrows(IllegalArgumentException.class, () ->
-                new GitHubConfig.Builder()
-                        .privateKey("key")
-                        .build());
+    void testConfigWithoutCredentials() {
+        // appId and privateKey are now optional (for webhook-only mode)
+        GitHubConfig noCredConfig = new GitHubConfig.Builder()
+                .webhookSecret("whsec_test")
+                .build();
 
-        // Missing privateKey
-        assertThrows(IllegalArgumentException.class, () ->
-                new GitHubConfig.Builder()
-                        .appId("123")
-                        .build());
+        assertNull(noCredConfig.getAppId());
+        assertNull(noCredConfig.getPrivateKey());
+        assertEquals("whsec_test", noCredConfig.getWebhookSecret());
     }
 
     @Test
@@ -157,31 +152,56 @@ class GitHubConnectorTest {
     }
 
     @Test
-    void testCreatePrComment() {
-        GitHubConnector connector = new GitHubConnector(config);
+    void testCreatePrCommentWithoutCredentials() {
+        // Without valid credentials, API calls return false
+        GitHubConfig noCredConfig = new GitHubConfig.Builder()
+                .webhookSecret("whsec_test")
+                .build();
+        GitHubConnector connector = new GitHubConnector(noCredConfig);
         connector.start(event -> {}).join();
 
         Boolean result = connector.createPrComment("owner/repo", 42, "Test comment").join();
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @Test
-    void testCreateIssueComment() {
-        GitHubConnector connector = new GitHubConnector(config);
+    void testCreateIssueCommentWithoutCredentials() {
+        GitHubConfig noCredConfig = new GitHubConfig.Builder()
+                .webhookSecret("whsec_test")
+                .build();
+        GitHubConnector connector = new GitHubConnector(noCredConfig);
         connector.start(event -> {}).join();
 
         Boolean result = connector.createIssueComment("owner/repo", 123, "Test comment").join();
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @Test
-    void testGetPr() {
-        GitHubConnector connector = new GitHubConnector(config);
+    void testGetPrWithoutCredentials() {
+        GitHubConfig noCredConfig = new GitHubConfig.Builder()
+                .webhookSecret("whsec_test")
+                .build();
+        GitHubConnector connector = new GitHubConnector(noCredConfig);
         connector.start(event -> {}).join();
 
         Map<String, Object> pr = connector.getPr("owner/repo", 42).join();
-        assertNotNull(pr);
-        assertEquals(42, pr.get("number"));
+        assertNull(pr);
+    }
+
+    @Test
+    void testApiMethodsExist() {
+        // Verify API methods exist and return CompletableFuture
+        GitHubConnector connector = new GitHubConnector(config);
+        connector.start(event -> {}).join();
+
+        // These will fail with test credentials, but the methods should exist
+        assertNotNull(connector.createPrComment("owner/repo", 42, "test"));
+        assertNotNull(connector.createIssueComment("owner/repo", 123, "test"));
+        assertNotNull(connector.getPr("owner/repo", 42));
+        assertNotNull(connector.getIssue("owner/repo", 123));
+        assertNotNull(connector.createReview("owner/repo", 42, "APPROVE", "LGTM"));
+        assertNotNull(connector.approvePr("owner/repo", 42, "LGTM"));
+        assertNotNull(connector.requestChanges("owner/repo", 42, "Please fix"));
     }
 
     @Test

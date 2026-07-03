@@ -85,9 +85,8 @@ public class SlackConfig {
         }
 
         public SlackConfig build() {
-            if (botToken == null || botToken.isEmpty()) {
-                throw new IllegalArgumentException("botToken is required");
-            }
+            // botToken is optional for event-handling-only mode
+            // It is required for API calls (send messages, etc.)
             return new SlackConfig(this);
         }
     }
