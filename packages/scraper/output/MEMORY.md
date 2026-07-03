@@ -78,7 +78,30 @@
 
 ## 2026-07-03 提取
 
+## 2026-07-04 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股半导体板块走低-AI硬件暴跌延续-左侧风险警示**
+
+### 港股分析
+- **港股AI概念股反弹-智谱涨超11%-左侧抄底验证信号**
+
+### 港股分析
+- **港股机器人板块集体暴涨-政策松绑左侧信号**
+
+### 港股分析
+- **港股黄金板块全线拉升-避险左侧信号**
+
+### 新范式/工具
+- **Page Agent — In-Page GUI Agent 范式** - https://github.com/alibaba/page-agent
+
+### 新范式/工具
+- **Graphify — Code→Knowledge Graph 知识编译范式** - https://github.com/safishamsi/graphify
+
+### 新范式/工具
+- **pxpipe — Text-as-Image-Token 压缩范式** - https://github.com/teamchong/pxpipe
 
 ### 港股分析
 - **南向资金持股19.53%创新高 — 左侧建仓信号升级**
