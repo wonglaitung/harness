@@ -1,13 +1,19 @@
 """
-MCP controller - manages MCP server connections.
+MCP controller - proxy to AgentHarness MCP methods.
+
+This controller wraps AgentHarness MCP APIs for UI convenience,
+providing change notifications and UI-friendly data structures.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 # SDK imports
-from harness import MCPManager, MCPServerConfig
+from harness import MCPServerConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -23,19 +29,29 @@ class MCPServerInfo:
 
 class MCPController:
     """
-    Controller for managing MCP server connections.
+    Controller for managing MCP server connections - proxies to AgentHarness.
 
-    Features:
-    - Add/remove MCP servers
-    - Connect/disconnect servers
-    - Get tools from connected servers
-    - Load configuration from files
+    This is a thin wrapper around AgentHarness MCP methods,
+    adding UI-specific features like change callbacks.
     """
 
     def __init__(self):
-        self.manager = MCPManager()
-        self.servers: dict[str, MCPServerInfo] = {}
+        # AgentHarness instance (set by set_agent)
+        self._agent = None
         self._on_change: Callable | None = None
+        # Local cache for UI display
+        self._server_states: dict[str, MCPServerInfo] = {}
+
+    def set_agent(self, agent) -> None:
+        """
+        Set the AgentHarness instance to proxy to.
+
+        Args:
+            agent: AgentHarness instance
+        """
+        self._agent = agent
+        if self._on_change:
+            self._on_change()
 
     def set_change_callback(self, callback: Callable[[], None]):
         """Set callback for server list changes."""
@@ -48,8 +64,18 @@ class MCPController:
         Args:
             config: Server configuration
         """
-        self.manager.add_server(config)
-        self.servers[config.name] = MCPServerInfo(
+        if not self._agent:
+            # Store locally until agent is set
+            self._server_states[config.name] = MCPServerInfo(
+                name=config.name,
+                transport=config.transport,
+                status="未连接",
+            )
+            return
+
+        # Add to agent's MCP manager
+        self._agent._mcp_manager.add_server(config)
+        self._server_states[config.name] = MCPServerInfo(
             name=config.name,
             transport=config.transport,
             status="未连接",
@@ -67,18 +93,21 @@ class MCPController:
         Returns:
             True if connected successfully
         """
-        if name not in self.servers:
+        if not self._agent:
             return False
 
-        server_info = self.servers[name]
+        if name not in self._server_states:
+            return False
+
+        server_info = self._server_states[name]
         server_info.status = "连接中..."
 
         try:
-            # Connect via manager
-            await self.manager.connect_server(name)
+            # Connect via agent
+            await self._agent.add_mcp_server(name)
 
             # Update status
-            tools = self.manager.get_server_tools(name)
+            tools = self._agent.get_mcp_server_tools(name)
             server_info.status = "已连接"
             server_info.tools_count = len(tools) if tools else 0
             server_info.error_message = ""
@@ -104,13 +133,13 @@ class MCPController:
         Returns:
             True if disconnected successfully
         """
-        if name not in self.servers:
+        if not self._agent:
             return False
 
         try:
-            await self.manager.disconnect_server(name)
-            self.servers[name].status = "未连接"
-            self.servers[name].tools_count = 0
+            await self._agent.disconnect_mcp_server(name)
+            self._server_states[name].status = "未连接"
+            self._server_states[name].tools_count = 0
 
             if self._on_change:
                 self._on_change()
@@ -129,11 +158,13 @@ class MCPController:
         Returns:
             True if removed successfully
         """
-        if name not in self.servers:
+        if name not in self._server_states:
             return False
 
-        # TODO: Implement removal in manager
-        del self.servers[name]
+        if self._agent:
+            self._agent.remove_mcp_server(name)
+
+        del self._server_states[name]
         if self._on_change:
             self._on_change()
         return True
@@ -149,35 +180,31 @@ class MCPController:
         Returns:
             True if updated successfully
         """
-        if old_name not in self.servers:
+        if old_name not in self._server_states:
             return False
 
-        # Remove old config from manager
-        # Note: manager doesn't have remove method, so we'll just add the new one
-        # and update our tracking
+        # Remove old and add new
+        if self._agent:
+            self._agent.remove_mcp_server(old_name)
 
-        # Create new config
-        from harness import MCPServerConfig
-        config = MCPServerConfig(
-            name=new_config.get("name", old_name),
-            transport=new_config.get("transport", "stdio"),
-            command=new_config.get("command"),
-            args=new_config.get("args", []),
-            url=new_config.get("url"),
-            timeout=new_config.get("timeout", 30),
-        )
-
-        # If name changed, remove old entry
-        if old_name != config.name:
-            del self.servers[old_name]
-
-        # Add/update in manager
-        self.manager.add_server(config)
+            config = MCPServerConfig(
+                name=new_config.get("name", old_name),
+                transport=new_config.get("transport", "stdio"),
+                command=new_config.get("command"),
+                args=new_config.get("args", []),
+                url=new_config.get("url"),
+                timeout=new_config.get("timeout", 30),
+            )
+            self._agent._mcp_manager.add_server(config)
 
         # Update local tracking
-        self.servers[config.name] = MCPServerInfo(
-            name=config.name,
-            transport=config.transport,
+        new_name = new_config.get("name", old_name)
+        if old_name != new_name:
+            del self._server_states[old_name]
+
+        self._server_states[new_name] = MCPServerInfo(
+            name=new_name,
+            transport=new_config.get("transport", "stdio"),
             status="未连接",
         )
 
@@ -192,17 +219,13 @@ class MCPController:
         Returns:
             List of tool instances
         """
-        tools = []
-        for name, info in self.servers.items():
-            if info.status == "已连接":
-                server_tools = self.manager.get_server_tools(name)
-                if server_tools:
-                    tools.extend(server_tools)
-        return tools
+        if not self._agent:
+            return []
+        return self._agent.get_all_mcp_tools()
 
     def get_server_list(self) -> list[MCPServerInfo]:
         """Get list of all servers."""
-        return list(self.servers.values())
+        return list(self._server_states.values())
 
     def load_from_file(self, path: Path) -> int:
         """
@@ -214,17 +237,18 @@ class MCPController:
         Returns:
             Number of servers loaded
         """
-        import logging
-        logger = logging.getLogger(__name__)
+        if not self._agent:
+            logger.warning("Agent not set, cannot load MCP config")
+            return 0
 
         try:
-            count = self.manager.load_from_file(str(path))
+            count = self._agent._mcp_manager.load_from_file(str(path))
             logger.info(f"MCPManager loaded {count} servers")
 
             # Update local tracking
-            for config in self.manager.list_server_configs():
-                if config.name not in self.servers:
-                    self.servers[config.name] = MCPServerInfo(
+            for config in self._agent._mcp_manager.list_server_configs():
+                if config.name not in self._server_states:
+                    self._server_states[config.name] = MCPServerInfo(
                         name=config.name,
                         transport=config.transport,
                         status="未连接",
@@ -245,14 +269,27 @@ class MCPController:
         Args:
             path: Path to save config file
         """
+        if not self._agent:
+            return
+
         import json
 
         config = {"mcpServers": {}}
-        for name, _info in self.servers.items():
-            # Get original config from manager
-            for c in self.manager.list_server_configs():
-                if c.name == name:
-                    config["mcpServers"][name] = c.to_dict()
-                    break
+        for name, _info in self._server_states.items():
+            c = self._agent.get_mcp_server_config(name)
+            if c:
+                config["mcpServers"][name] = c.to_dict()
 
         path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+
+    @property
+    def servers(self) -> dict[str, MCPServerInfo]:
+        """Get servers dict for backward compatibility."""
+        return self._server_states
+
+    @property
+    def manager(self):
+        """Get MCPManager for backward compatibility."""
+        if self._agent:
+            return self._agent._mcp_manager
+        return None

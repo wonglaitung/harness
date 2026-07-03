@@ -1,5 +1,8 @@
 """
-Skill controller - manages skill loading and injection.
+Skill controller - proxy to AgentHarness skill methods.
+
+This controller wraps AgentHarness skill APIs for UI convenience,
+providing change notifications and UI-friendly data structures.
 """
 
 from collections.abc import Callable
@@ -7,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # SDK imports
-from harness import Skill, SkillInjector, SkillLoader, SkillRegistry
+from harness import Skill
 
 
 @dataclass
@@ -23,21 +26,29 @@ class SkillInfo:
 
 class SkillController:
     """
-    Controller for managing skills.
+    Controller for managing skills - proxies to AgentHarness.
 
-    Features:
-    - Load skills from files/directories
-    - Enable/disable skills
-    - Inject skills into prompts
-    - Create/edit skill files
+    This is a thin wrapper around AgentHarness skill methods,
+    adding UI-specific features like change callbacks.
     """
 
     def __init__(self):
-        self.registry = SkillRegistry()
-        self.loader = SkillLoader(self.registry)
-        self.injector = SkillInjector(self.registry)
-        self.skills: dict[str, SkillInfo] = {}
+        # AgentHarness instance (set by set_agent)
+        self._agent = None
         self._on_change: Callable | None = None
+        # Local cache for UI display (enabled/disabled state)
+        self._skill_states: dict[str, bool] = {}
+
+    def set_agent(self, agent) -> None:
+        """
+        Set the AgentHarness instance to proxy to.
+
+        Args:
+            agent: AgentHarness instance
+        """
+        self._agent = agent
+        if self._on_change:
+            self._on_change()
 
     def set_change_callback(self, callback: Callable[[], None]):
         """Set callback for skill list changes."""
@@ -53,19 +64,13 @@ class SkillController:
         Returns:
             True if loaded successfully
         """
+        if not self._agent:
+            return False
         try:
-            skill = Skill.from_file(path)
-            self.registry.register(skill)
-            self.skills[skill.name] = SkillInfo(
-                name=skill.name,
-                version=skill.version,
-                description=skill.description,
-                enabled=True,
-                file_path=path,
-            )
+            count = self._agent.load_skills_from_dir(path.parent)
             if self._on_change:
                 self._on_change()
-            return True
+            return count > 0
         except Exception:
             return False
 
@@ -79,65 +84,51 @@ class SkillController:
         Returns:
             Number of skills loaded
         """
-        count = self.loader.load_from_dir(path)
-
-        # Update local tracking
-        for skill in self.registry.list_skills():
-            if skill.name not in self.skills:
-                self.skills[skill.name] = SkillInfo(
-                    name=skill.name,
-                    version=skill.version,
-                    description=skill.description,
-                    enabled=True,
-                )
-
+        if not self._agent:
+            return 0
+        count = self._agent.load_skills_from_dir(path)
         if self._on_change:
             self._on_change()
         return count
 
     def load_defaults(self) -> int:
         """Load skills from default directories."""
-        count = self.loader.load_defaults()
-
-        # Update local tracking
-        for skill in self.registry.list_skills():
-            if skill.name not in self.skills:
-                self.skills[skill.name] = SkillInfo(
-                    name=skill.name,
-                    version=skill.version,
-                    description=skill.description,
-                    enabled=True,
-                )
-
+        if not self._agent:
+            return 0
+        # AgentHarness loads skills on init, just trigger callback
         if self._on_change:
             self._on_change()
-        return count
+        return len(self._agent.list_skills())
 
     def enable_skill(self, name: str):
         """Enable a skill."""
-        if name in self.skills:
-            self.skills[name].enabled = True
+        if self._agent:
+            self._agent.activate_skill(name)
+            self._skill_states[name] = True
             if self._on_change:
                 self._on_change()
 
     def disable_skill(self, name: str):
         """Disable a skill."""
-        if name in self.skills:
-            self.skills[name].enabled = False
+        if self._agent:
+            self._agent.deactivate_skill(name)
+            self._skill_states[name] = False
             if self._on_change:
                 self._on_change()
 
     def remove_skill(self, name: str):
         """Remove a skill from registry."""
-        if name in self.skills:
-            del self.skills[name]
-            # Note: SkillRegistry doesn't have unregister, so we just remove from local
-            if self._on_change:
-                self._on_change()
+        # Note: SDK doesn't have unregister, just mark as disabled
+        self._skill_states[name] = False
+        if self._on_change:
+            self._on_change()
 
     def inject_skills(self, base_prompt: str, user_input: str) -> str:
         """
         Inject matching skills into the prompt.
+
+        Note: This is handled automatically by AgentHarness.run(),
+        but kept for backward compatibility.
 
         Args:
             base_prompt: Original system prompt
@@ -146,7 +137,8 @@ class SkillController:
         Returns:
             Enhanced prompt with skill content
         """
-        return self.injector.inject_skills(base_prompt, user_input)
+        # AgentHarness handles injection internally
+        return base_prompt
 
     def get_matching_skills(self, user_input: str) -> list[Skill]:
         """
@@ -158,15 +150,32 @@ class SkillController:
         Returns:
             List of matching skills
         """
-        return self.registry.find_matching_skills(user_input)
+        if not self._agent:
+            return []
+        return self._agent.get_matching_skills(user_input)
 
     def get_skill_list(self) -> list[SkillInfo]:
-        """Get list of all loaded skills."""
-        return list(self.skills.values())
+        """Get list of all discovered skills (including metadata-only)."""
+        if not self._agent:
+            return []
+
+        skills = []
+        # Use list_discovered_skills() to get all skills (Level 1 metadata)
+        for meta in self._agent.list_discovered_skills():
+            enabled = self._skill_states.get(meta.name, True)
+            skills.append(SkillInfo(
+                name=meta.name,
+                version=meta.version,
+                description=meta.description,
+                enabled=enabled,
+            ))
+        return skills
 
     def get_skill(self, name: str) -> Skill | None:
         """Get a skill by name."""
-        return self.registry.get(name)
+        if not self._agent:
+            return None
+        return self._agent.get_skill(name)
 
     def create_skill(
         self,
@@ -205,7 +214,11 @@ class SkillController:
             )
 
             skill.to_file(path)
-            self.load_from_file(path)
+
+            # Load into agent if available
+            if self._agent:
+                self._agent.load_skills_from_dir(path.parent)
+
             return True
 
         except Exception:
@@ -222,13 +235,9 @@ class SkillController:
         Returns:
             True if updated successfully
         """
-        if name not in self.skills:
-            return False
-
-        info = self.skills[name]
-        for key, value in kwargs.items():
-            if hasattr(info, key):
-                setattr(info, key, value)
+        # Update local state
+        if 'enabled' in kwargs:
+            self._skill_states[name] = kwargs['enabled']
 
         if self._on_change:
             self._on_change()

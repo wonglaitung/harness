@@ -558,6 +558,10 @@ class MainWindow(QMainWindow):
 
         self.schedule_controller.set_agent(agent)
 
+        # Set agent to skill and MCP controllers
+        self.skill_controller.set_agent(agent)
+        self.mcp_controller.set_agent(agent)
+
         # Start schedule controller in background
         async def start_schedule_controller():
             try:
