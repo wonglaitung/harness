@@ -12,7 +12,7 @@
 - ✅ MCP（STDIO, SSE 传输）
 - ✅ Tools（Read, Write, Edit, Bash, Glob, Grep）
 - ✅ Memory（MEMORY.md 管理, 向量存储）
-- ✅ Skills（Skill 加载, 渐进式加载）
+- ✅ Skills（Skill 加载, 元数据发现）
 - ✅ Security（沙箱, 验证, 审计）
 - ✅ Triggers（CronTrigger, IntervalTrigger, TriggerManager）
 - ✅ Connectors（GitHub, Slack, Webhook）
@@ -87,6 +87,12 @@ harness-sdk-java/
   - `runGoal(goalConfig, onProgress)`: 使用 GoalConfig 的目标驱动执行
   - `registerTool(tool)`: 注册工具
   - `addHook(hook)`: 添加生命周期钩子
+  - `fromEnv()`: 从环境变量创建（静态方法）
+  - `listDiscoveredSkills()`: 列出已发现的技能元数据
+  - `getAllSkills()`: 获取所有技能（完整内容）
+  - `getMcpServerConfig(name)`: 获取 MCP 服务器配置
+  - `getMcpServerTools(name)`: 获取 MCP 服务器工具
+  - `getAllMcpTools()`: 获取所有 MCP 工具
 - **Builder 模式**: `AgentHarness.builder().config(config).addTool(tool).build()`
 
 ### harness-sdk-llm
@@ -438,6 +444,40 @@ export ANTHROPIC_API_KEY=your-api-key
 # OpenAI / 兼容接口
 export OPENAI_API_KEY=your-api-key
 export OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI
+
+# Harness 配置
+export HARNESS_MODEL=claude-sonnet-4-6
+export HARNESS_PROVIDER=anthropic  # 或 openai/auto
+export HARNESS_MAX_ITERATIONS=10
+```
+
+**支持的环境变量**：
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ANTHROPIC_API_KEY` | Anthropic API Key | - |
+| `OPENAI_API_KEY` | OpenAI API Key | - |
+| `HARNESS_MODEL` | 模型名称 | `claude-sonnet-4-6` |
+| `HARNESS_PROVIDER` | 提供商 | `auto` |
+| `HARNESS_BASE_URL` | 自定义 API 端点 | - |
+| `HARNESS_MAX_ITERATIONS` | 最大迭代次数 | `10` |
+| `HARNESS_SYSTEM_PROMPT` | 系统提示词 | - |
+| `HARNESS_MEMORY_DIR` | 记忆目录 | `.harness/memory` |
+| `HARNESS_SANDBOX_WORKSPACE` | 沙箱工作区 | 当前目录 |
+
+**从环境变量创建 Agent**：
+
+```java
+// 方式 1：使用 HarnessConfig.fromEnv()
+HarnessConfig config = HarnessConfig.fromEnv();
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .build();
+
+// 方式 2：使用静态方法（推荐）
+AgentHarness agent = AgentHarness.fromEnv();
+
+// 方式 3：带工具
+AgentHarness agent = AgentHarness.fromEnv(List.of(new ReadTool()));
 ```
 
 ### 基本用法
@@ -507,6 +547,90 @@ agent.run("分析项目结构", null, progress -> {
     }
 }).join();
 ```
+
+### 工具验证（Tool Verification）
+
+工具验证提供客观、确定性的目标验证方式，通过运行测试、Lint、类型检查等命令来验证目标是否达成。
+
+#### 基础用法
+
+```java
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.VerificationMethod;
+import com.harness.loop.types.ToolVerificationConfig;
+
+// Python 项目验证
+ToolVerificationConfig pythonConfig = ToolVerificationConfig.builder()
+    .addCommand("pytest", "pytest", "tests/", "-v")
+    .addCommand("mypy", "mypy", "src/")
+    .addCommand("ruff", "ruff", "check", "src/")
+    .build();
+
+GoalConfig config = GoalConfig.builder()
+    .description("修复所有类型错误")
+    .verificationMethod(VerificationMethod.TOOL)
+    .toolVerificationConfig(pythonConfig)
+    .build();
+
+GoalResult result = agent.runGoal(config, null).join();
+
+if (result.getStatus().isAchieved()) {
+    System.out.println("目标达成！");
+}
+```
+
+#### 预设配置
+
+SDK 提供常用项目的预设验证配置：
+
+```java
+// Python 项目（pytest + mypy + ruff）
+ToolVerificationConfig pythonConfig = ToolVerificationConfig.pythonDefaults();
+
+// Python 项目（自定义路径）
+ToolVerificationConfig pythonConfig = ToolVerificationConfig.pythonProject("tests/", "src/");
+
+// Java/Gradle 项目
+ToolVerificationConfig gradleConfig = ToolVerificationConfig.gradleDefaults();
+
+// Java/Maven 项目
+ToolVerificationConfig mavenConfig = ToolVerificationConfig.mavenDefaults();
+
+// Node.js/npm 项目
+ToolVerificationConfig npmConfig = ToolVerificationConfig.npmDefaults();
+```
+
+#### 自定义命令
+
+```java
+ToolVerificationConfig config = ToolVerificationConfig.builder()
+    .addCommand("unit-tests", "pytest", "tests/unit/", "-v")
+    .addCommand("integration-tests", "pytest", "tests/integration/", "-v")
+    .addCommand("type-check", "mypy", "src/")
+    .workingDirectory("./project")
+    .timeoutSeconds(600)   // 10 分钟
+    .failFast(true)        // 第一个失败就停止
+    .build();
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `commands` | `List<VerificationCommand>` | 必填 | 验证命令列表 |
+| `workingDirectory` | `String` | `"."` | 命令执行目录 |
+| `timeoutSeconds` | `int` | `300` | 每个命令的超时时间 |
+| `failFast` | `boolean` | `true` | 是否在第一个失败时停止 |
+| `continueOnWarning` | `boolean` | `false` | 警告时是否继续 |
+
+#### 验证方法对比
+
+| 验证方法 | 说明 | 使用场景 |
+|---------|------|---------|
+| `LLM` | 让 LLM 判断目标是否达成 | 主观目标、文档生成、分析任务 |
+| `CUSTOM` | 用户提供的验证函数 | 自定义逻辑、外部系统检查 |
+| `TOOL` | 运行测试/Lint/类型检查 | 代码修复、测试覆盖率、重构验证 |
 
 ### 添加自定义工具
 

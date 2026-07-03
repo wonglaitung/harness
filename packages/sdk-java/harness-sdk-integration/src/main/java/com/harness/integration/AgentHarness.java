@@ -3,6 +3,7 @@ package com.harness.integration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -20,8 +21,10 @@ import com.harness.loop.GoalLoop;
 import com.harness.loop.types.GoalConfig;
 import com.harness.loop.types.GoalResult;
 import com.harness.loop.types.VerificationMethod;
+import com.harness.skills.Skill;
 import com.harness.skills.SkillInjector;
 import com.harness.skills.SkillLoader;
+import com.harness.skills.ProgressiveSkillLoader;
 import com.harness.skills.SkillRegistry;
 import com.harness.mcp.McpManager;
 import com.harness.mcp.McpServerConfig;
@@ -73,6 +76,10 @@ public class AgentHarness {
     // Skill system
     private final SkillRegistry skillRegistry;
     private final SkillLoader skillLoader;
+    private final ProgressiveSkillLoader progressiveLoader;
+    private final List<ProgressiveSkillLoader.SkillMetadata> skillMetadata = new ArrayList<>();
+    private final Map<String, ProgressiveSkillLoader.SkillMetadata> skillMetadataByName = new ConcurrentHashMap<>();
+    private final Set<String> activatedSkills = ConcurrentHashMap.newKeySet();
     private final SkillInjector skillInjector;
 
     // MCP system
@@ -91,8 +98,10 @@ public class AgentHarness {
         // Initialize skill system
         this.skillRegistry = new SkillRegistry();
         this.skillLoader = new SkillLoader(skillRegistry);
+        this.progressiveLoader = new ProgressiveSkillLoader();
         this.skillInjector = new SkillInjector(skillRegistry);
         this.skillLoader.loadDefaults();
+        loadSkillMetadata();  // Level 1: Load metadata only
 
         // Initialize MCP manager
         this.mcpManager = new McpManager();
@@ -112,8 +121,10 @@ public class AgentHarness {
         // Initialize skill system
         this.skillRegistry = new SkillRegistry();
         this.skillLoader = new SkillLoader(skillRegistry);
+        this.progressiveLoader = new ProgressiveSkillLoader();
         this.skillInjector = new SkillInjector(skillRegistry);
         this.skillLoader.loadDefaults();
+        loadSkillMetadata();  // Level 1: Load metadata only
 
         // Create loop config from harness config
         LoopConfig loopConfig = LoopConfig.builder()
@@ -187,6 +198,26 @@ public class AgentHarness {
                     new TokenUsage(100, 50)
                 )
             );
+        }
+
+        // Level 2: Load full content for matching and activated skills
+        List<ProgressiveSkillLoader.SkillMetadata> matchedMetadata = progressiveLoader.matchSkills(prompt, skillMetadata);
+
+        // Combine matched skills with explicitly activated skills
+        Set<String> skillsToLoad = new java.util.HashSet<>();
+        for (ProgressiveSkillLoader.SkillMetadata meta : matchedMetadata) {
+            skillsToLoad.add(meta.name());
+        }
+        skillsToLoad.addAll(activatedSkills);
+
+        // Load full content for skills not yet loaded
+        for (ProgressiveSkillLoader.SkillMetadata meta : skillMetadata) {
+            if (skillsToLoad.contains(meta.name()) && skillRegistry.getSkill(meta.name()).isEmpty()) {
+                Skill skill = progressiveLoader.loadFullContent(meta);
+                if (skill != null) {
+                    skillRegistry.registerSkill(skill);
+                }
+            }
         }
 
         // Get or create session
@@ -512,6 +543,24 @@ public class AgentHarness {
     // -------------------------------------------------------------------------
 
     /**
+     * Load skill metadata from default directories (Level 1).
+     */
+    private void loadSkillMetadata() {
+        for (java.nio.file.Path directory : SkillLoader.getDefaultSkillPaths()) {
+            if (java.nio.file.Files.exists(directory)) {
+                List<ProgressiveSkillLoader.SkillMetadata> skills = progressiveLoader.discoverSkills(directory);
+                for (ProgressiveSkillLoader.SkillMetadata meta : skills) {
+                    if (!skillMetadataByName.containsKey(meta.name())) {
+                        skillMetadata.add(meta);
+                        skillMetadataByName.put(meta.name(), meta);
+                    }
+                }
+            }
+        }
+        logger.debug("Loaded {} skill metadata entries", skillMetadata.size());
+    }
+
+    /**
      * Get the skill registry.
      */
     public SkillRegistry getSkillRegistry() {
@@ -526,6 +575,13 @@ public class AgentHarness {
     }
 
     /**
+     * Get the progressive skill loader.
+     */
+    public ProgressiveSkillLoader getProgressiveLoader() {
+        return progressiveLoader;
+    }
+
+    /**
      * Get the skill injector.
      */
     public SkillInjector getSkillInjector() {
@@ -533,11 +589,99 @@ public class AgentHarness {
     }
 
     /**
+     * Load skills from a specific directory using progressive loading.
+     *
+     * <p>This method discovers skill metadata (frontmatter only) from the given
+     * directory. Full skill content is loaded on-demand when:
+     * <ul>
+     *   <li>The skill is activated via activateSkill()</li>
+     *   <li>The skill matches user input during run()</li>
+     * </ul>
+     *
+     * @param directory Path to directory containing skill files
+     * @return Number of skills discovered (metadata only)
+     */
+    public int loadSkillsFromDir(java.nio.file.Path directory) {
+        if (!java.nio.file.Files.exists(directory)) {
+            logger.warn("Skill directory does not exist: {}", directory);
+            return 0;
+        }
+
+        // Level 1: Discover metadata only
+        List<ProgressiveSkillLoader.SkillMetadata> skills = progressiveLoader.discoverSkills(directory);
+        int count = 0;
+        for (ProgressiveSkillLoader.SkillMetadata meta : skills) {
+            // Skip if already discovered
+            if (skillMetadataByName.containsKey(meta.name())) {
+                continue;
+            }
+            skillMetadata.add(meta);
+            skillMetadataByName.put(meta.name(), meta);
+            count++;
+        }
+
+        logger.info("Discovered {} skills from {} (metadata only)", count, directory);
+        return count;
+    }
+
+    /**
+     * Activate a skill by name.
+     *
+     * <p>This will load the full skill content if not already loaded,
+     * then activate it in the registry.
+     *
+     * @param skillName Name of the skill to activate
+     * @return True if activated successfully
+     */
+    public boolean activateSkill(String skillName) {
+        // Track explicitly activated skill
+        activatedSkills.add(skillName);
+
+        // Check if skill is already registered with full content
+        if (skillRegistry.getSkill(skillName).isPresent()) {
+            return skillRegistry.activate(skillName);
+        }
+
+        // Find skill metadata and load full content
+        ProgressiveSkillLoader.SkillMetadata meta = skillMetadataByName.get(skillName);
+        if (meta == null) {
+            logger.warn("Skill not found: {}", skillName);
+            return false;
+        }
+
+        // Level 2: Load full content on activation
+        Skill skill = progressiveLoader.loadFullContent(meta);
+        if (skill == null) {
+            logger.warn("Failed to load skill content: {}", skillName);
+            return false;
+        }
+
+        // Register and activate
+        skillRegistry.registerSkill(skill);
+        return skillRegistry.activate(skillName);
+    }
+
+    /**
+     * Deactivate a skill by name.
+     *
+     * @param skillName Name of the skill to deactivate
+     * @return True if deactivated successfully
+     */
+    public boolean deactivateSkill(String skillName) {
+        activatedSkills.remove(skillName);
+        return skillRegistry.deactivate(skillName);
+    }
+
+    /**
      * Reload skills from disk.
      */
     public void reloadSkills() {
+        skillMetadata.clear();
+        skillMetadataByName.clear();
+        activatedSkills.clear();
         skillRegistry.reload();
-        skillLoader.loadDefaults();
+        progressiveLoader.clearCache();
+        loadSkillMetadata();
         logger.info("Skills reloaded");
     }
 
@@ -553,10 +697,51 @@ public class AgentHarness {
     }
 
     /**
+     * Get skills that match the user input.
+     *
+     * @param userInput User's input text
+     * @return List of matching skills
+     */
+    public List<Skill> getMatchingSkills(String userInput) {
+        return skillRegistry.findMatchingSkills(userInput);
+    }
+
+    /**
      * List all available skills.
      */
     public java.util.List<String> listSkills() {
         return skillRegistry.listSkills();
+    }
+
+    /**
+     * List all discovered skills (metadata only, Level 1).
+     *
+     * <p>This returns all skills that have been discovered from skill directories,
+     * including those whose full content hasn't been loaded yet.</p>
+     *
+     * @return List of skill metadata
+     */
+    public List<ProgressiveSkillLoader.SkillMetadata> listDiscoveredSkills() {
+        return new ArrayList<>(skillMetadata);
+    }
+
+    /**
+     * Get all skills with full content.
+     *
+     * @return List of all skills
+     */
+    public List<Skill> getAllSkills() {
+        return skillRegistry.getAllSkills();
+    }
+
+    /**
+     * Get a skill by name.
+     *
+     * @param name Skill name
+     * @return Skill instance or null if not found
+     */
+    public Skill getSkill(String name) {
+        return skillRegistry.getSkill(name).orElse(null);
     }
 
     // -------------------------------------------------------------------------
@@ -675,10 +860,86 @@ public class AgentHarness {
     }
 
     /**
+     * Get MCP server configuration by name.
+     *
+     * @param serverName Server name
+     * @return Server configuration or null if not found
+     */
+    public McpServerConfig getMcpServerConfig(String serverName) {
+        return mcpManager.getConfig(serverName);
+    }
+
+    /**
+     * Get tools from a connected MCP server.
+     *
+     * @param serverName Server name
+     * @return List of MCP tool info
+     */
+    public List<McpToolInfo> getMcpServerTools(String serverName) {
+        return mcpManager.getServerToolInfos(serverName);
+    }
+
+    /**
+     * Get all tools from all connected MCP servers.
+     *
+     * @return List of all MCP tool info
+     */
+    public List<McpToolInfo> getAllMcpTools() {
+        return mcpManager.getAllToolInfos();
+    }
+
+    /**
      * Generate unique session ID.
      */
     private String generateSessionId() {
         return "session_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * Create AgentHarness from environment variables.
+     *
+     * <p>Supported environment variables:</p>
+     * <ul>
+     *   <li>ANTHROPIC_API_KEY / OPENAI_API_KEY: API key</li>
+     *   <li>HARNESS_MODEL: Model name (default: claude-sonnet-4-6)</li>
+     *   <li>HARNESS_PROVIDER: Provider (anthropic/openai/auto)</li>
+     *   <li>HARNESS_BASE_URL: Custom API endpoint</li>
+     *   <li>HARNESS_MAX_ITERATIONS: Max loop iterations</li>
+     *   <li>HARNESS_SYSTEM_PROMPT: System prompt</li>
+     *   <li>HARNESS_MEMORY_DIR: Memory directory</li>
+     *   <li>HARNESS_SANDBOX_WORKSPACE: Sandbox workspace path</li>
+     * </ul>
+     *
+     * <p>Example:</p>
+     * <pre>{@code
+     * // Set environment variables
+     * // ANTHROPIC_API_KEY=sk-ant-...
+     * // HARNESS_MODEL=claude-sonnet-4-6
+     *
+     * AgentHarness agent = AgentHarness.fromEnv();
+     * LoopResult result = agent.run("Hello").join();
+     * }</pre>
+     *
+     * @return AgentHarness configured from environment variables
+     */
+    public static AgentHarness fromEnv() {
+        HarnessConfig config = HarnessConfig.fromEnv();
+        return new AgentHarness(config);
+    }
+
+    /**
+     * Create AgentHarness from environment variables with tools.
+     *
+     * @param tools Tools to register
+     * @return AgentHarness configured from environment variables
+     */
+    public static AgentHarness fromEnv(List<Tool> tools) {
+        HarnessConfig config = HarnessConfig.fromEnv();
+        return new AgentHarness(config) {{
+            for (Tool tool : tools) {
+                registerTool(tool);
+            }
+        }};
     }
 
     /**

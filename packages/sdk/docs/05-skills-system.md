@@ -267,6 +267,39 @@ print(f"估计 token 使用: {tokens}")
 loader.clear_cache()
 ```
 
+### AgentHarness 集成
+
+`AgentHarness` 已内置渐进式技能加载，无需手动使用 `ProgressiveSkillLoader`：
+
+```python
+from harness import AgentHarness
+
+agent = AgentHarness()
+
+# 初始化时自动发现技能元数据 (Level 1)
+# 从 ~/.harness/skills, .agent/skills 等目录
+
+# 查看已发现的技能（元数据，未加载完整内容）
+for meta in agent.list_discovered_skills():
+    print(f"- {meta.name}: {meta.description}")
+
+# 按需加载技能完整内容 (Level 2)
+agent.activate_skill("code-review")  # 触发 Level 2 加载
+
+# run() 时自动加载匹配技能的完整内容
+result = await agent.run("review this code")
+
+# 查看已加载完整内容的技能
+for skill in agent.list_skills():
+    print(f"- {skill.name}: {len(skill.content)} chars")
+```
+
+**工作流程**：
+
+1. **初始化**：`AgentHarness.__init__()` 调用 `_load_skill_metadata()` 发现所有技能元数据
+2. **激活**：`activate_skill()` 触发 Level 2 加载，注册到 SkillRegistry
+3. **运行**：`run()` 根据用户输入匹配技能，自动加载匹配技能的完整内容
+
 ### 各级别的内容格式
 
 **Level 1: FRONTMATTER 级别**（最小上下文占用，仅元数据）：

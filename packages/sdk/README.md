@@ -422,6 +422,59 @@ result = await agent.run_goal(
 )
 ```
 
+### Tool Verification
+
+Run tests, lint, and type checks to verify goals:
+
+```python
+from harness.loop import GoalConfig, VerificationMethod
+from harness.loop.tool_verification import ToolVerificationConfig
+
+# Python project verification
+result = await agent.run_goal(
+    goal=GoalConfig(
+        description="Fix all type errors",
+        verification_method=VerificationMethod.TOOL,
+        tool_verification_config=ToolVerificationConfig.python_defaults(),
+    ),
+)
+
+# Custom commands
+config = ToolVerificationConfig(
+    commands=[
+        ("pytest", "pytest", "tests/", "-v"),
+        ("mypy", "mypy", "src/"),
+        ("ruff", "ruff", "check", "src/"),
+    ],
+    timeout_seconds=300,
+)
+
+# Presets available
+ToolVerificationConfig.python_defaults()   # pytest + mypy + ruff
+ToolVerificationConfig.gradle_defaults()   # gradle test + check
+ToolVerificationConfig.maven_defaults()    # mvn test
+ToolVerificationConfig.npm_defaults()      # npm test + lint
+```
+
+### Environment Variables
+
+Create agent from environment variables:
+
+```python
+import os
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+
+agent = AgentHarness.from_env()
+```
+
+**Supported environment variables**:
+- `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`: API key
+- `HARNESS_MODEL`: Model name (default: claude-sonnet-4-6)
+- `HARNESS_PROVIDER`: Provider (anthropic/openai/auto)
+- `HARNESS_BASE_URL`: Custom API endpoint
+- `HARNESS_MAX_ITERATIONS`: Max loop iterations
+
 ### Goal Status
 
 | Status | Description |
@@ -565,6 +618,7 @@ result = await orchestrator.run_team("dev-team", "Implement login feature")
 - **Streaming**: Streaming output with backpressure control
 - **Interrupt/Recovery**: Interrupt and resume from snapshot
 - **Tool System**: Built-in tools + custom tools + JSON Schema validation
+- **Skills**: Progressive loading (Level 1: metadata, Level 2: content, Level 3: references)
 - **Memory**: Session management, SQLite persistence, async WAL mode
 - **Guardrails**: PII detection + LLM Judge content safety (Simplified/Traditional/English)
 - **Cost Control**: Multi-level budget control (session, user, global)

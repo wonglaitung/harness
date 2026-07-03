@@ -130,6 +130,128 @@ if result.status == GoalStatus.ACHIEVED:
     print("目标达成!")
 ```
 
+### 工具验证（Tool Verification）
+
+工具验证提供客观、确定性的目标验证方式，通过运行测试、Lint、类型检查等命令来验证目标是否达成。
+
+#### 基础用法
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalConfig, GoalStatus, VerificationMethod
+from harness.loop.tool_verification import ToolVerificationConfig
+
+agent = AgentHarness()
+
+# Python 项目验证配置
+config = ToolVerificationConfig(
+    commands=[
+        ("pytest", "pytest", "tests/", "-v"),
+        ("mypy", "mypy", "src/"),
+        ("ruff", "ruff", "check", "src/"),
+    ],
+    working_directory=".",
+    timeout_seconds=300,
+)
+
+result = await agent.run_goal(
+    goal=GoalConfig(
+        description="修复所有类型错误",
+        verification_method=VerificationMethod.TOOL,
+        tool_verification_config=config,
+    ),
+)
+
+if result.status == GoalStatus.ACHIEVED:
+    print("所有验证通过!")
+```
+
+#### 预设配置
+
+SDK 提供常用项目的预设验证配置：
+
+```python
+from harness.loop.tool_verification import ToolVerificationConfig
+
+# Python 项目（pytest + mypy + ruff）
+python_config = ToolVerificationConfig.python_defaults()
+
+# Python 项目（自定义路径）
+python_config = ToolVerificationConfig.python_project(
+    test_path="tests/",
+    src_path="src/",
+)
+
+# Java/Gradle 项目
+gradle_config = ToolVerificationConfig.gradle_defaults()
+
+# Java/Maven 项目
+maven_config = ToolVerificationConfig.maven_defaults()
+
+# Node.js/npm 项目
+npm_config = ToolVerificationConfig.npm_defaults()
+```
+
+#### 自定义命令
+
+```python
+from harness.loop.tool_verification import ToolVerificationConfig, VerificationCommand
+
+config = ToolVerificationConfig(
+    commands=[
+        VerificationCommand(
+            name="unit-tests",
+            command=["pytest", "tests/unit/", "-v"],
+        ),
+        VerificationCommand(
+            name="integration-tests",
+            command=["pytest", "tests/integration/", "-v"],
+        ),
+        VerificationCommand(
+            name="type-check",
+            command=["mypy", "src/"],
+        ),
+    ],
+    working_directory="./project",
+    timeout_seconds=600,  # 10 分钟
+    fail_fast=True,       # 第一个失败就停止
+)
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `commands` | `list[VerificationCommand]` | 必填 | 验证命令列表 |
+| `working_directory` | `str` | `"."` | 命令执行目录 |
+| `timeout_seconds` | `int` | `300` | 每个命令的超时时间 |
+| `fail_fast` | `bool` | `True` | 是否在第一个失败时停止 |
+| `continue_on_warning` | `bool` | `False` | 警告时是否继续 |
+
+#### 验证结果
+
+工具验证的结果会包含在 `GoalResult.verification_log` 中：
+
+```python
+result = await agent.run_goal(...)
+
+for record in result.verification_log:
+    print(f"迭代 {record.iteration}:")
+    print(f"  方法: {record.method}")  # VerificationMethod.TOOL
+    print(f"  结果: {'通过' if record.achieved else '失败'}")
+    print(f"  原因: {record.reasoning}")
+```
+
+#### 使用场景
+
+| 场景 | 推荐验证方式 |
+|------|------------|
+| 修复类型错误 | `VerificationMethod.TOOL` + mypy |
+| 提高测试覆盖率 | `VerificationMethod.TOOL` + pytest --cov |
+| 代码重构 | `VerificationMethod.TOOL` + pytest + ruff |
+| 功能开发 | `VerificationMethod.TOOL` + pytest |
+| 文档生成 | `VerificationMethod.LLM` 或自定义验证器 |
+
 ### GoalStatus 状态
 
 ```python
@@ -248,10 +370,11 @@ async def run(self) -> GoalResult:
 
 ```
 packages/sdk/src/harness/loop/
-├── __init__.py          # 模块入口
-├── types.py             # 类型定义 (GoalConfig, GoalResult, GoalStatus)
-├── goal.py              # GoalVerifier
-└── goal_loop.py         # GoalLoop
+├── __init__.py              # 模块入口
+├── types.py                 # 类型定义 (GoalConfig, GoalResult, GoalStatus, VerificationMethod)
+├── goal.py                  # GoalVerifier
+├── goal_loop.py             # GoalLoop
+└── tool_verification.py     # ToolVerificationConfig, 工具验证
 ```
 
 ---

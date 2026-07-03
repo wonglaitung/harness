@@ -177,6 +177,9 @@ from harness import (
     VerificationMethod,
     VerificationRecord,
     VerificationResult,
+    ToolVerificationConfig,
+    VerificationCommand,
+    CommandResult,
 
     # Automation (P0 - Phase 2)
     Automation,
@@ -452,18 +455,73 @@ def register_tool(
 ### MCP 方法
 
 ```python
-def add_mcp_server(
+async def add_mcp_server(
     self,
     name: str,
     command: str | None = None,  # Stdio 传输
     url: str | None = None,       # HTTP 传输
     config: dict | None = None,   # 服务器配置
-) -> None:
-    """添加 MCP 服务器"""
+) -> MCPServerInfo:
+    """添加并连接 MCP 服务器
+    
+    Args:
+        name: 服务器名称
+        command: Stdio 命令（如 "mcp-server-filesystem"）
+        url: HTTP URL（用于 HTTP 传输）
+        config: 完整服务器配置字典
+    
+    Returns:
+        连接后的服务器信息
+    """
 
-def remove_mcp_server(self, name: str) -> None:
-    """移除 MCP 服务器"""
+def remove_mcp_server(self, name: str) -> bool:
+    """移除 MCP 服务器配置"""
+
+async def disconnect_mcp_server(self, name: str) -> bool:
+    """断开 MCP 服务器连接"""
+
+async def connect_mcp_servers(self) -> dict[str, MCPServerInfo]:
+    """连接所有已配置的 MCP 服务器"""
+
+def list_mcp_servers(self) -> list[str]:
+    """列出所有已配置的 MCP 服务器名称"""
+
+def list_connected_mcp_servers(self) -> list[str]:
+    """列出已连接的 MCP 服务器"""
+
+def get_mcp_server_config(self, name: str) -> MCPServerConfig | None:
+    """获取 MCP 服务器配置"""
+
+def get_mcp_server_tools(self, name: str) -> list:
+    """获取指定 MCP 服务器的工具列表"""
+
+def get_all_mcp_tools(self) -> list:
+    """获取所有已连接 MCP 服务器的工具"""
 ```
+
+#### MCP 使用示例
+
+```python
+from harness import AgentHarness
+
+agent = AgentHarness()
+
+# 添加 MCP 服务器（自动连接）
+info = await agent.add_mcp_server(
+    "filesystem",
+    command="mcp-server-filesystem",
+    config={"args": ["/workspace"]}
+)
+
+# 查看已连接服务器
+print(agent.list_connected_mcp_servers())
+
+# 获取所有 MCP 工具
+tools = agent.get_all_mcp_tools()
+print(f"可用 MCP 工具: {[t.name for t in tools]}")
+```
+
+详见 [09-mcp-integration.md](./09-mcp-integration.md)。
 
 ### 技能方法
 
@@ -510,6 +568,29 @@ def get_matching_skills(self, user_input: str) -> list:
 
     Returns:
         匹配的技能列表
+    """
+
+def list_skills(self) -> list[Skill]:
+    """列出所有已加载完整内容的技能"""
+
+def list_discovered_skills(self) -> list[SkillMetadata]:
+    """列出所有已发现的技能元数据（Level 1）
+    
+    返回所有从技能目录发现的技能，包括尚未加载完整内容的。
+    用于 UI 显示技能列表等场景。
+    
+    Returns:
+        技能元数据列表
+    """
+
+def get_skill(self, name: str) -> Skill | None:
+    """按名称获取技能
+    
+    Args:
+        name: 技能名称
+    
+    Returns:
+        技能实例，不存在则返回 None
     """
 ```
 
@@ -565,7 +646,27 @@ def from_config(cls, path: str) -> AgentHarness:
 
 @classmethod
 def from_env(cls) -> AgentHarness:
-    """从环境变量创建（HARNESS_* 前缀）"""
+    """从环境变量创建 AgentHarness
+
+    支持的环境变量：
+    - ANTHROPIC_API_KEY / OPENAI_API_KEY: API 密钥
+    - HARNESS_MODEL: 模型名称（默认: claude-sonnet-4-6）
+    - HARNESS_PROVIDER: 提供商（anthropic/openai/auto）
+    - HARNESS_BASE_URL: 自定义 API 端点
+    - HARNESS_MAX_ITERATIONS: 最大迭代次数
+    - HARNESS_SYSTEM_PROMPT: 系统提示词
+    - HARNESS_MEMORY_DIR: 记忆目录
+    - HARNESS_SANDBOX_WORKSPACE: 沙箱工作区路径
+
+    示例：
+        ```python
+        import os
+        os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+        os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+
+        agent = AgentHarness.from_env()
+        ```
+    """
 ```
 
 ## HarnessConfig
@@ -1133,10 +1234,44 @@ class GoalConfig:
     max_iterations: int = 50            # 最大迭代次数
     max_context_resets: int = 5         # 最大上下文重置次数
     timeout_seconds: int = 3600         # 超时时间（秒）
+    verification_method: VerificationMethod = VerificationMethod.LLM  # 验证方法
     custom_verifier: Callable | None = None  # 自定义验证函数
+    tool_verification_config: ToolVerificationConfig | None = None  # 工具验证配置
     max_tokens: int | None = None       # 最大 token 数
     max_cost_usd: float | None = None   # 最大成本（美元）
 ```
+
+### VerificationMethod
+
+```python
+from harness.loop import VerificationMethod
+
+class VerificationMethod(Enum):
+    LLM = "llm"         # LLM 验证（默认）
+    CUSTOM = "custom"   # 自定义验证函数
+    TOOL = "tool"       # 工具验证（pytest/mypy/ruff/gradle 等）
+```
+
+| 验证方法 | 说明 | 使用场景 |
+|---------|------|---------|
+| `LLM` | 让 LLM 判断目标是否达成 | 主观目标、文档生成、分析任务 |
+| `CUSTOM` | 用户提供的验证函数 | 自定义逻辑、外部系统检查 |
+| `TOOL` | 运行测试/Lint/类型检查 | 代码修复、测试覆盖率、重构验证 |
+
+**工具验证示例**：
+
+```python
+from harness.loop import GoalConfig, VerificationMethod
+from harness.loop.tool_verification import ToolVerificationConfig
+
+config = GoalConfig(
+    description="修复所有类型错误",
+    verification_method=VerificationMethod.TOOL,
+    tool_verification_config=ToolVerificationConfig.python_defaults(),
+)
+```
+
+详见 [10-loop-engineering.md](./10-loop-engineering.md) 的工具验证章节。
 
 ### GoalResult
 

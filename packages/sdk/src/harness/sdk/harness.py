@@ -521,12 +521,24 @@ class AgentHarness:
 
     def list_skills(self) -> list[Skill]:
         """
-        List all registered skills.
+        List all registered skills (with full content loaded).
 
         Returns:
-            List of all skills
+            List of all skills with full content
         """
         return self._skill_registry.list_skills()
+
+    def list_discovered_skills(self) -> list[SkillMetadata]:
+        """
+        List all discovered skills (metadata only, Level 1).
+
+        This returns all skills that have been discovered from skill directories,
+        including those whose full content hasn't been loaded yet.
+
+        Returns:
+            List of skill metadata
+        """
+        return self._skill_metadata.copy()
 
     def get_skill(self, name: str) -> Skill | None:
         """

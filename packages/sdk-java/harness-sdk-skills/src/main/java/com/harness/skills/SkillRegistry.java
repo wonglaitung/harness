@@ -8,9 +8,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Skill registry - manages skill files.
@@ -28,10 +31,12 @@ public class SkillRegistry {
 
     private final Path skillsDir;
     private final Map<String, Skill> skills;
+    private final Set<String> activeSkillNames;
 
     public SkillRegistry(Path skillsDir) {
         this.skillsDir = skillsDir;
         this.skills = new HashMap<>();
+        this.activeSkillNames = ConcurrentHashMap.newKeySet();
         loadAllSkills();
     }
 
@@ -149,6 +154,30 @@ public class SkillRegistry {
     }
 
     /**
+     * Get all skill metadata (Level 1 - metadata only, no content).
+     *
+     * This is useful for listing discovered skills without loading full content.
+     *
+     * @return List of skill metadata
+     */
+    public List<SkillMetadata> getAllSkillMetadata() {
+        return skills.values().stream()
+            .map(Skill::metadata)
+            .toList();
+    }
+
+    /**
+     * Get skill metadata by name.
+     *
+     * @param name Skill name
+     * @return SkillMetadata or null if not found
+     */
+    public SkillMetadata getSkillMetadata(String name) {
+        Skill skill = skills.get(name);
+        return skill != null ? skill.metadata() : null;
+    }
+
+    /**
      * Reload all skills from disk.
      */
     public void reload() {
@@ -204,16 +233,54 @@ public class SkillRegistry {
     /**
      * Get all active skills.
      *
-     * @return List of skills marked as always active
+     * @return List of skills that have been activated
      */
     public List<Skill> getActiveSkills() {
         List<Skill> active = new ArrayList<>();
-        for (Skill skill : skills.values()) {
-            if (skill.metadata() != null && skill.metadata().active()) {
+        for (String name : activeSkillNames) {
+            Skill skill = skills.get(name);
+            if (skill != null) {
                 active.add(skill);
             }
         }
         return active;
+    }
+
+    /**
+     * Activate a skill.
+     *
+     * @param skillName Name of skill to activate
+     * @return True if activated, False if not found
+     */
+    public boolean activate(String skillName) {
+        if (skills.containsKey(skillName)) {
+            activeSkillNames.add(skillName);
+            logger.debug("Activated skill: {}", skillName);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Deactivate a skill.
+     *
+     * @param skillName Name of skill to deactivate
+     * @return True if deactivated, False if not active
+     */
+    public boolean deactivate(String skillName) {
+        boolean removed = activeSkillNames.remove(skillName);
+        if (removed) {
+            logger.debug("Deactivated skill: {}", skillName);
+        }
+        return removed;
+    }
+
+    /**
+     * Clear all active skills.
+     */
+    public void clearActive() {
+        activeSkillNames.clear();
+        logger.debug("Cleared all active skills");
     }
 
     /**

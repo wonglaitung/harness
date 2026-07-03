@@ -386,16 +386,42 @@ async def http_request(url: str, method: str = "GET") -> str:
 |----------|----------|----------|
 | 内置工具 | 自动注册 | 按 PermissionLevel |
 | 自定义工具 | `register_tool()` | 按 PermissionLevel |
-| MCP 工具 | MCP 服务器自动注册 | 按 MCP 配置 |
+| MCP 工具 | `add_mcp_server()` 自动注册 | 按 MCP 配置 |
 
 ```python
 # MCP 工具和内置工具统一使用
-agent = AgentHarness()
-agent.add_mcp_server("github", command="mcp-github")
+from harness import AgentHarness, ReadTool
+
+agent = AgentHarness(tools=[ReadTool()])
+
+# 添加 MCP 服务器（异步方法，自动连接并注册工具）
+info = await agent.add_mcp_server("github", command="mcp-github")
+
+# 查看所有工具（内置 + MCP）
+all_tools = agent._tool_registry.list_tools()
+print(f"可用工具: {[t.name for t in all_tools]}")
 
 # LLM 可以同时调用内置工具和 MCP 工具
 result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
 ```
+
+### MCP 工具管理方法
+
+```python
+# 列出已连接的 MCP 服务器
+servers = agent.list_connected_mcp_servers()
+
+# 获取指定服务器的工具
+github_tools = agent.get_mcp_server_tools("github")
+
+# 获取所有 MCP 工具
+all_mcp_tools = agent.get_all_mcp_tools()
+
+# 断开服务器
+await agent.disconnect_mcp_server("github")
+```
+
+详见 [07-sdk-api.md](./07-sdk-api.md) 的 MCP 方法章节。
 
 ## 下一步
 

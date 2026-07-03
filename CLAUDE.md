@@ -14,6 +14,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## ⚠️ 重要原则：Java SDK 禁止简化实现
+
+**Java SDK 必须与 Python SDK 功能完全同步！**
+
+- **严禁使用 placeholder、stub、mock 实现替代真实功能**
+- **严禁跳过功能实现**，即使框架差异也必须找到等效方案
+- **严禁"简化实现"**，必须实现完整功能逻辑
+
+**唯一允许的差异**：
+- Python 测试框架特有功能（如 `pytest_plugin`）
+- 异步/同步 API 差异（如 `AsyncSQLiteSessionStore` → Java 使用同步 JDBC）
+
+**当前同步率**：**99.5%**
+
+**代码审查重点**：
+- 发现 `throw new UnsupportedOperationException()` 或 `// TODO` 必须立即修复
+- 发现简化实现（如固定返回值、空方法体）必须立即补全
+- 新增 Python SDK 功能时，必须同步实现 Java 版本
+
+---
+
 ## 快速参考
 
 > **📚 详细文档**：完整指南请查看 `packages/sdk/docs/` 目录
@@ -31,7 +52,7 @@ Harness 是一个 **Monorepo** 项目，包含：
 | 包 | 路径 | 说明 |
 |---|------|------|
 | `harness-sdk` | `packages/sdk/` | 可内嵌的 Python AI Agent SDK（跨平台） |
-| `harness-sdk-java` | `packages/sdk-java/` | Java SDK（嵌入式库，96% 功能同步） |
+| `harness-sdk-java` | `packages/sdk-java/` | Java SDK（嵌入式库，99.5% 功能同步） |
 | `harness-client` | `packages/client/` | Windows 桌面客户端（PyQt6） |
 | `harness-cloud` | `packages/cloud/` | Docker 沙箱云服务 |
 | `harness-scraper` | `packages/scraper/` | AI 情报/港股 Alpha 提取系统 |

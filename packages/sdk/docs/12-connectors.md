@@ -327,6 +327,53 @@ manager.registerConnector(connector);
 manager.startAll().join();
 ```
 
+### GitHubAPIClient
+
+Java SDK 提供独立的 GitHub API 客户端，支持 GitHub App JWT 认证：
+
+```java
+import com.harness.connectors.GitHubAPIClient;
+
+// 创建 API 客户端
+GitHubAPIClient client = new GitHubAPIClient("123456", privateKeyPem);
+
+// 创建 Issue/PR 评论
+client.createIssueComment("owner/repo", 42, "评论内容")
+    .thenAccept(success -> {
+        if (success) {
+            System.out.println("评论创建成功");
+        }
+    });
+
+// 获取 PR 详情
+client.getPr("owner/repo", 42)
+    .thenAccept(pr -> {
+        System.out.println("PR 标题: " + pr.get("title"));
+    });
+
+// 创建 PR Review
+client.createPrReview("owner/repo", 42, "APPROVE", "LGTM!")
+    .thenAccept(success -> System.out.println("Review 创建成功"));
+
+// 获取 Installation Token（自动缓存）
+client.getInstallationToken(12345L)
+    .thenAccept(token -> System.out.println("Token: " + token));
+```
+
+**认证流程**：
+1. 使用私钥生成 JWT（有效期 10 分钟）
+2. 使用 JWT 获取 Installation Token
+3. 使用 Installation Token 调用 GitHub API
+
+**支持的 API**：
+| 方法 | 说明 |
+|------|------|
+| `createIssueComment()` | 创建 Issue/PR 评论 |
+| `getPr()` | 获取 PR 详情 |
+| `getIssue()` | 获取 Issue 详情 |
+| `createPrReview()` | 创建 PR Review |
+| `getInstallationToken()` | 获取 Installation Token |
+
 ### SlackConnector
 
 ```java
@@ -348,6 +395,57 @@ connector.sendMessage("C123456", "Hello from Harness!");
 connector.replyToThread("C123456", "17123456.0001", "回复内容");
 ```
 
+### SlackAPIClient
+
+Java SDK 提供独立的 Slack API 客户端：
+
+```java
+import com.harness.connectors.SlackAPIClient;
+
+// 创建 API 客户端
+SlackAPIClient client = new SlackAPIClient(botToken, appToken);
+
+// 发送消息到频道
+client.postMessage("C123456", "Hello!", null, null)
+    .thenAccept(success -> {
+        if (success) {
+            System.out.println("消息发送成功");
+        }
+    });
+
+// 发送 Block Kit 消息
+List<Map<String, Object>> blocks = List.of(
+    Map.of("type", "section", "text", Map.of("type", "plain_text", "text", "Hello"))
+);
+client.postMessage("C123456", "Fallback text", blocks, null);
+
+// 回复到线程
+client.postMessage("C123456", "Thread reply", null, "17123456.0001");
+
+// 发送 Ephemeral 消息（仅特定用户可见）
+client.postEphemeral("C123456", "U123456", "私密消息", null);
+
+// 添加 Reaction
+client.addReaction("C123456", "17123456.0001", "thumbsup");
+
+// 获取用户信息
+client.getUserInfo("U123456")
+    .thenAccept(user -> System.out.println("用户名: " + user.get("name")));
+
+// 验证认证
+client.authTest()
+    .thenAccept(success -> System.out.println("认证有效: " + success));
+```
+
+**支持的 API**：
+| 方法 | 说明 |
+|------|------|
+| `postMessage()` | 发送消息（支持 Block Kit） |
+| `postEphemeral()` | 发送仅特定用户可见的消息 |
+| `addReaction()` | 添加 Reaction |
+| `getUserInfo()` | 获取用户信息 |
+| `authTest()` | 验证认证是否有效 |
+
 ### WebhookConnector
 
 ```java
@@ -360,6 +458,31 @@ manager.registerConnector(webhook);
 // POST /webhook/{connector_id}
 // 接收 JSON 并转换为 ConnectorEvent
 ```
+
+### HttpClient（内部使用）
+
+连接器内部使用统一的 HTTP 客户端：
+
+```java
+import com.harness.connectors.HttpClient;
+
+HttpClient client = new HttpClient();
+
+// GET 请求
+HttpResponse<String> response = client.get(url, headers);
+
+// POST 请求
+Map<String, Object> body = Map.of("key", "value");
+HttpResponse<String> response = client.post(url, body, headers);
+
+// 解析 JSON 响应
+Map<String, Object> data = client.parseJson(response.body());
+```
+
+**特性**：
+- 自动重试（3 次）
+- 超时控制（默认 30 秒）
+- JSON 序列化/反序列化
 
 ### RoutingKeys
 

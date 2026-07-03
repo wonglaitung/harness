@@ -4,6 +4,78 @@
 
 本文档提供 Harness SDK 的完整 API 参考。SDK 以 `harness` 包名发布，所有公共 API 通过 `harness/__init__.py` 导出。
 
+> **注意**：本文档基于 Python SDK API。Java SDK 有对应的实现，详见各章节的 Java 示例代码。
+
+## Java SDK 特有 API
+
+### AgentHarness.fromEnv()
+
+从环境变量创建 AgentHarness 实例。
+
+```java
+import com.harness.integration.AgentHarness;
+
+// 方式 1：使用 HarnessConfig.fromEnv()
+HarnessConfig config = HarnessConfig.fromEnv();
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .build();
+
+// 方式 2：使用静态方法（推荐）
+AgentHarness agent = AgentHarness.fromEnv();
+
+// 方式 3：带工具
+AgentHarness agent = AgentHarness.fromEnv(List.of(new ReadTool()));
+```
+
+**支持的环境变量**：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ANTHROPIC_API_KEY` | Anthropic API Key | - |
+| `OPENAI_API_KEY` | OpenAI API Key | - |
+| `HARNESS_MODEL` | 模型名称 | `claude-sonnet-4-6` |
+| `HARNESS_PROVIDER` | 提供商 | `auto` |
+| `HARNESS_BASE_URL` | 自定义 API 端点 | - |
+| `HARNESS_MAX_ITERATIONS` | 最大迭代次数 | `10` |
+| `HARNESS_SYSTEM_PROMPT` | 系统提示词 | - |
+| `HARNESS_MEMORY_DIR` | 记忆目录 | `.harness/memory` |
+| `HARNESS_SANDBOX_WORKSPACE` | 沙箱工作区 | 当前目录 |
+
+### ToolVerificationConfig
+
+工具验证配置，用于目标驱动执行中的客观验证。
+
+```java
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.VerificationMethod;
+import com.harness.loop.types.ToolVerificationConfig;
+
+// Python 项目验证
+ToolVerificationConfig config = ToolVerificationConfig.builder()
+    .addCommand("pytest", "pytest", "tests/", "-v")
+    .addCommand("mypy", "mypy", "src/")
+    .addCommand("ruff", "ruff", "check", "src/")
+    .build();
+
+// 预设配置
+ToolVerificationConfig.pythonDefaults();   // pytest + mypy + ruff
+ToolVerificationConfig.gradleDefaults();   // gradle test + check
+ToolVerificationConfig.mavenDefaults();    // mvn test
+ToolVerificationConfig.npmDefaults();      // npm test + lint
+
+// 结合 GoalConfig 使用
+GoalConfig goalConfig = GoalConfig.builder()
+    .description("修复所有类型错误")
+    .verificationMethod(VerificationMethod.TOOL)
+    .toolVerificationConfig(config)
+    .build();
+```
+
+详见 [18-loop-engineering.md](./18-loop-engineering.md) 的工具验证章节。
+
+---
+
 ## 公共 API 导出
 
 ```python

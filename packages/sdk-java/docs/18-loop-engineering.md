@@ -100,33 +100,122 @@ GoalResult result2 = agent.runGoal(
 
 ### 自定义验证器
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import java.util.concurrent.CompletableFuture;
+import com.harness.loop.types.GoalResult;
 
-agent = AgentHarness()
+AgentHarness agent = new AgentHarness(llmClient, config);
 
-# 异步验证函数
-async def check_coverage(result):
-    """检查测试覆盖率是否达到 80%"""
-    proc = await asyncio.create_subprocess_exec(
-        "pytest", "--cov", "--cov-report=term",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    return "TOTAL.*80%" in stdout.decode()
+// 自定义验证函数
+Function<GoalResult, Boolean> checkCoverage = result -> {
+    try {
+        Process process = new ProcessBuilder("pytest", "--cov", "--cov-report=term")
+            .directory(new File("."))
+            .start();
+        String output = new String(process.getInputStream().readAllBytes());
+        return output.contains("TOTAL") && output.contains("80%");
+    } catch (Exception e) {
+        return false;
+    }
+};
 
-result = await agent.run_goal(
-    goal="测试覆盖率达到 80%",
-    custom_verifier=check_coverage,
-    max_iterations=50,
-)
+GoalResult result = agent.runGoal(
+    "测试覆盖率达到 80%",
+    null,  // sessionId
+    null,  // onProgress
+    checkCoverage
+).join();
 
-if result.status == GoalStatus.ACHIEVED:
-    print("目标达成!")
+if (result.getStatus().isAchieved()) {
+    System.out.println("目标达成!");
+}
 ```
+
+### 工具验证（Tool Verification）
+
+工具验证提供客观、确定性的目标验证方式，通过运行测试、Lint、类型检查等命令来验证目标是否达成。
+
+#### 基础用法
+
+```java
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.VerificationMethod;
+import com.harness.loop.types.ToolVerificationConfig;
+
+AgentHarness agent = new AgentHarness(llmClient, config);
+
+// Python 项目验证配置
+ToolVerificationConfig toolConfig = ToolVerificationConfig.builder()
+    .addCommand("pytest", "pytest", "tests/", "-v")
+    .addCommand("mypy", "mypy", "src/")
+    .addCommand("ruff", "ruff", "check", "src/")
+    .build();
+
+GoalConfig goalConfig = GoalConfig.builder()
+    .description("修复所有类型错误")
+    .verificationMethod(VerificationMethod.TOOL)
+    .toolVerificationConfig(toolConfig)
+    .build();
+
+GoalResult result = agent.runGoal(goalConfig, null).join();
+
+if (result.getStatus().isAchieved()) {
+    System.out.println("所有验证通过!");
+}
+```
+
+#### 预设配置
+
+SDK 提供常用项目的预设验证配置：
+
+```java
+// Python 项目（pytest + mypy + ruff）
+ToolVerificationConfig pythonConfig = ToolVerificationConfig.pythonDefaults();
+
+// Python 项目（自定义路径）
+ToolVerificationConfig pythonConfig = ToolVerificationConfig.pythonProject("tests/", "src/");
+
+// Java/Gradle 项目
+ToolVerificationConfig gradleConfig = ToolVerificationConfig.gradleDefaults();
+
+// Java/Maven 项目
+ToolVerificationConfig mavenConfig = ToolVerificationConfig.mavenDefaults();
+
+// Node.js/npm 项目
+ToolVerificationConfig npmConfig = ToolVerificationConfig.npmDefaults();
+```
+
+#### 自定义命令
+
+```java
+ToolVerificationConfig config = ToolVerificationConfig.builder()
+    .addCommand("unit-tests", "pytest", "tests/unit/", "-v")
+    .addCommand("integration-tests", "pytest", "tests/integration/", "-v")
+    .addCommand("type-check", "mypy", "src/")
+    .workingDirectory("./project")
+    .timeoutSeconds(600)   // 10 分钟
+    .failFast(true)        // 第一个失败就停止
+    .build();
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `commands` | `List<VerificationCommand>` | 必填 | 验证命令列表 |
+| `workingDirectory` | `String` | `"."` | 命令执行目录 |
+| `timeoutSeconds` | `int` | `300` | 每个命令的超时时间 |
+| `failFast` | `boolean` | `true` | 是否在第一个失败时停止 |
+| `continueOnWarning` | `boolean` | `false` | 警告时是否继续 |
+
+#### 验证方法对比
+
+| 验证方法 | 说明 | 使用场景 |
+|---------|------|---------|
+| `LLM` | 让 LLM 判断目标是否达成 | 主观目标、文档生成、分析任务 |
+| `CUSTOM` | 用户提供的验证函数 | 自定义逻辑、外部系统检查 |
+| `TOOL` | 运行测试/Lint/类型检查 | 代码修复、测试覆盖率、重构验证 |
 
 ### GoalStatus 状态
 
@@ -244,12 +333,29 @@ async def run(self) -> GoalResult:
 
 ## 文件结构
 
+**Python SDK**:
 ```
 packages/sdk/src/harness/loop/
-├── __init__.py          # 模块入口
-├── types.py             # 类型定义 (GoalConfig, GoalResult, GoalStatus)
-├── goal.py              # GoalVerifier
-└── goal_loop.py         # GoalLoop
+├── __init__.py              # 模块入口
+├── types.py                 # 类型定义 (GoalConfig, GoalResult, GoalStatus, VerificationMethod)
+├── goal.py                  # GoalVerifier
+├── goal_loop.py             # GoalLoop
+└── tool_verification.py     # ToolVerificationConfig, 工具验证
+```
+
+**Java SDK**:
+```
+packages/sdk-java/harness-sdk-loop/src/main/java/com/harness/loop/
+├── GoalLoop.java            # 目标驱动执行循环
+├── GoalVerifier.java        # 目标验证器
+├── ParallelGoalExecutor.java # 并行目标执行
+└── types/
+    ├── GoalConfig.java      # 目标配置
+    ├── GoalResult.java      # 目标结果
+    ├── GoalStatus.java      # 目标状态
+    ├── VerificationMethod.java # 验证方法
+    ├── ToolVerificationConfig.java # 工具验证配置
+    └── VerificationCommand.java    # 验证命令
 ```
 
 ---
