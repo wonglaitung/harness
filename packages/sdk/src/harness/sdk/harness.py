@@ -21,6 +21,7 @@ from harness.progress import create_progress_handler
 from harness.sdk.config import HarnessConfig, RoutingConfig
 from harness.skills import (
     ProgressiveSkillLoader,
+    Skill,
     SkillInjector,
     SkillLoader,
     SkillMetadata,
@@ -176,6 +177,8 @@ class AgentHarness:
         self._skill_loader = SkillLoader(self._skill_registry)  # Keep for explicit loading
         self._progressive_loader = ProgressiveSkillLoader()
         self._skill_metadata: list[SkillMetadata] = []
+        self._skill_metadata_by_name: dict[str, SkillMetadata] = {}  # Quick lookup by name
+        self._activated_skills: set[str] = set()  # Track explicitly activated skills
         self._skill_injector = SkillInjector(self._skill_registry)
         self._load_skill_metadata()  # Level 1: Load metadata only
 
@@ -371,6 +374,9 @@ class AgentHarness:
             if directory.exists():
                 skills = self._progressive_loader.discover_skills(directory)
                 self._skill_metadata.extend(skills)
+                # Build name lookup
+                for meta in skills:
+                    self._skill_metadata_by_name[meta.name] = meta
 
         import logging
         logger = logging.getLogger(__name__)
@@ -411,19 +417,49 @@ class AgentHarness:
 
     def load_skills_from_dir(self, directory: Path) -> int:
         """
-        Load skills from a specific directory.
+        Load skills from a specific directory using progressive loading.
+
+        This method discovers skill metadata (frontmatter only) from the given
+        directory. Full skill content is loaded on-demand when:
+        - The skill is activated via activate_skill()
+        - The skill matches user input during run()
 
         Args:
             directory: Path to directory containing skill files
 
         Returns:
-            Number of skills loaded
+            Number of skills discovered (metadata only)
         """
-        return self._skill_loader.load_from_dir(directory)
+        directory = Path(directory)
+        if not directory.exists():
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Skill directory does not exist: {directory}")
+            return 0
+
+        # Level 1: Discover metadata only
+        skills = self._progressive_loader.discover_skills(directory)
+        count = 0
+        for meta in skills:
+            # Skip if already discovered
+            if meta.name in self._skill_metadata_by_name:
+                continue
+            self._skill_metadata.append(meta)
+            self._skill_metadata_by_name[meta.name] = meta
+            count += 1
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Discovered {count} skills from {directory} (metadata only)")
+
+        return count
 
     def activate_skill(self, skill_name: str) -> bool:
         """
         Activate a skill by name.
+
+        This will load the full skill content if not already loaded,
+        then activate it in the registry.
 
         Args:
             skill_name: Name of the skill to activate
@@ -431,6 +467,31 @@ class AgentHarness:
         Returns:
             True if activated successfully
         """
+        # Track explicitly activated skill
+        self._activated_skills.add(skill_name)
+
+        # Check if skill is already registered with full content
+        if skill_name in self._skill_registry:
+            return self._skill_registry.activate(skill_name)
+
+        # Find skill metadata and load full content
+        meta = self._skill_metadata_by_name.get(skill_name)
+        if meta is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Skill not found: {skill_name}")
+            return False
+
+        # Level 2: Load full content on activation
+        skill = self._progressive_loader.load_full_content(meta)
+        if skill is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to load skill content: {skill_name}")
+            return False
+
+        # Register and activate
+        self._skill_registry.register(skill)
         return self._skill_registry.activate(skill_name)
 
     def deactivate_skill(self, skill_name: str) -> bool:
@@ -443,6 +504,7 @@ class AgentHarness:
         Returns:
             True if deactivated successfully
         """
+        self._activated_skills.discard(skill_name)
         return self._skill_registry.deactivate(skill_name)
 
     def get_matching_skills(self, user_input: str) -> list:
@@ -456,6 +518,27 @@ class AgentHarness:
             List of matching skills
         """
         return self._skill_registry.find_matching_skills(user_input)
+
+    def list_skills(self) -> list[Skill]:
+        """
+        List all registered skills.
+
+        Returns:
+            List of all skills
+        """
+        return self._skill_registry.list_skills()
+
+    def get_skill(self, name: str) -> Skill | None:
+        """
+        Get a skill by name.
+
+        Args:
+            name: Skill name
+
+        Returns:
+            Skill instance or None if not found
+        """
+        return self._skill_registry.get(name)
 
     # -------------------------------------------------------------------------
     # MCP Methods
@@ -587,6 +670,42 @@ class AgentHarness:
         """
         return self._mcp_manager.list_connected_servers()
 
+    def get_mcp_server_config(self, name: str) -> MCPServerConfig | None:
+        """
+        Get MCP server configuration by name.
+
+        Args:
+            name: Server name
+
+        Returns:
+            Server configuration or None if not found
+        """
+        return self._mcp_manager.get_server_config(name)
+
+    def get_mcp_server_tools(self, name: str) -> list:
+        """
+        Get tools from a connected MCP server.
+
+        Args:
+            name: Server name
+
+        Returns:
+            List of tool wrappers
+        """
+        return self._mcp_manager.get_server_tools(name)
+
+    def get_all_mcp_tools(self) -> list:
+        """
+        Get all tools from all connected MCP servers.
+
+        Returns:
+            List of all MCP tool wrappers
+        """
+        tools = []
+        for name in self._mcp_manager.list_connected_servers():
+            tools.extend(self._mcp_manager.get_server_tools(name))
+        return tools
+
     async def run(
         self,
         prompt: str,
@@ -613,12 +732,18 @@ class AgentHarness:
         if progress_callback is None and verbose:
             progress_callback = create_progress_handler("emoji")
 
-        # Level 2: Load full content for matching skills (progressive loading)
+        # Level 2: Load full content for matching and activated skills
         matched_metadata = self._progressive_loader.match_skills(prompt, self._skill_metadata)
-        for meta in matched_metadata:
-            skill = self._progressive_loader.load_full_content(meta)
-            if skill and skill.name not in self._skill_registry:
-                self._skill_registry.register(skill)
+
+        # Also include explicitly activated skills that aren't loaded yet
+        skills_to_load = set(meta.name for meta in matched_metadata)
+        skills_to_load.update(self._activated_skills)
+
+        for meta in self._skill_metadata:
+            if meta.name in skills_to_load and meta.name not in self._skill_registry:
+                skill = self._progressive_loader.load_full_content(meta)
+                if skill:
+                    self._skill_registry.register(skill)
 
         # Inject matching skills into system prompt
         enhanced_system_prompt = self._skill_injector.inject_skills(
@@ -1105,4 +1230,34 @@ class AgentHarness:
             AgentHarness instance
         """
         config = HarnessConfig.from_file(path)
+        return cls(config=config)
+
+    @classmethod
+    def from_env(cls) -> "AgentHarness":
+        """
+        Create an agent from environment variables.
+
+        Supported environment variables:
+        - ANTHROPIC_API_KEY / OPENAI_API_KEY: API key
+        - HARNESS_MODEL: Model name (default: claude-sonnet-4-6)
+        - HARNESS_PROVIDER: Provider (anthropic/openai/auto)
+        - HARNESS_BASE_URL: Custom API endpoint
+        - HARNESS_MAX_ITERATIONS: Max loop iterations
+        - HARNESS_SYSTEM_PROMPT: System prompt
+        - HARNESS_MEMORY_DIR: Memory directory
+        - HARNESS_SANDBOX_WORKSPACE: Sandbox workspace path
+
+        Returns:
+            AgentHarness instance configured from environment
+
+        Example:
+            ```python
+            import os
+            os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+            os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+
+            agent = AgentHarness.from_env()
+            ```
+        """
+        config = HarnessConfig.from_env()
         return cls(config=config)
