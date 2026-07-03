@@ -19,7 +19,14 @@ from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore, SQLiteSessionStore
 from harness.progress import create_progress_handler
 from harness.sdk.config import HarnessConfig, RoutingConfig
-from harness.skills import SkillInjector, SkillLoader, SkillRegistry
+from harness.skills import (
+    ProgressiveSkillLoader,
+    SkillInjector,
+    SkillLoader,
+    SkillMetadata,
+    SkillRegistry,
+)
+from harness.mcp import MCPManager, MCPServerConfig, MCPServerInfo
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
@@ -164,11 +171,19 @@ class AgentHarness:
             ),
         )
 
-        # Initialize skill system
+        # Initialize skill system with progressive loading
         self._skill_registry = SkillRegistry()
-        self._skill_loader = SkillLoader(self._skill_registry)
+        self._skill_loader = SkillLoader(self._skill_registry)  # Keep for explicit loading
+        self._progressive_loader = ProgressiveSkillLoader()
+        self._skill_metadata: list[SkillMetadata] = []
         self._skill_injector = SkillInjector(self._skill_registry)
-        self._load_skills()
+        self._load_skill_metadata()  # Level 1: Load metadata only
+
+        # Initialize MCP manager
+        self._mcp_manager = MCPManager(
+            tool_registry=self._tool_registry,
+            auto_load_configs=True,  # Auto-load from mcp.json
+        )
 
         # Initialize guardrails if configured
         self._init_guardrails()
@@ -343,8 +358,31 @@ class AgentHarness:
             low_client=low_client,
         )
 
+    def _load_skill_metadata(self) -> None:
+        """
+        Load skill metadata only (Level 1 progressive loading).
+
+        This scans skill directories and loads only frontmatter (~50 tokens/skill),
+        not the full content. Full content is loaded on-demand in run().
+        """
+        from harness.skills.loader import DEFAULT_SKILL_PATHS
+
+        for directory in DEFAULT_SKILL_PATHS:
+            if directory.exists():
+                skills = self._progressive_loader.discover_skills(directory)
+                self._skill_metadata.extend(skills)
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Discovered {len(self._skill_metadata)} skills (metadata only)")
+
     def _load_skills(self) -> None:
-        """Load skills from default directories."""
+        """
+        Load skills from default directories (full content).
+
+        Deprecated: Use _load_skill_metadata() for progressive loading.
+        Kept for backward compatibility with explicit loading scenarios.
+        """
         self._skill_loader.load_defaults()
 
     def _init_guardrails(self) -> None:
@@ -419,6 +457,136 @@ class AgentHarness:
         """
         return self._skill_registry.find_matching_skills(user_input)
 
+    # -------------------------------------------------------------------------
+    # MCP Methods
+    # -------------------------------------------------------------------------
+
+    async def add_mcp_server(
+        self,
+        name: str,
+        command: str | None = None,
+        url: str | None = None,
+        config: dict | None = None,
+    ) -> MCPServerInfo:
+        """
+        Add and connect to an MCP server.
+
+        MCP (Model Context Protocol) servers provide additional tools and resources
+        that the agent can use. This method adds a server configuration and
+        immediately connects to it.
+
+        Args:
+            name: Server name (used to identify the server)
+            command: Stdio command to launch the server (e.g., "mcp-server-filesystem")
+            url: HTTP URL for HTTP transport servers
+            config: Full server configuration dict (alternative to command/url)
+
+        Returns:
+            MCPServerInfo after successful connection
+
+        Raises:
+            ValueError: If no valid transport configuration is provided
+            RuntimeError: If connection fails
+
+        Example:
+            ```python
+            agent = AgentHarness()
+
+            # Stdio transport
+            info = await agent.add_mcp_server(
+                "filesystem",
+                command="mcp-server-filesystem",
+                config={"args": ["/workspace"]}
+            )
+
+            # HTTP transport
+            info = await agent.add_mcp_server(
+                "remote",
+                url="http://api.example.com/mcp"
+            )
+            ```
+        """
+        if config:
+            server_config = MCPServerConfig.from_dict(name, config)
+        elif command:
+            server_config = MCPServerConfig(
+                name=name,
+                transport="stdio",
+                command=command,
+            )
+        elif url:
+            server_config = MCPServerConfig(
+                name=name,
+                transport="http",
+                url=url,
+            )
+        else:
+            raise ValueError("Must provide command, url, or config")
+
+        self._mcp_manager.add_server(server_config)
+        return await self._mcp_manager.connect_server(name)
+
+    def remove_mcp_server(self, name: str) -> bool:
+        """
+        Remove an MCP server configuration.
+
+        Note: This only removes the configuration. To disconnect a connected
+        server, use disconnect_mcp_server() first.
+
+        Args:
+            name: Server name to remove
+
+        Returns:
+            True if server was removed, False if not found
+        """
+        return self._mcp_manager.remove_server(name)
+
+    async def disconnect_mcp_server(self, name: str) -> bool:
+        """
+        Disconnect from an MCP server.
+
+        Args:
+            name: Server name to disconnect
+
+        Returns:
+            True if disconnected, False if not connected
+        """
+        return await self._mcp_manager.disconnect_server(name)
+
+    async def connect_mcp_servers(self) -> dict[str, MCPServerInfo]:
+        """
+        Connect to all configured MCP servers.
+
+        This connects to all servers that have been added but not yet connected.
+        Servers configured in mcp.json are automatically added on initialization.
+
+        Returns:
+            Dictionary mapping server names to their info
+        """
+        return await self._mcp_manager.connect_all()
+
+    async def disconnect_all_mcp_servers(self) -> None:
+        """Disconnect from all MCP servers."""
+        await self._mcp_manager.disconnect_all()
+
+    def list_mcp_servers(self) -> list[str]:
+        """
+        List all configured MCP server names.
+
+        Returns:
+            List of server names
+        """
+        return self._mcp_manager.list_server_configs()
+
+    def list_connected_mcp_servers(self) -> list[str]:
+        """
+        List currently connected MCP servers.
+
+        Returns:
+            List of connected server names
+        """
+        return self._mcp_manager.list_connected_servers()
+
     async def run(
         self,
         prompt: str,
@@ -444,6 +612,13 @@ class AgentHarness:
         progress_callback = on_progress
         if progress_callback is None and verbose:
             progress_callback = create_progress_handler("emoji")
+
+        # Level 2: Load full content for matching skills (progressive loading)
+        matched_metadata = self._progressive_loader.match_skills(prompt, self._skill_metadata)
+        for meta in matched_metadata:
+            skill = self._progressive_loader.load_full_content(meta)
+            if skill and skill.name not in self._skill_registry:
+                self._skill_registry.register(skill)
 
         # Inject matching skills into system prompt
         enhanced_system_prompt = self._skill_injector.inject_skills(

@@ -11,6 +11,12 @@ import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.harness.core.EmbeddingModel;
+import com.harness.core.OpenAIEmbeddingModel;
+import com.harness.core.OnnxEmbeddingModel;
+
+import java.nio.file.Path;
+
 /**
  * Vector-based memory store for semantic search.
  *
@@ -24,37 +30,118 @@ import org.slf4j.LoggerFactory;
  * - Time decay: older entries decay but never below min_strength
  * - Access bonus: frequently accessed entries get bonus
  *
- * Example:
- * <pre>
- * VectorMemoryStore store = new VectorMemoryStore();
+ * <h2>Example with OpenAI</h2>
+ * <pre>{@code
+ * VectorMemoryStore store = new VectorMemoryStore(
+ *     VectorMemoryConfig.builder()
+ *         .embeddingModel("openai:text-embedding-3-small")
+ *         .build(),
+ *     new OpenAIEmbeddingModel("sk-...", "text-embedding-3-small")
+ * );
  * store.add("doc1", "Python async patterns").join();
  *
- * // Search with Retrieval Strength weighting
- * List&lt;VectorSearchResult&gt; results = store.search("concurrency in Python", 5, true).join();
- * for (VectorSearchResult result : results) {
- *     System.out.println(result.score() + " (strength=" + result.retrievalStrength() + "): " + result.content());
- * }
- * </pre>
+ * List<VectorSearchResult> results = store.search("concurrency in Python", 5, true).join();
+ * }</pre>
+ *
+ * <h2>Example with ONNX (local)</h2>
+ * <pre>{@code
+ * VectorMemoryStore store = new VectorMemoryStore(
+ *     VectorMemoryConfig.builder()
+ *         .embeddingModel("onnx:all-MiniLM-L6-v2")
+ *         .embeddingDimension(384)
+ *         .build(),
+ *     new OnnxEmbeddingModel(Path.of("models/all-MiniLM-L6-v2.onnx"), 384)
+ * );
+ * }</pre>
  */
 public class VectorMemoryStore {
 
     private static final Logger logger = LoggerFactory.getLogger(VectorMemoryStore.class);
 
     private final VectorMemoryConfig config;
-    private final MockEmbeddingModel embeddingModel;
+    private final EmbeddingModel embeddingModel;
     private final SimpleVectorStore vectorStore;
 
     // Track archived entries for Retrieval Strength calculation
     private final Map<String, ArchivedMemoryEntry> entries = new HashMap<>();
 
+    /**
+     * Create store with default configuration (mock embedding).
+     */
     public VectorMemoryStore() {
         this(VectorMemoryConfig.defaults());
     }
 
+    /**
+     * Create store with configuration (uses mock embedding by default).
+     *
+     * @param config Configuration
+     */
     public VectorMemoryStore(VectorMemoryConfig config) {
+        this(config, null);
+    }
+
+    /**
+     * Create store with configuration and custom embedding model.
+     *
+     * @param config Configuration
+     * @param embeddingModel Custom embedding model (null uses mock)
+     */
+    public VectorMemoryStore(VectorMemoryConfig config, EmbeddingModel embeddingModel) {
         this.config = config;
-        this.embeddingModel = new MockEmbeddingModel(config.embeddingDimension());
+        this.embeddingModel = embeddingModel != null ? embeddingModel : createDefaultEmbeddingModel(config);
         this.vectorStore = new SimpleVectorStore();
+
+        logger.info("VectorMemoryStore initialized: model={}, dimension={}",
+            this.embeddingModel.getName(), this.embeddingModel.getDimension());
+    }
+
+    /**
+     * Create default embedding model based on config.
+     */
+    private EmbeddingModel createDefaultEmbeddingModel(VectorMemoryConfig config) {
+        String modelSpec = config.embeddingModel();
+
+        if (modelSpec == null || modelSpec.equals("mock")) {
+            logger.warn("Using mock embedding model - not suitable for production");
+            return new MockEmbeddingModel(config.embeddingDimension());
+        }
+
+        // Parse model specification: "provider:model"
+        String[] parts = modelSpec.split(":", 2);
+        String provider = parts[0];
+        String modelName = parts.length > 1 ? parts[1] : "text-embedding-3-small";
+
+        try {
+            switch (provider.toLowerCase()) {
+                case "openai":
+                    String apiKey = System.getenv("OPENAI_API_KEY");
+                    if (apiKey == null || apiKey.isEmpty()) {
+                        logger.warn("OPENAI_API_KEY not set, falling back to mock");
+                        return new MockEmbeddingModel(config.embeddingDimension());
+                    }
+                    return new OpenAIEmbeddingModel(apiKey, modelName);
+
+                case "onnx":
+                    // modelName is path to ONNX file
+                    Path modelPath = Path.of(modelName);
+                    return new OnnxEmbeddingModel(modelPath, config.embeddingDimension());
+
+                default:
+                    logger.warn("Unknown embedding provider: {}, using mock", provider);
+                    return new MockEmbeddingModel(config.embeddingDimension());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to create embedding model: {}, using mock", e.getMessage());
+            return new MockEmbeddingModel(config.embeddingDimension());
+        }
+    }
+
+    /**
+     * Get the embedding model in use.
+     */
+    public EmbeddingModel getEmbeddingModel() {
+        return embeddingModel;
     }
 
     /**
@@ -69,7 +156,7 @@ public class VectorMemoryStore {
      */
     public CompletableFuture<Void> add(String id, String content, Map<String, Object> metadata) {
         return CompletableFuture.supplyAsync(() -> {
-            double[] embedding = embeddingModel.embed(content);
+            float[] embedding = embeddingModel.embed(content);
             vectorStore.add(id, embedding, content, metadata);
 
             // Track entry for Retrieval Strength if it's archived memory
@@ -91,12 +178,13 @@ public class VectorMemoryStore {
      */
     public CompletableFuture<Void> addBatch(List<String> ids, List<String> contents, List<Map<String, Object>> metadatas) {
         return CompletableFuture.supplyAsync(() -> {
+            List<float[]> embeddings = embeddingModel.embedBatch(contents);
             for (int i = 0; i < ids.size(); i++) {
                 String id = ids.get(i);
                 String content = contents.get(i);
                 Map<String, Object> metadata = metadatas != null && i < metadatas.size() ? metadatas.get(i) : null;
+                float[] embedding = embeddings.get(i);
 
-                double[] embedding = embeddingModel.embed(content);
                 vectorStore.add(id, embedding, content, metadata);
             }
             return null;
@@ -113,7 +201,7 @@ public class VectorMemoryStore {
      */
     public CompletableFuture<List<VectorSearchResult>> search(String query, int topK, boolean applyDecay) {
         return CompletableFuture.supplyAsync(() -> {
-            double[] queryEmbedding = embeddingModel.embed(query);
+            float[] queryEmbedding = embeddingModel.embed(query);
             List<VectorSearchResult> rawResults = vectorStore.search(queryEmbedding, topK * 2);
 
             if (!applyDecay) {
@@ -227,22 +315,43 @@ public class VectorMemoryStore {
 
     /**
      * Mock embedding model for testing.
+     * Implements EmbeddingModel interface for compatibility.
      */
-    private static class MockEmbeddingModel {
+    private static class MockEmbeddingModel implements EmbeddingModel {
         private final int dimension;
 
         MockEmbeddingModel(int dimension) {
             this.dimension = dimension;
         }
 
-        double[] embed(String text) {
+        @Override
+        public int getDimension() {
+            return dimension;
+        }
+
+        @Override
+        public float[] embed(String text) {
             // Generate deterministic embedding based on text content
-            double[] embedding = new double[dimension];
+            float[] embedding = new float[dimension];
             int hash = text != null ? text.hashCode() : 0;
             for (int i = 0; i < dimension; i++) {
-                embedding[i] = ((hash >> (i % 32)) & 0xFF) / 255.0 - 0.5;
+                embedding[i] = ((hash >> (i % 32)) & 0xFF) / 255.0f - 0.5f;
             }
             return embedding;
+        }
+
+        @Override
+        public List<float[]> embedBatch(List<String> texts) {
+            List<float[]> results = new ArrayList<>();
+            for (String text : texts) {
+                results.add(embed(text));
+            }
+            return results;
+        }
+
+        @Override
+        public String getName() {
+            return "mock";
         }
     }
 
@@ -250,11 +359,11 @@ public class VectorMemoryStore {
      * Simple in-memory vector store.
      */
     private static class SimpleVectorStore {
-        private final Map<String, double[]> vectors = new HashMap<>();
+        private final Map<String, float[]> vectors = new HashMap<>();
         private final Map<String, String> documents = new HashMap<>();
         private final Map<String, Map<String, Object>> metadatas = new HashMap<>();
 
-        void add(String id, double[] embedding, String document, Map<String, Object> metadata) {
+        void add(String id, float[] embedding, String document, Map<String, Object> metadata) {
             vectors.put(id, embedding);
             documents.put(id, document);
             if (metadata != null) {
@@ -262,21 +371,21 @@ public class VectorMemoryStore {
             }
         }
 
-        List<VectorSearchResult> search(double[] queryEmbedding, int topK) {
-            List<Map.Entry<String, Double>> scores = new ArrayList<>();
+        List<VectorSearchResult> search(float[] queryEmbedding, int topK) {
+            List<Map.Entry<String, Float>> scores = new ArrayList<>();
 
-            for (Map.Entry<String, double[]> entry : vectors.entrySet()) {
-                double similarity = cosineSimilarity(queryEmbedding, entry.getValue());
+            for (Map.Entry<String, float[]> entry : vectors.entrySet()) {
+                float similarity = cosineSimilarity(queryEmbedding, entry.getValue());
                 scores.add(Map.entry(entry.getKey(), similarity));
             }
 
             // Sort by score descending
-            scores.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+            scores.sort((a, b) -> Float.compare(b.getValue(), a.getValue()));
 
             // Return top K
             List<VectorSearchResult> results = new ArrayList<>();
             for (int i = 0; i < Math.min(topK, scores.size()); i++) {
-                Map.Entry<String, Double> entry = scores.get(i);
+                Map.Entry<String, Float> entry = scores.get(i);
                 String id = entry.getKey();
                 results.add(new VectorSearchResult(
                     id,
@@ -302,15 +411,15 @@ public class VectorMemoryStore {
             metadatas.clear();
         }
 
-        private double cosineSimilarity(double[] a, double[] b) {
-            double dot = 0, normA = 0, normB = 0;
+        private float cosineSimilarity(float[] a, float[] b) {
+            float dot = 0, normA = 0, normB = 0;
             for (int i = 0; i < a.length; i++) {
                 dot += a[i] * b[i];
                 normA += a[i] * a[i];
                 normB += b[i] * b[i];
             }
             if (normA == 0 || normB == 0) return 0;
-            return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+            return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
         }
     }
 

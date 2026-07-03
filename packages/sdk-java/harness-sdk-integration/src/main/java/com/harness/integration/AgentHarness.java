@@ -23,6 +23,9 @@ import com.harness.loop.types.VerificationMethod;
 import com.harness.skills.SkillInjector;
 import com.harness.skills.SkillLoader;
 import com.harness.skills.SkillRegistry;
+import com.harness.mcp.McpManager;
+import com.harness.mcp.McpServerConfig;
+import com.harness.mcp.McpToolInfo;
 import com.harness.types.LoopResult;
 import com.harness.types.Session;
 import com.harness.types.TokenUsage;
@@ -72,6 +75,9 @@ public class AgentHarness {
     private final SkillLoader skillLoader;
     private final SkillInjector skillInjector;
 
+    // MCP system
+    private final McpManager mcpManager;
+
     /**
      * Create AgentHarness with configuration.
      */
@@ -87,6 +93,9 @@ public class AgentHarness {
         this.skillLoader = new SkillLoader(skillRegistry);
         this.skillInjector = new SkillInjector(skillRegistry);
         this.skillLoader.loadDefaults();
+
+        // Initialize MCP manager
+        this.mcpManager = new McpManager();
 
         logger.info("AgentHarness initialized with model: {}", config.getModel());
     }
@@ -118,6 +127,10 @@ public class AgentHarness {
             .build();
 
         this.agentLoop = new AgentLoop(llmClient, toolsList, loopConfig, hookRegistry);
+
+        // Initialize MCP manager
+        this.mcpManager = new McpManager();
+
         logger.info("AgentHarness initialized with custom LLM client and AgentLoop");
     }
 
@@ -544,6 +557,121 @@ public class AgentHarness {
      */
     public java.util.List<String> listSkills() {
         return skillRegistry.listSkills();
+    }
+
+    // -------------------------------------------------------------------------
+    // MCP Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the MCP manager.
+     */
+    public McpManager getMcpManager() {
+        return mcpManager;
+    }
+
+    /**
+     * Add and connect to an MCP server.
+     *
+     * @param config Server configuration
+     * @return true if connected successfully
+     */
+    public boolean addMcpServer(McpServerConfig config) {
+        mcpManager.registerServer(config);
+        boolean connected = mcpManager.connect(config.name());
+        if (connected) {
+            // Register tools from this server
+            List<Tool> mcpTools = mcpManager.getHarnessTools(config.name());
+            for (Tool tool : mcpTools) {
+                registerTool(tool);
+            }
+            logger.info("MCP server {} connected with {} tools", config.name(), mcpTools.size());
+        }
+        return connected;
+    }
+
+    /**
+     * Add an MCP server without connecting.
+     *
+     * @param config Server configuration
+     */
+    public void registerMcpServer(McpServerConfig config) {
+        mcpManager.registerServer(config);
+    }
+
+    /**
+     * Connect to a registered MCP server.
+     *
+     * @param serverName Server name
+     * @return true if connected successfully
+     */
+    public boolean connectMcpServer(String serverName) {
+        boolean connected = mcpManager.connect(serverName);
+        if (connected) {
+            List<Tool> mcpTools = mcpManager.getHarnessTools(serverName);
+            for (Tool tool : mcpTools) {
+                registerTool(tool);
+            }
+            logger.info("MCP server {} connected with {} tools", serverName, mcpTools.size());
+        }
+        return connected;
+    }
+
+    /**
+     * Connect to all registered MCP servers.
+     *
+     * @return Map of server name to connection success
+     */
+    public Map<String, Boolean> connectAllMcpServers() {
+        Map<String, Boolean> results = mcpManager.connectAll();
+        for (Map.Entry<String, Boolean> entry : results.entrySet()) {
+            if (entry.getValue()) {
+                List<Tool> mcpTools = mcpManager.getHarnessTools(entry.getKey());
+                for (Tool tool : mcpTools) {
+                    registerTool(tool);
+                }
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Disconnect from an MCP server.
+     *
+     * @param serverName Server name
+     */
+    public void disconnectMcpServer(String serverName) {
+        mcpManager.disconnect(serverName);
+        logger.info("Disconnected from MCP server: {}", serverName);
+    }
+
+    /**
+     * Disconnect from all MCP servers.
+     */
+    public void disconnectAllMcpServers() {
+        mcpManager.disconnectAll();
+        logger.info("Disconnected from all MCP servers");
+    }
+
+    /**
+     * List all registered MCP servers.
+     */
+    public List<String> listMcpServers() {
+        return mcpManager.getRegisteredServers();
+    }
+
+    /**
+     * List connected MCP servers.
+     */
+    public List<String> listConnectedMcpServers() {
+        return mcpManager.getConnectedServers();
+    }
+
+    /**
+     * Get MCP server status.
+     */
+    public Map<String, String> getMcpStatus() {
+        return mcpManager.getStatus();
     }
 
     /**

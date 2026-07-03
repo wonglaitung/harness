@@ -7,16 +7,22 @@ import java.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.alibaba.nacos.api.NacosFactory;
+import com.alibaba.nacos.api.naming.NamingService;
+import com.alibaba.nacos.api.naming.pojo.Instance;
+
 /**
  * Service discovery for Spring Cloud integration.
  *
- * Supports:
- * - Nacos service registry
- * - Eureka service registry
- * - Static endpoint configuration
+ * <p>Supports:</p>
+ * <ul>
+ *   <li>Nacos service registry (production-ready)</li>
+ *   <li>Eureka service registry (via REST API)</li>
+ *   <li>Static endpoint configuration</li>
+ * </ul>
  *
- * Example:
- * <pre>
+ * <h2>Example with Nacos</h2>
+ * <pre>{@code
  * ServiceDiscovery discovery = ServiceDiscovery.builder()
  *     .type("nacos")
  *     .serverAddr("localhost:8848")
@@ -27,8 +33,18 @@ import org.slf4j.LoggerFactory;
  * discovery.register("harness-agent", "192.168.1.100", 8080);
  *
  * // Discover services
- * List&lt;ServiceInstance&gt; instances = discovery.getInstances("harness-agent");
- * </pre>
+ * List<ServiceInstance> instances = discovery.getInstances("harness-agent");
+ * }</pre>
+ *
+ * <h2>Example with Eureka</h2>
+ * <pre>{@code
+ * ServiceDiscovery discovery = ServiceDiscovery.builder()
+ *     .type("eureka")
+ *     .serverAddr("localhost:8761")
+ *     .build();
+ *
+ * discovery.register("harness-agent", "192.168.1.100", 8080);
+ * }</pre>
  */
 public class ServiceDiscovery {
 
@@ -40,11 +56,20 @@ public class ServiceDiscovery {
     private final String group;
     private final Map<String, List<ServiceInstance>> serviceCache = new ConcurrentHashMap<>();
 
+    // Nacos naming service (lazy initialized)
+    private volatile NamingService nacosNamingService;
+
+    // HTTP client for Eureka
+    private final java.net.http.HttpClient httpClient;
+
     private ServiceDiscovery(Builder builder) {
         this.type = builder.type;
         this.serverAddr = builder.serverAddr;
         this.namespace = builder.namespace;
         this.group = builder.group;
+        this.httpClient = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(5))
+            .build();
     }
 
     /**
@@ -99,11 +124,15 @@ public class ServiceDiscovery {
 
         serviceCache.computeIfAbsent(serviceId, k -> new CopyOnWriteArrayList<>()).add(instance);
 
-        // In a real implementation, this would call Nacos/Eureka API
-        if ("nacos".equals(type)) {
-            registerWithNacos(instance);
-        } else if ("eureka".equals(type)) {
-            registerWithEureka(instance);
+        switch (type.toLowerCase()) {
+            case "nacos":
+                registerWithNacos(instance);
+                break;
+            case "eureka":
+                registerWithEureka(instance);
+                break;
+            default:
+                logger.debug("Static discovery - registration stored locally only");
         }
     }
 
@@ -118,7 +147,14 @@ public class ServiceDiscovery {
             instances.removeIf(i -> i.host().equals(host) && i.port() == port);
         }
 
-        // In a real implementation, this would call Nacos/Eureka API
+        switch (type.toLowerCase()) {
+            case "nacos":
+                deregisterFromNacos(serviceId, host, port);
+                break;
+            case "eureka":
+                deregisterFromEureka(serviceId, host, port);
+                break;
+        }
     }
 
     /**
@@ -131,14 +167,15 @@ public class ServiceDiscovery {
             return new ArrayList<>(cached);
         }
 
-        // In a real implementation, this would query Nacos/Eureka
-        if ("nacos".equals(type)) {
-            return queryNacos(serviceId);
-        } else if ("eureka".equals(type)) {
-            return queryEureka(serviceId);
+        // Query from registry
+        switch (type.toLowerCase()) {
+            case "nacos":
+                return queryNacos(serviceId);
+            case "eureka":
+                return queryEureka(serviceId);
+            default:
+                return List.of();
         }
-
-        return List.of();
     }
 
     /**
@@ -165,39 +202,234 @@ public class ServiceDiscovery {
         }
     }
 
+    /**
+     * Shutdown and cleanup resources.
+     */
+    public void shutdown() {
+        if (nacosNamingService != null) {
+            try {
+                nacosNamingService.shutDown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down Nacos naming service: {}", e.getMessage());
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // Nacos integration (placeholder)
+    // Nacos integration
     // -------------------------------------------------------------------------
 
+    private NamingService getNacosNamingService() {
+        if (nacosNamingService == null) {
+            synchronized (this) {
+                if (nacosNamingService == null) {
+                    try {
+                        Properties properties = new Properties();
+                        properties.setProperty("serverAddr", serverAddr);
+                        if (namespace != null && !namespace.isEmpty() && !"public".equals(namespace)) {
+                            properties.setProperty("namespace", namespace);
+                        }
+                        nacosNamingService = NacosFactory.createNamingService(properties);
+                        logger.info("Nacos naming service initialized: {}", serverAddr);
+                    } catch (Exception e) {
+                        logger.error("Failed to initialize Nacos naming service: {}", e.getMessage());
+                        throw new RuntimeException("Failed to initialize Nacos", e);
+                    }
+                }
+            }
+        }
+        return nacosNamingService;
+    }
+
     private void registerWithNacos(ServiceInstance instance) {
-        logger.debug("Registering with Nacos: {}", instance);
-        // In production, use Nacos SDK:
-        // NamingService naming = NamingFactory.createNamingService(serverAddr);
-        // naming.registerInstance(instance.serviceId(), instance.host(), instance.port());
+        try {
+            NamingService naming = getNacosNamingService();
+            naming.registerInstance(
+                instance.serviceId(),
+                group,
+                instance.host(),
+                instance.port()
+            );
+            logger.info("Registered with Nacos: {}", instance);
+        } catch (Exception e) {
+            logger.error("Failed to register with Nacos: {}", e.getMessage());
+        }
+    }
+
+    private void deregisterFromNacos(String serviceId, String host, int port) {
+        try {
+            if (nacosNamingService != null) {
+                nacosNamingService.deregisterInstance(serviceId, group, host, port);
+                logger.info("Deregistered from Nacos: {}@{}:{}", serviceId, host, port);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to deregister from Nacos: {}", e.getMessage());
+        }
     }
 
     private List<ServiceInstance> queryNacos(String serviceId) {
-        logger.debug("Querying Nacos for: {}", serviceId);
-        // In production, use Nacos SDK:
-        // List<Instance> instances = naming.selectInstances(serviceId, true);
-        return List.of();
+        try {
+            NamingService naming = getNacosNamingService();
+            List<Instance> instances = naming.selectInstances(serviceId, group, true);
+
+            List<ServiceInstance> results = new ArrayList<>();
+            for (Instance inst : instances) {
+                Map<String, String> metadata = new HashMap<>(inst.getMetadata());
+                metadata.put("nacos.instanceId", inst.getInstanceId());
+
+                results.add(new ServiceInstance(
+                    serviceId,
+                    inst.getIp(),
+                    inst.getPort(),
+                    metadata,
+                    false
+                ));
+            }
+
+            // Update cache
+            serviceCache.put(serviceId, new CopyOnWriteArrayList<>(results));
+
+            return results;
+        } catch (Exception e) {
+            logger.error("Failed to query Nacos for {}: {}", serviceId, e.getMessage());
+            return List.of();
+        }
     }
 
     // -------------------------------------------------------------------------
-    // Eureka integration (placeholder)
+    // Eureka integration (REST API)
     // -------------------------------------------------------------------------
 
     private void registerWithEureka(ServiceInstance instance) {
-        logger.debug("Registering with Eureka: {}", instance);
-        // In production, use Eureka Client:
-        // ApplicationInfoManager.getInstance().setInstanceStatus(InstanceStatus.UP);
+        try {
+            // Eureka REST API registration
+            String url = String.format("%s/apps/%s", normalizeEurekaUrl(), instance.serviceId());
+
+            String xmlBody = String.format(
+                "<instance>" +
+                "<hostName>%s</hostName>" +
+                "<app>%s</app>" +
+                "<ipAddr>%s</ipAddr>" +
+                "<vipAddress>%s</vipAddress>" +
+                "<secureVipAddress>%s</secureVipAddress>" +
+                "<port>%d</port>" +
+                "<securePort>%d</securePort>" +
+                "<status>UP</status>" +
+                "<dataCenterInfo class=\"com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo\">" +
+                "<name>MyOwn</name>" +
+                "</dataCenterInfo>" +
+                "</instance>",
+                instance.host(),
+                instance.serviceId().toUpperCase(),
+                instance.host(),
+                instance.serviceId(),
+                instance.serviceId(),
+                instance.port(),
+                instance.port()
+            );
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/xml")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(xmlBody))
+                .build();
+
+            httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            logger.info("Registered with Eureka: {}", instance);
+
+        } catch (Exception e) {
+            logger.error("Failed to register with Eureka: {}", e.getMessage());
+        }
+    }
+
+    private void deregisterFromEureka(String serviceId, String host, int port) {
+        try {
+            String instanceId = host + ":" + serviceId.toUpperCase() + ":" + port;
+            String url = String.format("%s/apps/%s/%s", normalizeEurekaUrl(), serviceId.toUpperCase(), instanceId);
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .DELETE()
+                .build();
+
+            httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            logger.info("Deregistered from Eureka: {}@{}:{}", serviceId, host, port);
+
+        } catch (Exception e) {
+            logger.error("Failed to deregister from Eureka: {}", e.getMessage());
+        }
     }
 
     private List<ServiceInstance> queryEureka(String serviceId) {
-        logger.debug("Querying Eureka for: {}", serviceId);
-        // In production, use Eureka Client:
-        // Application app = eurekaClient.getApplication(serviceId);
-        return List.of();
+        try {
+            String url = String.format("%s/apps/%s", normalizeEurekaUrl(), serviceId.toUpperCase());
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+            java.net.http.HttpResponse<String> response = httpClient.send(request,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                return parseEurekaResponse(serviceId, response.body());
+            }
+
+            return List.of();
+
+        } catch (Exception e) {
+            logger.error("Failed to query Eureka for {}: {}", serviceId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private String normalizeEurekaUrl() {
+        String url = serverAddr;
+        if (!url.startsWith("http")) {
+            url = "http://" + url;
+        }
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url + "/eureka";
+    }
+
+    private List<ServiceInstance> parseEurekaResponse(String serviceId, String json) {
+        List<ServiceInstance> results = new ArrayList<>();
+
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+
+            com.fasterxml.jackson.databind.JsonNode application = root.path("application");
+            com.fasterxml.jackson.databind.JsonNode instanceArray = application.path("instance");
+
+            if (instanceArray.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode inst : instanceArray) {
+                    String host = inst.path("hostName").asText();
+                    int port = inst.path("port").path("$").asInt();
+
+                    Map<String, String> metadata = new HashMap<>();
+                    com.fasterxml.jackson.databind.JsonNode metadataNode = inst.path("metadata");
+                    if (metadataNode.isObject()) {
+                        metadataNode.fields().forEachRemaining(entry ->
+                            metadata.put(entry.getKey(), entry.getValue().asText()));
+                    }
+
+                    results.add(new ServiceInstance(serviceId, host, port, metadata, false));
+                }
+            }
+
+            // Update cache
+            serviceCache.put(serviceId, new CopyOnWriteArrayList<>(results));
+
+        } catch (Exception e) {
+            logger.warn("Failed to parse Eureka response: {}", e.getMessage());
+        }
+
+        return results;
     }
 
     // -------------------------------------------------------------------------

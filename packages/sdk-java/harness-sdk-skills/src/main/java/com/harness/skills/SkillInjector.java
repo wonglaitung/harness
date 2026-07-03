@@ -96,10 +96,25 @@ public class SkillInjector {
         List<String> skillPrompts = new ArrayList<>();
         for (Skill skill : allSkills) {
             String skillPrompt = formatSkill(skill);
-            // Truncate if too long
-            if (skillPrompt.length() > config.maxSkillLength()) {
-                skillPrompt = skillPrompt.substring(0, config.maxSkillLength()) + "\n...[truncated]";
+
+            // Check length and log warning if too long (but don't truncate)
+            int skillLen = skillPrompt.length();
+            if (config.warnSkillLength() > 0 && skillLen > config.warnSkillLength()) {
+                logger.warn(
+                    "Skill '{}' is {} chars (>{}). Consider shortening for better LLM performance.",
+                    skill.name(), skillLen, config.warnSkillLength()
+                );
             }
+
+            // Only truncate if maxSkillLength is explicitly set (> 0)
+            if (config.maxSkillLength() > 0 && skillLen > config.maxSkillLength()) {
+                skillPrompt = skillPrompt.substring(0, config.maxSkillLength()) + "\n...[truncated]";
+                logger.warn(
+                    "Skill '{}' truncated from {} to {} chars",
+                    skill.name(), skillLen, config.maxSkillLength()
+                );
+            }
+
             skillPrompts.add(skillPrompt);
         }
 

@@ -8,12 +8,13 @@ package com.harness.skills;
 public record InjectionConfig(
     int maxSkillsPerPrompt,
     int maxSkillLength,
+    int warnSkillLength,
     String injectMethod,
     String skillSeparator
 ) {
 
     public InjectionConfig() {
-        this(5, 2000, "append", "\n\n---\n\n");
+        this(5, 0, 8000, "append", "\n\n---\n\n");
     }
 
     /**
@@ -32,7 +33,8 @@ public record InjectionConfig(
 
     public static class Builder {
         private int maxSkillsPerPrompt = 5;
-        private int maxSkillLength = 2000;
+        private int maxSkillLength = 0;  // 0 = no limit, user controls via logging
+        private int warnSkillLength = 8000;  // Log warning if skill exceeds this length
         private String injectMethod = "append";  // append, prepend, section
         private String skillSeparator = "\n\n---\n\n";
 
@@ -43,6 +45,11 @@ public record InjectionConfig(
 
         public Builder maxSkillLength(int value) {
             this.maxSkillLength = value;
+            return this;
+        }
+
+        public Builder warnSkillLength(int value) {
+            this.warnSkillLength = value;
             return this;
         }
 
@@ -60,6 +67,7 @@ public record InjectionConfig(
             return new InjectionConfig(
                 maxSkillsPerPrompt,
                 maxSkillLength,
+                warnSkillLength,
                 injectMethod,
                 skillSeparator
             );

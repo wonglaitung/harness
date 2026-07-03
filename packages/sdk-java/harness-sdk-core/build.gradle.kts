@@ -21,6 +21,12 @@ dependencies {
     // 缓存
     api("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
 
+    // ONNX Runtime for local embedding models
+    implementation("com.microsoft.onnxruntime:onnxruntime:1.17.0")
+
+    // Nacos service discovery (optional)
+    implementation("com.alibaba.nacos:nacos-client:2.3.2")
+
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
