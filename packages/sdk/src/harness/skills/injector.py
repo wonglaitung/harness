@@ -26,7 +26,8 @@ class InjectionConfig:
     """
 
     max_skills_per_prompt: int = 5
-    max_skill_length: int = 2000
+    max_skill_length: int = 0  # 0 = no limit, user controls via logging
+    warn_skill_length: int = 8000  # Log warning if skill exceeds this length
     inject_method: str = "append"  # append, prepend, section
     skill_separator: str = "\n\n---\n\n"
 
@@ -94,9 +95,22 @@ class SkillInjector:
         skill_prompts = []
         for skill in all_skills:
             skill_prompt = self._format_skill(skill)
-            # Truncate if too long
-            if len(skill_prompt) > self.config.max_skill_length:
+
+            # Check length and log warning if too long (but don't truncate)
+            skill_len = len(skill_prompt)
+            if self.config.warn_skill_length > 0 and skill_len > self.config.warn_skill_length:
+                logger.warning(
+                    f"Skill '{skill.name}' is {skill_len} chars (>{self.config.warn_skill_length}). "
+                    f"Consider shortening for better LLM performance."
+                )
+
+            # Only truncate if max_skill_length is explicitly set (> 0)
+            if self.config.max_skill_length > 0 and skill_len > self.config.max_skill_length:
                 skill_prompt = skill_prompt[: self.config.max_skill_length] + "\n...[truncated]"
+                logger.warning(
+                    f"Skill '{skill.name}' truncated from {skill_len} to {self.config.max_skill_length} chars"
+                )
+
             skill_prompts.append(skill_prompt)
 
         combined_skills = self.config.skill_separator.join(skill_prompts)
