@@ -9,6 +9,17 @@ from harness.tools.builtins import (
     ReadTool,
     WriteTool,
 )
+from harness.tools.browser import (
+    BrowserClickTool,
+    BrowserCloseTool,
+    BrowserExtractTool,
+    BrowserManager,
+    BrowserNavigateTool,
+    BrowserScreenshotTool,
+    BrowserTypeTool,
+    BrowserWaitTool,
+    get_browser_tools,
+)
 from harness.tools.executor import ToolExecutor
 from harness.tools.permissions import PermissionSet
 from harness.tools.registry import ToolRegistry
@@ -25,4 +36,14 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "BashTool",
+    # Browser tools
+    "BrowserManager",
+    "BrowserNavigateTool",
+    "BrowserClickTool",
+    "BrowserTypeTool",
+    "BrowserExtractTool",
+    "BrowserScreenshotTool",
+    "BrowserWaitTool",
+    "BrowserCloseTool",
+    "get_browser_tools",
 ]

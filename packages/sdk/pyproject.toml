@@ -54,6 +54,9 @@ sqlite = [
 web = [
     "beautifulsoup4>=4.12.0",
 ]
+browser = [
+    "playwright>=1.40.0",
+]
 stuck = [
     "numpy>=1.24.0",
     "sentence-transformers>=2.2.0",
