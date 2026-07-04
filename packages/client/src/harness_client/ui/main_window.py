@@ -7,7 +7,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont, QFontDatabase, QIcon
@@ -406,15 +406,19 @@ class MainWindow(QMainWindow):
 
     # === Message Handling ===
 
-    @asyncSlot(str, bool)
-    async def _on_message_sent(self, message: str, goal_mode: bool):
+    @asyncSlot(object, bool)
+    async def _on_message_sent(self, message: str | list[dict[str, Any]], goal_mode: bool):
         """Handle message sent from chat panel.
 
         Args:
-            message: User message
+            message: User message - can be text (str) or multimodal content (list of dicts)
             goal_mode: If True, use run_goal() for multi-iteration autonomous execution
         """
-        logger.info(f"Message sent: {message[:50]}..., goal_mode={goal_mode}")
+        # Log message type
+        if isinstance(message, list):
+            logger.info(f"Multimodal message sent with {len(message)} blocks, goal_mode={goal_mode}")
+        else:
+            logger.info(f"Message sent: {message[:50]}..., goal_mode={goal_mode}")
 
         if self.chat_controller.is_busy():
             self.statusbar.showMessage("正在处理中，请稍候...", 2000)
