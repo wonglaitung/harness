@@ -151,9 +151,64 @@ class OpenAIClient(LLMClient):
                 raise ValueError(f"API returned non-standard response: {response[:200]}")
 
             logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+
         except Exception as e:
-            logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
-            raise
+            error_str = str(e)
+
+            # Check if error is about unsupported content type (file type)
+            # This happens with OpenAI-compatible APIs that don't support documents
+            if "content type" in error_str and ("file" in error_str or "must be text" in error_str):
+                logger.warning(f"API doesn't support 'file' content type, retrying with text conversion: {error_str}")
+
+                # Check if we have document content in original messages
+                has_documents = False
+                for msg in messages:
+                    content = msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if block.get("type") == "document":
+                                has_documents = True
+                                break
+
+                if has_documents:
+                    # Convert documents to text and retry
+                    converted_messages = []
+                    for msg in messages:
+                        converted_msg = msg.copy()
+                        content = msg.get("content")
+                        if isinstance(content, list):
+                            converted_msg["content"] = self._convert_documents_to_text(content)
+                        converted_messages.append(converted_msg)
+
+                    # Rebuild formatted messages
+                    formatted_messages = []
+                    if system:
+                        formatted_messages.append({"role": "system", "content": system})
+                    formatted_messages.extend(converted_messages)
+                    params["messages"] = formatted_messages
+
+                    logger.info(f"Retrying with converted messages: {len(formatted_messages)} messages")
+
+                    # Retry the call
+                    try:
+                        future = self._executor.submit(sync_call)
+                        while not future.done():
+                            await asyncio.sleep(0.02)
+                        response = future.result()
+
+                        if isinstance(response, str):
+                            raise ValueError(f"API returned non-standard response: {response[:200]}")
+
+                        logger.info(f"Retry successful: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+
+                    except Exception as retry_error:
+                        logger.error(f"Retry failed: {retry_error}")
+                        raise retry_error
+                else:
+                    raise e
+            else:
+                logger.exception(f"OpenAI API error: {type(e).__name__}: {e}")
+                raise
 
         # Parse response
         return self._parse_response(response)
@@ -297,7 +352,7 @@ class OpenAIClient(LLMClient):
                 })
 
             elif block_type == "document":
-                # Convert document block (PDF support)
+                # Convert document block (OpenAI supports file type)
                 source = block.get("source", {})
                 media_type = source.get("media_type", "application/pdf")
                 data = source.get("data", "")
@@ -313,6 +368,71 @@ class OpenAIClient(LLMClient):
             else:
                 # Keep text and other blocks unchanged
                 converted.append(block)
+
+        return converted
+
+    def _convert_documents_to_text(self, content: list[dict]) -> list[dict]:
+        """
+        Convert document blocks to text for APIs that don't support file type.
+
+        This is a fallback for OpenAI-compatible APIs that don't support the
+        'file' content type (e.g., GLM, Qwen, other local models).
+
+        Args:
+            content: Original multimodal content list
+
+        Returns:
+            Content list with documents converted to text blocks
+        """
+        import base64
+
+        converted = []
+        document_texts = []
+
+        for block in content:
+            block_type = block.get("type", "")
+
+            if block_type == "document":
+                # Decode document and add as text
+                source = block.get("source", {})
+                data = source.get("data", "")
+                filename = block.get("filename", "document")
+                media_type = source.get("media_type", "text/plain")
+
+                try:
+                    decoded_content = base64.b64decode(data).decode("utf-8", errors="replace")
+                    file_info = f"\n\n--- Attached File: {filename} ---\n{decoded_content}\n--- End of File ---\n"
+                    document_texts.append(file_info)
+                    logger.info(f"Document '{filename}' converted to text ({len(decoded_content)} chars)")
+                except Exception as e:
+                    logger.warning(f"Failed to decode document '{filename}': {e}")
+                    document_texts.append(f"\n\n[Attached file: {filename} - content could not be decoded]\n")
+
+            elif block_type == "image":
+                # Keep image blocks unchanged
+                source = block.get("source", {})
+                media_type = source.get("media_type", "image/png")
+                data = source.get("data", "")
+                converted.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{data}"}
+                })
+
+            else:
+                # Keep other blocks unchanged
+                converted.append(block)
+
+        # Append document texts to the last text block or create new one
+        if document_texts:
+            for i in range(len(converted) - 1, -1, -1):
+                if converted[i].get("type") == "text":
+                    converted[i]["text"] += "".join(document_texts)
+                    break
+            else:
+                converted.append({
+                    "type": "text",
+                    "text": "".join(document_texts)
+                })
 
         return converted
 
