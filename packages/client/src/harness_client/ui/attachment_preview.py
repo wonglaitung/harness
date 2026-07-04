@@ -2,6 +2,7 @@
 Attachment preview widget for file uploads.
 
 Displays image thumbnails and document icons for files attached to messages.
+Inline design for integration inside input bar.
 """
 
 import base64
@@ -9,17 +10,13 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer, QPropertyAnimation, QEasingCurve, QByteArray
-from PyQt6.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QBrush, QFont, QFontMetrics
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QBrush, QFont
 from PyQt6.QtWidgets import (
     QWidget,
     QHBoxLayout,
-    QVBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
-    QFrame,
-    QSizePolicy,
 )
 
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
@@ -58,7 +55,7 @@ def create_close_icon(size: int = 16, color: QColor = QColor("#FFFFFF")) -> QIco
 
 
 class AttachmentCard(QWidget):
-    """Single attachment preview card with remove button."""
+    """Single attachment preview card with remove button - compact inline version."""
 
     removed = pyqtSignal(str)  # attachment_id
 
@@ -70,83 +67,64 @@ class AttachmentCard(QWidget):
         self._apply_theme()
 
     def _setup_ui(self):
-        """Setup the card UI."""
+        """Setup the card UI - compact size for inline display."""
         theme = get_theme()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)  # Reduced margins
-        layout.setSpacing(2)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(6)
 
-        self.setFixedSize(80, 80)  # Smaller card
+        self.setFixedHeight(32)  # Single line height
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        # Preview area
-        self._preview = QLabel()
-        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setFixedSize(68, 50)  # Smaller preview
+        # Icon preview
+        self._icon_label = QLabel()
+        self._icon_label.setFixedSize(20, 20)
 
-        # Set preview content based on type
+        # Set icon based on type
         att_type = self._attachment.get("type", "document")
         if att_type == "image":
-            self._set_image_preview()
+            self._set_image_icon()
         else:
-            self._set_document_preview()
+            self._set_document_icon()
 
-        layout.addWidget(self._preview, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._icon_label)
 
         # Filename label
         self._filename_label = QLabel()
-        self._filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._filename_label.setMaximumWidth(68)
-
         font = QFont()
-        font.setPointSize(7)  # Smaller font
+        font.setPointSize(9)
         self._filename_label.setFont(font)
 
         filename = self._attachment.get("filename", "")
-        if len(filename) > 10:
-            filename = filename[:7] + "..."
+        if len(filename) > 20:
+            filename = filename[:17] + "..."
         self._filename_label.setText(filename)
 
-        layout.addWidget(self._filename_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._filename_label)
 
-        # Remove button (top-right corner, initially hidden)
+        # Remove button
         self._remove_btn = QPushButton()
-        self._remove_btn.setIcon(create_close_icon(12, QColor(theme.TEXT)))
-        self._remove_btn.setIconSize(QSize(12, 12))
-        self._remove_btn.setFixedSize(20, 20)
+        self._remove_btn.setIcon(create_close_icon(10, QColor(theme.TEXT_SUBTLE)))
+        self._remove_btn.setIconSize(QSize(10, 10))
+        self._remove_btn.setFixedSize(18, 18)
         self._remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._remove_btn.setToolTip("移除附件")
         self._remove_btn.clicked.connect(self._on_remove)
-        self._remove_btn.setVisible(False)
 
-        # Position remove button
-        self._remove_btn.move(70, 4)
+        layout.addWidget(self._remove_btn)
 
         # Style the card
         self._apply_theme()
 
-    def _set_image_preview(self):
-        """Set image thumbnail preview."""
-        path = self._attachment.get("path", "")
-        if path and Path(path).exists():
-            pixmap = QPixmap(path)
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(
-                    68, 50,  # Match preview area size
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation
-                )
-                self._preview.setPixmap(scaled)
-                return
-
-        # Fallback to icon
+    def _set_image_icon(self):
+        """Set image icon."""
         theme = get_theme()
-        self._preview.setPixmap(create_image_icon(28, QColor(theme.TEXT_SUBTLE)).pixmap(28, 28))
+        self._icon_label.setPixmap(create_image_icon(16, QColor(theme.TEXT_SUBTLE)).pixmap(16, 16))
 
-    def _set_document_preview(self):
-        """Set document icon preview."""
+    def _set_document_icon(self):
+        """Set document icon."""
         theme = get_theme()
-        self._preview.setPixmap(create_document_icon(28, QColor(theme.TEXT_SUBTLE)).pixmap(28, 28))
+        self._icon_label.setPixmap(create_document_icon(16, QColor(theme.TEXT_SUBTLE)).pixmap(16, 16))
 
     def _apply_theme(self):
         """Apply theme styling."""
@@ -155,39 +133,28 @@ class AttachmentCard(QWidget):
             AttachmentCard {{
                 background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
-                border-radius: 8px;
+                border-radius: 6px;
             }}
             AttachmentCard:hover {{
                 border-color: {theme.ACCENT};
             }}
             QLabel {{
                 background: transparent;
-                color: {theme.TEXT_SUBTLE};
+                color: {theme.TEXT};
             }}
         """)
 
         # Style remove button
         self._remove_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.CHROME};
-                border: 1px solid {theme.BORDER};
-                border-radius: 10px;
+                background-color: transparent;
+                border: none;
+                border-radius: 9px;
             }}
             QPushButton:hover {{
                 background-color: {theme.DANGER};
-                border-color: {theme.DANGER};
             }}
         """)
-
-    def enterEvent(self, event):
-        """Show remove button on hover."""
-        super().enterEvent(event)
-        self._remove_btn.setVisible(True)
-
-    def leaveEvent(self, event):
-        """Hide remove button when not hovering."""
-        super().leaveEvent(event)
-        self._remove_btn.setVisible(False)
 
     def _on_remove(self):
         """Handle remove button click."""
@@ -200,20 +167,21 @@ class AttachmentCard(QWidget):
     def _on_theme_changed(self):
         """Handle theme change."""
         self._apply_theme()
-        # Re-render preview
+        # Re-render icon
         att_type = self._attachment.get("type", "document")
         if att_type == "image":
-            self._set_image_preview()
+            self._set_image_icon()
         else:
-            self._set_document_preview()
+            self._set_document_icon()
 
 
 class AttachmentPreview(QWidget):
     """
     Attachment preview area for displaying attached files before sending.
+    Compact inline design for integration inside input bar.
 
     Features:
-    - Horizontal scrollable list of attachment cards
+    - Horizontal inline list of attachment cards
     - Support for images and documents
     - Remove individual attachments
     - Clear all attachments
@@ -238,19 +206,14 @@ class AttachmentPreview(QWidget):
             pass
 
     def _setup_ui(self):
-        """Setup the UI."""
+        """Setup the UI - compact inline version for input bar."""
         theme = get_theme()
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(24, 6, 24, 6)  # Match input bar margins
+        main_layout.setSpacing(8)
 
-        # Header with title and clear button - more compact
-        header = QWidget()
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 4, 16, 2)  # Reduced vertical margins
-        header_layout.setSpacing(8)
-
+        # Title label (compact)
         self._title_label = QLabel("附件")
         self._title_label.setStyleSheet(f"""
             QLabel {{
@@ -259,10 +222,18 @@ class AttachmentPreview(QWidget):
                 background: transparent;
             }}
         """)
-        header_layout.addWidget(self._title_label)
+        main_layout.addWidget(self._title_label)
 
-        header_layout.addStretch()
+        # Cards container (horizontal)
+        self._cards_container = QWidget()
+        self._cards_layout = QHBoxLayout(self._cards_container)
+        self._cards_layout.setContentsMargins(0, 0, 0, 0)
+        self._cards_layout.setSpacing(6)
+        main_layout.addWidget(self._cards_container)
 
+        main_layout.addStretch()
+
+        # Clear button
         self._clear_btn = QPushButton("清空")
         self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._clear_btn.setStyleSheet(f"""
@@ -278,54 +249,12 @@ class AttachmentPreview(QWidget):
             }}
         """)
         self._clear_btn.clicked.connect(self.clear)
-        header_layout.addWidget(self._clear_btn)
+        main_layout.addWidget(self._clear_btn)
 
-        main_layout.addWidget(header)
-
-        # Scroll area for attachments - reduced height
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(False)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(90)  # Reduced from 110
-        scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background-color: transparent;
-                border: none;
-            }}
-            QScrollBar:horizontal {{
-                background-color: {theme.CHROME};
-                height: 5px;
-                border-radius: 2px;
-            }}
-            QScrollBar::handle:horizontal {{
-                background-color: {theme.BORDER};
-                border-radius: 2px;
-                min-width: 20px;
-            }}
-            QScrollBar::handle:horizontal:hover {{
-                background-color: {theme.ACCENT};
-            }}
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                width: 0px;
-            }}
-        """)
-
-        # Container for cards
-        self._cards_container = QWidget()
-        self._cards_layout = QHBoxLayout(self._cards_container)
-        self._cards_layout.setContentsMargins(12, 4, 12, 8)
-        self._cards_layout.setSpacing(8)
-        self._cards_layout.addStretch()
-
-        scroll.setWidget(self._cards_container)
-        main_layout.addWidget(scroll)
-
-        # Container background
+        # No border since it's inside input bar
         self.setStyleSheet(f"""
             AttachmentPreview {{
-                background-color: {theme.APP_BACKGROUND};
-                border-top: 1px solid {theme.BORDER};
+                background-color: transparent;
             }}
         """)
 
@@ -398,8 +327,8 @@ class AttachmentPreview(QWidget):
         card.removed.connect(self._on_card_removed)
         self._cards[attachment_id] = card
 
-        # Insert before stretch
-        self._cards_layout.insertWidget(self._cards_layout.count() - 1, card)
+        # Add to layout
+        self._cards_layout.addWidget(card)
 
         # Show preview area
         self.setVisible(True)
@@ -463,15 +392,14 @@ class AttachmentPreview(QWidget):
 
         self.setStyleSheet(f"""
             AttachmentPreview {{
-                background-color: {theme.APP_BACKGROUND};
-                border-top: 1px solid {theme.BORDER};
+                background-color: transparent;
             }}
         """)
 
         self._title_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
+                font-size: 11px;
                 background: transparent;
             }}
         """)
@@ -481,8 +409,8 @@ class AttachmentPreview(QWidget):
                 background: transparent;
                 border: none;
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
-                padding: 2px 8px;
+                font-size: 11px;
+                padding: 1px 6px;
             }}
             QPushButton:hover {{
                 color: {theme.ACCENT};

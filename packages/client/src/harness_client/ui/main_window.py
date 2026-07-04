@@ -372,11 +372,24 @@ class MainWindow(QMainWindow):
                 for msg in session.messages:
                     content = msg.get("content", "")
                     if isinstance(content, list):
-                        content = " ".join(
-                            block.get("text", "")
-                            for block in content
-                            if isinstance(block, dict) and "text" in block
-                        )
+                        # Multimodal content: extract text and show attachment info
+                        text_parts = []
+                        attachment_info = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                block_type = block.get("type", "")
+                                if block_type == "text":
+                                    text_parts.append(block.get("text", ""))
+                                elif block_type == "document":
+                                    filename = block.get("filename", "文档")
+                                    attachment_info.append(f"[文档: {filename}]")
+                                elif block_type == "image":
+                                    attachment_info.append("[图片]")
+                        # Combine text and attachment info
+                        display_content = " ".join(text_parts)
+                        if attachment_info:
+                            display_content += " " + " ".join(attachment_info)
+                        content = display_content
                     if msg.get("role") == "user":
                         self.chat_panel.append_user_message(content)
                     elif msg.get("role") == "assistant":

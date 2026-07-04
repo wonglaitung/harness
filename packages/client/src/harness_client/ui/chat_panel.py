@@ -942,11 +942,7 @@ class ChatPanel(QWidget):
         self.messages_container = MessagesContainer()
         scroll_area.setWidget(self.messages_container)
 
-        # --- Attachment preview area ---
-        self._attachment_preview = AttachmentPreview()
-        self._attachment_preview.attachments_changed.connect(self._on_attachments_changed)
-
-        # --- Input bar ---
+        # --- Input bar (vertical layout: attachments above input) ---
         self._input_bar = QWidget()
         self._input_bar.setStyleSheet(f"""
             QWidget {{
@@ -954,7 +950,23 @@ class ChatPanel(QWidget):
                 border-top: 1px solid {theme.BORDER};
             }}
         """)
-        input_layout = QHBoxLayout(self._input_bar)
+        input_bar_layout = QVBoxLayout(self._input_bar)
+        input_bar_layout.setContentsMargins(0, 0, 0, 0)
+        input_bar_layout.setSpacing(0)
+
+        # Attachment preview area (inside input bar)
+        self._attachment_preview = AttachmentPreview()
+        self._attachment_preview.attachments_changed.connect(self._on_attachments_changed)
+        input_bar_layout.addWidget(self._attachment_preview)
+
+        # Input row (horizontal layout)
+        self._input_row = QWidget()
+        self._input_row.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+            }}
+        """)
+        input_layout = QHBoxLayout(self._input_row)
         input_layout.setContentsMargins(24, 12, 24, 12)
         input_layout.setSpacing(12)
 
@@ -1105,8 +1117,10 @@ class ChatPanel(QWidget):
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
+        # Add input row to input bar
+        input_bar_layout.addWidget(self._input_row)
+
         layout.addWidget(scroll_area, stretch=1)
-        layout.addWidget(self._attachment_preview)
         layout.addWidget(self._input_bar)
 
         # Store scroll area for scrolling
@@ -1719,6 +1733,13 @@ class ChatPanel(QWidget):
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
                 border-top: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        # Update input row background
+        self._input_row.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
             }}
         """)
 
