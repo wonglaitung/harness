@@ -526,8 +526,15 @@ class ChatController:
 
     def clear_context(self) -> bool:
         """Clear current session messages without creating new session."""
+        session_id = self.session_manager.current_id
         success = self.session_manager.clear_current_messages()
         if success:
+            # Also clear SDK session to keep them in sync
+            if self.agent and session_id:
+                try:
+                    self.agent.clear_session(session_id)
+                except Exception as e:
+                    logger.warning(f"Failed to clear SDK session: {e}")
             # Reset agent to force re-initialization
             self.agent = None
         return success
