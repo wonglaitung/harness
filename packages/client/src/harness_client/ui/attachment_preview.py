@@ -73,16 +73,16 @@ class AttachmentCard(QWidget):
         """Setup the card UI."""
         theme = get_theme()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(6, 6, 6, 6)  # Reduced margins
+        layout.setSpacing(2)
 
-        self.setFixedSize(90, 90)
+        self.setFixedSize(80, 80)  # Smaller card
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Preview area
         self._preview = QLabel()
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setFixedSize(74, 60)
+        self._preview.setFixedSize(68, 50)  # Smaller preview
 
         # Set preview content based on type
         att_type = self._attachment.get("type", "document")
@@ -96,15 +96,15 @@ class AttachmentCard(QWidget):
         # Filename label
         self._filename_label = QLabel()
         self._filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._filename_label.setMaximumWidth(74)
+        self._filename_label.setMaximumWidth(68)
 
         font = QFont()
-        font.setPointSize(8)
+        font.setPointSize(7)  # Smaller font
         self._filename_label.setFont(font)
 
         filename = self._attachment.get("filename", "")
-        if len(filename) > 12:
-            filename = filename[:9] + "..."
+        if len(filename) > 10:
+            filename = filename[:7] + "..."
         self._filename_label.setText(filename)
 
         layout.addWidget(self._filename_label, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -132,7 +132,7 @@ class AttachmentCard(QWidget):
             pixmap = QPixmap(path)
             if not pixmap.isNull():
                 scaled = pixmap.scaled(
-                    74, 60,
+                    68, 50,  # Match preview area size
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
@@ -141,12 +141,12 @@ class AttachmentCard(QWidget):
 
         # Fallback to icon
         theme = get_theme()
-        self._preview.setPixmap(create_image_icon(32, QColor(theme.TEXT_SUBTLE)).pixmap(32, 32))
+        self._preview.setPixmap(create_image_icon(28, QColor(theme.TEXT_SUBTLE)).pixmap(28, 28))
 
     def _set_document_preview(self):
         """Set document icon preview."""
         theme = get_theme()
-        self._preview.setPixmap(create_document_icon(32, QColor(theme.TEXT_SUBTLE)).pixmap(32, 32))
+        self._preview.setPixmap(create_document_icon(28, QColor(theme.TEXT_SUBTLE)).pixmap(28, 28))
 
     def _apply_theme(self):
         """Apply theme styling."""
@@ -245,17 +245,17 @@ class AttachmentPreview(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Header with title and clear button
+        # Header with title and clear button - more compact
         header = QWidget()
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 8, 12, 4)
+        header_layout.setContentsMargins(16, 4, 16, 2)  # Reduced vertical margins
         header_layout.setSpacing(8)
 
         self._title_label = QLabel("附件")
         self._title_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
+                font-size: 11px;
                 background: transparent;
             }}
         """)
@@ -270,8 +270,8 @@ class AttachmentPreview(QWidget):
                 background: transparent;
                 border: none;
                 color: {theme.TEXT_SUBTLE};
-                font-size: 12px;
-                padding: 2px 8px;
+                font-size: 11px;
+                padding: 1px 6px;
             }}
             QPushButton:hover {{
                 color: {theme.ACCENT};
@@ -282,12 +282,12 @@ class AttachmentPreview(QWidget):
 
         main_layout.addWidget(header)
 
-        # Scroll area for attachments
+        # Scroll area for attachments - reduced height
         scroll = QScrollArea()
         scroll.setWidgetResizable(False)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(110)
+        scroll.setFixedHeight(90)  # Reduced from 110
         scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: transparent;
@@ -295,12 +295,12 @@ class AttachmentPreview(QWidget):
             }}
             QScrollBar:horizontal {{
                 background-color: {theme.CHROME};
-                height: 6px;
-                border-radius: 3px;
+                height: 5px;
+                border-radius: 2px;
             }}
             QScrollBar::handle:horizontal {{
                 background-color: {theme.BORDER};
-                border-radius: 3px;
+                border-radius: 2px;
                 min-width: 20px;
             }}
             QScrollBar::handle:horizontal:hover {{
