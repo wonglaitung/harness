@@ -379,7 +379,17 @@ class MainWindow(QMainWindow):
                             if isinstance(block, dict):
                                 block_type = block.get("type", "")
                                 if block_type == "text":
-                                    text_parts.append(block.get("text", ""))
+                                    text = block.get("text", "")
+                                    # Clean up any leaked conversion format from SDK
+                                    # Remove "--- Attached File: ... --- End of File ---" blocks
+                                    import re
+                                    text = re.sub(
+                                        r'\n\n--- Attached File: [^\n]+ ---\n.*?\n--- End of File ---\n',
+                                        '',
+                                        text,
+                                        flags=re.DOTALL
+                                    )
+                                    text_parts.append(text.strip())
                                 elif block_type == "document":
                                     filename = block.get("filename", "文档")
                                     attachment_info.append(f"[文档: {filename}]")
