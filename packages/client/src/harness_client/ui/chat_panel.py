@@ -1490,8 +1490,7 @@ class ChatPanel(QWidget):
         self.stop_btn.setVisible(is_streaming)
         self.send_btn.setEnabled(not is_streaming)
         self.input_field.setEnabled(not is_streaming)
-        self.attach_image_btn.setEnabled(not is_streaming)
-        self.attach_doc_btn.setEnabled(not is_streaming)
+        self.attach_btn.setEnabled(not is_streaming)
 
     def set_skills(self, skills: list[dict]) -> None:
         """Update the skill completer with available skills."""
@@ -1504,16 +1503,41 @@ class ChatPanel(QWidget):
 
     def _on_attach_file(self):
         """Handle attachment button click - unified file picker for all types."""
+        from PyQt6.QtWidgets import QMessageBox
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "选择附件",
             str(self._work_dir),
-            "支持的文件 (*.png *.jpg *.jpeg *.gif *.webp *.pdf *.txt *.md);;图片 (*.png *.jpg *.jpeg *.gif *.webp);;文档 (*.pdf *.txt *.md);;所有文件 (*)"
+            "支持的文件 (*.png *.jpg *.jpeg *.gif *.webp *.pdf *.txt *.md *.json *.csv);;图片 (*.png *.jpg *.jpeg *.gif *.webp);;文档 (*.pdf *.txt *.md *.json *.csv);;所有文件 (*)"
         )
         if file_path:
-            if self._attachment_preview.add_attachment(file_path):
+            result = self._attachment_preview.add_attachment(file_path)
+            if result:
                 logger.info(f"Added attachment: {file_path}")
             else:
+                # Show error message to user
+                from pathlib import Path
+                ext = Path(file_path).suffix.lower()
+                if ext not in self._attachment_preview.get_supported_extensions():
+                    QMessageBox.warning(
+                        self,
+                        "不支持的文件类型",
+                        f"文件类型 '{ext}' 不支持。\n\n支持的格式：\n"
+                        f"图片：PNG, JPG, JPEG, GIF, WebP\n"
+                        f"文档：PDF, TXT, MD, JSON, CSV"
+                    )
+                else:
+                    # File too large or read error
+                    QMessageBox.warning(
+                        self,
+                        "添加失败",
+                        f"无法添加文件 '{Path(file_path).name}'。\n\n"
+                        f"可能原因：\n"
+                        f"- 图片超过 10MB\n"
+                        f"- 文档超过 32MB\n"
+                        f"- 文件读取错误"
+                    )
                 logger.warning(f"Failed to add attachment: {file_path}")
 
     def _on_attachments_changed(self):
@@ -1698,21 +1722,9 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Update attachment buttons
-        self.attach_image_btn.setIcon(create_image_icon(16, QColor(theme.TEXT_SUBTLE)))
-        self.attach_image_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                border-radius: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-
-        self.attach_doc_btn.setIcon(create_document_icon(16, QColor(theme.TEXT_SUBTLE)))
-        self.attach_doc_btn.setStyleSheet(f"""
+        # Update attachment button
+        self.attach_btn.setIcon(create_attachment_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 border: none;

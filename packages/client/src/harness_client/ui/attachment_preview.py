@@ -33,7 +33,7 @@ MAX_DOCUMENT_SIZE = 32 * 1024 * 1024  # 32MB
 
 # Supported formats
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-DOCUMENT_EXTENSIONS = {".pdf", ".txt"}
+DOCUMENT_EXTENSIONS = {".pdf", ".txt", ".md", ".json", ".csv"}
 
 
 def create_close_icon(size: int = 16, color: QColor = QColor("#FFFFFF")) -> QIcon:
@@ -436,6 +436,10 @@ class AttachmentPreview(QWidget):
     def get_attachments(self) -> list[dict]:
         """Get all attachments."""
         return self._attachments.copy()
+
+    def get_supported_extensions(self) -> set[str]:
+        """Get all supported file extensions."""
+        return IMAGE_EXTENSIONS | DOCUMENT_EXTENSIONS
 
     def has_attachments(self) -> bool:
         """Check if there are any attachments."""
