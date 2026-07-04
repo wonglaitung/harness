@@ -105,6 +105,7 @@ class ChatController:
         self.config = ChatConfig()
         self.session_manager = SessionManager()
         self._is_running = False
+        self._initializing = False  # Flag to track if initialization is in progress
         self._mcp_tools: list = []  # MCP tools from connected servers
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
@@ -123,8 +124,8 @@ class ChatController:
         """
         self._mcp_tools = tools
         # Reset agent to force re-initialization with new tools
-        # Only reset if agent was already initialized (not during initialization)
-        if self.agent is not None:
+        # Only reset if agent was already initialized AND we're not currently initializing
+        if self.agent is not None and not self._initializing:
             self.agent = None
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
@@ -173,103 +174,107 @@ class ChatController:
         Args:
             mcp_tools: Optional list of MCP tools to add to the agent
         """
-        logger.info(
-            f"Initializing agent with provider={self.config.provider}, model={self.config.model}"
-        )
-
-        if not self.config.api_key:
-            raise ValueError(
-                "未配置 API Key。请在设置中配置 API Key。\n\n"
-                "或设置环境变量：\n"
-                "- Anthropic: ANTHROPIC_API_KEY\n"
-                "- OpenAI: OPENAI_API_KEY"
+        self._initializing = True  # Set flag to prevent agent reset during initialization
+        try:
+            logger.info(
+                f"Initializing agent with provider={self.config.provider}, model={self.config.model}"
             )
 
-        sdk_config = HarnessConfig(
-            model=self.config.model,
-            api_key=self.config.api_key or None,
-            provider=self.config.provider,
-            base_url=self.config.base_url or None,
-            context_window=self.config.context_window,
-            max_iterations=self.config.max_iterations,
-            temperature=self.config.temperature,
-            tool_result_role=self.config.tool_result_role,
-            system_prompt=self.config.system_prompt,
-            sandbox_workspace=str(self.work_dir),
-            memory_md_path=get_config_dir() / "MEMORY.md",
-        )
+            if not self.config.api_key:
+                raise ValueError(
+                    "未配置 API Key。请在设置中配置 API Key。\n\n"
+                    "或设置环境变量：\n"
+                    "- Anthropic: ANTHROPIC_API_KEY\n"
+                    "- OpenAI: OPENAI_API_KEY"
+                )
 
-        logger.info(
-            f"SDK config: provider={sdk_config.provider}, "
-            f"base_url={sdk_config.base_url}, temperature={sdk_config.temperature}"
-        )
-
-        tools = [
-            ReadTool(),
-            WriteTool(),
-            GlobTool(),
-            GrepTool(),
-            BashTool(),
-            WebSearchTool(),
-            WebFetchTool(),
-            WebToMarkdownTool(),
-        ]
-
-        # Add MCP tools if provided
-        if mcp_tools:
-            tools.extend(mcp_tools)
-            logger.info(f"Added {len(mcp_tools)} MCP tools")
-
-        # Add stored MCP tools
-        if self._mcp_tools:
-            tools.extend(self._mcp_tools)
-            logger.info(f"Added {len(self._mcp_tools)} stored MCP tools")
-
-        # Add UpdateCoreMemoryTool if auto_update_memory is enabled
-        if self.config.auto_update_memory:
-            tools.append(UpdateCoreMemoryTool())
-            logger.info("Added UpdateCoreMemoryTool (auto_update_memory enabled)")
-
-        logger.info("Creating AgentHarness...")
-
-        # Check if routing is enabled
-        if self.config.enable_routing:
-            self.agent = await self._create_routing_agent(sdk_config, tools)
-        else:
-            self.agent = AgentHarness(
-                config=sdk_config,
-                tools=tools,
+            sdk_config = HarnessConfig(
+                model=self.config.model,
+                api_key=self.config.api_key or None,
+                provider=self.config.provider,
+                base_url=self.config.base_url or None,
+                context_window=self.config.context_window,
+                max_iterations=self.config.max_iterations,
+                temperature=self.config.temperature,
+                tool_result_role=self.config.tool_result_role,
+                system_prompt=self.config.system_prompt,
+                sandbox_workspace=str(self.work_dir),
+                memory_md_path=get_config_dir() / "MEMORY.md",
             )
 
-        # Add confirmation hook if callback is set
-        if self._confirm_callback:
-            async def async_confirm(tool_name: str, args: dict) -> ConfirmationResult:
-                """Wrap sync callback for async hook."""
-                return self._confirm_callback(tool_name, args)
+            logger.info(
+                f"SDK config: provider={sdk_config.provider}, "
+                f"base_url={sdk_config.base_url}, temperature={sdk_config.temperature}"
+            )
 
-            def is_trusted(trust_key: str) -> bool:
-                """Check if command is trusted for current session."""
-                session = self.session_manager.get_current()
-                return session.is_command_trusted(trust_key) if session else False
+            tools = [
+                ReadTool(),
+                WriteTool(),
+                GlobTool(),
+                GrepTool(),
+                BashTool(),
+                WebSearchTool(),
+                WebFetchTool(),
+                WebToMarkdownTool(),
+            ]
 
-            def on_trust(trust_key: str) -> None:
-                """Mark command as trusted for current session."""
-                session = self.session_manager.get_current()
-                if session:
-                    session.trust_command(trust_key)
+            # Add MCP tools if provided
+            if mcp_tools:
+                tools.extend(mcp_tools)
+                logger.info(f"Added {len(mcp_tools)} MCP tools")
 
-            self.agent.add_hook(ConfirmationHook(
-                on_confirm=async_confirm,
-                is_trusted=is_trusted,
-                on_trust=on_trust,
-            ))
-            logger.info("ConfirmationHook registered with session trust support")
+            # Add stored MCP tools
+            if self._mcp_tools:
+                tools.extend(self._mcp_tools)
+                logger.info(f"Added {len(self._mcp_tools)} stored MCP tools")
 
-        logger.info("AgentHarness created successfully")
+            # Add UpdateCoreMemoryTool if auto_update_memory is enabled
+            if self.config.auto_update_memory:
+                tools.append(UpdateCoreMemoryTool())
+                logger.info("Added UpdateCoreMemoryTool (auto_update_memory enabled)")
 
-        # Notify that agent is ready
-        if self._on_agent_ready:
-            self._on_agent_ready(self.agent)
+            logger.info("Creating AgentHarness...")
+
+            # Check if routing is enabled
+            if self.config.enable_routing:
+                self.agent = await self._create_routing_agent(sdk_config, tools)
+            else:
+                self.agent = AgentHarness(
+                    config=sdk_config,
+                    tools=tools,
+                )
+
+            # Add confirmation hook if callback is set
+            if self._confirm_callback:
+                async def async_confirm(tool_name: str, args: dict) -> ConfirmationResult:
+                    """Wrap sync callback for async hook."""
+                    return self._confirm_callback(tool_name, args)
+
+                def is_trusted(trust_key: str) -> bool:
+                    """Check if command is trusted for current session."""
+                    session = self.session_manager.get_current()
+                    return session.is_command_trusted(trust_key) if session else False
+
+                def on_trust(trust_key: str) -> None:
+                    """Mark command as trusted for current session."""
+                    session = self.session_manager.get_current()
+                    if session:
+                        session.trust_command(trust_key)
+
+                self.agent.add_hook(ConfirmationHook(
+                    on_confirm=async_confirm,
+                    is_trusted=is_trusted,
+                    on_trust=on_trust,
+                ))
+                logger.info("ConfirmationHook registered with session trust support")
+
+            logger.info("AgentHarness created successfully")
+
+            # Notify that agent is ready
+            if self._on_agent_ready:
+                self._on_agent_ready(self.agent)
+        finally:
+            self._initializing = False  # Clear flag after initialization complete (or on error)
 
     async def _create_routing_agent(self, sdk_config: HarnessConfig, tools: list):
         """Create AgentHarness with RoutingLLMClient."""

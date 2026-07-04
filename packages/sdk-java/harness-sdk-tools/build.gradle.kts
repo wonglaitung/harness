@@ -17,6 +17,10 @@ dependencies {
     // 日志接口
     api("org.slf4j:slf4j-api:$slf4jVersion")
 
+    // Playwright for browser automation (optional)
+    // Users need to add this dependency explicitly when using browser tools
+    compileOnly("com.microsoft.playwright:playwright:1.40.0")
+
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
