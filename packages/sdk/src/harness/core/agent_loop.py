@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from harness.core.cost_controller import CostController
@@ -248,7 +248,7 @@ class AgentLoop:
 
     async def run(
         self,
-        prompt: str,
+        prompt: str | list[dict[str, Any]],
         session: Session,
         tools: list[ToolDefinition] | None = None,
         on_chunk: Callable[[str], None] | None = None,
@@ -258,7 +258,8 @@ class AgentLoop:
         Run the agent loop.
 
         Args:
-            prompt: User input
+            prompt: User input - can be text (str) or multimodal content (list of dicts)
+                    Multimodal format: [{"type": "text", "text": "..."}, {"type": "image", ...}]
             session: Current session
             tools: Available tools
             on_chunk: Streaming callback

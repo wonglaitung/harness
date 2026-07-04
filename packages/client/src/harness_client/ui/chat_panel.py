@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QSizePolicy,
+    QFileDialog,
 )
 
 from harness_client.ui.interactive import GlowButton
@@ -35,6 +36,8 @@ from harness_client.themes import get_theme, register_theme_listener, unregister
 from harness_client.ui.skill_completer import SkillCompleter
 from harness_client.ui.file_completer import FileCompleter
 from harness_client.ui.toggle_switch import ModeToggleSwitch
+from harness_client.ui.attachment_preview import AttachmentPreview
+from harness_client.ui.icons import create_image_icon, create_document_icon
 
 
 # Cache for avatar base64 data
@@ -809,7 +812,7 @@ class MessagesContainer(QWidget):
 class ChatPanel(QWidget):
     """Panel for displaying chat messages and input."""
 
-    message_sent = pyqtSignal(str, bool)  # (message, goal_mode)
+    message_sent = pyqtSignal(object, bool)  # (message: str | list[dict], goal_mode)
     mode_changed = pyqtSignal(bool)  # (is_goal_mode)
     stop_requested = pyqtSignal()
     clear_chat_requested = pyqtSignal()
@@ -819,6 +822,7 @@ class ChatPanel(QWidget):
         self._streaming_text = ""
         self._is_streaming = False
         self._goal_mode = False  # False = Chat mode, True = Task mode
+        self._work_dir = Path.cwd()  # Working directory for file dialogs
         self._setup_ui()
         # Register theme listener
         register_theme_listener(self._on_theme_changed)
@@ -937,6 +941,10 @@ class ChatPanel(QWidget):
         # Messages container
         self.messages_container = MessagesContainer()
         scroll_area.setWidget(self.messages_container)
+
+        # --- Attachment preview area ---
+        self._attachment_preview = AttachmentPreview()
+        self._attachment_preview.attachments_changed.connect(self._on_attachments_changed)
 
         # --- Input bar ---
         self._input_bar = QWidget()
@@ -1061,12 +1069,52 @@ class ChatPanel(QWidget):
             }}
         """)
 
+        # Attachment buttons (left side)
+        self.attach_image_btn = QPushButton()
+        self.attach_image_btn.setIcon(create_image_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_image_btn.setIconSize(QSize(16, 16))
+        self.attach_image_btn.setFixedSize(28, 28)
+        self.attach_image_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_image_btn.setToolTip("上传图片 (PNG, JPEG, GIF, WebP)")
+        self.attach_image_btn.clicked.connect(self._on_attach_image)
+        self.attach_image_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        self.attach_doc_btn = QPushButton()
+        self.attach_doc_btn.setIcon(create_document_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_doc_btn.setIconSize(QSize(16, 16))
+        self.attach_doc_btn.setFixedSize(28, 28)
+        self.attach_doc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_doc_btn.setToolTip("上传文档 (PDF, TXT)")
+        self.attach_doc_btn.clicked.connect(self._on_attach_document)
+        self.attach_doc_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        input_layout.addWidget(self.attach_image_btn)
+        input_layout.addWidget(self.attach_doc_btn)
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.token_label)
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
 
         layout.addWidget(scroll_area, stretch=1)
+        layout.addWidget(self._attachment_preview)
         layout.addWidget(self._input_bar)
 
         # Store scroll area for scrolling
@@ -1134,14 +1182,80 @@ class ChatPanel(QWidget):
     def _on_send(self):
         """Handle send button click."""
         text = self.input_field.toPlainText().strip()
-        if not text:
+        attachments = self._attachment_preview.get_attachments()
+
+        if not text and not attachments:
             return
 
-        self.messages_container.add_message(text, "user")
+        # Add user message to display (show text + attachment count)
+        display_text = text
+        if attachments:
+            att_count = len(attachments)
+            att_types = [a.get("type") for a in attachments]
+            image_count = sum(1 for t in att_types if t == "image")
+            doc_count = sum(1 for t in att_types if t == "document")
+            if image_count and doc_count:
+                att_info = f" [{image_count} 图片, {doc_count} 文档]"
+            elif image_count:
+                att_info = f" [{image_count} 图片]"
+            else:
+                att_info = f" [{doc_count} 文档]"
+            display_text = text + att_info if text else f"[{att_count} 附件]"
+
+        self.messages_container.add_message(display_text, "user")
         self.input_field.clear()
+
+        # Build multimodal content if attachments exist
+        if attachments:
+            content = self._build_multimodal_content(text, attachments)
+            self.message_sent.emit(content, self._goal_mode)
+            self._attachment_preview.clear()
+        else:
+            self.message_sent.emit(text, self._goal_mode)
+
         self._scroll_to_bottom()
-        # Pass goal_mode to signal
-        self.message_sent.emit(text, self._goal_mode)
+
+    def _build_multimodal_content(self, text: str, attachments: list) -> list:
+        """
+        Build multimodal message content from text and attachments.
+
+        Returns a list of content blocks in Anthropic format:
+        [{"type": "text", "text": "..."}, {"type": "image", "source": {...}}, ...]
+        """
+        content = []
+
+        # Add text first
+        if text:
+            content.append({"type": "text", "text": text})
+
+        # Add attachments
+        for att in attachments:
+            att_type = att.get("type", "document")
+            media_type = att.get("media_type", "")
+            data = att.get("data", "")
+            filename = att.get("filename", "")
+
+            if att_type == "image":
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": data,
+                    }
+                })
+            elif att_type == "document":
+                content.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": data,
+                    },
+                    "filename": filename,
+                })
+
+        return content
 
     def _on_mode_changed(self, is_goal_mode: bool):
         """Handle mode toggle change."""
@@ -1366,6 +1480,8 @@ class ChatPanel(QWidget):
         self.stop_btn.setVisible(is_streaming)
         self.send_btn.setEnabled(not is_streaming)
         self.input_field.setEnabled(not is_streaming)
+        self.attach_image_btn.setEnabled(not is_streaming)
+        self.attach_doc_btn.setEnabled(not is_streaming)
 
     def set_skills(self, skills: list[dict]) -> None:
         """Update the skill completer with available skills."""
@@ -1374,6 +1490,40 @@ class ChatPanel(QWidget):
     def set_work_dir(self, path: Path) -> None:
         """Update the file completer with the work directory."""
         self.file_completer.set_work_dir(path)
+        self._work_dir = path
+
+    def _on_attach_image(self):
+        """Handle image attachment button click."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择图片",
+            str(self._work_dir),
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.webp);;所有文件 (*)"
+        )
+        if file_path:
+            if self._attachment_preview.add_attachment(file_path):
+                logger.info(f"Added image attachment: {file_path}")
+            else:
+                logger.warning(f"Failed to add image attachment: {file_path}")
+
+    def _on_attach_document(self):
+        """Handle document attachment button click."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择文档",
+            str(self._work_dir),
+            "文档文件 (*.pdf *.txt);;所有文件 (*)"
+        )
+        if file_path:
+            if self._attachment_preview.add_attachment(file_path):
+                logger.info(f"Added document attachment: {file_path}")
+            else:
+                logger.warning(f"Failed to add document attachment: {file_path}")
+
+    def _on_attachments_changed(self):
+        """Handle attachment list changes."""
+        # Update send button state (disable if streaming and attachments exist)
+        pass  # Currently no action needed, but available for future use
 
     def _on_skill_popup_activated(self, index):
         """Handle skill popup activated signal from QListView."""
@@ -1549,6 +1699,31 @@ class ChatPanel(QWidget):
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
                 border-top: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        # Update attachment buttons
+        self.attach_image_btn.setIcon(create_image_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_image_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        self.attach_doc_btn.setIcon(create_document_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_doc_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
 

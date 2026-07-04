@@ -720,7 +720,7 @@ class AgentHarness:
 
     async def run(
         self,
-        prompt: str,
+        prompt: str | list[dict[str, Any]],
         session_id: str | None = None,
         on_progress: ProgressCallback | None = None,
         verbose: bool = False,
@@ -730,7 +730,8 @@ class AgentHarness:
         Run the agent with a prompt.
 
         Args:
-            prompt: User input
+            prompt: User input - can be text (str) or multimodal content (list of dicts)
+                    Multimodal format: [{"type": "text", "text": "..."}, {"type": "image", ...}]
             session_id: Optional session ID for conversation continuity
             on_progress: Optional callback for progress events
             verbose: If True, print progress to console (ignored if on_progress is set)

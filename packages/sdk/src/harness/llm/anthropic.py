@@ -275,3 +275,7 @@ class AnthropicClient(LLMClient):
                 converted.append(msg)
 
         return converted
+
+    def supports_vision(self) -> bool:
+        """Check if the client supports vision/image inputs."""
+        return True

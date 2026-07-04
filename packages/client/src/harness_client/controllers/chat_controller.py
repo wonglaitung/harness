@@ -6,6 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # SDK imports
 from harness import (
@@ -328,18 +329,32 @@ class ChatController:
                 base_url=self.config.base_url or None,
             )
 
-    async def send_message(self, message: str, goal_mode: bool = False) -> AsyncIterator[str]:
+    async def send_message(
+        self,
+        message: str | list[dict[str, Any]],
+        goal_mode: bool = False
+    ) -> AsyncIterator[str]:
         """
         Send a message and yield the response.
 
         Args:
-            message: User message
+            message: User message - can be text (str) or multimodal content (list of dicts)
+                     Multimodal format: [{"type": "text", "text": "..."}, {"type": "image", ...}]
             goal_mode: If True, use run_goal() for multi-iteration autonomous execution
 
         Yields:
             Response text
         """
-        logger.info(f"send_message called with: {message[:50]}..., goal_mode={goal_mode}")
+        # Convert to string for logging
+        if isinstance(message, list):
+            log_msg = "[多模态消息]"
+            for block in message:
+                if block.get("type") == "text":
+                    log_msg = block.get("text", "")[:50]
+                    break
+        else:
+            log_msg = message[:50]
+        logger.info(f"send_message called with: {log_msg}..., goal_mode={goal_mode}")
 
         if not self.agent:
             logger.info("Agent not initialized, initializing now...")
@@ -389,16 +404,29 @@ class ChatController:
             current_session = self.session_manager.get_current()
             session_id = current_session.id if current_session else None
 
-            # Log matching skills
-            matching_skills = self.agent.get_matching_skills(message)
-            if matching_skills:
-                logger.info(f"Matching skills: {[s.name for s in matching_skills]}")
+            # Extract text from multimodal message for skill matching
+            prompt_text: str
+            if isinstance(message, list):
+                # Multimodal: extract text block
+                prompt_text = ""
+                for block in message:
+                    if block.get("type") == "text":
+                        prompt_text = block.get("text", "")
+                        break
+            else:
+                prompt_text = message
+
+            # Log matching skills (only check text portion)
+            if prompt_text:
+                matching_skills = self.agent.get_matching_skills(prompt_text)
+                if matching_skills:
+                    logger.info(f"Matching skills: {[s.name for s in matching_skills]}")
 
             if goal_mode:
                 # Task mode: Multi-iteration autonomous execution
                 logger.info("Calling agent.run_goal()...")
                 result = await self.agent.run_goal(
-                    goal=message,
+                    goal=prompt_text,  # Use extracted text for goal mode
                     session_id=session_id,
                     max_iterations=50,
                     on_progress=on_progress,

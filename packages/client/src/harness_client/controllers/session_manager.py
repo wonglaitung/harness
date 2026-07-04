@@ -33,13 +33,27 @@ class ClientSession:
     token_usage: dict = field(default_factory=lambda: {"input": 0, "output": 0})
     trusted_commands: set[str] = field(default_factory=set)  # Command-level trust cache
 
-    def add_message(self, role: str, content: str):
-        """Add a message and update timestamp."""
+    def add_message(self, role: str, content: str | list[dict[str, Any]]):
+        """Add a message and update timestamp.
+
+        Args:
+            role: Message role (user, assistant, system)
+            content: Message content - can be text (str) or multimodal content (list of dicts)
+        """
         self.messages.append({"role": role, "content": content})
         self.updated_at = datetime.now()
         # Auto-name from first user message
         if self.name == "新会话" and role == "user":
-            self.name = self._generate_name(content)
+            # Extract text from multimodal content for naming
+            if isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "text":
+                        text = block.get("text", "")
+                        if text:
+                            self.name = self._generate_name(text)
+                        break
+            else:
+                self.name = self._generate_name(content)
 
     def trust_command(self, trust_key: str) -> None:
         """Mark a command as trusted for this session.
@@ -277,8 +291,13 @@ class SessionManager:
         )
         return history
 
-    def add_message_to_current(self, role: str, content: str):
-        """Add a message to the current session."""
+    def add_message_to_current(self, role: str, content: str | list[dict[str, Any]]):
+        """Add a message to the current session.
+
+        Args:
+            role: Message role (user, assistant, system)
+            content: Message content - can be text (str) or multimodal content (list of dicts)
+        """
         current = self.get_current()
         if current:
             current.add_message(role, content)

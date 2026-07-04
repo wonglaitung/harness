@@ -348,3 +348,106 @@ def create_pause_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIco
 
     painter.end()
     return QIcon(pixmap)
+
+
+def create_image_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create an image/photo icon (outline style with mountain)."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    margin = size * 0.15
+    width = size - 2 * margin
+    height = size - 2 * margin
+    corner_radius = size * 0.1
+
+    # Draw rounded rectangle frame
+    frame_rect = QRectF(margin, margin, width, height)
+    painter.drawRoundedRect(frame_rect, corner_radius, corner_radius)
+
+    # Draw mountain shape inside
+    mountain_base_y = size - margin - size * 0.08
+    mountain_left_x = margin + size * 0.12
+    mountain_peak_x = size * 0.38
+    mountain_peak_y = margin + size * 0.45
+    mountain_right_x = size * 0.65
+
+    painter.drawLine(QPointF(mountain_left_x, mountain_base_y), QPointF(mountain_peak_x, mountain_peak_y))
+    painter.drawLine(QPointF(mountain_peak_x, mountain_peak_y), QPointF(mountain_right_x, mountain_base_y))
+
+    # Draw second mountain (smaller, behind)
+    mountain2_left_x = size * 0.48
+    mountain2_peak_x = size * 0.62
+    mountain2_peak_y = margin + size * 0.32
+    mountain2_right_x = size - margin - size * 0.08
+
+    painter.drawLine(QPointF(mountain2_left_x, mountain_base_y), QPointF(mountain2_peak_x, mountain2_peak_y))
+    painter.drawLine(QPointF(mountain2_peak_x, mountain2_peak_y), QPointF(mountain2_right_x, mountain_base_y))
+
+    # Draw sun circle (top right)
+    sun_radius = size * 0.08
+    sun_x = size - margin - size * 0.22
+    sun_y = margin + size * 0.28
+    painter.drawEllipse(QPointF(sun_x, sun_y), sun_radius, sun_radius)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+def create_document_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a document/file icon with folded corner (outline style)."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    margin = size * 0.15
+    width = size - 2 * margin
+    height = size - 2 * margin
+    fold_size = size * 0.18
+
+    # Draw main document outline (without fold corner)
+    # Left edge
+    painter.drawLine(QPointF(margin, margin), QPointF(margin, size - margin))
+    # Bottom edge
+    painter.drawLine(QPointF(margin, size - margin), QPointF(size - margin - fold_size, size - margin))
+    # Right edge (bottom part)
+    painter.drawLine(QPointF(size - margin - fold_size, size - margin), QPointF(size - margin - fold_size, margin + fold_size))
+    # Top edge (left part)
+    painter.drawLine(QPointF(margin, margin), QPointF(size - margin - fold_size, margin))
+
+    # Draw fold corner (diagonal + vertical + horizontal)
+    fold_corner_x = size - margin - fold_size
+    fold_corner_y = margin + fold_size
+
+    # Diagonal fold line
+    painter.drawLine(QPointF(fold_corner_x, fold_corner_y), QPointF(size - margin, fold_corner_y))
+    # Fold vertical
+    painter.drawLine(QPointF(size - margin, fold_corner_y), QPointF(size - margin, margin))
+    # Fold horizontal (connects to top)
+    painter.drawLine(QPointF(size - margin, margin), QPointF(fold_corner_x, margin))
+
+    # Draw text lines inside
+    line_margin = size * 0.28
+    line_width = width - fold_size - size * 0.08
+    line_y1 = size * 0.35
+    line_y2 = size * 0.45
+    line_y3 = size * 0.55
+
+    painter.drawLine(QPointF(line_margin, line_y1), QPointF(line_margin + line_width * 0.8, line_y1))
+    painter.drawLine(QPointF(line_margin, line_y2), QPointF(line_margin + line_width, line_y2))
+    painter.drawLine(QPointF(line_margin, line_y3), QPointF(line_margin + line_width * 0.6, line_y3))
+
+    painter.end()
+    return QIcon(pixmap)

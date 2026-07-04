@@ -95,7 +95,17 @@ class OpenAIClient(LLMClient):
         formatted_messages = []
         if system:
             formatted_messages.append({"role": "system", "content": system})
-        formatted_messages.extend(messages)
+
+        # Convert multimodal content to OpenAI format
+        for msg in messages:
+            converted_msg = msg.copy()
+            content = msg.get("content")
+
+            # If content is a list (multimodal), convert format
+            if isinstance(content, list):
+                converted_msg["content"] = self._convert_multimodal_content(content)
+
+            formatted_messages.append(converted_msg)
 
         # Build request parameters
         params: dict[str, Any] = {
@@ -253,6 +263,58 @@ class OpenAIClient(LLMClient):
                 "parameters": tool.input_schema,
             },
         }
+
+    def supports_vision(self) -> bool:
+        """Check if the client supports vision/image inputs."""
+        # GPT-4o, GPT-4-turbo, and later models support vision
+        model_name = self.config.model.lower()
+        return any(v in model_name for v in ["gpt-4o", "gpt-4-turbo", "gpt-4-vision", "gpt-4-1106", "gpt-4-0125"])
+
+    def _convert_multimodal_content(self, content: list[dict]) -> list[dict]:
+        """
+        Convert Anthropic-style multimodal content to OpenAI format.
+
+        Anthropic format:
+            {"type": "image", "source": {"type": "base64", "media_type": "...", "data": "..."}}
+            {"type": "document", "source": {"type": "base64", "media_type": "...", "data": "..."}}
+
+        OpenAI format:
+            {"type": "image_url", "image_url": {"url": "data:image/...;base64,..."}}
+            {"type": "file", "file": {"filename": "...", "file_data": "data:...;base64,..."}}
+        """
+        converted = []
+        for block in content:
+            block_type = block.get("type", "")
+
+            if block_type == "image":
+                # Convert image block
+                source = block.get("source", {})
+                media_type = source.get("media_type", "image/png")
+                data = source.get("data", "")
+                converted.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{data}"}
+                })
+
+            elif block_type == "document":
+                # Convert document block (PDF support)
+                source = block.get("source", {})
+                media_type = source.get("media_type", "application/pdf")
+                data = source.get("data", "")
+                filename = block.get("filename", "document.pdf")
+                converted.append({
+                    "type": "file",
+                    "file": {
+                        "filename": filename,
+                        "file_data": f"data:{media_type};base64,{data}"
+                    }
+                })
+
+            else:
+                # Keep text and other blocks unchanged
+                converted.append(block)
+
+        return converted
 
     def _parse_response(self, response) -> LLMResponse:
         """Parse OpenAI response into our format."""
