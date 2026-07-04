@@ -958,6 +958,12 @@ class ChatPanel(QWidget):
         input_layout.setContentsMargins(24, 12, 24, 12)
         input_layout.setSpacing(12)
 
+        # Input field container (to overlay attachment button inside)
+        input_container = QWidget()
+        input_container_layout = QHBoxLayout(input_container)
+        input_container_layout.setContentsMargins(0, 0, 0, 0)
+        input_container_layout.setSpacing(0)
+
         # Multi-line input field (QTextEdit)
         self.input_field = QTextEdit()
         self.input_field.setPlaceholderText("输入消息…  (Enter 发送, Shift+Enter 换行)")
@@ -970,7 +976,7 @@ class ChatPanel(QWidget):
                 background-color: {theme.COMPOSER};
                 border: 1px solid {theme.BORDER};
                 border-radius: 14px;
-                padding: 10px 14px;
+                padding: 10px 14px 10px 38px;
                 color: {theme.TEXT};
             }}
             QTextEdit:focus {{
@@ -1009,6 +1015,31 @@ class ChatPanel(QWidget):
         self.file_completer.popup().activated.connect(self._on_file_popup_activated)
         # Install event filter on popup to capture keyboard events
         self.file_completer.popup().installEventFilter(self)
+
+        # Attachment button (inside input field, left side)
+        self.attach_btn = QPushButton()
+        self.attach_btn.setIcon(create_attachment_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_btn.setIconSize(QSize(16, 16))
+        self.attach_btn.setFixedSize(28, 28)
+        self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_btn.setToolTip("添加附件 (图片、PDF、TXT)")
+        self.attach_btn.clicked.connect(self._on_attach_file)
+        self.attach_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+
+        # Layout: attachment button (absolute positioned) + input field
+        input_container_layout.addWidget(self.input_field, stretch=1)
+        # Position attachment button inside the input field (left side)
+        self.attach_btn.setParent(input_container)
+        self.attach_btn.move(8, 8)  # Will be repositioned in resizeEvent
 
         # Token usage label
         self.token_label = QLabel("0 / 200k")
@@ -1069,27 +1100,7 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Attachment button (single unified button for all file types)
-        self.attach_btn = QPushButton()
-        self.attach_btn.setIcon(create_attachment_icon(16, QColor(theme.TEXT_SUBTLE)))
-        self.attach_btn.setIconSize(QSize(16, 16))
-        self.attach_btn.setFixedSize(28, 28)
-        self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.attach_btn.setToolTip("添加附件 (图片、PDF、TXT)")
-        self.attach_btn.clicked.connect(self._on_attach_file)
-        self.attach_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                border-radius: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-
-        input_layout.addWidget(self.attach_btn)
-        input_layout.addWidget(self.input_field, stretch=1)
+        input_layout.addWidget(input_container, stretch=1)
         input_layout.addWidget(self.token_label)
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
@@ -1138,10 +1149,11 @@ class ChatPanel(QWidget):
         )
 
     def resizeEvent(self, event):
-        """Position the scroll-down button at bottom-center of scroll area."""
+        """Position the scroll-down button and attachment button."""
         super().resizeEvent(event)
+
+        # Position scroll-down button at bottom-center of scroll area
         if hasattr(self, '_scroll_down_btn') and hasattr(self, '_scroll_area'):
-            # Calculate position: bottom-center of scroll area, above input bar
             scroll_rect = self._scroll_area.geometry()
             input_height = self._input_bar.height() if hasattr(self, '_input_bar') else 0
             btn_width = self._scroll_down_btn.width()
@@ -1150,6 +1162,14 @@ class ChatPanel(QWidget):
             x = scroll_rect.x() + (scroll_rect.width() - btn_width) // 2
             y = scroll_rect.bottom() - btn_height - 16
             self._scroll_down_btn.move(x, y)
+
+        # Position attachment button inside input field (vertically centered)
+        if hasattr(self, 'attach_btn') and hasattr(self, 'input_field'):
+            input_height = self.input_field.height()
+            btn_height = self.attach_btn.height()
+            # Vertically center the button in the input field
+            y = (input_height - btn_height) // 2
+            self.attach_btn.move(8, y)
 
     def _on_scroll_changed(self, value: int):
         """Show/hide scroll-down button based on scroll position."""
