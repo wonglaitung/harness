@@ -76,16 +76,27 @@ class PromptInjectionDetector:
                 re.compile(p, re.IGNORECASE) for p in custom_patterns
             )
 
-    def detect(self, text: str) -> tuple[bool, list[str]]:
+    def detect(self, text: str | list[dict[str, Any]]) -> tuple[bool, list[str]]:
         """
         Detect injection attempts.
 
         Args:
-            text: Text to analyze
+            text: Text to analyze - can be a string or multimodal content list
 
         Returns:
             (is_safe, detected_patterns) tuple
         """
+        # Handle multimodal content (list of dicts)
+        if isinstance(text, list):
+            text_content = ""
+            for block in text:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_content += block.get("text", "")
+            text = text_content
+
+        if not text or not isinstance(text, str):
+            return True, []  # Safe if no text content
+
         detected = []
 
         for pattern in self.patterns:
@@ -94,7 +105,7 @@ class PromptInjectionDetector:
 
         return len(detected) == 0, detected
 
-    def sanitize(self, text: str) -> str:
+    def sanitize(self, text: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
         """
         Sanitize text by escaping special patterns.
 
@@ -102,15 +113,28 @@ class PromptInjectionDetector:
         rejecting inputs with detected patterns instead.
 
         Args:
-            text: Text to sanitize
+            text: Text to sanitize - can be a string or multimodal content list
 
         Returns:
-            Sanitized text
+            Sanitized text (same type as input)
         """
-        # Basic sanitization - escape special characters
-        sanitized = text
+        # Handle multimodal content (list of dicts)
+        if isinstance(text, list):
+            sanitized_list = []
+            for block in text:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    # Sanitize text blocks
+                    sanitized_text = block.get("text", "")
+                    for pattern in self.patterns:
+                        sanitized_text = pattern.sub("[FILTERED]", sanitized_text)
+                    sanitized_list.append({"type": "text", "text": sanitized_text})
+                else:
+                    # Keep non-text blocks unchanged
+                    sanitized_list.append(block)
+            return sanitized_list
 
-        # Replace detected patterns with warnings
+        # String input
+        sanitized = text
         for pattern in self.patterns:
             sanitized = pattern.sub("[FILTERED]", sanitized)
 
@@ -143,12 +167,12 @@ class InputValidator:
             PromptInjectionDetector(custom_patterns) if check_injection else None
         )
 
-    def validate(self, text: str) -> ValidationResult:
+    def validate(self, text: str | list[dict[str, Any]]) -> ValidationResult:
         """
         Validate input.
 
         Args:
-            text: Input to validate
+            text: Input to validate - can be a string or multimodal content list
 
         Returns:
             ValidationResult
@@ -156,8 +180,16 @@ class InputValidator:
         errors: list[str] = []
         warnings: list[str] = []
 
+        # Extract text content for length check
+        text_content = text
+        if isinstance(text, list):
+            text_content = ""
+            for block in text:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_content += block.get("text", "")
+
         # Length check
-        if len(text) > self.max_length:
+        if isinstance(text_content, str) and len(text_content) > self.max_length:
             errors.append(f"Input exceeds maximum length ({self.max_length})")
 
         # Injection detection
@@ -173,19 +205,22 @@ class InputValidator:
             else text
         )
 
+        # For ValidationResult, convert list back to string representation
+        sanitized_text = sanitized if isinstance(sanitized, str) else str(sanitized)
+
         return ValidationResult(
             valid=len(errors) == 0,
             errors=errors,
             warnings=warnings,
-            sanitized_text=sanitized,
+            sanitized_text=sanitized_text,
         )
 
-    def is_safe(self, text: str) -> bool:
+    def is_safe(self, text: str | list[dict[str, Any]]) -> bool:
         """
         Quick check if input is safe.
 
         Args:
-            text: Input to check
+            text: Input to check - can be a string or multimodal content list
 
         Returns:
             True if input passes all checks

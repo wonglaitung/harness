@@ -83,13 +83,40 @@ public class ProgressiveSkillLoader {
 
         /**
          * Check if text matches this skill's triggers.
+         *
+         * @param text Input text - can be a String or multimodal content List
          */
-        public boolean matches(String text) {
-            if (text == null || text.isEmpty()) {
+        public boolean matches(Object text) {
+            // Handle multimodal content (List of Map)
+            if (text instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<?> contentList = (List<?>) text;
+                StringBuilder textBuilder = new StringBuilder();
+                for (Object block : contentList) {
+                    if (block instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<?, ?> blockMap = (Map<?, ?>) block;
+                        if ("text".equals(blockMap.get("type"))) {
+                            Object textObj = blockMap.get("text");
+                            if (textObj instanceof String) {
+                                textBuilder.append((String) textObj);
+                            }
+                        }
+                    }
+                }
+                text = textBuilder.toString();
+            }
+
+            if (text == null || !(text instanceof String)) {
                 return false;
             }
 
-            String textLower = text.toLowerCase();
+            String textStr = (String) text;
+            if (textStr.isEmpty()) {
+                return false;
+            }
+
+            String textLower = textStr.toLowerCase();
 
             // Keyword matching
             List<String> keywords = triggers.get("keywords");
@@ -106,7 +133,7 @@ public class ProgressiveSkillLoader {
             if (patterns != null) {
                 for (String pattern : patterns) {
                     try {
-                        if (Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(text).find()) {
+                        if (Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(textStr).find()) {
                             return true;
                         }
                     } catch (PatternSyntaxException e) {
@@ -317,12 +344,24 @@ public class ProgressiveSkillLoader {
 
     /**
      * Match skills to user input text.
+     *
+     * @param text Input text - can be a String or multimodal content List
+     * @param skills List of skill metadata
+     * @return List of matching skills
      */
-    public List<SkillMetadata> matchSkills(String text, List<SkillMetadata> skills) {
+    public List<SkillMetadata> matchSkills(Object text, List<SkillMetadata> skills) {
         return matchSkills(text, skills, 3);
     }
 
-    public List<SkillMetadata> matchSkills(String text, List<SkillMetadata> skills, int maxMatches) {
+    /**
+     * Match skills to user input text with max matches limit.
+     *
+     * @param text Input text - can be a String or multimodal content List
+     * @param skills List of skill metadata
+     * @param maxMatches Maximum number of matches to return
+     * @return List of matching skills
+     */
+    public List<SkillMetadata> matchSkills(Object text, List<SkillMetadata> skills, int maxMatches) {
         List<SkillMetadata> matches = new ArrayList<>();
 
         for (SkillMetadata skill : skills) {
