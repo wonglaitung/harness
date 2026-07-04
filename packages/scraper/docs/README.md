@@ -5,7 +5,7 @@
 ## 目录
 
 - [01-overview.md](./01-overview.md) - 项目概述与架构
-- [02-agent-design.md](./02-agent-design.md) - IntelAgent 设计
+- [02-agent-design.md](./02-agent-design.md) - Agent 设计（IntelAgent + GoalAgent）
 - [03-tools.md](./03-tools.md) - 工具系统
 - [04-skills.md](./04-skills.md) - 技能系统
 - [05-cli.md](./05-cli.md) - CLI 使用指南
@@ -16,8 +16,15 @@
 构建一个**通用信息抓取 Agent**，通过技能注入支持不同领域的情报提取：
 
 ```
-IntelAgent (通用) + Skill (领域知识) = 领域情报提取
+Agent (通用) + Skill (领域知识) = 领域情报提取
 ```
+
+### 两种 Agent 模式
+
+| 模式 | Agent | 适用场景 |
+|------|-------|----------|
+| 目标驱动（推荐） | `GoalAgent` | 复杂任务，自主迭代直到目标达成 |
+| 单次执行 | `IntelAgent` | 简单任务，一次性提取 |
 
 ### 与传统爬虫的区别
 
@@ -27,35 +34,45 @@ IntelAgent (通用) + Skill (领域知识) = 领域情报提取
 | 规则过滤 | LLM 智能判断 |
 | 单一领域 | 技能注入多领域 |
 | 无记忆 | MEMORY.md 避免重复 |
+| 无验证 | GoalAgent 自动验证目标达成 |
 
 ## 快速预览
 
 ### 最简使用
 
 ```bash
-# AI 情报抽取（默认）
+# AI 情报抽取（默认，目标驱动）
 harness-scraper
 
-# 股票分析
-harness-scraper --skill stock-analysis
+# 港股异动监控
+harness-scraper --skill hk-stocks-alpha
 
-# 自定义技能
-harness-scraper --skill my-domain
+# 自定义目标
+harness-scraper goal "提取 5 个 MCP 相关项目"
+
+# 单次执行模式
+harness-scraper agent "只关注 Rust 项目"
 ```
 
 ### Python API
 
 ```python
-from harness_scraper import IntelAgent, load_config
+from harness_scraper import GoalAgent, IntelAgent, load_config
+from harness import GoalStatus
 
-# 创建 Agent
-agent = IntelAgent(
-    load_config(),
-    skill="ai-intelligence",  # 领域技能
+# 方式 1：目标驱动（推荐）
+agent = GoalAgent(load_config(), skill="ai-intelligence")
+result = await agent.run_goal(
+    goal="提取 3 个 AI 行业新范式项目",
+    max_iterations=20,
 )
 
-# 运行
-result = await agent.run("提取 AI 行业新范式")
+if result.status == GoalStatus.ACHIEVED:
+    print(f"✅ 目标达成，共 {result.total_iterations} 轮迭代")
+
+# 方式 2：单次执行
+agent = IntelAgent(load_config(), skill="ai-intelligence")
+result = await agent.run("提取 AI 情报")
 ```
 
 ## 设计原则

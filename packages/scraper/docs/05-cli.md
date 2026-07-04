@@ -1,22 +1,38 @@
 # 05 - CLI 使用指南
 
+## 概述
+
+Scraper CLI 提供两种执行模式：
+
+| 命令 | 模式 | 说明 |
+|------|------|------|
+| `goal` | 目标驱动（推荐） | Agent 自主运行直到目标达成 |
+| `agent` | 单次执行 | 一次性运行，适合简单任务 |
+
+**默认行为**：`harness-scraper` 等同于 `harness-scraper goal`
+
 ## 基本命令
 
 ### 运行情报抽取
 
 ```bash
-# AI 情报抽取（默认）
+# AI 情报抽取（默认，目标驱动）
 harness-scraper
 
+# 等同于
+harness-scraper goal
+
 # 指定技能
-harness-scraper --skill stock-analysis
-harness-scraper --skill my-custom-skill
+harness-scraper --skill hk-stocks-alpha
 
 # 详细输出
 harness-scraper -v
 harness-scraper --verbose
 
-# 自定义提示词
+# 自定义目标
+harness-scraper goal "提取 5 个 Rust 生态项目"
+
+# 单次执行模式（旧方式）
 harness-scraper agent "只关注前端框架类项目"
 ```
 
@@ -38,6 +54,59 @@ harness-scraper skills
 ```
 
 ## 命令详解
+
+### goal 命令（推荐）
+
+目标驱动执行，Agent 自主运行直到目标达成。
+
+```bash
+harness-scraper goal [OPTIONS] [GOAL]
+```
+
+**选项**：
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `--skill` | 技能名称 | `ai-intelligence` |
+| `--max-iterations` | 最大迭代次数 | `20` |
+| `--timeout` | 超时时间（秒） | `300` |
+| `-v, --verbose` | 详细输出 | `False` |
+| `GOAL` | 目标描述 | 技能默认目标 |
+
+**示例**：
+
+```bash
+# 默认运行（AI 情报）
+harness-scraper goal
+
+# 港股信号
+harness-scraper goal --skill hk-stocks-alpha
+
+# 自定义目标
+harness-scraper goal "提取 5 个 MCP 相关项目"
+
+# 限制迭代次数
+harness-scraper goal "提取 AI 情报" --max-iterations 15
+
+# 设置超时
+harness-scraper goal "深度分析" --timeout 600
+```
+
+**输出示例**：
+
+```
+🎯 Goal: 提取 AI 行业情报：识别 3 个以上新范式项目
+
+21:03:14 [INFO] Loaded skill: ai-intelligence
+21:03:15 [INFO] Fetching RSS feeds...
+21:03:20 [INFO] Fetching Hacker News...
+21:03:30 [INFO] Saved: output/2026-07-04/project1.md
+
+=== Goal Result ===
+Status: GoalStatus.ACHIEVED
+Iterations: 4
+✅ Goal achieved!
+```
 
 ### agent 命令
 

@@ -1,6 +1,17 @@
-# 02 - IntelAgent 设计
+# 02 - Agent 设计
 
-## 类设计
+## 概述
+
+Scraper 提供两种 Agent 模式：
+
+| Agent | 执行模式 | 适用场景 |
+|-------|----------|----------|
+| **IntelAgent** | 单次执行 | 简单任务，一次性提取 |
+| **GoalAgent** | 目标驱动 | 复杂任务，自主迭代直到目标达成 |
+
+## IntelAgent
+
+单次执行的情报提取 Agent，适合简单任务。
 
 ### IntelAgent 结构
 
@@ -298,6 +309,163 @@ result2 = await agent.run(
 | **复用** | 不重复实现 Agent Loop |
 | **稳定性** | SDK 经过测试验证 |
 | **功能丰富** | Memory、Hooks、Skills 等 |
+
+## GoalAgent（目标驱动执行）
+
+GoalAgent 使用 `run_goal()` 自主执行，直到目标达成。这是 Loop Engineering 范式的应用。
+
+### 与 IntelAgent 的区别
+
+| 特性 | IntelAgent | GoalAgent |
+|------|------------|-----------|
+| 执行模式 | 单次执行 | 循环执行直到目标达成 |
+| 方法 | `run(prompt)` | `run_goal(goal, ...)` |
+| 验证 | 无自动验证 | 内置验证器 + 自定义验证 |
+| 迭代次数 | 固定（max_iterations=15） | 可配置（默认 20） |
+| 适用场景 | 简单任务 | 复杂信息提取 |
+
+### 类设计
+
+```python
+from harness import AgentHarness, GoalStatus
+from harness.loop import GoalConfig, GoalResult
+
+class GoalAgent:
+    """目标驱动的信息提取 Agent"""
+
+    def __init__(
+        self,
+        config: ScraperConfig,
+        skill: str | None = None,
+        memory_path: str | Path | None = None,
+    ):
+        # 初始化 AgentHarness
+        self._agent = AgentHarness(...)
+
+    async def run_goal(
+        self,
+        goal: str,
+        max_iterations: int = 20,
+        timeout_seconds: float = 300.0,
+        custom_verifier: Callable | None = None,
+    ) -> GoalResult:
+        """
+        运行目标驱动执行。
+
+        Args:
+            goal: 目标描述
+            max_iterations: 最大迭代次数
+            timeout_seconds: 超时时间（秒）
+            custom_verifier: 自定义验证函数
+
+        Returns:
+            GoalResult 包含 status、content、total_iterations
+        """
+        config = GoalConfig(
+            description=goal,
+            max_iterations=max_iterations,
+        )
+        return await self._agent.run_goal(
+            config,
+            timeout_seconds=timeout_seconds,
+            custom_verifier=custom_verifier,
+        )
+```
+
+### 使用示例
+
+#### 基本使用
+
+```python
+from harness_scraper.goal_agent import GoalAgent
+from harness_scraper.config import load_config
+
+agent = GoalAgent(load_config(), skill="ai-intelligence")
+
+result = await agent.run_goal(
+    goal="提取 3 个 AI 行业新范式项目",
+    max_iterations=20,
+)
+
+if result.status == GoalStatus.ACHIEVED:
+    print(f"✅ 目标达成，共 {result.total_iterations} 轮迭代")
+else:
+    print(f"❌ 未达成: {result.status}")
+```
+
+#### 自定义验证
+
+```python
+from pathlib import Path
+
+def verify_one_pagers(result):
+    """验证是否生成了至少 3 个 One-Pager"""
+    output_dir = Path("output")
+    md_files = list(output_dir.glob("**/*.md"))
+    # 排除 MEMORY.md
+    one_pagers = [f for f in md_files if f.name != "MEMORY.md"]
+    return len(one_pagers) >= 3
+
+result = await agent.run_goal(
+    goal="提取 AI 情报并保存 One-Pager",
+    custom_verifier=verify_one_pagers,
+)
+```
+
+### 执行流程
+
+```
+用户目标: "提取 3 个 AI 行业新范式项目"
+    ↓
+GoalAgent.run_goal()
+    ↓
+┌─────────────────────────────────────────────┐
+│              Goal Loop                       │
+│                                              │
+│  ┌─────────┐    ┌─────────┐    ┌────────┐  │
+│  │ 迭代 1  │ →  │ 验证    │ →  │ 未达成 │  │
+│  │ 抓取 RSS│    │ 检查结果│    │ 继续   │  │
+│  └─────────┘    └─────────┘    └────────┘  │
+│       ↓                                       │
+│  ┌─────────┐    ┌─────────┐    ┌────────┐  │
+│  │ 迭代 2  │ →  │ 验证    │ →  │ 未达成 │  │
+│  │ 抓取 HN │    │ 检查结果│    │ 继续   │  │
+│  └─────────┘    └─────────┘    └────────┘  │
+│       ↓                                       │
+│  ┌─────────┐    ┌─────────┐    ┌────────┐  │
+│  │ 迭代 3  │ →  │ 验证    │ →  │ 达成!  │  │
+│  │ 保存    │    │ 3 个文件│    │ 退出   │  │
+│  └─────────┘    └─────────┘    └────────┘  │
+└─────────────────────────────────────────────┘
+    ↓
+返回 GoalResult(status=ACHIEVED, total_iterations=3)
+```
+
+### 默认目标
+
+根据技能自动生成默认目标：
+
+| 技能 | 默认目标 |
+|------|----------|
+| `ai-intelligence` | 提取 AI 行业情报：识别 3 个以上新范式项目 |
+| `hk-stocks-alpha` | 提取港股市场信号：识别 3 个以上左侧交易机会 |
+
+### 设计决策
+
+#### 为什么使用 run_goal() 而非 run()？
+
+| 场景 | IntelAgent (run) | GoalAgent (run_goal) |
+|------|------------------|----------------------|
+| 单次抓取 | ✅ 足够 | 过度设计 |
+| 需要多次尝试 | ❌ 需手动重试 | ✅ 自动重试 |
+| 质量验证 | ❌ 无自动验证 | ✅ 内置验证 |
+| 成本控制 | ✅ 固定迭代 | ⚠️ 需设上限 |
+
+#### GoalAgent 适用场景
+
+- **信息质量要求高**：需要验证输出质量
+- **任务复杂**：可能需要多次调整策略
+- **自主性要求**：Agent 自主决定何时完成
 
 ## 下一步
 
