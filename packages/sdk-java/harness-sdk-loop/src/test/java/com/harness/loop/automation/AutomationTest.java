@@ -177,9 +177,14 @@ class AutomationTest {
                 })
                 .build();
 
+        // Add two responses: one for start() which triggers immediately (delay=0),
+        // and one for executeNow()
+        agent.addResponse("Task success!", 1);
         agent.addResponse("Task success!", 1);
 
         automation.start(agent).join();
+        // Small delay to let the scheduled execution complete
+        Thread.sleep(100);
         GoalResult result = automation.executeNow().join();
 
         // Check that the verifier was called
