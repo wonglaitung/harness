@@ -187,9 +187,17 @@ public class SkillRegistry {
 
     /**
      * Register a skill programmatically.
+     *
+     * If the skill's metadata has active=true, it will be automatically activated.
      */
     public void registerSkill(Skill skill) {
         skills.put(skill.name(), skill);
+
+        // Auto-activate if skill metadata indicates it should be active
+        if (skill.metadata() != null && skill.metadata().active()) {
+            activeSkillNames.add(skill.name());
+            logger.debug("Auto-activated skill: {}", skill.name());
+        }
     }
 
     /**
