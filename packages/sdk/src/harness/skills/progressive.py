@@ -70,8 +70,25 @@ class SkillMetadata:
         """Format as a list item for skill selection."""
         return f"- {self.name}: {self.description}"
 
-    def matches(self, text: str) -> bool:
-        """Check if text matches this skill's triggers."""
+    def matches(self, text: str | list) -> bool:
+        """Check if text matches this skill's triggers.
+
+        Args:
+            text: Can be a string or a multimodal content list.
+                  For multimodal, only the text blocks are checked.
+        """
+        # Handle multimodal content (list of dicts)
+        if isinstance(text, list):
+            # Extract text from multimodal content
+            text_content = ""
+            for block in text:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_content += block.get("text", "")
+            text = text_content
+
+        if not text or not isinstance(text, str):
+            return False
+
         keywords = self.triggers.get("keywords", [])
         patterns = self.triggers.get("patterns", [])
 
@@ -248,7 +265,7 @@ class ProgressiveSkillLoader:
 
     def match_skills(
         self,
-        text: str,
+        text: str | list,
         skills: list[SkillMetadata],
         max_matches: int = 3,
     ) -> list[SkillMetadata]:
@@ -256,7 +273,7 @@ class ProgressiveSkillLoader:
         Match skills to user input text.
 
         Args:
-            text: User input text
+            text: User input - can be a string or multimodal content list
             skills: List of skill metadata
             max_matches: Maximum number of matches to return
 
