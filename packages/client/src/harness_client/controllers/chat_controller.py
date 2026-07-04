@@ -359,6 +359,7 @@ class ChatController:
         if not self.agent:
             logger.info("Agent not initialized, initializing now...")
             await self.initialize()
+            logger.info(f"initialize() completed, agent={self.agent is not None}")
 
         self._is_running = True
 
@@ -417,7 +418,7 @@ class ChatController:
                 prompt_text = message
 
             # Log matching skills (only check text portion)
-            if prompt_text:
+            if prompt_text and self.agent:
                 matching_skills = self.agent.get_matching_skills(prompt_text)
                 if matching_skills:
                     logger.info(f"Matching skills: {[s.name for s in matching_skills]}")
