@@ -242,12 +242,59 @@ class InputValidator:
         check_injection: bool = True,          # 是否检查提示注入
         custom_patterns: list[str] | None = None,  # 自定义注入模式
     )
-    
-    def validate(self, text: str) -> ValidationResult:
-        """验证输入文本，返回验证结果"""
-        
-    def is_safe(self, text: str) -> bool:
+
+    def validate(self, text: str | list[dict[str, Any]]) -> ValidationResult:
+        """
+        验证输入文本，返回验证结果
+
+        Args:
+            text: 输入文本或多模态内容列表
+
+        Returns:
+            ValidationResult
+        """
+
+    def is_safe(self, text: str | list[dict[str, Any]]) -> bool:
         """快速检查输入是否安全"""
+```
+
+### 多模态内容支持
+
+`InputValidator` 和 `PromptInjectionDetector` 支持处理多模态内容（图片 + 文本）：
+
+```python
+# 纯文本验证
+result = validator.validate("你好，请帮我写代码")
+
+# 多模态内容验证
+multimodal_content = [
+    {"type": "text", "text": "请分析这张图片"},
+    {"type": "image", "source": {...}}
+]
+result = validator.validate(multimodal_content)
+```
+
+**处理逻辑**：
+
+1. 如果输入是字符串，直接验证
+2. 如果输入是列表（多模态内容），提取所有 `type: text` 块进行验证
+3. 图片和文档块被忽略（不包含可注入文本）
+
+```python
+# PromptInjectionDetector 内部实现
+def detect(self, text: str | list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    # Handle multimodal content (list of dicts)
+    if isinstance(text, list):
+        text_content = ""
+        for block in text:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_content += block.get("text", "")
+        text = text_content
+
+    if not text or not isinstance(text, str):
+        return True, []  # Safe if no text content
+
+    # 继续检测注入模式...
 ```
 
 ### ValidationResult

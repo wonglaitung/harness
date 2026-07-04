@@ -290,6 +290,251 @@ class SkillCompleter(QCompleter):
         self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
 ```
 
+### 附件上传组件
+
+支持上传图片和文档，发送多模态消息。
+
+#### 支持的文件类型
+
+| 类型 | 扩展名 | 大小限制 |
+|------|--------|----------|
+| 图片 | PNG, JPEG, GIF, WebP | ≤ 10MB |
+| 文档 | PDF, TXT | ≤ 10MB |
+
+#### 组件结构
+
+```
+ChatPanel
+├── AttachmentPreview (附件预览区)
+│   ├── ImageThumbnail (图片缩略图)
+│   │   ├── QPixmap (缩略图)
+│   │   └── RemoveButton (删除按钮)
+│   └── DocumentIcon (文档图标)
+│       ├── QPainter 绘制的图标
+│       └── RemoveButton (删除按钮)
+└── AttachmentButton (附件按钮，位于输入框内)
+    └── FileDialog (文件选择对话框)
+```
+
+#### 附件预览
+
+附件预览区显示已选择的文件，支持移除操作：
+
+```python
+class AttachmentPreview(QWidget):
+    """附件预览区，显示已选择的图片和文档"""
+
+    remove_requested = pyqtSignal(str)  # file_path
+
+    def add_image(self, file_path: str, thumbnail: QPixmap):
+        """添加图片预览"""
+        # 创建缩略图控件
+        thumb = ImageThumbnail(file_path, thumbnail)
+        thumb.remove_clicked.connect(lambda: self.remove_requested.emit(file_path))
+        self._layout.addWidget(thumb)
+
+    def add_document(self, file_path: str, doc_type: str):
+        """添加文档预览"""
+        # 创建文档图标控件
+        icon = DocumentIcon(file_path, doc_type)
+        icon.remove_clicked.connect(lambda: self.remove_requested.emit(file_path))
+        self._layout.addWidget(icon)
+
+    def clear(self):
+        """清空所有预览"""
+        for i in reversed(range(self._layout.count())):
+            widget = self._layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+```
+
+#### 图片缩略图
+
+使用 QPainter 绘制矢量图标，避免模糊问题：
+
+```python
+class ImageThumbnail(QWidget):
+    """图片缩略图，带删除按钮"""
+
+    remove_clicked = pyqtSignal()
+
+    def __init__(self, file_path: str, thumbnail: QPixmap, parent=None):
+        super().__init__(parent)
+        self._file_path = file_path
+        self._thumbnail = thumbnail
+        self.setFixedSize(80, 80)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 绘制圆角背景
+        theme = get_theme()
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.PANEL)))
+        painter.drawRoundedRect(self.rect(), 8, 8)
+
+        # 绘制缩略图
+        scaled = self._thumbnail.scaled(
+            70, 70,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        x = (self.width() - scaled.width()) // 2
+        y = (self.height() - scaled.height()) // 2
+        painter.drawPixmap(x, y, scaled)
+
+        # 绘制删除按钮（右上角）
+        self._draw_remove_button(painter)
+
+    def _draw_remove_button(self, painter):
+        """绘制删除按钮"""
+        # 红色圆形背景
+        painter.setBrush(QBrush(QColor("#E74C3C")))
+        painter.drawEllipse(60, 4, 16, 16)
+
+        # 白色 X 图标
+        painter.setPen(QPen(QColor("#FFFFFF"), 2))
+        painter.drawLine(64, 8, 72, 16)
+        painter.drawLine(72, 8, 64, 16)
+```
+
+#### 文档图标
+
+使用 QPainter 绘制矢量文档图标：
+
+```python
+class DocumentIcon(QWidget):
+    """文档图标，使用 QPainter 绘制"""
+
+    remove_clicked = pyqtSignal()
+
+    def __init__(self, file_path: str, doc_type: str, parent=None):
+        super().__init__(parent)
+        self._file_path = file_path
+        self._doc_type = doc_type  # "pdf" or "txt"
+        self.setFixedSize(80, 80)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        theme = get_theme()
+
+        # 绘制文档背景
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.PANEL)))
+        painter.drawRoundedRect(10, 5, 60, 70, 4, 4)
+
+        # 绘制折角效果
+        painter.setBrush(QBrush(QColor(theme.BORDER)))
+        fold = [QPointF(55, 5), QPointF(70, 20), QPointF(55, 20)]
+        painter.drawPolygon(QPolygonF(fold))
+
+        # 根据类型绘制图标
+        if self._doc_type == "pdf":
+            painter.setPen(QPen(QColor("#E74C3C"), 2))
+            painter.drawText(25, 45, "PDF")
+        else:
+            painter.setPen(QPen(QColor(theme.TEXT), 2))
+            painter.drawText(30, 45, "TXT")
+
+        # 绘制删除按钮
+        self._draw_remove_button(painter)
+```
+
+#### 文件选择
+
+通过文件对话框选择文件：
+
+```python
+def _show_file_dialog(self):
+    """显示文件选择对话框"""
+    dialog = QFileDialog(self)
+    dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+    dialog.setNameFilter(
+        "支持的文件 (*.png *.jpg *.jpeg *.gif *.webp *.pdf *.txt)"
+    )
+
+    if dialog.exec() == QFileDialog.DialogCode.Accepted:
+        files = dialog.selectedFiles()
+        for file_path in files:
+            self._add_attachment(file_path)
+
+def _add_attachment(self, file_path: str):
+    """添加附件到预览区"""
+    # 检查文件大小
+    size = os.path.getsize(file_path)
+    if size > 10 * 1024 * 1024:  # 10MB
+        self._show_error(f"文件过大: {file_path}")
+        return
+
+    # 根据类型添加预览
+    ext = Path(file_path).suffix.lower()
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        thumbnail = self._create_thumbnail(file_path)
+        self._preview.add_image(file_path, thumbnail)
+    elif ext in (".pdf", ".txt"):
+        self._preview.add_document(file_path, ext[1:])
+```
+
+#### 发送多模态消息
+
+附件与文本一起发送：
+
+```python
+def _send_message(self):
+    """发送消息（可能包含附件）"""
+    text = self._input.text().strip()
+    attachments = self._preview.get_attachments()
+
+    if not text and not attachments:
+        return
+
+    # 构建多模态消息
+    if attachments:
+        content = self._build_multimodal_content(text, attachments)
+    else:
+        content = text
+
+    # 发送到控制器
+    self.message_submitted.emit(content)
+
+    # 清空输入
+    self._input.clear()
+    self._preview.clear()
+
+def _build_multimodal_content(self, text: str, attachments: list) -> list[dict]:
+    """构建多模态消息内容"""
+    content = []
+
+    # 添加文本
+    if text:
+        content.append({"type": "text", "text": text})
+
+    # 添加附件
+    for attachment in attachments:
+        if attachment["type"] == "image":
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": attachment["media_type"],
+                    "data": attachment["base64_data"],
+                }
+            })
+        elif attachment["type"] == "document":
+            content.append({
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": attachment["media_type"],
+                    "data": attachment["base64_data"],
+                }
+            })
+
+    return content
+```
+
 ## 右侧面板 (RightPanel)
 
 右侧面板是可折叠的多功能面板，包含四个区块。

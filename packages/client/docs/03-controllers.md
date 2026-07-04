@@ -121,19 +121,19 @@ async def initialize(self, mcp_tools: list = None):
 async def send_message(self, message: str) -> AsyncIterator[str]:
     """
     发送消息并返回流式响应。
-    
+
     Args:
-        message: 用户消息
-        
+        message: 用户消息（文本或多模态内容）
+
     Yields:
         响应文本块
     """
     if not self.agent:
         await self.initialize()
-    
+
     # 先缓存用户消息
     self.session_manager.add_message_to_current("user", message)
-    
+
     try:
         # 设置进度回调
         def on_progress(event: ProgressEvent):
@@ -141,21 +141,101 @@ async def send_message(self, message: str) -> AsyncIterator[str]:
                 self._on_tool_call(event.data["tool"], event.data["arguments"])
             elif event.type == ProgressEventType.TOOL_RESULT:
                 self._on_tool_result(event.data["tool"], event.data["result"], event.data["success"])
-        
-        # 调用 Agent
+
+        # 调用 Agent（支持多模态消息）
         result = await self.agent.run(
             message,
             session_id=self.session_manager.current_id,
             on_progress=on_progress,
         )
-        
+
         # 缓存助手响应
         self.session_manager.add_message_to_current("assistant", result.content)
-        
+
         yield result.content
-        
+
     except Exception as e:
         yield f"❌ 错误: {type(e).__name__}: {str(e)}"
+```
+
+#### 多模态消息处理
+
+`send_message` 支持处理 `str | list[dict]` 类型的消息，用于发送图片和文档：
+
+```python
+# 纯文本消息
+await chat_controller.send_message("你好")
+
+# 多模态消息（包含图片）
+multimodal_content = [
+    {"type": "text", "text": "请分析这张图片"},
+    {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "<base64_encoded_image>",
+        }
+    }
+]
+await chat_controller.send_message(multimodal_content)
+
+# 多模态消息（包含文档）
+document_content = [
+    {"type": "text", "text": "请总结这个文档"},
+    {
+        "type": "document",
+        "source": {
+            "type": "base64",
+            "media_type": "application/pdf",
+            "data": "<base64_encoded_pdf>",
+        }
+    }
+]
+await chat_controller.send_message(document_content)
+```
+
+**类型签名**：
+
+```python
+from typing import Union
+
+MessageContent = Union[
+    str,                                    # 纯文本
+    list[dict[str, Any]]                   # 多模态内容
+]
+```
+
+**消息缓存**：
+
+多模态消息在缓存时会转换为可读的字符串表示：
+
+```python
+def _content_to_cache_key(self, content: str | list[dict]) -> str:
+    """将消息内容转换为缓存键"""
+    if isinstance(content, str):
+        return content
+
+    # 多模态内容：提取文本 + 文件计数
+    text_parts = []
+    image_count = 0
+    doc_count = 0
+
+    for block in content:
+        if block.get("type") == "text":
+            text_parts.append(block.get("text", ""))
+        elif block.get("type") == "image":
+            image_count += 1
+        elif block.get("type") == "document":
+            doc_count += 1
+
+    result = " ".join(text_parts)
+    if image_count:
+        result += f" [图片x{image_count}]"
+    if doc_count:
+        result += f" [文档x{doc_count}]"
+
+    return result
 ```
 
 ### 回调机制
