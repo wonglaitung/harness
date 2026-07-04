@@ -77,6 +77,7 @@ Agent = Model + Harness
 
 ```python
 from harness import AgentHarness, ReadTool, GlobTool
+from harness.tools.browser import get_browser_tools
 
 # 创建 Harness 实例
 agent = AgentHarness(
@@ -91,6 +92,12 @@ response = agent.run("分析当前目录的代码结构")
 # 流式调用
 async for chunk in agent.stream("帮我重构这个函数"):
     print(chunk.content, end="")
+
+# 浏览器自动化（内网支持）
+browser_agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=get_browser_tools(),  # 7 个浏览器工具
+)
 
 # 目标驱动执行（Loop Engineering）
 from harness.loop import GoalStatus

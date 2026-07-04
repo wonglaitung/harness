@@ -1189,6 +1189,99 @@ Layer 1 使用 `PatternRecognizer`（正则表达式 + 上下文关键词）检�
 - 添加 ConfirmationHook：需要用户确认的场景
 - 添加 Guardrails (Layer 2)：高安全要求的场景
 
+## 浏览器工具安全注意事项
+
+浏览器自动化工具具有特殊的安全考虑，需要在便利性和安全性之间取得平衡。
+
+### 危险操作确认
+
+浏览器工具中的以下操作建议触发用户确认：
+
+| 工具 | 参数 | 说明 |
+|------|------|------|
+| `browser_navigate` | URL 指向外部站点 | 导航到非内网地址 |
+| `browser_type` | 输入密码字段 | 敏感信息输入 |
+| `browser_click` | 表单提交按钮 | 可能触发不可逆操作 |
+
+### 配置 ConfirmationHook
+
+```python
+from harness import AgentHarness, ConfirmationHook, ConfirmationResult
+from harness.tools.browser import get_browser_tools
+
+async def browser_confirm_handler(tool_name: str, args: dict) -> ConfirmationResult:
+    """浏览器操作确认回调"""
+    if tool_name == "browser_navigate":
+        url = args.get("url", "")
+        # 内网地址不确认
+        if url.startswith(("http://localhost", "http://192.168", "http://10.")):
+            return ConfirmationResult(confirmed=True, trust_session=False)
+        # 外网地址需要确认
+        return await show_confirm_dialog(f"即将访问外部站点: {url}")
+
+    elif tool_name == "browser_type":
+        selector = args.get("selector", "")
+        if "password" in selector.lower():
+            return await show_confirm_dialog("即将输入密码字段")
+
+    return ConfirmationResult(confirmed=True, trust_session=False)
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=get_browser_tools(),
+)
+agent.add_hook(ConfirmationHook(on_confirm=browser_confirm_handler))
+```
+
+### 内网环境配置
+
+内网环境推荐使用系统浏览器，避免下载 Playwright 浏览器：
+
+```python
+from harness.tools.browser import BrowserManager
+
+# 自动检测系统浏览器（Edge > Chrome > Chromium）
+BrowserManager.use_system_browser()
+
+# 或手动指定
+BrowserManager.configure(
+    browser_type="msedge",  # Windows 企业环境推荐
+    headless=True,
+)
+```
+
+### 截图审计
+
+启用自动截图可以审计所有浏览器操作：
+
+```python
+BrowserManager.configure(auto_screenshot=True)
+
+# 每个操作后自动保存截图
+# 路径: /tmp/browser_xxx/step_001_navigate_123456.png
+```
+
+### 浏览器生命周期
+
+建议在会话结束时关闭浏览器：
+
+```python
+from harness.tools.browser import BrowserCloseTool
+
+# 在会话结束时
+async def on_session_end():
+    close_tool = BrowserCloseTool()
+    await close_tool.execute({}, context)
+```
+
+### 安全最佳实践
+
+1. **使用 headless 模式**：避免意外弹出浏览器窗口
+2. **限制导航范围**：只允许访问特定域名
+3. **启用截图审计**：记录所有操作用于事后分析
+4. **及时关闭浏览器**：避免资源泄漏
+5. **内网使用系统浏览器**：无需下载，符合企业安全策略
+
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop

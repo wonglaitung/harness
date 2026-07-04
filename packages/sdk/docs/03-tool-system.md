@@ -25,10 +25,14 @@
 │  └─────────────────────────────────────────┘    │
 │                                                  │
 │  ┌─────────────────────────────────────────┐    │
-│  │          Built-in Tools (9)              │    │
+│  │          Built-in Tools (16)             │    │
 │  │  Read │ Write │ Edit │ Glob │ Grep      │    │
 │  │  Bash │ WebSearch │ WebFetch            │    │
 │  │  WebToMarkdown                           │    │
+│  │  BrowserNavigate │ BrowserClick         │    │
+│  │  BrowserType │ BrowserExtract           │    │
+│  │  BrowserScreenshot │ BrowserWait        │    │
+│  │  BrowserClose                            │    │
 │  └─────────────────────────────────────────┘    │
 │                                                  │
 │  ┌─────────────────────────────────────────┐    │
@@ -246,6 +250,243 @@ class WebToMarkdownTool(Tool):
     #   - 支持 BeautifulSoup 解析
 ```
 
+## 浏览器自动化工具
+
+基于 Playwright 的确定性浏览器自动化工具集，专为需要精确控制的场景设计（如金融/银行操作）。
+
+### 特性
+
+- **内网/离线支持**: 使用系统 Edge/Chrome，无需下载 Playwright 浏览器
+- **XPath + CSS 选择器**: 支持两种选择器语法
+- **自动等待**: 工具自动等待元素可见/可点击
+- **重试机制**: 点击操作支持自动重试
+- **截图审计**: 可选的每步操作自动截图
+
+### BrowserManager 单例管理器
+
+管理 Playwright 浏览器实例的生命周期，确保所有工具共享同一浏览器。
+
+```python
+from harness.tools.browser import BrowserManager
+
+# 配置浏览器
+BrowserManager.configure(
+    headless=True,
+    browser_type="msedge",  # 使用系统 Edge（内网友好）
+    auto_screenshot=True,
+)
+
+# 检测系统可用浏览器
+browser = BrowserManager.detect_available_browser()
+# 返回: "msedge" | "chrome" | "chromium" | None
+
+# 一键配置系统浏览器（内网环境推荐）
+if BrowserManager.use_system_browser():
+    print("已配置系统浏览器，无需下载")
+
+# 获取页面实例
+page = await BrowserManager.get_page()
+
+# 关闭浏览器
+await BrowserManager.close()
+```
+
+#### 浏览器类型
+
+| 类型 | 说明 | 需要下载 |
+|------|------|----------|
+| `chromium` | Playwright 内置 Chromium | 是 (`playwright install`) |
+| `firefox` | Playwright 内置 Firefox | 是 |
+| `webkit` | Playwright 内置 WebKit | 是 |
+| `msedge` | 系统 Microsoft Edge | **否**（内网推荐） |
+| `chrome` | 系统 Google Chrome | **否** |
+
+### BrowserNavigateTool
+
+导航到 URL 并等待页面加载。
+
+```python
+from harness.tools.browser import BrowserNavigateTool
+
+tool = BrowserNavigateTool()
+
+result = await tool.execute({
+    "url": "https://example.com",
+    "wait_until": "load",  # load | domcontentloaded | networkidle
+    "timeout": 30000,
+}, context)
+```
+
+### BrowserClickTool
+
+点击页面元素，支持自动等待和重试。
+
+```python
+from harness.tools.browser import BrowserClickTool
+
+tool = BrowserClickTool()
+
+# CSS 选择器
+result = await tool.execute({
+    "selector": "#submit-btn",
+    "timeout": 10000,
+    "retry_count": 2,
+}, context)
+
+# XPath 选择器
+result = await tool.execute({
+    "selector": "//button[text()='Submit']",
+}, context)
+```
+
+### BrowserTypeTool
+
+在输入框中输入文本。
+
+```python
+from harness.tools.browser import BrowserTypeTool
+
+tool = BrowserTypeTool()
+
+result = await tool.execute({
+    "selector": "#username",
+    "text": "myusername",
+    "clear_first": True,  # 先清空
+    "delay": 50,  # 每个字符延迟（毫秒）
+}, context)
+```
+
+### BrowserExtractTool
+
+提取页面数据（文本或属性）。
+
+```python
+from harness.tools.browser import BrowserExtractTool
+
+tool = BrowserExtractTool()
+
+# 提取文本
+result = await tool.execute({
+    "selector": ".article-content",
+}, context)
+
+# 提取属性
+result = await tool.execute({
+    "selector": "a.download-link",
+    "attribute": "href",
+}, context)
+
+# 提取多个元素
+result = await tool.execute({
+    "selector": "li.item",
+    "multiple": True,
+}, context)
+```
+
+### BrowserScreenshotTool
+
+截取页面或元素的截图。
+
+```python
+from harness.tools.browser import BrowserScreenshotTool
+
+tool = BrowserScreenshotTool()
+
+# 整页截图
+result = await tool.execute({
+    "full_page": True,
+}, context)
+
+# 元素截图
+result = await tool.execute({
+    "selector": "#chart",
+}, context)
+
+# 返回 base64
+result = await tool.execute({
+    "return_base64": True,
+}, context)
+```
+
+### BrowserWaitTool
+
+等待页面条件（元素、URL、超时）。
+
+```python
+from harness.tools.browser import BrowserWaitTool
+
+tool = BrowserWaitTool()
+
+# 等待元素出现
+result = await tool.execute({
+    "wait_type": "selector",
+    "selector": "#loading",
+    "state": "hidden",  # visible | hidden | attached | detached
+}, context)
+
+# 等待 URL 变化
+result = await tool.execute({
+    "wait_type": "url",
+    "url_pattern": "**/success",
+}, context)
+
+# 等待超时
+result = await tool.execute({
+    "wait_type": "timeout",
+    "timeout_ms": 1000,
+}, context)
+```
+
+### BrowserCloseTool
+
+关闭浏览器实例。
+
+```python
+from harness.tools.browser import BrowserCloseTool
+
+tool = BrowserCloseTool()
+result = await tool.execute({}, context)
+```
+
+### 快速获取所有浏览器工具
+
+```python
+from harness.tools.browser import get_browser_tools
+
+# 获取所有 7 个浏览器工具
+tools = get_browser_tools()
+
+# 直接用于 AgentHarness
+from harness import AgentHarness
+
+agent = AgentHarness(
+    model="claude-sonnet-4-6",
+    tools=get_browser_tools(),
+)
+
+result = await agent.run("""
+1. 打开 https://example.com/login
+2. 输入用户名和密码
+3. 点击登录
+4. 截取结果页面
+""")
+```
+
+### 内网环境部署
+
+```python
+# 方式 1：自动检测系统浏览器
+BrowserManager.use_system_browser()
+
+# 方式 2：手动指定 Edge
+BrowserManager.configure(browser_type="msedge")
+
+# 方式 3：手动指定 Chrome
+BrowserManager.configure(browser_type="chrome")
+```
+
+**注意**: 使用系统浏览器需要安装 Playwright 库，但不需要 `playwright install` 下载浏览器。
+
 ## ToolExecutor
 
 ToolExecutor 负责工具的调度和执行，支持串行和并行模式。
@@ -427,4 +668,5 @@ await agent.disconnect_mcp_server("github")
 
 - [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
 - [05-skills-system.md](./05-skills-system.md) - 了解技能系统
+- [08-security.md](./08-security.md) - 浏览器工具安全注意事项
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
