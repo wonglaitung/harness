@@ -80,7 +80,30 @@
 
 ## 2026-07-04 提取
 
+## 2026-07-05 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股科网股走强+渣打超配科技 — 左侧信号与右侧共振升级**
+
+### 港股分析
+- **港股黄金板块-美债高位避险左侧布局窗口**
+
+### 港股分析
+- **港股机器人板块 — 政策松绑+产业催化左侧信号强化**
+
+### 新范式/工具
+- **Chrome DevTools MCP — DevTools-as-Agent-Tool 范式** - https://github.com/ChromeDevTools/chrome-devtools-mcp
+
+### 新范式/工具
+- **code-review-graph — 代码知识图谱+MCP精准上下文范式** - https://github.com/tirth8205/code-review-graph
+
+### 新范式/工具
+- **Jalapeño — LLM原生推理芯片范式** - https://openai.com/index/openai-broadcom-jalapeno-inference-chip
+
+### 新范式/工具
+- **Leanstral 1.5 — Agentic Proof Engineering 形式化证明工程新范式** - https://mistral.ai/news/leanstral-1-5/
 
 ### 新范式/工具
 - **ctx — Agent History Search 新范式** - https://news.ycombinator.com/show
