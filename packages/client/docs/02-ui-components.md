@@ -228,10 +228,13 @@ ChatPanel
 │       ├── AssistantMessage
 │       ├── ToolCallMessage
 │       └── ...
-├── InputArea (输入框)
-│   ├── QLineEdit (文本输入)
-│   └── SendButton
-└── SkillCompleter (技能自动补全)
+├── InputBar (输入栏，垂直布局)
+│   ├── AttachmentPreview (附件预览区)
+│   ├── InputRow (输入行)
+│   │   ├── AttachmentButton (附件按钮)
+│   │   ├── QLineEdit (文本输入)
+│   │   └── SendButton (发送按钮)
+│   └── SkillCompleter (技能自动补全)
 ```
 
 ### 消息渲染
@@ -305,16 +308,22 @@ class SkillCompleter(QCompleter):
 
 ```
 ChatPanel
-├── AttachmentPreview (附件预览区)
-│   ├── ImageThumbnail (图片缩略图)
-│   │   ├── QPixmap (缩略图)
-│   │   └── RemoveButton (删除按钮)
-│   └── DocumentIcon (文档图标)
-│       ├── QPainter 绘制的图标
-│       └── RemoveButton (删除按钮)
-└── AttachmentButton (附件按钮，位于输入框内)
-    └── FileDialog (文件选择对话框)
+└── InputBar (输入栏，垂直布局)
+    ├── AttachmentPreview (附件预览区，内嵌于输入栏)
+    │   ├── ImageThumbnail (图片缩略图，水平排列)
+    │   │   ├── QPixmap (缩略图，32x32)
+    │   │   └── RemoveButton (删除按钮)
+    │   └── DocumentCard (文档卡片，水平排列)
+    │       ├── QPainter 绘制的图标
+    │       ├── 文件名标签
+    │       └── RemoveButton (删除按钮)
+    └── InputRow (输入行，水平布局)
+        ├── AttachmentButton (附件按钮)
+        ├── QLineEdit (文本输入)
+        └── SendButton (发送按钮)
 ```
+
+**注意**：附件预览区已集成到输入栏内部，采用水平紧凑布局（高度 32px），提供更流畅的用户体验。
 
 #### 附件预览
 
