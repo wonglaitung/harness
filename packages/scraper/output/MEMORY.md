@@ -82,6 +82,15 @@
 
 ## 注意事项
 
+### 新范式/工具
+- **ctx — Agent History Search 新范式** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Orca — Agent Development Environment (ADE) 新范式** - https://github.com/stablyai/orca
+
+### 新范式/工具
+- **mcpsnoop — MCP 协议可观测性新范式** - https://news.ycombinator.com/show
+
 ### 港股分析
 - **港股半导体板块走低-AI硬件暴跌延续-左侧风险警示**
 
