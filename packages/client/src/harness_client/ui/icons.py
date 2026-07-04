@@ -451,3 +451,66 @@ def create_document_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> Q
 
     painter.end()
     return QIcon(pixmap)
+
+
+def create_attachment_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a paperclip attachment icon (outline style)."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    # Paperclip shape: simplified curved "C" shape with hook
+    cx, cy = size / 2, size / 2
+    r_outer = size * 0.35
+    r_inner = size * 0.18
+
+    # Draw a simple paperclip shape
+    # Main curved body (left side curves down, right side curves up)
+    margin = size * 0.15
+    top_y = margin
+    bottom_y = size - margin
+    left_x = margin + size * 0.1
+    right_x = size - margin - size * 0.1
+
+    # Draw the paperclip as a path
+    path = QPainterPath()
+
+    # Start at top-right, curve around clockwise
+    path.moveTo(right_x, top_y + size * 0.15)
+
+    # Right side going down
+    path.cubicTo(
+        right_x + size * 0.05, top_y + size * 0.3,
+        right_x + size * 0.05, bottom_y - size * 0.3,
+        right_x - size * 0.02, bottom_y - size * 0.1
+    )
+
+    # Bottom curve
+    path.quadTo(
+        cx, bottom_y + size * 0.05,
+        left_x, bottom_y - size * 0.15
+    )
+
+    # Left side going up (inner curve)
+    path.cubicTo(
+        left_x - size * 0.05, bottom_y - size * 0.35,
+        left_x - size * 0.05, top_y + size * 0.35,
+        left_x + size * 0.02, top_y + size * 0.15
+    )
+
+    # Top curve connecting back
+    path.quadTo(
+        cx - size * 0.05, top_y,
+        right_x - size * 0.05, top_y + size * 0.1
+    )
+
+    painter.drawPath(path)
+
+    painter.end()
+    return QIcon(pixmap)

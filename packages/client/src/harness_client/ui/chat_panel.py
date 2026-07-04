@@ -37,7 +37,7 @@ from harness_client.ui.skill_completer import SkillCompleter
 from harness_client.ui.file_completer import FileCompleter
 from harness_client.ui.toggle_switch import ModeToggleSwitch
 from harness_client.ui.attachment_preview import AttachmentPreview
-from harness_client.ui.icons import create_image_icon, create_document_icon
+from harness_client.ui.icons import create_attachment_icon
 
 
 # Cache for avatar base64 data
@@ -1069,15 +1069,15 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        # Attachment buttons (left side)
-        self.attach_image_btn = QPushButton()
-        self.attach_image_btn.setIcon(create_image_icon(16, QColor(theme.TEXT_SUBTLE)))
-        self.attach_image_btn.setIconSize(QSize(16, 16))
-        self.attach_image_btn.setFixedSize(28, 28)
-        self.attach_image_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.attach_image_btn.setToolTip("上传图片 (PNG, JPEG, GIF, WebP)")
-        self.attach_image_btn.clicked.connect(self._on_attach_image)
-        self.attach_image_btn.setStyleSheet(f"""
+        # Attachment button (single unified button for all file types)
+        self.attach_btn = QPushButton()
+        self.attach_btn.setIcon(create_attachment_icon(16, QColor(theme.TEXT_SUBTLE)))
+        self.attach_btn.setIconSize(QSize(16, 16))
+        self.attach_btn.setFixedSize(28, 28)
+        self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_btn.setToolTip("添加附件 (图片、PDF、TXT)")
+        self.attach_btn.clicked.connect(self._on_attach_file)
+        self.attach_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 border: none;
@@ -1088,26 +1088,7 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        self.attach_doc_btn = QPushButton()
-        self.attach_doc_btn.setIcon(create_document_icon(16, QColor(theme.TEXT_SUBTLE)))
-        self.attach_doc_btn.setIconSize(QSize(16, 16))
-        self.attach_doc_btn.setFixedSize(28, 28)
-        self.attach_doc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.attach_doc_btn.setToolTip("上传文档 (PDF, TXT)")
-        self.attach_doc_btn.clicked.connect(self._on_attach_document)
-        self.attach_doc_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                border-radius: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-
-        input_layout.addWidget(self.attach_image_btn)
-        input_layout.addWidget(self.attach_doc_btn)
+        input_layout.addWidget(self.attach_btn)
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.token_label)
         input_layout.addWidget(self.stop_btn)
@@ -1492,33 +1473,19 @@ class ChatPanel(QWidget):
         self.file_completer.set_work_dir(path)
         self._work_dir = path
 
-    def _on_attach_image(self):
-        """Handle image attachment button click."""
+    def _on_attach_file(self):
+        """Handle attachment button click - unified file picker for all types."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择图片",
+            "选择附件",
             str(self._work_dir),
-            "图片文件 (*.png *.jpg *.jpeg *.gif *.webp);;所有文件 (*)"
+            "支持的文件 (*.png *.jpg *.jpeg *.gif *.webp *.pdf *.txt *.md);;图片 (*.png *.jpg *.jpeg *.gif *.webp);;文档 (*.pdf *.txt *.md);;所有文件 (*)"
         )
         if file_path:
             if self._attachment_preview.add_attachment(file_path):
-                logger.info(f"Added image attachment: {file_path}")
+                logger.info(f"Added attachment: {file_path}")
             else:
-                logger.warning(f"Failed to add image attachment: {file_path}")
-
-    def _on_attach_document(self):
-        """Handle document attachment button click."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择文档",
-            str(self._work_dir),
-            "文档文件 (*.pdf *.txt);;所有文件 (*)"
-        )
-        if file_path:
-            if self._attachment_preview.add_attachment(file_path):
-                logger.info(f"Added document attachment: {file_path}")
-            else:
-                logger.warning(f"Failed to add document attachment: {file_path}")
+                logger.warning(f"Failed to add attachment: {file_path}")
 
     def _on_attachments_changed(self):
         """Handle attachment list changes."""
