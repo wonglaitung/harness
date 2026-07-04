@@ -24,6 +24,7 @@ dependencies {
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("com.microsoft.playwright:playwright:1.40.0")
 }
 
 tasks.test {

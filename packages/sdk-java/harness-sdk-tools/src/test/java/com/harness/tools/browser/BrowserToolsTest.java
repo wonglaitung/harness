@@ -144,7 +144,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testNavigateAndClose() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
@@ -171,7 +172,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testClickAndType() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
@@ -211,7 +213,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testExtract() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
@@ -252,7 +255,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testScreenshot() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
@@ -278,7 +282,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testWait() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
@@ -316,7 +321,8 @@ class BrowserToolsTest {
     @Test
     @EnabledIf("isPlaywrightAvailable")
     void testXPathSelectors() throws Exception {
-        BrowserManager.useSystemBrowser();
+        // Use Playwright's bundled Chromium (works in CI/WSL environments)
+        BrowserManager.setBrowserType("chromium");
         BrowserManager.setHeadless(true);
 
         BrowserNavigateTool navigate = BrowserTools.navigate();
