@@ -123,7 +123,9 @@ class ChatController:
         """
         self._mcp_tools = tools
         # Reset agent to force re-initialization with new tools
-        self.agent = None
+        # Only reset if agent was already initialized (not during initialization)
+        if self.agent is not None:
+            self.agent = None
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -239,8 +241,6 @@ class ChatController:
                 tools=tools,
             )
 
-        logger.info(f"AgentHarness assigned: self.agent is not None = {self.agent is not None}")
-
         # Add confirmation hook if callback is set
         if self._confirm_callback:
             async def async_confirm(tool_name: str, args: dict) -> ConfirmationResult:
@@ -263,15 +263,13 @@ class ChatController:
                 is_trusted=is_trusted,
                 on_trust=on_trust,
             ))
-            logger.info(f"ConfirmationHook registered, self.agent is not None = {self.agent is not None}")
+            logger.info("ConfirmationHook registered with session trust support")
 
-        logger.info(f"AgentHarness created successfully, self.agent is not None = {self.agent is not None}")
+        logger.info("AgentHarness created successfully")
 
         # Notify that agent is ready
         if self._on_agent_ready:
-            logger.info(f"Calling _on_agent_ready, self.agent is not None = {self.agent is not None}")
             self._on_agent_ready(self.agent)
-            logger.info(f"_on_agent_ready returned, self.agent is not None = {self.agent is not None}")
 
     async def _create_routing_agent(self, sdk_config: HarnessConfig, tools: list):
         """Create AgentHarness with RoutingLLMClient."""
@@ -363,7 +361,6 @@ class ChatController:
         if not self.agent:
             logger.info("Agent not initialized, initializing now...")
             await self.initialize()
-            logger.info(f"initialize() completed, agent={self.agent is not None}")
 
         self._is_running = True
 

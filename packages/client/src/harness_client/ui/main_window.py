@@ -559,17 +559,12 @@ class MainWindow(QMainWindow):
     def _on_agent_ready(self, agent):
         """Handle agent ready - start schedule controller."""
         logger.info("Agent ready, starting ScheduleController...")
-        logger.info(f"[DEBUG] _on_agent_ready: chat_controller.agent is not None = {self.chat_controller.agent is not None}")
 
         self.schedule_controller.set_agent(agent)
-        logger.info(f"[DEBUG] after schedule_controller.set_agent: chat_controller.agent is not None = {self.chat_controller.agent is not None}")
 
         # Set agent to skill and MCP controllers
         self.skill_controller.set_agent(agent)
-        logger.info(f"[DEBUG] after skill_controller.set_agent: chat_controller.agent is not None = {self.chat_controller.agent is not None}")
-
         self.mcp_controller.set_agent(agent)
-        logger.info(f"[DEBUG] after mcp_controller.set_agent: chat_controller.agent is not None = {self.chat_controller.agent is not None}")
 
         # Start schedule controller in background
         async def start_schedule_controller():
