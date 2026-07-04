@@ -15,7 +15,7 @@ from pathlib import Path
 import markdown
 
 logger = logging.getLogger(__name__)
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPointF, QPropertyAnimation, QEasingCurve, QByteArray, QRectF, QEvent, QTimer
 from PyQt6.QtGui import QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPainterPath, QColor, QPen, QBrush, QPixmap, QPolygonF, QTextCursor
 from PyQt6.QtWidgets import (
     QFrame,
@@ -1148,6 +1148,9 @@ class ChatPanel(QWidget):
             "assistant",
         )
 
+        # Initial positioning of attachment button (will also be updated in resizeEvent)
+        QTimer.singleShot(0, self._position_attachment_btn)
+
     def resizeEvent(self, event):
         """Position the scroll-down button and attachment button."""
         super().resizeEvent(event)
@@ -1163,15 +1166,19 @@ class ChatPanel(QWidget):
             y = scroll_rect.bottom() - btn_height - 16
             self._scroll_down_btn.move(x, y)
 
-        # Position attachment button inside input field (left-bottom corner)
-        # Matches the position of send button on the right side (both at bottom)
+        # Position attachment button inside input field
+        self._position_attachment_btn()
+
+    def _position_attachment_btn(self):
+        """Position attachment button at bottom-left inside input field."""
         if hasattr(self, 'attach_btn') and hasattr(self, '_input_container'):
             container_height = self._input_container.height()
             btn_height = self.attach_btn.height()
             # Position at bottom-left: 8px from left, 8px from bottom
-            x = 8
-            y = container_height - btn_height - 8
-            self.attach_btn.move(x, y)
+            if container_height > 0:
+                x = 8
+                y = container_height - btn_height - 8
+                self.attach_btn.move(x, y)
 
     def _on_scroll_changed(self, value: int):
         """Show/hide scroll-down button based on scroll position."""
