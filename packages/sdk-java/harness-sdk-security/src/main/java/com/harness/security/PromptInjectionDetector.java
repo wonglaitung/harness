@@ -2,13 +2,14 @@ package com.harness.security;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
  * Prompt injection detector.
  *
  * Detects common injection patterns in user input.
+ * Supports both plain text and multimodal content (list of content blocks).
  */
 public class PromptInjectionDetector {
 
@@ -77,14 +78,20 @@ public class PromptInjectionDetector {
     /**
      * Detect injection attempts.
      *
-     * @param text text to analyze
+     * @param text text to analyze (String or multimodal content List)
      * @return DetectionResult with safety status and detected patterns
      */
-    public DetectionResult detect(String text) {
+    public DetectionResult detect(Object text) {
+        String textContent = extractTextContent(text);
+
+        if (textContent == null || textContent.isEmpty()) {
+            return new DetectionResult(true, List.of());
+        }
+
         List<String> detected = new ArrayList<>();
 
         for (Pattern pattern : patterns) {
-            if (pattern.matcher(text).find()) {
+            if (pattern.matcher(textContent).find()) {
                 detected.add(pattern.pattern());
             }
         }
@@ -95,17 +102,89 @@ public class PromptInjectionDetector {
     /**
      * Sanitize text by filtering detected patterns.
      *
-     * @param text text to sanitize
-     * @return sanitized text
+     * @param text text to sanitize (String or multimodal content List)
+     * @return sanitized content (same type as input)
      */
-    public String sanitize(String text) {
-        String sanitized = text;
+    public Object sanitize(Object text) {
+        if (text instanceof String) {
+            return sanitizeString((String) text);
+        } else if (text instanceof List) {
+            return sanitizeMultimodalContent((List<?>) text);
+        }
+        return text;
+    }
 
+    /**
+     * Sanitize plain text string.
+     */
+    private String sanitizeString(String text) {
+        String sanitized = text;
         for (Pattern pattern : patterns) {
             sanitized = pattern.matcher(sanitized).replaceAll("[FILTERED]");
         }
-
         return sanitized;
+    }
+
+    /**
+     * Sanitize multimodal content list.
+     * Only text blocks are sanitized; other blocks are preserved.
+     */
+    @SuppressWarnings("unchecked")
+    private List<?> sanitizeMultimodalContent(List<?> content) {
+        List<Object> sanitizedList = new ArrayList<>();
+
+        for (Object block : content) {
+            if (block instanceof Map) {
+                Map<String, Object> blockMap = (Map<String, Object>) block;
+                if ("text".equals(blockMap.get("type"))) {
+                    // Sanitize text blocks
+                    String text = (String) blockMap.get("text");
+                    String sanitizedText = sanitizeString(text);
+                    Map<String, Object> sanitizedBlock = new java.util.HashMap<>(blockMap);
+                    sanitizedBlock.put("text", sanitizedText);
+                    sanitizedList.add(sanitizedBlock);
+                } else {
+                    // Keep non-text blocks unchanged
+                    sanitizedList.add(block);
+                }
+            } else {
+                sanitizedList.add(block);
+            }
+        }
+
+        return sanitizedList;
+    }
+
+    /**
+     * Extract text content from input.
+     * Handles both String and multimodal content (List of Maps).
+     *
+     * @param input String or multimodal content List
+     * @return extracted text content, or null if no text found
+     */
+    @SuppressWarnings("unchecked")
+    private String extractTextContent(Object input) {
+        if (input instanceof String) {
+            return (String) input;
+        }
+
+        if (input instanceof List) {
+            StringBuilder textBuilder = new StringBuilder();
+            for (Object block : (List<?>) input) {
+                if (block instanceof Map) {
+                    Map<String, Object> blockMap = (Map<String, Object>) block;
+                    if ("text".equals(blockMap.get("type"))) {
+                        Object textObj = blockMap.get("text");
+                        if (textObj instanceof String) {
+                            textBuilder.append((String) textObj);
+                        }
+                    }
+                }
+            }
+            return textBuilder.toString();
+        }
+
+        return null;
     }
 
     /**
