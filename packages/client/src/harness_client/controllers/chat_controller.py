@@ -239,6 +239,8 @@ class ChatController:
                 tools=tools,
             )
 
+        logger.info(f"AgentHarness assigned: self.agent is not None = {self.agent is not None}")
+
         # Add confirmation hook if callback is set
         if self._confirm_callback:
             async def async_confirm(tool_name: str, args: dict) -> ConfirmationResult:
@@ -261,13 +263,15 @@ class ChatController:
                 is_trusted=is_trusted,
                 on_trust=on_trust,
             ))
-            logger.info("ConfirmationHook registered with session trust support")
+            logger.info(f"ConfirmationHook registered, self.agent is not None = {self.agent is not None}")
 
-        logger.info("AgentHarness created successfully")
+        logger.info(f"AgentHarness created successfully, self.agent is not None = {self.agent is not None}")
 
         # Notify that agent is ready
         if self._on_agent_ready:
+            logger.info(f"Calling _on_agent_ready, self.agent is not None = {self.agent is not None}")
             self._on_agent_ready(self.agent)
+            logger.info(f"_on_agent_ready returned, self.agent is not None = {self.agent is not None}")
 
     async def _create_routing_agent(self, sdk_config: HarnessConfig, tools: list):
         """Create AgentHarness with RoutingLLMClient."""
