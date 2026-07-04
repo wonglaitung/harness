@@ -959,8 +959,8 @@ class ChatPanel(QWidget):
         input_layout.setSpacing(12)
 
         # Input field container (to overlay attachment button inside)
-        input_container = QWidget()
-        input_container_layout = QHBoxLayout(input_container)
+        self._input_container = QWidget()
+        input_container_layout = QHBoxLayout(self._input_container)
         input_container_layout.setContentsMargins(0, 0, 0, 0)
         input_container_layout.setSpacing(0)
 
@@ -1016,7 +1016,7 @@ class ChatPanel(QWidget):
         # Install event filter on popup to capture keyboard events
         self.file_completer.popup().installEventFilter(self)
 
-        # Attachment button (inside input field, left side)
+        # Attachment button (inside input field, left-bottom corner)
         self.attach_btn = QPushButton()
         self.attach_btn.setIcon(create_attachment_icon(16, QColor(theme.TEXT_SUBTLE)))
         self.attach_btn.setIconSize(QSize(16, 16))
@@ -1038,7 +1038,7 @@ class ChatPanel(QWidget):
         # Layout: attachment button (absolute positioned) + input field
         input_container_layout.addWidget(self.input_field, stretch=1)
         # Position attachment button inside the input field (left side)
-        self.attach_btn.setParent(input_container)
+        self.attach_btn.setParent(self._input_container)
         self.attach_btn.move(8, 8)  # Will be repositioned in resizeEvent
 
         # Token usage label
@@ -1100,7 +1100,7 @@ class ChatPanel(QWidget):
             }}
         """)
 
-        input_layout.addWidget(input_container, stretch=1)
+        input_layout.addWidget(self._input_container, stretch=1)
         input_layout.addWidget(self.token_label)
         input_layout.addWidget(self.stop_btn)
         input_layout.addWidget(self.send_btn)
@@ -1163,13 +1163,15 @@ class ChatPanel(QWidget):
             y = scroll_rect.bottom() - btn_height - 16
             self._scroll_down_btn.move(x, y)
 
-        # Position attachment button inside input field (vertically centered)
-        if hasattr(self, 'attach_btn') and hasattr(self, 'input_field'):
-            input_height = self.input_field.height()
+        # Position attachment button inside input field (left-bottom corner)
+        # Matches the position of send button on the right side (both at bottom)
+        if hasattr(self, 'attach_btn') and hasattr(self, '_input_container'):
+            container_height = self._input_container.height()
             btn_height = self.attach_btn.height()
-            # Vertically center the button in the input field
-            y = (input_height - btn_height) // 2
-            self.attach_btn.move(8, y)
+            # Position at bottom-left: 8px from left, 8px from bottom
+            x = 8
+            y = container_height - btn_height - 8
+            self.attach_btn.move(x, y)
 
     def _on_scroll_changed(self, value: int):
         """Show/hide scroll-down button based on scroll position."""
