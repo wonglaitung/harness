@@ -946,6 +946,70 @@ if isinstance(response, str):
 | 本地 vLLM | `http://localhost:8000/v1` | 本地推理 |
 | 本地 Ollama | `http://localhost:11434/v1` | 本地推理 |
 
+#### 多模态内容支持
+
+OpenAIClient 支持发送多模态内容（文本 + 图片 + 文档）：
+
+**Anthropic 格式**（推荐）：
+
+```python
+import base64
+
+# 读取文档
+with open("report.pdf", "rb") as f:
+    pdf_data = base64.b64encode(f.read()).decode()
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "请分析这份文档"},
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": pdf_data
+                },
+                "filename": "report.pdf"
+            }
+        ]
+    }
+]
+
+result = await agent.run(messages)
+```
+
+**自动降级机制**：
+
+当使用不支持 `file` 类型的 OpenAI 兼容 API（如 GLM、Qwen、本地模型）时，SDK 会自动检测错误并重试，将文档内容解码后作为文本嵌入消息：
+
+```python
+# 自动降级流程：
+# 1. 发送包含文档的多模态消息
+# 2. API 返回 "content type file not supported" 错误
+# 3. SDK 自动解码 base64 文档内容
+# 4. 转换为文本块嵌入消息：
+#    "\n\n--- Attached File: report.pdf ---\n{文档内容}\n--- End of File ---\n"
+# 5. 重试 API 调用
+```
+
+**支持的第三方 API 文档处理**：
+
+| API | 文档支持方式 | 说明 |
+|-----|------------|------|
+| OpenAI 官方 | ✅ 原生支持 | 使用 `file` 类型 |
+| GLM (智谱) | ✅ 自动降级 | 文档转文本嵌入 |
+| Qwen (通义) | ✅ 自动降级 | 文档转文本嵌入 |
+| 本地 vLLM | ✅ 自动降级 | 文档转文本嵌入 |
+| 本地 Ollama | ✅ 自动降级 | 文档转文本嵌入 |
+
+**注意事项**：
+
+- 图片内容在降级模式下会显示为 `[Image attached: image/png]` 占位符
+- 文档内容会被完整解码并嵌入消息，确保模型能理解
+- 自动降级仅在 API 返回不支持错误时触发，不影响支持 `file` 类型的 API
+
 #### 参数说明
 
 | 参数 | 类型 | 默认值 | 说明 |
