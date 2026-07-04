@@ -382,7 +382,7 @@ class OpenAIClient(LLMClient):
             content: Original multimodal content list
 
         Returns:
-            Content list with documents converted to text blocks
+            Content list with documents converted to text blocks (does NOT modify original)
         """
         import base64
 
@@ -409,7 +409,7 @@ class OpenAIClient(LLMClient):
                     document_texts.append(f"\n\n[Attached file: {filename} - content could not be decoded]\n")
 
             elif block_type == "image":
-                # Keep image blocks unchanged
+                # Keep image blocks unchanged (copy to avoid modifying original)
                 source = block.get("source", {})
                 media_type = source.get("media_type", "image/png")
                 data = source.get("data", "")
@@ -419,8 +419,14 @@ class OpenAIClient(LLMClient):
                 })
 
             else:
-                # Keep other blocks unchanged
-                converted.append(block)
+                # Copy other blocks (especially text) to avoid modifying original content
+                if block_type == "text":
+                    converted.append({
+                        "type": "text",
+                        "text": block.get("text", "")
+                    })
+                else:
+                    converted.append(block.copy())
 
         # Append document texts to the last text block or create new one
         if document_texts:
