@@ -60,7 +60,13 @@ class BrowserManager:
 
     # Configuration
     headless: bool = False
-    browser_type: str = "chromium"  # chromium, firefox, webkit
+    browser_type: str = "chromium"
+    # Supported browser types:
+    # - "chromium": Playwright's bundled Chromium (requires `playwright install`)
+    # - "firefox": Playwright's bundled Firefox (requires `playwright install`)
+    # - "webkit": Playwright's bundled WebKit (requires `playwright install`)
+    # - "msedge": System Microsoft Edge (no download needed, ideal for intranet)
+    # - "chrome": System Google Chrome (no download needed)
     default_timeout: int = 30000  # ms
     auto_screenshot: bool = True
 
@@ -93,7 +99,16 @@ class BrowserManager:
 
     @classmethod
     async def _start_browser(cls) -> None:
-        """Start a new browser instance."""
+        """
+        Start a new browser instance.
+
+        Browser types:
+        - "chromium": Playwright's bundled Chromium (requires `playwright install`)
+        - "firefox": Playwright's bundled Firefox (requires `playwright install`)
+        - "webkit": Playwright's bundled WebKit (requires `playwright install`)
+        - "msedge": System Microsoft Edge (no download needed, ideal for intranet)
+        - "chrome": System Google Chrome (no download needed)
+        """
         logger.info(f"Starting {cls.browser_type} browser (headless={cls.headless})")
 
         cls._playwright = await async_playwright().start()
@@ -103,7 +118,20 @@ class BrowserManager:
             cls._browser = await cls._playwright.firefox.launch(headless=cls.headless)
         elif cls.browser_type == "webkit":
             cls._browser = await cls._playwright.webkit.launch(headless=cls.headless)
+        elif cls.browser_type == "msedge":
+            # Use system Microsoft Edge (no download needed)
+            cls._browser = await cls._playwright.chromium.launch(
+                channel="msedge",
+                headless=cls.headless,
+            )
+        elif cls.browser_type == "chrome":
+            # Use system Google Chrome (no download needed)
+            cls._browser = await cls._playwright.chromium.launch(
+                channel="chrome",
+                headless=cls.headless,
+            )
         else:
+            # Default: Playwright's bundled Chromium
             cls._browser = await cls._playwright.chromium.launch(headless=cls.headless)
 
         cls._page = await cls._browser.new_page()
@@ -185,6 +213,89 @@ class BrowserManager:
     def is_active(cls) -> bool:
         """Check if browser is active."""
         return cls._page is not None and not cls._page.is_closed()
+
+    @classmethod
+    def detect_available_browser(cls) -> str | None:
+        """
+        Detect available browser on the system.
+
+        Returns:
+            Browser type string or None if no browser found
+
+        Detection order (for intranet/offline scenarios):
+        1. Microsoft Edge (Windows enterprise standard)
+        2. Google Chrome
+        3. Playwright's bundled Chromium (if installed)
+        """
+        import platform
+        import shutil
+
+        system = platform.system()
+
+        if system == "Windows":
+            # Check for Edge (Windows 10/11 enterprise standard)
+            edge_paths = [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            ]
+            for path in edge_paths:
+                if Path(path).exists():
+                    logger.info("Detected: Microsoft Edge")
+                    return "msedge"
+
+            # Check for Chrome
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ]
+            for path in chrome_paths:
+                if Path(path).exists():
+                    logger.info("Detected: Google Chrome")
+                    return "chrome"
+
+        elif system == "Darwin":  # macOS
+            edge_path = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+            chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+            if Path(edge_path).exists():
+                return "msedge"
+            if Path(chrome_path).exists():
+                return "chrome"
+
+        elif system == "Linux":
+            # Check for Edge/Chrome in common paths
+            if shutil.which("microsoft-edge") or shutil.which("msedge"):
+                return "msedge"
+            if shutil.which("google-chrome") or shutil.which("chrome"):
+                return "chrome"
+
+        # Check if Playwright's bundled browser is installed
+        playwright_cache = Path.home() / ".cache" / "ms-playwright"
+        if playwright_cache.exists():
+            chromium_dirs = list(playwright_cache.glob("chromium-*"))
+            if chromium_dirs:
+                logger.info("Detected: Playwright bundled Chromium")
+                return "chromium"
+
+        return None
+
+    @classmethod
+    def use_system_browser(cls) -> bool:
+        """
+        Configure to use system browser (Edge/Chrome).
+
+        Automatically detects and configures the best available browser.
+        Ideal for intranet/offline environments.
+
+        Returns:
+            True if a system browser was found and configured
+        """
+        browser = cls.detect_available_browser()
+        if browser and browser in ("msedge", "chrome"):
+            cls.browser_type = browser
+            logger.info(f"Configured to use system browser: {browser}")
+            return True
+        return False
 
     @classmethod
     def configure(
