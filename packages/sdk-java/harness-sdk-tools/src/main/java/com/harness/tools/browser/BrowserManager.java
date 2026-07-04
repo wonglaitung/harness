@@ -123,6 +123,20 @@ public class BrowserManager {
     }
 
     /**
+     * Check if auto-screenshot is enabled.
+     */
+    public boolean isAutoScreenshot() {
+        return autoScreenshot;
+    }
+
+    /**
+     * Enable or disable auto-screenshot.
+     */
+    public static void setAutoScreenshot(boolean autoScreenshot) {
+        getInstance().autoScreenshot = autoScreenshot;
+    }
+
+    /**
      * Detect available browser on the system.
      *
      * <p>Detection order (for intranet/offline scenarios):</p>

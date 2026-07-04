@@ -6,6 +6,7 @@ import com.harness.core.ToolContext;
 import com.harness.core.ValidationResult;
 import com.harness.types.ToolResult;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.WaitUntilState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,8 +86,9 @@ public class BrowserNavigateTool implements Tool {
                 Page page = BrowserManager.getPage();
                 long startTime = System.currentTimeMillis();
 
+                WaitUntilState waitUntilState = WaitUntilState.valueOf(waitUntil.toUpperCase());
                 Page.NavigateOptions options = new Page.NavigateOptions()
-                    .setWaitUntil(Page.NavigateOptions.WaitUntil.valueOf(waitUntil.toUpperCase()))
+                    .setWaitUntil(waitUntilState)
                     .setTimeout(timeout);
 
                 page.navigate(url, options);

@@ -48,7 +48,7 @@ public final class BrowserTools {
         tools.add(type());
         tools.add(extract());
         tools.add(screenshot());
-        tools.add(wait());
+        tools.add(waitFor());
         tools.add(close());
         return tools;
     }
@@ -91,7 +91,7 @@ public final class BrowserTools {
     /**
      * Get browser wait tool.
      */
-    public static BrowserWaitTool wait() {
+    public static BrowserWaitTool waitFor() {
         return new BrowserWaitTool();
     }
 

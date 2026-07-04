@@ -7,6 +7,7 @@ import com.harness.core.ValidationResult;
 import com.harness.types.ToolResult;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.WaitForSelectorState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,8 +112,10 @@ public class BrowserWaitTool implements Tool {
                         ? page.locator("xpath=" + selector)
                         : page.locator(selector);
 
-                    Locator.WaitForOptions.State state = Locator.WaitForOptions.State.valueOf(stateStr.toUpperCase());
-                    locator.waitFor(new Locator.WaitForOptions().setState(state).setTimeout(timeoutMs));
+                    WaitForSelectorState state = WaitForSelectorState.valueOf(stateStr.toUpperCase());
+                    locator.waitFor(new Locator.WaitForOptions()
+                        .setState(state)
+                        .setTimeout(timeoutMs));
 
                     long elapsed = System.currentTimeMillis() - startTime;
 

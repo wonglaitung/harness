@@ -7,6 +7,7 @@ import com.harness.core.ValidationResult;
 import com.harness.types.ToolResult;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.WaitForSelectorState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +103,7 @@ public class BrowserTypeTool implements Tool {
 
                 // Wait for element to be visible
                 locator.waitFor(new Locator.WaitForOptions()
-                    .setState(Locator.WaitForOptions.State.VISIBLE)
+                    .setState(WaitForSelectorState.VISIBLE)
                     .setTimeout(timeout));
 
                 // Clear existing text if requested
