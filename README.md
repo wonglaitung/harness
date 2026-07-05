@@ -14,7 +14,7 @@ Agent = Model + Harness
 
 - **多语言支持** — Python SDK 和 Java SDK，99.5% API 一致
 - **多 LLM 支持** — Anthropic Claude、OpenAI 及兼容 API
-- **工具系统** — 内置文件操作、Web 搜索，支持自定义工具
+- **工具系统** — 内置文件操作、Web 搜索、浏览器自动化，支持自定义工具
 - **MCP 协议** — 连接外部 MCP 工具服务器扩展能力
 - **技能注入** — 根据上下文自动注入专业技能
 - **记忆系统** — 跨会话持久化记忆，支持去重和内容提炼
@@ -26,6 +26,7 @@ Agent = Model + Harness
 - **成本控制** — Token 预算管理、熔断机制
 - **中断恢复** — 保存快照、断点续传
 - **可观测性** — OpenTelemetry 集成
+- **知识图谱** — 内置 code-review-graph 支持，提供代码结构分析和智能代码审查
 
 ---
 
@@ -494,6 +495,28 @@ manager.stop().join();
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
 | [packages/scraper/](packages/scraper/) | harness-scraper — 智能文档爬取工具 |
 
+### 代码库统计（Graph 分析）
+
+| 指标 | 数值 |
+|------|------|
+| 总节点数 | 8,368 |
+| 总边数 | 47,115 |
+| 文件数 | 588 |
+| 测试节点 | 1,263 |
+| 类 | 1,089 |
+| 函数 | 5,428 |
+
+**主要社区**：
+- `core-config` (1,582 节点) — SDK 核心配置
+- `core-builder` (1,414 节点) — 构建器模式
+- `ui-theme` (650 节点) — PyQt6 客户端 UI
+- `memory-memory` (327 节点) — 记忆系统
+- `mcp-tool` (120 节点) — MCP 集成
+
+**关键执行流**：
+- `session_websocket` — WebSocket 会话管理
+- `run` / `stream` / `run_goal` — Agent 执行入口
+
 ---
 
 ## 开发
@@ -522,8 +545,22 @@ snap run gradle publishToMavenLocal
 
 - [Python SDK 详细文档](packages/sdk/docs/)
 - [Java SDK 详细文档](packages/sdk-java/docs/)
+- [客户端用户指南](packages/client/README.md)
 - [编程规范](packages/sdk/docs/programmer_skill.md)
 - [经验教训](lessons.md)
+
+---
+
+## 知识图谱工具
+
+本项目集成了 **code-review-graph** MCP 服务器，提供：
+
+- **结构化代码搜索** — 基于图谱的语义搜索，比 Grep 更高效
+- **影响分析** — 理解代码变更的影响范围
+- **架构洞察** — 自动检测代码社区和关键节点
+- **智能审查** — 风险评分和优先级建议
+
+详见 [CLAUDE.md](CLAUDE.md) 中的 "MCP Tools: code-review-graph" 章节。
 
 ---
 

@@ -388,6 +388,28 @@ SidebarPanel.update_sessions() (纯渲染)
 返回 LoopResult
 ```
 
+### 代码社区结构（Graph 分析）
+
+基于 code-review-graph 的社区检测，代码库分为 25 个自然社区：
+
+| 社区 | 节点数 | 内聚度 | 描述 |
+|------|--------|--------|------|
+| `core-config` | 1582 | 0.36 | SDK 核心配置和连接器 |
+| `core-builder` | 1414 | 0.20 | 构建器模式组件 |
+| `tests-config` | 1124 | 0.15 | 测试配置 |
+| `ui-theme` | 650 | 0.23 | PyQt6 客户端 UI |
+| `types-goal` | 477 | 0.26 | Goal 类型定义 |
+| `orchestrator-builder` | 329 | 0.18 | 编排器 |
+| `memory-memory` | 327 | 0.27 | 记忆系统 |
+| `tools-tool` | 208 | 0.12 | 工具系统 |
+| `mcp-tool` | 120 | 0.26 | MCP 集成 |
+| `llm-call` | 87 | 0.21 | LLM 调用层 |
+
+**关键洞察**：
+- **高内聚区域**：`memory-memory` (0.27)、`types-goal` (0.26)、`mcp-tool` (0.26) 是模块化最好的部分
+- **高连接节点（Hub）**：`AgentLoop._run_impl` (128 连接)、`ToolResult` 类 (79 入度)、`get_theme()` (77 入度)
+- **关键执行流**：`session_websocket` (criticality 0.77)、`run` (0.71)、`stream` (0.71)
+
 ### Loop Engineering（目标驱动执行）
 
 让 Agent 自主运行直到目标达成，而不是逐轮手动提示：
@@ -483,7 +505,7 @@ Python SDK 和 Java SDK 定位不同：
 | Python | Sidecar 微服务 | 提供 FastAPI HTTP 端点，独立部署 |
 | Java | 嵌入式库 | 无 HTTP 端点，应用直接调用 AgentHarness |
 
-**功能同步率 96%**，未实现的 4% 是框架依赖差异（如 Java 用同步 JDBC，无 AsyncSQLiteSessionStore）。
+**功能同步率 99.5%**，未实现的 0.5% 是框架依赖差异（如 Java 用同步 JDBC，无 AsyncSQLiteSessionStore）。
 
 ---
 
@@ -500,6 +522,7 @@ Python SDK 和 Java SDK 定位不同：
 - **消息结构固定**：LLM API 消息有固定格式要求，Session 是单一数据源，用户消息必须持久化到 session
 - **测试多轮迭代**：任何涉及消息处理的代码，都要测试第二轮迭代是否正常
 - **QTextBrowser 限制**：只支持基础 CSS，复杂布局用 `<table>`，不支持 flexbox/grid
+- **高连接节点谨慎修改**：`AgentLoop._run_impl`、`ToolResult`、`get_theme()` 是高连接节点，修改时需评估影响范围
 
 ---
 
@@ -635,4 +658,43 @@ uv run python build.py
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
 
 # currentDate
-Today's date is 2026-06-28.
+Today's date is 2026-07-05.
+
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
+
+**IMPORTANT: This project has a knowledge graph. ALWAYS use the
+code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
+the codebase.** The graph is faster, cheaper (fewer tokens), and gives
+you structural context (callers, dependents, test coverage) that file
+scanning cannot.
+
+### When to use graph tools FIRST
+
+- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
+- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
+- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
+- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview` + `list_communities`
+
+Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+
+### Key Tools
+
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context` | Need source snippets for review — token-efficient |
+| `get_impact_radius` | Understanding blast radius of a change |
+| `get_affected_flows` | Finding which execution paths are impacted |
+| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `get_architecture_overview` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
+
+### Workflow
+
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes` for code review.
+3. Use `get_affected_flows` to understand impact.
+4. Use `query_graph` pattern="tests_for" to check coverage.
