@@ -82,7 +82,21 @@
 
 ## 2026-07-05 提取
 
+## 2026-07-06 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股回购潮900亿+非农降温 — 三重左侧信号共振**
+
+### 新范式/工具
+- **GPT-5.5 Codex Reasoning-Token Clustering — 推理语义坍缩新发现** - https://github.com/openai/codex/issues/30364
+
+### 新范式/工具
+- **last30days-skill — 社交信号聚合搜索范式** - https://github.com/mvanhorn/last30days-skill
+
+### 新范式/工具
+- **Planning-with-Files — Agent持久化文件规划新范式** - https://github.com/OthmanAdi/planning-with-files
 
 ### 港股分析
 - **港股科网股走强+渣打超配科技 — 左侧信号与右侧共振升级**
