@@ -304,6 +304,39 @@ class SkillCompleter(QCompleter):
 | 图片 | PNG, JPEG, GIF, WebP | ≤ 10MB |
 | 文档 | PDF, TXT | ≤ 10MB |
 
+#### 文档大小警告
+
+当文档超过建议大小（5MB）时，会弹出警告对话框：
+
+```python
+class AttachmentPreview(QWidget):
+    # 建议大小阈值
+    RECOMMENDED_DOCUMENT_SIZE = 5 * 1024 * 1024  # 5MB
+
+    def _show_large_document_warning(self, filename: str, size_mb: float) -> bool:
+        """显示大文档警告对话框"""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("文档大小警告")
+        msg_box.setText(f"文档 '{filename}' 大小为 {size_mb:.1f}MB，可能影响处理速度。")
+        msg_box.setInformativeText("是否继续添加此附件？")
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+
+        # 自定义按钮
+        continue_btn = msg_box.addButton("继续发送", QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg_box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+
+        msg_box.setDefaultButton(cancel_btn)
+        msg_box.exec()
+
+        return msg_box.clickedButton() == continue_btn
+```
+
+**警告对话框按钮**：
+- **继续发送**：添加附件（用户确认）
+- **取消**：取消添加（默认选中）
+
+**设计理念**：不提供"查看文档"按钮，避免用户在警告弹窗中分心，保持决策焦点。
+
 #### 组件结构
 
 ```

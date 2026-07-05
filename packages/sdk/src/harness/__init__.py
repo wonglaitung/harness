@@ -132,6 +132,7 @@ from harness.tools.builtins import (
 from harness.types import (
     BudgetExceededError,
     CostConfig,
+    DocumentTooLargeError,
     GlobalBudgetExceededError,
     LoopResult,
     LoopSnapshot,
@@ -240,6 +241,7 @@ __all__ = [
     "BudgetExceededError",
     "UserBudgetExceededError",
     "GlobalBudgetExceededError",
+    "DocumentTooLargeError",
     # Progress types
     "ProgressEvent",
     "ProgressEventType",

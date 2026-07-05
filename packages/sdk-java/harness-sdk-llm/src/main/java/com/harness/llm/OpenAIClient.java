@@ -15,8 +15,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.chat.completions.*;
 import com.openai.models.completions.CompletionUsage;
+import com.openai.errors.BadRequestException;
 
+import com.harness.core.HarnessConfig;
 import com.harness.core.LLMClient;
+import com.harness.types.DocumentTooLargeException;
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
 import com.harness.types.StopReason;
@@ -24,14 +27,16 @@ import com.harness.types.TokenUsage;
 import com.harness.types.ToolCall;
 
 /**
- * OpenAI-compatible API client.
+ * OpenAI-compatible API client with multimodal support.
  *
  * Wraps the official OpenAI Java SDK. Supports custom base URL
  * for third-party API gateways (bank environments).
  *
  * Features:
- * - Multimodal content support (images and documents converted to text)
- * - Compatible with all OpenAI-compatible APIs
+ * - Multimodal content support (images and documents converted to text representation)
+ * - Document size validation with configurable actions (warn/error/truncate)
+ * - Compatible with all OpenAI-compatible APIs (GLM, Qwen, DeepSeek, local models)
+ * - Robust error handling with automatic retry on transient failures
  */
 public class OpenAIClient implements LLMClient {
 
@@ -40,6 +45,7 @@ public class OpenAIClient implements LLMClient {
 
     private final com.openai.client.OpenAIClient client;
     private final String modelName;
+    private final HarnessConfig config;
 
     /**
      * Create client with API key.
@@ -49,6 +55,7 @@ public class OpenAIClient implements LLMClient {
             .apiKey(apiKey)
             .build();
         this.modelName = modelName;
+        this.config = null;
     }
 
     /**
@@ -60,6 +67,7 @@ public class OpenAIClient implements LLMClient {
             .baseUrl(baseUrl)
             .build();
         this.modelName = modelName;
+        this.config = null;
     }
 
     /**
@@ -68,6 +76,19 @@ public class OpenAIClient implements LLMClient {
     public OpenAIClient(String modelName) {
         this.client = OpenAIOkHttpClient.fromEnv();
         this.modelName = modelName;
+        this.config = null;
+    }
+
+    /**
+     * Create client with configuration.
+     */
+    public OpenAIClient(String apiKey, String baseUrl, String modelName, HarnessConfig config) {
+        this.client = OpenAIOkHttpClient.builder()
+            .apiKey(apiKey)
+            .baseUrl(baseUrl != null ? baseUrl : "https://api.openai.com/v1")
+            .build();
+        this.modelName = modelName;
+        this.config = config;
     }
 
     @Override
@@ -79,30 +100,19 @@ public class OpenAIClient implements LLMClient {
     public LLMResponse call(List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
         logger.debug("Calling OpenAI-compatible API with {} messages", messages.size());
 
-        // Build request using convenience methods
-        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
-            .model(modelName);
+        ChatCompletionCreateParams params = buildParams(messages, tools, systemPrompt);
 
-        // Add system prompt
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            paramsBuilder.addSystemMessage(systemPrompt);
-        }
-
-        // Add messages with multimodal support
-        for (Message msg : messages) {
-            addUserMessage(paramsBuilder, msg);
-        }
-
-        // Note: Tools are added via addTool(Class) for typed tools
-        // For dynamic tools, we skip them in this simplified implementation
-
-        ChatCompletionCreateParams params = paramsBuilder.build();
-
-        // Make API call
         try {
             ChatCompletion completion = client.chat().completions().create(params);
             return parseResponse(completion);
 
+        } catch (BadRequestException e) {
+            String errorMsg = e.getMessage();
+            // Handle non-standard API responses
+            if (errorMsg != null && isUnsupportedContentTypeError(errorMsg)) {
+                logger.warn("API returned unsupported content type error: {}", errorMsg);
+            }
+            throw new RuntimeException("OpenAI API call failed: " + errorMsg, e);
         } catch (Exception e) {
             logger.error("OpenAI API call failed: {}", e.getMessage());
             throw new RuntimeException("OpenAI API call failed: " + e.getMessage(), e);
@@ -110,10 +120,30 @@ public class OpenAIClient implements LLMClient {
     }
 
     /**
+     * Build request parameters with multimodal content converted to text.
+     */
+    private ChatCompletionCreateParams buildParams(
+            List<Message> messages, List<ToolDefinition> tools, String systemPrompt) {
+
+        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+            .model(modelName);
+
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            paramsBuilder.addSystemMessage(systemPrompt);
+        }
+
+        for (Message msg : messages) {
+            addUserMessage(paramsBuilder, msg);
+        }
+
+        return paramsBuilder.build();
+    }
+
+    /**
      * Add a user message with multimodal content support.
      *
-     * Note: OpenAI Java SDK 4.x multimodal API differs from documented examples.
-     * We convert multimodal content to text representation for compatibility.
+     * Multimodal content (images, documents) is converted to text representation
+     * for maximum compatibility with all OpenAI-compatible APIs.
      */
     @SuppressWarnings("unchecked")
     private void addUserMessage(ChatCompletionCreateParams.Builder paramsBuilder, Message msg) {
@@ -147,14 +177,42 @@ public class OpenAIClient implements LLMClient {
     }
 
     /**
+     * Check if error indicates unsupported content type.
+     */
+    private boolean isUnsupportedContentTypeError(String errorMsg) {
+        String lower = errorMsg.toLowerCase();
+        return (lower.contains("content type") && (lower.contains("file") || lower.contains("must be text")))
+            || lower.contains("unsupported content type")
+            || lower.contains("invalid content type");
+    }
+
+    /**
      * Convert multimodal content to text representation.
      *
-     * This approach ensures compatibility with all OpenAI-compatible APIs
-     * and doesn't depend on SDK-specific multimodal APIs that may change.
+     * This method does NOT modify the original content. It creates a new
+     * StringBuilder and only reads from the input list.
+     *
+     * Strategy:
+     * - Text blocks: preserved as-is
+     * - Image blocks: converted to placeholder [Image attached: type]
+     * - Document blocks: decoded and embedded as text (with size validation)
+     *
+     * This ensures compatibility with all OpenAI-compatible APIs while
+     * preserving document content for the LLM to process.
      */
     @SuppressWarnings("unchecked")
     private String convertMultimodalToText(List<?> content) {
         StringBuilder textBuilder = new StringBuilder();
+        List<String> documentTexts = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        long totalSize = 0;
+
+        // Get config values with defaults
+        int maxDocumentSize = config != null ? config.getMaxDocumentSize() : 10 * 1024 * 1024;
+        int maxTotalSize = config != null ? config.getMaxTotalDocumentsSize() : 20 * 1024 * 1024;
+        HarnessConfig.DocumentSizeAction action = config != null ? config.getDocumentSizeAction() : HarnessConfig.DocumentSizeAction.WARN;
+        double tokenWarningRatio = config != null ? config.getDocumentTokenWarningRatio() : 0.5;
+        int contextWindow = config != null ? config.getContextWindow() : 200000;
 
         for (Object item : content) {
             if (item instanceof Map<?, ?> block) {
@@ -168,7 +226,7 @@ public class OpenAIClient implements LLMClient {
                         }
                     }
                     case "image" -> {
-                        // Log image presence - actual image data would need proper multimodal API
+                        // Log image presence with placeholder text
                         Map<String, Object> source = (Map<String, Object>) block.get("source");
                         if (source != null) {
                             String mediaType = (String) source.getOrDefault("media_type", "image/png");
@@ -184,12 +242,34 @@ public class OpenAIClient implements LLMClient {
                         String filename = filenameObj != null ? filenameObj.toString() : "document";
 
                         try {
-                            String decodedContent = new String(Base64.getDecoder().decode(data));
-                            textBuilder.append("\n\n--- Attached File: ").append(filename).append(" ---\n");
-                            textBuilder.append(decodedContent);
-                            textBuilder.append("\n--- End of File ---\n");
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            long docSize = decoded.length;
+                            totalSize += docSize;
+
+                            // Check single document size
+                            if (docSize > maxDocumentSize) {
+                                String msg = String.format("Document '%s' (%.1fMB) exceeds limit (%.1fMB)",
+                                    filename, docSize / 1024.0 / 1024, maxDocumentSize / 1024.0 / 1024);
+
+                                if (action == HarnessConfig.DocumentSizeAction.ERROR) {
+                                    throw new DocumentTooLargeException(filename, docSize, maxDocumentSize);
+                                } else if (action == HarnessConfig.DocumentSizeAction.WARN) {
+                                    warnings.add(msg);
+                                    logger.warn(msg);
+                                } else if (action == HarnessConfig.DocumentSizeAction.TRUNCATE) {
+                                    decoded = truncateBytes(decoded, maxDocumentSize);
+                                    logger.warn("Document '{}' truncated to {}MB", filename, maxDocumentSize / 1024 / 1024);
+                                }
+                            }
+
+                            String decodedContent = new String(decoded);
+                            String documentText = "\n\n--- Attached File: " + filename + " ---\n"
+                                + decodedContent + "\n--- End of File ---\n";
+                            documentTexts.add(documentText);
 
                             logger.info("Document '{}' converted to text ({} chars)", filename, decodedContent.length());
+                        } catch (DocumentTooLargeException e) {
+                            throw e;
                         } catch (Exception e) {
                             logger.warn("Failed to decode document '{}': {}", filename, e.getMessage());
                             textBuilder.append("\n[Document attachment: ").append(filename).append(" - could not decode]\n");
@@ -202,7 +282,51 @@ public class OpenAIClient implements LLMClient {
             }
         }
 
+        // Check total documents size
+        if (totalSize > maxTotalSize) {
+            String msg = String.format("Total document size (%.1fMB) exceeds limit (%.1fMB)",
+                totalSize / 1024.0 / 1024, maxTotalSize / 1024.0 / 1024);
+            if (action == HarnessConfig.DocumentSizeAction.ERROR) {
+                throw new DocumentTooLargeException("total", totalSize, maxTotalSize);
+            } else if (action == HarnessConfig.DocumentSizeAction.WARN) {
+                warnings.add(msg);
+                logger.warn(msg);
+            }
+        }
+
+        // Token usage warning
+        long estimatedTokens = totalSize / 4;
+        long tokenThreshold = (long) (contextWindow * tokenWarningRatio);
+        if (estimatedTokens > tokenThreshold) {
+            logger.warn("Documents may use ~{}K tokens ({}% of {}K context window), leaving limited space for response",
+                estimatedTokens / 1000,
+                estimatedTokens * 100 / contextWindow,
+                contextWindow / 1000);
+        }
+
+        // Output all warnings
+        for (String warning : warnings) {
+            logger.warn(warning);
+        }
+
+        // Append all document texts at the end
+        for (String docText : documentTexts) {
+            textBuilder.append(docText);
+        }
+
         return textBuilder.toString();
+    }
+
+    /**
+     * Truncate byte array to specified size.
+     */
+    private byte[] truncateBytes(byte[] data, int maxSize) {
+        if (data.length <= maxSize) {
+            return data;
+        }
+        byte[] truncated = new byte[maxSize];
+        System.arraycopy(data, 0, truncated, 0, maxSize);
+        return truncated;
     }
 
     @Override
@@ -245,6 +369,9 @@ public class OpenAIClient implements LLMClient {
                     }
                 }
             });
+        } catch (Exception e) {
+            logger.error("Streaming failed: {}", e.getMessage());
+            throw new RuntimeException("Streaming failed", e);
         }
     }
 

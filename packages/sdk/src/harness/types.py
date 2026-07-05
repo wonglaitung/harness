@@ -204,6 +204,17 @@ class GlobalBudgetExceededError(Exception):
         self.budget = budget
 
 
+class DocumentTooLargeError(Exception):
+    """Raised when document size exceeds the configured limit."""
+
+    def __init__(self, filename: str, size: int, limit: int):
+        self.filename = filename
+        self.size = size
+        self.limit = limit
+        message = f"Document '{filename}' ({size / 1024 / 1024:.1f}MB) exceeds limit ({limit / 1024 / 1024:.1f}MB)"
+        super().__init__(message)
+
+
 @dataclass
 class CostConfig:
     """

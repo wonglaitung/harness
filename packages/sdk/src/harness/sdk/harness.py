@@ -33,6 +33,7 @@ from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
 from harness.types import (
     CostConfig,
+    DocumentTooLargeError,
     LoopResult,
     LoopSnapshot,
     ProgressCallback,
@@ -274,6 +275,81 @@ class AgentHarness:
             size_threshold_chars=offload.size_threshold_chars,
             preview_length=offload.preview_length,
         )
+
+    def _validate_document_sizes(self, prompt: str | list[dict[str, Any]]) -> None:
+        """
+        Validate document sizes in the prompt.
+
+        Checks each document against configured limits and performs the configured
+        action (warn/error/truncate) when limits are exceeded.
+
+        Args:
+            prompt: User input - can be text or multimodal content
+
+        Raises:
+            DocumentTooLargeError: When document_size_action="error" and a document exceeds limit
+        """
+        import base64
+
+        if isinstance(prompt, str):
+            return
+
+        if not isinstance(prompt, list):
+            return
+
+        total_size = 0
+        context_window = self.config.get_context_window()
+        warnings_list = []
+
+        for block in prompt:
+            if not isinstance(block, dict):
+                continue
+
+            if block.get("type") != "document":
+                continue
+
+            source = block.get("source", {})
+            data = source.get("data", "")
+            filename = block.get("filename", "document")
+
+            try:
+                decoded = base64.b64decode(data)
+                doc_size = len(decoded)
+                total_size += doc_size
+
+                # Check single document size
+                if doc_size > self.config.max_document_size:
+                    msg = f"Document '{filename}' ({doc_size / 1024 / 1024:.1f}MB) exceeds limit ({self.config.max_document_size / 1024 / 1024:.1f}MB)"
+
+                    if self.config.document_size_action == "error":
+                        raise DocumentTooLargeError(filename, doc_size, self.config.max_document_size)
+                    elif self.config.document_size_action == "warn":
+                        warnings_list.append(msg)
+                        logger.warning(msg)
+                    # truncate action is handled at conversion time
+            except DocumentTooLargeError:
+                raise
+            except Exception as e:
+                logger.warning(f"Failed to check document '{filename}' size: {e}")
+
+        # Check total documents size
+        if total_size > self.config.max_total_documents_size:
+            msg = f"Total document size ({total_size / 1024 / 1024:.1f}MB) exceeds limit ({self.config.max_total_documents_size / 1024 / 1024:.1f}MB)"
+            if self.config.document_size_action == "error":
+                raise DocumentTooLargeError("total", total_size, self.config.max_total_documents_size)
+            elif self.config.document_size_action == "warn":
+                warnings_list.append(msg)
+                logger.warning(msg)
+
+        # Token usage warning
+        estimated_tokens = total_size / 4  # Rough estimate
+        token_threshold = context_window * self.config.document_token_warning_ratio
+        if estimated_tokens > token_threshold:
+            logger.warning(
+                f"Documents may use ~{estimated_tokens / 1000:.0f}K tokens "
+                f"({estimated_tokens / context_window * 100:.0f}% of {context_window / 1000:.0f}K context window), "
+                f"leaving limited space for response"
+            )
 
     def _create_llm_client(
         self,
@@ -740,6 +816,9 @@ class AgentHarness:
         Returns:
             LoopResult: Result of the agent execution
         """
+        # Validate document sizes before processing
+        self._validate_document_sizes(prompt)
+
         # Set up progress callback
         progress_callback = on_progress
         if progress_callback is None and verbose:

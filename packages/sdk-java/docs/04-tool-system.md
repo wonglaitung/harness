@@ -246,6 +246,103 @@ class WebToMarkdownTool(Tool):
     #   - 支持 BeautifulSoup 解析
 ```
 
+## Browser Automation Tools
+
+浏览器自动化工具，使用 Playwright 提供确定性的浏览器操作能力。适用于金融/银行等需要精确控制的场景。
+
+### Java SDK Browser Tools
+
+```java
+import com.harness.tools.browser.*;
+
+// 创建浏览器工具
+List<Tool> browserTools = List.of(
+    new BrowserNavigateTool(),
+    new BrowserClickTool(),
+    new BrowserTypeTool(),
+    new BrowserReadTool(),
+    new BrowserScreenshotTool()
+);
+
+AgentHarness agent = AgentHarness.builder()
+    .tools(browserTools)
+    .build();
+```
+
+### 可用工具
+
+| 工具 | 功能 | 参数 |
+|-----|------|------|
+| `BrowserNavigateTool` | 导航到 URL | `url` |
+| `BrowserClickTool` | 点击元素 | `selector` |
+| `BrowserTypeTool` | 输入文本 | `selector`, `text` |
+| `BrowserReadTool` | 读取页面内容 | `selector` (可选) |
+| `BrowserScreenshotTool` | 截图保存 | `filename` (可选) |
+| `BrowserWaitTool` | 等待元素 | `selector`, `timeout` |
+
+### System Browser 支持（内网环境）
+
+Java SDK 支持使用系统已安装的浏览器，无需下载 Playwright 自带的浏览器。适合内网/离线环境。
+
+```java
+import com.harness.tools.browser.BrowserManager;
+
+// 自动检测系统浏览器（Edge > Chrome > Chromium）
+if (BrowserManager.useSystemBrowser()) {
+    System.out.println("已配置系统浏览器");
+}
+
+// 或手动指定
+BrowserManager.configure("msedge");  // Microsoft Edge
+BrowserManager.configure("chrome");   // Google Chrome
+```
+
+### 配置选项
+
+```java
+BrowserManager.configure(builder -> builder
+    .browserType("msedge")      // 浏览器类型
+    .headless(false)            // 是否无头模式
+    .defaultTimeout(30000)      // 默认超时（毫秒）
+    .autoScreenshot(true)       // 自动截图
+    .screenshotDir("./screenshots")  // 截图目录
+);
+```
+
+### 使用示例
+
+```java
+// 1. 导航到页面
+await agent.run("打开 https://example.com");
+
+// 2. 登录银行网站
+await agent.run("""
+    1. 打开 https://bank.example.com
+    2. 在用户名输入框输入 myuser
+    3. 在密码输入框输入 mypass
+    4. 点击登录按钮
+    """);
+
+// 3. 读取数据
+await agent.run("读取账户余额表格");
+```
+
+### 安全考虑
+
+浏览器工具具有 `PermissionLevel.DANGEROUS` 级别，需要用户确认或配置白名单：
+
+```java
+HarnessConfig config = HarnessConfig.builder()
+    .allowDangerousTools(true)  // 允许危险工具
+    .browserWhitelist(List.of(
+        "https://internal.company.com",
+        "https://bank.company.com"
+    ))
+    .build();
+```
+
+详见 [08-security.md](./08-security.md)。
+
 ## ToolExecutor
 
 ToolExecutor 负责工具的调度和执行，支持串行和并行模式。
@@ -399,6 +496,7 @@ result = await agent.run("搜索代码中的 TODO 并在 GitHub 创建 issue")
 
 ## 下一步
 
-- [04-memory-system.md](./05-memory-system.md) - 了解记忆系统
-- [05-skills-system.md](./16-skills-system.md) - 了解技能系统
-- [09-mcp-integration.md](./06-mcp-integration.md) - MCP 协议集成
+- [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
+- [08-security.md](./08-security.md) - 了解安全设计和浏览器工具权限
+- [16-skills-system.md](./16-skills-system.md) - 了解技能系统
+- [06-mcp-integration.md](./06-mcp-integration.md) - MCP 协议集成

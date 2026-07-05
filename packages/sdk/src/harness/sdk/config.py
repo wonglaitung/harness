@@ -252,6 +252,12 @@ class HarnessConfig:
     system_prompt: str = ""  # If empty, no system prompt is sent (uses model's default behavior)
     extra_config: dict[str, Any] = field(default_factory=dict)
 
+    # Document settings (文档大小检查)
+    max_document_size: int = 10 * 1024 * 1024  # 10MB, 单个文档解码后大小限制
+    max_total_documents_size: int = 20 * 1024 * 1024  # 20MB, 所有文档总大小限制
+    document_size_action: Literal["warn", "error", "truncate"] = "warn"  # 超限时的行为
+    document_token_warning_ratio: float = 0.5  # 文档占用上下文窗口比例警告阈值
+
     # Security settings
     security: SecurityConfig | None = None
 

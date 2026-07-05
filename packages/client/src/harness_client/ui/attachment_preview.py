@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QMessageBox,
 )
 
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 # File size limits
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_DOCUMENT_SIZE = 32 * 1024 * 1024  # 32MB
+RECOMMENDED_DOCUMENT_SIZE = 5 * 1024 * 1024  # 5MB - warning threshold
 
 # Supported formats
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -291,6 +293,12 @@ class AttachmentPreview(QWidget):
             logger.warning(f"File too large: {file_size} > {max_size}")
             return False
 
+        # Show warning for large documents (exceeds recommended but under max)
+        if att_type == "document" and file_size > RECOMMENDED_DOCUMENT_SIZE:
+            size_mb = file_size / 1024 / 1024
+            if not self._show_large_document_warning(path.name, size_mb):
+                return False
+
         # Read and encode file
         try:
             file_data = path.read_bytes()
@@ -336,6 +344,32 @@ class AttachmentPreview(QWidget):
 
         self.attachments_changed.emit()
         return True
+
+    def _show_large_document_warning(self, filename: str, size_mb: float) -> bool:
+        """
+        Show warning dialog for large documents.
+
+        Args:
+            filename: Name of the file
+            size_mb: File size in MB
+
+        Returns:
+            True if user wants to proceed, False to cancel
+        """
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("文档大小警告")
+        msg_box.setText(f"文档 '{filename}' 大小为 {size_mb:.1f}MB，可能影响处理速度。")
+        msg_box.setInformativeText("是否继续添加此附件？")
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+
+        # Add custom buttons
+        continue_btn = msg_box.addButton("继续发送", QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg_box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+
+        msg_box.setDefaultButton(cancel_btn)
+        msg_box.exec()
+
+        return msg_box.clickedButton() == continue_btn
 
     def remove_attachment(self, attachment_id: str):
         """Remove an attachment by ID."""

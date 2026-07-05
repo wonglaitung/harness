@@ -22,6 +22,18 @@ import java.util.Map;
  */
 public class HarnessConfig {
 
+    /**
+     * Action to take when document size exceeds limit.
+     */
+    public enum DocumentSizeAction {
+        /** Log warning and continue processing */
+        WARN,
+        /** Throw DocumentTooLargeException */
+        ERROR,
+        /** Truncate document to limit size */
+        TRUNCATE
+    }
+
     // LLM settings
     private final String model;
     private final String apiKey;
@@ -52,6 +64,12 @@ public class HarnessConfig {
     // System prompt
     private final String systemPrompt;
 
+    // Document settings (文档大小检查)
+    private final int maxDocumentSize;
+    private final int maxTotalDocumentsSize;
+    private final DocumentSizeAction documentSizeAction;
+    private final double documentTokenWarningRatio;
+
     // Sub-configurations
     private final SecurityConfig security;
     private final CostControlConfig costControl;
@@ -77,6 +95,10 @@ public class HarnessConfig {
         this.maxIterations = builder.maxIterations;
         this.toolTimeout = builder.toolTimeout;
         this.systemPrompt = builder.systemPrompt;
+        this.maxDocumentSize = builder.maxDocumentSize;
+        this.maxTotalDocumentsSize = builder.maxTotalDocumentsSize;
+        this.documentSizeAction = builder.documentSizeAction;
+        this.documentTokenWarningRatio = builder.documentTokenWarningRatio;
         this.security = builder.security;
         this.costControl = builder.costControl;
         this.observability = builder.observability;
@@ -102,6 +124,10 @@ public class HarnessConfig {
     public int getMaxIterations() { return maxIterations; }
     public double getToolTimeout() { return toolTimeout; }
     public String getSystemPrompt() { return systemPrompt; }
+    public int getMaxDocumentSize() { return maxDocumentSize; }
+    public int getMaxTotalDocumentsSize() { return maxTotalDocumentsSize; }
+    public DocumentSizeAction getDocumentSizeAction() { return documentSizeAction; }
+    public double getDocumentTokenWarningRatio() { return documentTokenWarningRatio; }
     public SecurityConfig getSecurity() { return security; }
     public CostControlConfig getCostControl() { return costControl; }
     public ObservabilityConfig getObservability() { return observability; }
@@ -216,6 +242,10 @@ public class HarnessConfig {
         private int maxIterations = 10;
         private double toolTimeout = 30.0;
         private String systemPrompt = "";
+        private int maxDocumentSize = 10 * 1024 * 1024;  // 10MB
+        private int maxTotalDocumentsSize = 20 * 1024 * 1024;  // 20MB
+        private DocumentSizeAction documentSizeAction = DocumentSizeAction.WARN;
+        private double documentTokenWarningRatio = 0.5;
         private SecurityConfig security = null;
         private CostControlConfig costControl = null;
         private ObservabilityConfig observability = null;
@@ -300,6 +330,26 @@ public class HarnessConfig {
 
         public Builder systemPrompt(String systemPrompt) {
             this.systemPrompt = systemPrompt;
+            return this;
+        }
+
+        public Builder maxDocumentSize(int maxDocumentSize) {
+            this.maxDocumentSize = maxDocumentSize;
+            return this;
+        }
+
+        public Builder maxTotalDocumentsSize(int maxTotalDocumentsSize) {
+            this.maxTotalDocumentsSize = maxTotalDocumentsSize;
+            return this;
+        }
+
+        public Builder documentSizeAction(DocumentSizeAction documentSizeAction) {
+            this.documentSizeAction = documentSizeAction;
+            return this;
+        }
+
+        public Builder documentTokenWarningRatio(double documentTokenWarningRatio) {
+            this.documentTokenWarningRatio = documentTokenWarningRatio;
             return this;
         }
 

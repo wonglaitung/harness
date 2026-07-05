@@ -83,7 +83,10 @@ from harness.tools.browser import get_browser_tools
 agent = AgentHarness(
     model="claude-sonnet-4-6",
     tools=[ReadTool(), GlobTool()],
-    memory_dir="~/.harness/memory"
+    memory_dir="~/.harness/memory",
+    # 文档大小检查配置
+    max_document_size=5 * 1024 * 1024,      # 5MB
+    document_size_action="warn",             # warn/error/truncate
 )
 
 # 同步调用
@@ -112,6 +115,7 @@ if result.status == GoalStatus.ACHIEVED:
 ```java
 import com.harness.integration.AgentHarness;
 import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.DocumentSizeAction;
 import com.harness.types.LoopResult;
 import com.harness.tools.ReadTool;
 import com.harness.tools.GlobTool;
@@ -122,6 +126,9 @@ HarnessConfig config = HarnessConfig.builder()
     .apiKey("your-api-key")
     .model("gpt-4o")
     .maxIterations(10)
+    // 文档大小检查配置
+    .maxDocumentSize(5 * 1024 * 1024)           // 5MB
+    .documentSizeAction(DocumentSizeAction.WARN)  // WARN/ERROR/TRUNCATE
     .build();
 
 AgentHarness agent = AgentHarness.builder()

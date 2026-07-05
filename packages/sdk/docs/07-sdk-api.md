@@ -67,6 +67,7 @@ from harness import (
     BudgetExceededError,
     UserBudgetExceededError,
     GlobalBudgetExceededError,
+    DocumentTooLargeError,  # 文档大小超限异常
 
     # 进度事件
     ProgressEvent,
@@ -714,6 +715,12 @@ class HarnessConfig:
 
     # 模型预设
     model_presets: dict[str, dict] = field(default_factory=dict)
+
+    # 文档大小检查
+    max_document_size: int = 10 * 1024 * 1024  # 10MB, 单个文档解码后大小限制
+    max_total_documents_size: int = 20 * 1024 * 1024  # 20MB, 所有文档总大小限制
+    document_size_action: Literal["warn", "error", "truncate"] = "warn"  # 超限时的行为
+    document_token_warning_ratio: float = 0.5  # 文档占用上下文窗口比例警告阈值
 ```
 
 ### step_budget 步骤预算控制
@@ -754,6 +761,59 @@ agent = AgentHarness(config=config, tools=[...])
 | 简单任务（读文件、回答问题） | 2-3 | 2-3 | 5 |
 | 中等任务（代码分析、多步推理） | 5-7 | 5 | 10-15 |
 | 复杂任务（代码生成、研究） | 10-15 | 10 | 50-100 |
+
+### 文档大小检查
+
+SDK 支持对上传的文档进行大小检查，防止过大的文档影响处理性能。
+
+#### 配置参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `max_document_size` | int | 10MB | 单个文档解码后大小限制 |
+| `max_total_documents_size` | int | 20MB | 所有文档总大小限制 |
+| `document_size_action` | str | "warn" | 超限时的行为：warn/error/truncate |
+| `document_token_warning_ratio` | float | 0.5 | 文档占用上下文窗口比例警告阈值 |
+
+#### 使用示例
+
+```python
+from harness import AgentHarness, HarnessConfig
+
+# 配置文档大小检查
+config = HarnessConfig(
+    max_document_size=5 * 1024 * 1024,      # 5MB
+    max_total_documents_size=10 * 1024 * 1024,  # 10MB
+    document_size_action="error",           # 超限时抛出异常
+)
+
+agent = AgentHarness(config=config)
+
+# 当文档超过限制时，会抛出 DocumentTooLargeError
+try:
+    result = await agent.run([
+        {"type": "text", "text": "请分析这份文档"},
+        {"type": "document", "source": {...}, "filename": "large.pdf"}
+    ])
+except DocumentTooLargeError as e:
+    print(f"文档过大: {e.filename} ({e.size / 1024 / 1024:.1f}MB)")
+```
+
+#### 超限行为
+
+| 行为 | 说明 |
+|------|------|
+| `warn` | 记录警告日志，继续处理 |
+| `error` | 抛出 `DocumentTooLargeError` 异常 |
+| `truncate` | 截断文档到限制大小 |
+
+#### Token 使用警告
+
+当文档解码后的估计 token 数超过上下文窗口的 50%（默认）时，SDK 会记录警告日志：
+
+```
+Documents may use ~100K tokens (50% of 200K context window), leaving limited space for response
+```
 
 ### tool_result_role 兼容模式
 

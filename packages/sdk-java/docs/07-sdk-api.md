@@ -889,6 +889,54 @@ LoopConfig config = LoopConfig.builder()
 
 详见 [05-memory-system.md](./05-memory-system.md)。
 
+### 文档大小检查
+
+Java SDK 支持对上传的文档进行大小检查，与 Python SDK 功能完全同步。
+
+#### HarnessConfig 配置
+
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.DocumentSizeAction;
+
+HarnessConfig config = HarnessConfig.builder()
+    .maxDocumentSize(5 * 1024 * 1024)           // 5MB
+    .maxTotalDocumentsSize(10 * 1024 * 1024)    // 10MB
+    .documentSizeAction(DocumentSizeAction.ERROR)  // WARN/ERROR/TRUNCATE
+    .documentTokenWarningRatio(0.5)             // 50% 上下文窗口阈值
+    .build();
+```
+
+#### DocumentSizeAction 枚举
+
+| 行为 | 说明 |
+|------|------|
+| `WARN` | 记录警告日志，继续处理 |
+| `ERROR` | 抛出 `DocumentTooLargeException` 异常 |
+| `TRUNCATE` | 截断文档到限制大小 |
+
+#### DocumentTooLargeException
+
+```java
+import com.harness.types.DocumentTooLargeException;
+
+try {
+    LLMResponse response = client.call(messages, null, systemPrompt);
+} catch (DocumentTooLargeException e) {
+    System.out.println("文档过大: " + e.getFilename() +
+                       " (" + e.getSize() / 1024 / 1024 + "MB)");
+}
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `maxDocumentSize` | int | 10MB | 单个文档解码后大小限制 |
+| `maxTotalDocumentsSize` | int | 20MB | 所有文档总大小限制 |
+| `documentSizeAction` | DocumentSizeAction | WARN | 超限时的行为 |
+| `documentTokenWarningRatio` | double | 0.5 | 文档占用上下文窗口比例警告阈值 |
+
 ### RalphLoopConfig
 
 Ralph Loop 的配置类，支持自定义任务完成检查：
@@ -1147,6 +1195,74 @@ client = OpenAIClient(
     base_url="https://api.openai.com/v1",  # 可自定义
 )
 ```
+
+#### Java SDK OpenAIClient
+
+```java
+import com.harness.llm.OpenAIClient;
+
+// 创建客户端
+OpenAIClient client = new OpenAIClient("sk-...", "gpt-4o");
+
+// 自定义 base URL（用于第三方 API）
+OpenAIClient client = new OpenAIClient("sk-...", "https://api.deepseek.com/v1", "deepseek-chat");
+```
+
+#### 多模态内容支持
+
+Java SDK 的 OpenAIClient 支持多模态消息（文本 + 图片 + 文档）：
+
+```java
+import com.harness.types.Message;
+import java.util.List;
+import java.util.Map;
+
+// 构建多模态消息
+Message message = new Message("user", List.of(
+    Map.of("type", "text", "text", "请分析这份文档"),
+    Map.of(
+        "type", "document",
+        "source", Map.of(
+            "type", "base64",
+            "media_type", "application/pdf",
+            "data", pdfBase64Data
+        ),
+        "filename", "report.pdf"
+    )
+));
+
+// 调用 API
+LLMResponse response = client.call(List.of(message), null, "你是一个助手");
+```
+
+**文档转换策略**：
+
+Java SDK 采用兼容性优先策略，将多模态内容转换为文本表示：
+
+| 内容类型 | 转换方式 | 说明 |
+|---------|---------|------|
+| `text` | 直接传递 | 文本内容 |
+| `image` | 占位符 | `[Image attached: image/png]` |
+| `document` | 解码嵌入 | 文档内容解码后嵌入消息 |
+
+**转换示例**：
+
+```
+原始消息:
+  [text] "请分析这份报告"
+  [document] report.pdf (base64)
+
+转换后:
+  请分析这份报告
+
+  --- Attached File: report.pdf ---
+  [文档完整内容]
+  --- End of File ---
+```
+
+**不修改原始数据**：`convertMultimodalToText()` 方法只读取原始内容，创建新的字符串，不会修改传入的 Message 对象。
+
+这种策略确保与所有 OpenAI 兼容 API 的兼容性（GLM、Qwen、DeepSeek、本地模型），无需担心 API 是否支持 `file` 类型。
 
 #### 第三方 API 兼容性
 
@@ -1903,8 +2019,8 @@ from harness.service import (
 ## 下一步
 
 - [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
+- [04-tool-system.md](./04-tool-system.md) - 了解工具系统和 Browser Automation
 - [05-memory-system.md](./05-memory-system.md) - 了解上下文压缩和记忆管理
-- [17-trigger-system.md](./17-trigger-system.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
 - [06-mcp-integration.md](./06-mcp-integration.md) - MCP 协议集成
 - [18-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 完整指南
