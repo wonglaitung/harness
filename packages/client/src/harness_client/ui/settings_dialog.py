@@ -269,7 +269,12 @@ class SettingsDialog(QDialog):
         browser_tab = QWidget()
         browser_layout = QFormLayout(browser_tab)
 
-        # Browser type selection
+        # Browser type selection with visual indicator
+        browser_type_widget = QWidget()
+        browser_type_layout = QHBoxLayout(browser_type_widget)
+        browser_type_layout.setContentsMargins(0, 0, 0, 0)
+        browser_type_layout.setSpacing(8)
+
         self.browser_type_combo = QComboBox()
         self.browser_type_combo.addItems([
             "msedge",  # Microsoft Edge (default for Windows enterprise)
@@ -281,7 +286,26 @@ class SettingsDialog(QDialog):
             "msedge/chrome: 使用系统浏览器，无需下载\n"
             "chromium/firefox: Playwright 自带，需要运行 playwright install"
         )
-        browser_layout.addRow("浏览器类型:", self.browser_type_combo)
+        browser_type_layout.addWidget(self.browser_type_combo)
+
+        # Recommended badge for msedge
+        self.browser_recommended_label = QLabel("推荐")
+        self.browser_recommended_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {theme.ACCENT};
+                color: white;
+                font-size: {theme.FONT_SIZE_XS};
+                padding: 2px 6px;
+                border-radius: 4px;
+            }}
+        """)
+        browser_type_layout.addWidget(self.browser_recommended_label)
+        browser_type_layout.addStretch()
+
+        browser_layout.addRow("浏览器类型:", browser_type_widget)
+
+        # Connect browser type change to update recommended badge
+        self.browser_type_combo.currentTextChanged.connect(self._on_browser_type_changed)
 
         # Headless mode
         self.browser_headless_check = QCheckBox("无头模式 (后台运行)")
@@ -399,6 +423,12 @@ class SettingsDialog(QDialog):
         """Update temperature label when slider changes."""
         temp = value / 100.0
         self.temperature_label.setText(f"Temperature: {temp:.1f}")
+
+    def _on_browser_type_changed(self, browser_type: str):
+        """Update UI based on browser type selection."""
+        # Show "推荐" badge only for msedge (Windows enterprise default)
+        is_recommended = browser_type == "msedge"
+        self.browser_recommended_label.setVisible(is_recommended)
 
     def get_settings(self) -> dict:
         """Get current settings."""

@@ -816,6 +816,7 @@ class ChatPanel(QWidget):
     mode_changed = pyqtSignal(bool)  # (is_goal_mode)
     stop_requested = pyqtSignal()
     clear_chat_requested = pyqtSignal()
+    browser_close_requested = pyqtSignal()  # Request to close browser
 
     def __init__(self):
         super().__init__()
@@ -823,6 +824,7 @@ class ChatPanel(QWidget):
         self._is_streaming = False
         self._goal_mode = False  # False = Chat mode, True = Task mode
         self._work_dir = Path.cwd()  # Working directory for file dialogs
+        self._browser_active = False  # Track browser tool state
         self._setup_ui()
         # Register theme listener
         register_theme_listener(self._on_theme_changed)
@@ -942,7 +944,7 @@ class ChatPanel(QWidget):
         self.messages_container = MessagesContainer()
         scroll_area.setWidget(self.messages_container)
 
-        # --- Input bar (vertical layout: attachments above input) ---
+        # --- Input bar (vertical layout: browser status, attachments above input) ---
         self._input_bar = QWidget()
         self._input_bar.setStyleSheet(f"""
             QWidget {{
@@ -953,6 +955,61 @@ class ChatPanel(QWidget):
         input_bar_layout = QVBoxLayout(self._input_bar)
         input_bar_layout.setContentsMargins(0, 0, 0, 0)
         input_bar_layout.setSpacing(0)
+
+        # Browser tools status bar (hidden by default)
+        self._browser_status_bar = QWidget()
+        self._browser_status_bar.setFixedHeight(28)
+        self._browser_status_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+        browser_status_layout = QHBoxLayout(self._browser_status_bar)
+        browser_status_layout.setContentsMargins(16, 0, 12, 0)
+        browser_status_layout.setSpacing(8)
+
+        # Status indicator dot (green)
+        self._browser_status_dot = QLabel("●")
+        self._browser_status_dot.setStyleSheet(f"color: #50c878; font-size: 10px;")
+        browser_status_layout.addWidget(self._browser_status_dot)
+
+        # Status text
+        self._browser_status_text = QLabel("浏览器工具已激活")
+        self._browser_status_text.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_SM};
+                background: transparent;
+            }}
+        """)
+        browser_status_layout.addWidget(self._browser_status_text)
+
+        browser_status_layout.addStretch()
+
+        # Close button (×)
+        self._browser_close_btn = QPushButton("×")
+        self._browser_close_btn.setFixedSize(20, 20)
+        self._browser_close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._browser_close_btn.setToolTip("关闭浏览器")
+        self._browser_close_btn.clicked.connect(self._on_browser_close)
+        self._browser_close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 16px;
+                border-radius: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                color: {theme.TEXT};
+            }}
+        """)
+        browser_status_layout.addWidget(self._browser_close_btn)
+
+        self._browser_status_bar.setVisible(False)  # Hidden by default
+        input_bar_layout.addWidget(self._browser_status_bar)
 
         # Attachment preview area (inside input bar)
         self._attachment_preview = AttachmentPreview()
@@ -1659,6 +1716,24 @@ class ChatPanel(QWidget):
         elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, max_width)
         self._session_title_label.setText(elided)
 
+    def set_browser_active(self, is_active: bool, tool_count: int = 7):
+        """Update the browser tools status bar.
+
+        Args:
+            is_active: Whether browser tools are active
+            tool_count: Number of browser tools available
+        """
+        self._browser_active = is_active
+        if is_active:
+            self._browser_status_text.setText(f"浏览器工具已激活 ({tool_count} 个工具)")
+            self._browser_status_bar.setVisible(True)
+        else:
+            self._browser_status_bar.setVisible(False)
+
+    def _on_browser_close(self):
+        """Handle browser close button click."""
+        self.browser_close_requested.emit()
+
     def _on_theme_changed(self):
         """Handle theme change - update all styles."""
         theme = get_theme()
@@ -1733,6 +1808,34 @@ class ChatPanel(QWidget):
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
                 border-top: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        # Update browser status bar
+        self._browser_status_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.CHROME};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+        self._browser_status_text.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_SM};
+                background: transparent;
+            }}
+        """)
+        self._browser_close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 16px;
+                border-radius: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                color: {theme.TEXT};
             }}
         """)
 

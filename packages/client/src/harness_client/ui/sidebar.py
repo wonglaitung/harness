@@ -216,7 +216,8 @@ class SidebarPanel(QWidget):
         """
         theme = get_theme()
         if is_active:
-            self.browser_btn.setText(f"关闭浏览器")
+            # Green dot indicator for active state
+            self.browser_btn.setText(f"● 浏览器")
             self.browser_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {theme.ACCENT};
@@ -231,7 +232,8 @@ class SidebarPanel(QWidget):
                 }}
             """)
         else:
-            self.browser_btn.setText("启动浏览器")
+            # No dot for inactive state
+            self.browser_btn.setText("  浏览器")
             self.browser_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: transparent;

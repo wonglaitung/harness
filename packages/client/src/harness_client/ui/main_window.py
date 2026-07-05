@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
         self.chat_panel.message_sent.connect(self._on_message_sent)
         self.chat_panel.stop_requested.connect(self._on_stop_requested)
         self.chat_panel.clear_chat_requested.connect(self._on_clear_context)
+        self.chat_panel.browser_close_requested.connect(self._on_browser_close)
         self.sidebar.session_new_requested.connect(self._on_new_session)
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
@@ -714,6 +715,7 @@ class MainWindow(QMainWindow):
             if success:
                 self.statusbar.showMessage(message, 3000)
                 self.sidebar.update_browser_status(False)
+                self.chat_panel.set_browser_active(False)
                 # Reset agent to remove browser tools
                 self.chat_controller.refresh_browser_tools()
             else:
@@ -724,10 +726,16 @@ class MainWindow(QMainWindow):
             if success:
                 self.statusbar.showMessage(message, 3000)
                 self.sidebar.update_browser_status(True, browser_ctrl.get_config().browser_type)
+                self.chat_panel.set_browser_active(True, len(browser_ctrl.get_browser_tools()))
                 # Reset agent to add browser tools
                 self.chat_controller.refresh_browser_tools()
             else:
                 QMessageBox.warning(self, "启动浏览器失败", message)
+
+    def _on_browser_close(self):
+        """Handle browser close request from chat panel status bar."""
+        # Trigger the toggle which will close the browser
+        self._on_browser_toggle()
 
     def _apply_settings(self, settings: dict):
         """Apply settings to controllers and save to disk."""
