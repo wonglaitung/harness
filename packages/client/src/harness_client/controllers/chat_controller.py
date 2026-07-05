@@ -31,6 +31,7 @@ from harness.tools.builtins import (
 )
 
 from harness_client.controllers.session_manager import SessionManager
+from harness_client.controllers.browser_controller import BrowserController
 from harness_client.utils.settings import get_config_dir
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ class ChatController:
         self.agent: AgentHarness | None = None
         self.config = ChatConfig()
         self.session_manager = SessionManager()
+        self.browser_controller = BrowserController()
         self._is_running = False
         self._initializing = False  # Flag to track if initialization is in progress
         self._mcp_tools: list = []  # MCP tools from connected servers
@@ -114,6 +116,7 @@ class ChatController:
         self._on_thinking: Callable | None = None
         self._on_text_chunk: Callable | None = None
         self._confirm_callback: Callable[[str, dict], ConfirmationResult] | None = None
+        self._on_browser_tools_change: Callable | None = None
         self._on_agent_ready: Callable | None = None  # Callback when agent is initialized
 
     def set_mcp_tools(self, tools: list):
@@ -162,6 +165,25 @@ class ChatController:
             callback: Function that takes (tool_name, args) and returns ConfirmationResult
         """
         self._confirm_callback = callback
+
+    def set_browser_tools_change_callback(self, callback: Callable[[], None]):
+        """Set callback for browser tools change.
+
+        Args:
+            callback: Function to call when browser tools change
+        """
+        self._on_browser_tools_change = callback
+
+    def refresh_browser_tools(self):
+        """Refresh browser tools and reset agent.
+
+        Call this when browser status changes (started/stopped).
+        """
+        # Reset agent to force re-initialization with/without browser tools
+        self.agent = None
+        if self._on_browser_tools_change:
+            self._on_browser_tools_change()
+        logger.info("Browser tools refreshed, agent reset")
 
     def configure(self, config: ChatConfig):
         """Update chat configuration and reset agent."""
@@ -232,6 +254,12 @@ class ChatController:
             if self.config.auto_update_memory:
                 tools.append(UpdateCoreMemoryTool())
                 logger.info("Added UpdateCoreMemoryTool (auto_update_memory enabled)")
+
+            # Add browser tools if browser is active
+            if self.browser_controller.is_active():
+                browser_tools = self.browser_controller.get_browser_tools()
+                tools.extend(browser_tools)
+                logger.info(f"Added {len(browser_tools)} browser tools")
 
             logger.info("Creating AgentHarness...")
 

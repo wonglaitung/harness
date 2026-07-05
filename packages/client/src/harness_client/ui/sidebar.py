@@ -28,6 +28,7 @@ from harness_client.ui.icons import (
     create_session_icon,
     create_delete_icon,
     create_schedule_icon,
+    create_browser_icon,
 )
 
 
@@ -43,6 +44,7 @@ class SidebarPanel(QWidget):
     session_new_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     schedule_requested = pyqtSignal()
+    browser_toggle_requested = pyqtSignal()
 
     # Fixed width
     FIXED_WIDTH = 180
@@ -125,6 +127,11 @@ class SidebarPanel(QWidget):
         self.schedule_btn.clicked.connect(self._on_schedule_click)
         nav_layout.addWidget(self.schedule_btn)
 
+        # Browser button
+        self.browser_btn = self._create_nav_button(create_browser_icon(18, QColor(theme.TEXT)), "启动浏览器")
+        self.browser_btn.clicked.connect(self._on_browser_click)
+        nav_layout.addWidget(self.browser_btn)
+
         # Settings button
         self.settings_btn = self._create_nav_button(create_settings_icon(18, QColor(theme.TEXT)), "设置")
         self.settings_btn.clicked.connect(self._on_settings_click)
@@ -195,6 +202,49 @@ class SidebarPanel(QWidget):
     def _on_schedule_click(self):
         """Handle schedule button click."""
         self.schedule_requested.emit()
+
+    def _on_browser_click(self):
+        """Handle browser button click."""
+        self.browser_toggle_requested.emit()
+
+    def update_browser_status(self, is_active: bool, browser_type: str = ""):
+        """Update browser button status.
+
+        Args:
+            is_active: Whether browser is running
+            browser_type: Browser type name (e.g., "msedge")
+        """
+        theme = get_theme()
+        if is_active:
+            self.browser_btn.setText(f"关闭浏览器")
+            self.browser_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.ACCENT};
+                    border-radius: {theme.RADIUS_MD};
+                    padding: 12px 16px;
+                    color: white;
+                    font-size: {theme.FONT_SIZE_MD};
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.ACCENT_HOVER};
+                }}
+            """)
+        else:
+            self.browser_btn.setText("启动浏览器")
+            self.browser_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    border-radius: {theme.RADIUS_MD};
+                    padding: 12px 16px;
+                    color: {theme.TEXT};
+                    font-size: {theme.FONT_SIZE_MD};
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.HOVER_NEUTRAL};
+                }}
+            """)
 
     def _on_new_session(self):
         """Handle new session button click."""
@@ -341,6 +391,10 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.schedule_btn.setIcon(create_schedule_icon(18, QColor(theme.TEXT)))
+
+        # Browser button - update based on active state
+        self.browser_btn.setIcon(create_browser_icon(18, QColor(theme.TEXT)))
+        # Note: update_browser_status() handles the style based on active state
 
         self.settings_btn.setStyleSheet(f"""
             QPushButton {{

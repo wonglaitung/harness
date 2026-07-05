@@ -514,3 +514,37 @@ def create_attachment_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) ->
 
     painter.end()
     return QIcon(pixmap)
+
+
+def create_browser_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
+    """Create a browser/globe icon (outline style)."""
+    pixmap = _create_pixmap(size)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+
+    import math
+
+    cx, cy = size / 2, size / 2
+    radius = size * 0.38
+
+    # Draw outer circle (globe)
+    painter.drawEllipse(QPointF(cx, cy), radius, radius)
+
+    # Draw horizontal line (equator)
+    painter.drawLine(
+        QPointF(cx - radius, cy),
+        QPointF(cx + radius, cy)
+    )
+
+    # Draw vertical ellipse (meridian)
+    meridian_width = radius * 0.5
+    painter.drawEllipse(QPointF(cx, cy), meridian_width, radius)
+
+    painter.end()
+    return QIcon(pixmap)

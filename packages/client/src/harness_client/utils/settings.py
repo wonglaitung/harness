@@ -81,6 +81,11 @@ class AppSettings:
     low_model: str = ""
     router_model_path: str = ""
     router_url: str = ""
+    # Browser settings
+    browser_type: str = "msedge"  # msedge, chrome, chromium, firefox
+    browser_headless: bool = False
+    browser_screenshot: bool = True
+    browser_timeout: int = 30000  # milliseconds
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -110,6 +115,11 @@ class AppSettings:
             low_model=data.get("low_model", ""),
             router_model_path=data.get("router_model_path", ""),
             router_url=data.get("router_url", ""),
+            # Browser settings
+            browser_type=data.get("browser_type", "msedge"),
+            browser_headless=data.get("browser_headless", False),
+            browser_screenshot=data.get("browser_screenshot", True),
+            browser_timeout=data.get("browser_timeout", 30000),
         )
 
 

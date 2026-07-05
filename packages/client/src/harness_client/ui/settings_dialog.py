@@ -265,6 +265,62 @@ class SettingsDialog(QDialog):
 
         tabs.addTab(routing_tab, "路由")
 
+        # Browser tab
+        browser_tab = QWidget()
+        browser_layout = QFormLayout(browser_tab)
+
+        # Browser type selection
+        self.browser_type_combo = QComboBox()
+        self.browser_type_combo.addItems([
+            "msedge",  # Microsoft Edge (default for Windows enterprise)
+            "chrome",  # Google Chrome
+            "chromium",  # Playwright bundled
+            "firefox",  # Playwright bundled
+        ])
+        self.browser_type_combo.setToolTip(
+            "msedge/chrome: 使用系统浏览器，无需下载\n"
+            "chromium/firefox: Playwright 自带，需要运行 playwright install"
+        )
+        browser_layout.addRow("浏览器类型:", self.browser_type_combo)
+
+        # Headless mode
+        self.browser_headless_check = QCheckBox("无头模式 (后台运行)")
+        self.browser_headless_check.setChecked(False)
+        self.browser_headless_check.setToolTip(
+            "勾选后浏览器在后台运行，不显示窗口。\n"
+            "适合自动化任务，但无法手动干预。"
+        )
+        browser_layout.addRow(self.browser_headless_check)
+
+        # Auto screenshot
+        self.browser_screenshot_check = QCheckBox("自动截图 (审计)")
+        self.browser_screenshot_check.setChecked(True)
+        self.browser_screenshot_check.setToolTip(
+            "每次操作后自动截图，用于审计和调试。"
+        )
+        browser_layout.addRow(self.browser_screenshot_check)
+
+        # Timeout
+        self.browser_timeout_spin = QSpinBox()
+        self.browser_timeout_spin.setRange(5000, 120000)
+        self.browser_timeout_spin.setValue(30000)
+        self.browser_timeout_spin.setSuffix(" ms")
+        self.browser_timeout_spin.setToolTip("等待页面加载的超时时间")
+        browser_layout.addRow("超时时间:", self.browser_timeout_spin)
+
+        # Help text
+        browser_help = QLabel(
+            "浏览器控制允许 Agent 自动操作浏览器。\n\n"
+            "• Microsoft Edge: Windows 系统自带，推荐内网使用\n"
+            "• Chrome: 需要安装 Google Chrome\n"
+            "• Chromium/Firefox: Playwright 自带浏览器"
+        )
+        browser_help.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
+        browser_help.setWordWrap(True)
+        browser_layout.addRow(browser_help)
+
+        tabs.addTab(browser_tab, "浏览器")
+
         layout.addWidget(tabs)
 
         # Config save location info
@@ -376,6 +432,11 @@ class SettingsDialog(QDialog):
             "low_model": self.low_model_combo.currentText(),
             "router_model_path": self.router_path_edit.text(),
             "router_url": self.router_url_edit.text(),
+            # Browser settings
+            "browser_type": self.browser_type_combo.currentText(),
+            "browser_headless": self.browser_headless_check.isChecked(),
+            "browser_screenshot": self.browser_screenshot_check.isChecked(),
+            "browser_timeout": self.browser_timeout_spin.value(),
         }
 
     def _get_theme_mode(self) -> str:
@@ -430,6 +491,15 @@ class SettingsDialog(QDialog):
             self.router_path_edit.setText(settings["router_model_path"])
         if "router_url" in settings:
             self.router_url_edit.setText(settings["router_url"])
+        # Browser settings
+        if "browser_type" in settings:
+            self.browser_type_combo.setCurrentText(settings["browser_type"])
+        if "browser_headless" in settings:
+            self.browser_headless_check.setChecked(settings["browser_headless"])
+        if "browser_screenshot" in settings:
+            self.browser_screenshot_check.setChecked(settings["browser_screenshot"])
+        if "browser_timeout" in settings:
+            self.browser_timeout_spin.setValue(settings["browser_timeout"])
 
         # Update UI visibility based on provider
         self._on_provider_changed(self.provider_combo.currentText())

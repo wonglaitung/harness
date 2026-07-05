@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
         self.sidebar.schedule_requested.connect(self._on_schedule_panel)
+        self.sidebar.browser_toggle_requested.connect(self._on_browser_toggle)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -675,6 +676,11 @@ class MainWindow(QMainWindow):
             dialog.work_dir_edit.setText(current.work_dir)
         dialog.remember_dir_check.setChecked(current.remember_dir)
         dialog._set_theme_mode(current.theme_mode)
+        # Browser settings
+        dialog.browser_type_combo.setCurrentText(getattr(current, "browser_type", "msedge"))
+        dialog.browser_headless_check.setChecked(getattr(current, "browser_headless", False))
+        dialog.browser_screenshot_check.setChecked(getattr(current, "browser_screenshot", True))
+        dialog.browser_timeout_spin.setValue(getattr(current, "browser_timeout", 30000))
 
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:
@@ -687,6 +693,41 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("设置已应用", 3000)
             # Reopen dialog with updated settings
             self._on_preferences()
+
+    @asyncSlot()
+    async def _on_browser_toggle(self):
+        """Toggle browser on/off."""
+        browser_ctrl = self.chat_controller.browser_controller
+
+        # Check if playwright is available
+        if not browser_ctrl.is_available():
+            QMessageBox.warning(
+                self,
+                "浏览器不可用",
+                "Playwright 未安装。\n\n请运行:\npip install playwright\nplaywright install",
+            )
+            return
+
+        if browser_ctrl.is_active():
+            # Stop browser
+            success, message = await browser_ctrl.stop_browser()
+            if success:
+                self.statusbar.showMessage(message, 3000)
+                self.sidebar.update_browser_status(False)
+                # Reset agent to remove browser tools
+                self.chat_controller.refresh_browser_tools()
+            else:
+                QMessageBox.warning(self, "关闭浏览器失败", message)
+        else:
+            # Start browser
+            success, message = browser_ctrl.start_browser()
+            if success:
+                self.statusbar.showMessage(message, 3000)
+                self.sidebar.update_browser_status(True, browser_ctrl.get_config().browser_type)
+                # Reset agent to add browser tools
+                self.chat_controller.refresh_browser_tools()
+            else:
+                QMessageBox.warning(self, "启动浏览器失败", message)
 
     def _apply_settings(self, settings: dict):
         """Apply settings to controllers and save to disk."""
@@ -708,6 +749,11 @@ class MainWindow(QMainWindow):
             work_dir=settings.get("work_dir", ""),
             remember_dir=settings.get("remember_dir", True),
             theme_mode=settings.get("theme_mode", "auto"),
+            # Browser settings
+            browser_type=settings.get("browser_type", "msedge"),
+            browser_headless=settings.get("browser_headless", False),
+            browser_screenshot=settings.get("browser_screenshot", True),
+            browser_timeout=settings.get("browser_timeout", 30000),
         )
         self.settings_manager.save(app_settings)
 
@@ -745,6 +791,16 @@ class MainWindow(QMainWindow):
 
         set_theme_mode(theme_mode)
 
+        # Apply browser settings
+        from harness_client.controllers.browser_controller import BrowserConfig
+        browser_config = BrowserConfig(
+            browser_type=settings.get("browser_type", "msedge"),
+            headless=settings.get("browser_headless", False),
+            auto_screenshot=settings.get("browser_screenshot", True),
+            default_timeout=settings.get("browser_timeout", 30000),
+        )
+        self.chat_controller.browser_controller.configure(browser_config)
+
     def _load_saved_settings(self):
         """Load and apply saved settings on startup."""
         from harness_client.controllers.chat_controller import ChatConfig
@@ -774,6 +830,16 @@ class MainWindow(QMainWindow):
         # 初始化监控控制器模型名称
         self.monitoring_controller.set_model(settings.model)
         self._model_label.setText(f"API: {settings.model}")
+
+        # Load browser settings
+        from harness_client.controllers.browser_controller import BrowserConfig
+        browser_config = BrowserConfig(
+            browser_type=getattr(settings, "browser_type", "msedge"),
+            headless=getattr(settings, "browser_headless", False),
+            auto_screenshot=getattr(settings, "browser_screenshot", True),
+            default_timeout=getattr(settings, "browser_timeout", 30000),
+        )
+        self.chat_controller.browser_controller.configure(browser_config)
 
         if settings.work_dir:
             self.work_dir = Path(settings.work_dir)
