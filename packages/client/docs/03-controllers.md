@@ -955,6 +955,161 @@ def update_cost(self, input_cost_per_1m: float = 3.0, output_cost_per_1m: float 
     )
 ```
 
+## BrowserController
+
+浏览器控制器，管理浏览器自动化功能。
+
+### 职责
+
+- 管理 Playwright 浏览器生命周期（启动/停止）
+- 提供浏览器工具给 AgentHarness
+- 配置浏览器设置（类型、无头模式、超时等）
+- 跟踪浏览器状态
+
+### 数据模型
+
+#### BrowserConfig
+
+```python
+@dataclass
+class BrowserConfig:
+    """浏览器配置"""
+
+    browser_type: str = "msedge"      # msedge, chrome, chromium, firefox
+    headless: bool = False            # 无头模式（默认显示窗口）
+    default_timeout: int = 30000      # 超时时间（毫秒）
+    auto_screenshot: bool = True      # 自动截图（审计）
+```
+
+### 核心方法
+
+```python
+class BrowserController:
+    """浏览器控制器"""
+
+    def __init__(self):
+        self._config = BrowserConfig()
+        self._active = False
+        self._tools: list = []
+
+    def configure(self, config: BrowserConfig):
+        """更新浏览器配置"""
+
+    def is_available(self) -> bool:
+        """检查 Playwright 是否可用"""
+
+    def is_active(self) -> bool:
+        """检查浏览器是否运行中"""
+
+    def get_config(self) -> BrowserConfig:
+        """获取当前配置"""
+
+    def start_browser(self) -> tuple[bool, str]:
+        """
+        启动浏览器实例。
+
+        Returns:
+            (success, message) 元组
+        """
+
+    async def stop_browser(self) -> tuple[bool, str]:
+        """
+        停止浏览器实例。
+
+        Returns:
+            (success, message) 元组
+        """
+
+    def get_browser_tools(self) -> list:
+        """
+        获取浏览器工具列表（7 个工具）。
+
+        Returns:
+            Tool 实例列表，用于注入 AgentHarness
+        """
+```
+
+### 浏览器工具
+
+浏览器启动后，提供以下 7 个工具给 AgentHarness：
+
+| 工具名 | 功能 |
+|--------|------|
+| `browser_navigate` | 导航到 URL |
+| `browser_click` | 点击元素 |
+| `browser_type` | 输入文本 |
+| `browser_extract` | 提取页面内容 |
+| `browser_screenshot` | 截图 |
+| `browser_wait` | 等待元素/条件 |
+| `browser_close` | 关闭浏览器 |
+
+### 与 ChatController 集成
+
+```python
+class ChatController:
+    def __init__(self):
+        self.browser_controller = BrowserController()
+
+    async def initialize(self, mcp_tools: list = None):
+        tools = [
+            ReadTool(),
+            WriteTool(),
+            # ...其他内置工具
+        ]
+
+        # 添加 MCP 工具
+        if mcp_tools:
+            tools.extend(mcp_tools)
+
+        # 添加浏览器工具（如果浏览器已启动）
+        if self.browser_controller.is_active():
+            browser_tools = self.browser_controller.get_browser_tools()
+            tools.extend(browser_tools)
+
+        self.agent = AgentHarness(config=sdk_config, tools=tools)
+
+    def refresh_browser_tools(self):
+        """浏览器状态变化时重置 Agent"""
+        # 重新初始化 Agent 以更新工具列表
+        self.agent = None
+```
+
+### 浏览器类型
+
+支持四种浏览器类型：
+
+| 类型 | 说明 | 需要安装 |
+|------|------|---------|
+| `msedge` | Microsoft Edge（推荐） | 系统自带 |
+| `chrome` | Google Chrome | 需安装 |
+| `chromium` | Playwright 自带 | `playwright install` |
+| `firefox` | Playwright 自带 | `playwright install` |
+
+### 使用流程
+
+1. 用户点击侧边栏"启动浏览器"按钮
+2. BrowserController 启动浏览器（独立窗口）
+3. 浏览器工具注入 AgentHarness
+4. 用户可观看 Agent 操作浏览器
+5. 完成后点击"关闭浏览器"
+
+### 依赖检测
+
+```python
+# 检查 Playwright 是否安装
+try:
+    from harness.tools.browser import BrowserManager, PLAYWRIGHT_AVAILABLE
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
+# 提示用户安装
+if not browser_ctrl.is_available():
+    QMessageBox.warning(
+        "浏览器不可用",
+        "Playwright 未安装。\n\n请运行:\npip install playwright\nplaywright install"
+    )
+```
+
 ## 最佳实践
 
 ### 1. 控制器分离
@@ -1019,5 +1174,5 @@ self.memory_controller.memory_changed.connect(self._on_memory_changed)
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
-- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计（含 SchedulePanel）
-- [04-configuration.md](./04-configuration.md) - 了解配置管理（含 schedules.json）
+- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计（浏览器状态条、SchedulePanel）
+- [04-configuration.md](./04-configuration.md) - 了解配置管理（浏览器配置、schedules.json）

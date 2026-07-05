@@ -108,6 +108,35 @@ if self.config.auto_update_memory:
 }
 ```
 
+### 浏览器配置
+
+从 v1.5.0 开始，支持浏览器自动化配置：
+
+```json
+{
+  "browser_type": "msedge",
+  "browser_headless": false,
+  "browser_screenshot": true,
+  "browser_timeout": 30000
+}
+```
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `browser_type` | string | `"msedge"` | 浏览器类型：msedge/chrome/chromium/firefox |
+| `browser_headless` | bool | `false` | 无头模式（后台运行，不显示窗口） |
+| `browser_screenshot` | bool | `true` | 每次操作后自动截图（审计） |
+| `browser_timeout` | int | `30000` | 页面加载超时时间（毫秒） |
+
+**浏览器类型说明**：
+
+| 类型 | 说明 | 适用场景 |
+|------|------|---------|
+| `msedge` | Microsoft Edge | Windows 企业环境，系统自带，推荐 |
+| `chrome` | Google Chrome | 需要 Chrome 已安装 |
+| `chromium` | Playwright 自带 | 跨平台一致性，需 `playwright install` |
+| `firefox` | Playwright 自带 | 需 `playwright install` |
+
 ## mcp.json
 
 ### 配置格式
@@ -528,5 +557,5 @@ logging.basicConfig(
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
-- [03-controllers.md](./03-controllers.md) - 了解控制器层设计
-- [05-client-lessons.md](./05-client-lessons.md) - 了解开发经验总结
+- [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件设计
+- [03-controllers.md](./03-controllers.md) - 了解控制器层设计（BrowserController）

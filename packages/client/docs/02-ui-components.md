@@ -179,6 +179,40 @@ class MainWindow(QMainWindow):
 - 切换会话
 - 删除会话
 - 打开设置
+- 启动/关闭浏览器
+
+### 浏览器按钮
+
+侧边栏底部有浏览器控制按钮，支持一键启动/关闭浏览器：
+
+```python
+class SidebarPanel(QWidget):
+    # 信号定义
+    browser_toggle_requested = pyqtSignal()  # 切换浏览器状态
+
+    def update_browser_status(self, is_active: bool, browser_type: str = ""):
+        """更新浏览器按钮状态"""
+        theme = get_theme()
+        if is_active:
+            # 绿色圆点 + accent 背景
+            self.browser_btn.setText(f"● 浏览器")
+            self.browser_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.ACCENT};
+                    color: white;
+                }}
+            """)
+        else:
+            # 无圆点 + 透明背景
+            self.browser_btn.setText("  浏览器")
+```
+
+**状态指示**：
+
+| 状态 | 显示 | 样式 |
+|------|------|------|
+| 已停止 | `  浏览器` | 透明背景 |
+| 运行中 | `● 浏览器` | Accent 背景 + 绿色圆点 |
 
 ### 尺寸
 
@@ -229,6 +263,10 @@ ChatPanel
 │       ├── ToolCallMessage
 │       └── ...
 ├── InputBar (输入栏，垂直布局)
+│   ├── BrowserStatusBar (浏览器状态条，条件显示)
+│   │   ├── StatusDot (绿色圆点)
+│   │   ├── StatusText ("浏览器工具已激活 (7 个工具)")
+│   │   └── CloseButton (× 按钮)
 │   ├── AttachmentPreview (附件预览区)
 │   ├── InputRow (输入行)
 │   │   ├── AttachmentButton (附件按钮)
@@ -236,6 +274,35 @@ ChatPanel
 │   │   └── SendButton (发送按钮)
 │   └── SkillCompleter (技能自动补全)
 ```
+
+### 浏览器状态条
+
+当浏览器工具激活时，输入框上方显示状态条：
+
+```python
+class ChatPanel(QWidget):
+    browser_close_requested = pyqtSignal()  # 关闭浏览器信号
+
+    def set_browser_active(self, is_active: bool, tool_count: int = 7):
+        """设置浏览器状态显示"""
+        if is_active:
+            self._browser_status_text.setText(f"浏览器工具已激活 ({tool_count} 个工具)")
+            self._browser_status_bar.setVisible(True)
+        else:
+            self._browser_status_bar.setVisible(False)
+```
+
+**状态条布局**：
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ ● 浏览器工具已激活 (7 个工具)                          [×] │
+└────────────────────────────────────────────────────────────┘
+```
+
+- **绿色圆点**：表示运行中
+- **工具数量**：动态显示可用工具数
+- **关闭按钮**：点击快速关闭浏览器
 
 ### 消息渲染
 
@@ -670,9 +737,49 @@ class AddEntryDialog(QDialog):
 
 ## 设置对话框 (SettingsDialog)
 
-设置对话框提供应用配置界面。
+设置对话框提供应用配置界面，包含多个标签页。
 
-### 配置项
+### 标签页结构
+
+| 标签页 | 配置项 |
+|--------|--------|
+| API | Provider, API Key, Base URL, Model, Context Window |
+| 常规 | Theme, Stream, Auto Save, Temperature, Max Iterations |
+| 目录 | Work Directory, Remember Dir |
+| 路由 | Enable Routing, High/Low Model, Router Path/URL |
+| 浏览器 | Browser Type, Headless, Screenshot, Timeout |
+
+### 浏览器配置标签页
+
+从 v1.5.0 开始，设置对话框包含浏览器配置标签页：
+
+```python
+# 浏览器类型选择（带推荐标签）
+self.browser_type_combo = QComboBox()
+self.browser_type_combo.addItems(["msedge", "chrome", "chromium", "firefox"])
+
+# msedge 显示"推荐"标签
+self.browser_recommended_label = QLabel("推荐")
+self.browser_recommended_label.setStyleSheet(f"""
+    QLabel {{
+        background-color: {theme.ACCENT};
+        color: white;
+        border-radius: 4px;
+    }}
+""")
+self.browser_recommended_label.setVisible(browser_type == "msedge")
+```
+
+**配置项说明**：
+
+| 配置项 | 类型 | 说明 |
+|--------|------|------|
+| Browser Type | ComboBox | 浏览器类型（msedge 推荐） |
+| Headless Mode | CheckBox | 无头模式，后台运行 |
+| Auto Screenshot | CheckBox | 每次操作后自动截图 |
+| Timeout | SpinBox | 页面加载超时时间（毫秒） |
+
+### API 配置项
 
 | 配置项 | 类型 | 说明 |
 |--------|------|------|
@@ -680,6 +787,7 @@ class AddEntryDialog(QDialog):
 | API Key | LineEdit | API 密钥 |
 | Base URL | LineEdit | 自定义 API 端点 |
 | Model | ComboBox | 模型选择 |
+| Context Window | ComboBox | 上下文窗口大小 |
 | Temperature | SpinBox | 温度参数 |
 | Max Iterations | SpinBox | 最大迭代次数 |
 
@@ -1268,5 +1376,5 @@ class MonitoringPanel(ThemeAwareWidget):
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
-- [03-controllers.md](./03-controllers.md) - 了解控制器层设计（含 ScheduleController）
-- [04-configuration.md](./04-configuration.md) - 了解配置管理（含 schedules.json）
+- [03-controllers.md](./03-controllers.md) - 了解控制器层设计（BrowserController、ScheduleController）
+- [04-configuration.md](./04-configuration.md) - 了解配置管理（浏览器配置、schedules.json）
