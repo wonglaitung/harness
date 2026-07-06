@@ -466,6 +466,13 @@ class BrowserClickTool(Tool):
                     "type": "integer",
                     "description": "Number of retries on failure (default: 2)",
                 },
+                "first": {
+                    "type": "boolean",
+                    "description": (
+                        "Click the first matching element when selector matches multiple "
+                        "(default: true, avoids 'strict mode violation' errors)"
+                    ),
+                },
             },
             "required": ["selector"],
         }
@@ -487,6 +494,7 @@ class BrowserClickTool(Tool):
         timeout = arguments.get("timeout", 10000)
         force = arguments.get("force", False)
         retry_count = arguments.get("retry_count", 2)
+        use_first = arguments.get("first", True)  # Default to first to avoid strict mode violation
 
         try:
             page = await BrowserManager.get_page()
@@ -502,6 +510,10 @@ class BrowserClickTool(Tool):
                         element = page.locator(f"xpath={selector}")
                     else:
                         element = page.locator(selector)
+
+                    # Use .first to avoid strict mode violation when multiple elements match
+                    if use_first:
+                        element = element.first
 
                     # Wait for element to be visible
                     if not force:
@@ -592,6 +604,10 @@ class BrowserTypeTool(Tool):
                     "type": "integer",
                     "description": "Delay between keystrokes in milliseconds (default: 50)",
                 },
+                "press_enter": {
+                    "type": "boolean",
+                    "description": "Press Enter after typing to submit form (default: false)",
+                },
             },
             "required": ["selector", "text"],
         }
@@ -614,6 +630,7 @@ class BrowserTypeTool(Tool):
         clear_first = arguments.get("clear_first", True)
         timeout = arguments.get("timeout", 10000)
         delay = arguments.get("delay", 50)
+        press_enter = arguments.get("press_enter", False)
 
         try:
             page = await BrowserManager.get_page()
@@ -635,12 +652,19 @@ class BrowserTypeTool(Tool):
             # Type with realistic delay
             await element.type(text, delay=delay)
 
+            # Press Enter if requested (useful for form submission)
+            if press_enter:
+                await page.keyboard.press("Enter")
+                logger.debug("Pressed Enter")
+
             elapsed = time.time() - start_time
 
             result_content = f"""✅ Type: {selector}
 Text: {text[:50]}{'...' if len(text) > 50 else ''}
 Length: {len(text)}
 Time: {elapsed * 1000:.0f}ms"""
+            if press_enter:
+                result_content += "\nEnter: pressed"
 
             # Auto screenshot
             screenshot_path = None
@@ -657,6 +681,7 @@ Time: {elapsed * 1000:.0f}ms"""
                     "selector": selector,
                     "text_length": len(text),
                     "elapsed_ms": elapsed * 1000,
+                    "press_enter": press_enter,
                     "screenshot_path": screenshot_path,
                 },
             )
