@@ -109,7 +109,7 @@ class MCPClient:
                         "resources": {},
                     },
                 },
-                timeout=10.0,
+                timeout=30.0,  # Increased timeout for npm-based servers that may need to download packages
             )
             logger.info(f"Initialize response received: {response}")
 
