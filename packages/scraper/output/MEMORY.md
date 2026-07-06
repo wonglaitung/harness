@@ -84,7 +84,27 @@
 
 ## 2026-07-06 提取
 
+## 2026-07-07 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股回购潮900亿+南向19.54%+美债4.48% — 三重左侧信号持续共振**
+
+### 港股分析
+- **快手-可灵AI完成30亿美元融资-左侧AI估值重估信号**
+
+### 港股分析
+- **港股创新药板块集体爆发-左侧催化升级右侧超强确认**
+
+### 新范式/工具
+- **mcpsnoop — MCP 协议的 Wireshark** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Pulpie — Pareto最优Web清洗编码器** - https://usefeyn.com/blog/pulpie-pareto-optimal-models-for-cleaning-the-web/
+
+### 新范式/工具
+- **J-space / Jacobian Lens — LLM全局工作空间** - https://www.anthropic.com/research/global-workspace
 
 ### 港股分析
 - **港股回购潮900亿+非农降温 — 三重左侧信号共振**
