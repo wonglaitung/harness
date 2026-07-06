@@ -983,7 +983,7 @@ class MainWindow(QMainWindow):
         config_file = config_dir / "mcp.json"
 
         config = {"mcpServers": {}}
-        for server_config in self.mcp_controller.manager.list_server_configs():
+        for server_config in self.mcp_controller.list_server_configs():
             config["mcpServers"][server_config.name] = server_config.to_dict()
 
         config_file.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1016,7 +1016,7 @@ class MainWindow(QMainWindow):
         logger = logging.getLogger(__name__)
 
         for name, info in self.mcp_controller.servers.items():
-            config = self.mcp_controller.manager.get_server_config(name)
+            config = self.mcp_controller.get_server_config(name)
             if config and config.enabled:
                 logger.info(f"Auto-connecting to MCP server: {name}")
                 asyncio.ensure_future(self._connect_mcp_server(name))

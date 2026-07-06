@@ -293,3 +293,51 @@ class MCPController:
         if self._agent:
             return self._agent._mcp_manager
         return None
+
+    def list_server_configs(self) -> list:
+        """
+        List all server configurations.
+
+        Returns configurations from agent's manager if available,
+        otherwise from local cache.
+
+        Returns:
+            List of MCPServerConfig objects
+        """
+        if self._agent and self._agent._mcp_manager:
+            return self._agent._mcp_manager.list_server_configs()
+
+        # Return configs from local cache (convert MCPServerInfo to minimal MCPServerConfig)
+        configs = []
+        for name, info in self._server_states.items():
+            # Create minimal config from cached info
+            config = MCPServerConfig(
+                name=name,
+                transport=info.transport,
+                enabled=True,
+            )
+            configs.append(config)
+        return configs
+
+    def get_server_config(self, name: str):
+        """
+        Get configuration for a specific server.
+
+        Args:
+            name: Server name
+
+        Returns:
+            MCPServerConfig or None
+        """
+        if self._agent:
+            return self._agent.get_mcp_server_config(name)
+
+        # Return minimal config from local cache
+        info = self._server_states.get(name)
+        if info:
+            return MCPServerConfig(
+                name=name,
+                transport=info.transport,
+                enabled=True,
+            )
+        return None
