@@ -239,22 +239,46 @@ class MCPController:
         Returns:
             Number of servers loaded
         """
-        if not self._agent:
-            logger.warning("Agent not set, cannot load MCP config")
-            return 0
+        import json
 
         try:
-            count = self._agent._mcp_manager.load_from_file(str(path))
-            logger.info(f"MCPManager loaded {count} servers")
+            # Read config file directly
+            config_path = Path(path)
+            if not config_path.exists():
+                logger.warning(f"MCP config file not found: {path}")
+                return 0
 
-            # Update local tracking
-            for config in self._agent._mcp_manager.list_server_configs():
-                if config.name not in self._server_states:
-                    self._server_states[config.name] = MCPServerInfo(
-                        name=config.name,
-                        transport=config.transport,
-                        status="未连接",
-                    )
+            config_data = json.loads(config_path.read_text(encoding="utf-8"))
+            servers = config_data.get("mcpServers", {})
+            count = 0
+
+            for name, server_config in servers.items():
+                # Create MCPServerConfig
+                config = MCPServerConfig(
+                    name=name,
+                    transport=server_config.get("transport", "stdio"),
+                    command=server_config.get("command"),
+                    args=server_config.get("args", []),
+                    url=server_config.get("url"),
+                    env=server_config.get("env", {}),
+                    headers=server_config.get("headers", {}),
+                    enabled=server_config.get("enabled", True),
+                    timeout=server_config.get("timeout", 30.0),
+                )
+
+                # Add to agent's manager if available
+                if self._agent:
+                    self._agent._mcp_manager.add_server(config)
+
+                # Update local tracking
+                self._server_states[config.name] = MCPServerInfo(
+                    name=config.name,
+                    transport=config.transport,
+                    status="未连接",
+                )
+                count += 1
+
+            logger.info(f"Loaded {count} MCP server configs from {path}")
 
             if self._on_change:
                 self._on_change()
