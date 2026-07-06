@@ -7,8 +7,6 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QAction, QColor, QFont, QFontDatabase, QCursor, QIcon
 from PyQt6.QtWidgets import (
-    QFileDialog,
-    QFrame,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -25,15 +23,12 @@ from harness_client.ui.icons import (
     create_chat_icon,
     create_settings_icon,
     create_add_icon,
-    create_session_icon,
     create_delete_icon,
-    create_schedule_icon,
-    create_browser_icon,
 )
 
 
 class SidebarPanel(QWidget):
-    """Left sidebar with navigation and session list."""
+    """Left sidebar with navigation and session list - Simplified layout."""
 
     # Signals
     work_dir_changed = pyqtSignal(Path)
@@ -43,8 +38,6 @@ class SidebarPanel(QWidget):
     session_switch_requested = pyqtSignal(str)
     session_new_requested = pyqtSignal()
     settings_requested = pyqtSignal()
-    schedule_requested = pyqtSignal()
-    browser_toggle_requested = pyqtSignal()
 
     # Fixed width
     FIXED_WIDTH = 180
@@ -97,7 +90,7 @@ class SidebarPanel(QWidget):
         return btn
 
     def _setup_ui(self):
-        """Setup UI components."""
+        """Setup UI components - Simplified navigation."""
         theme = get_theme()
 
         # Main layout
@@ -112,38 +105,17 @@ class SidebarPanel(QWidget):
             }}
         """)
 
-        # Navigation buttons
+        # Navigation buttons - Simplified to core actions only
         nav_widget = QWidget()
         nav_layout = QVBoxLayout(nav_widget)
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(2)
 
-        # Chat button
+        # Chat button (primary action)
         self.chat_btn = self._create_nav_button(create_chat_icon(18, QColor(theme.TEXT)), "对话")
         nav_layout.addWidget(self.chat_btn)
 
-        # Schedule button
-        self.schedule_btn = self._create_nav_button(create_schedule_icon(18, QColor(theme.TEXT)), "排程")
-        self.schedule_btn.clicked.connect(self._on_schedule_click)
-        nav_layout.addWidget(self.schedule_btn)
-
-        # Browser button
-        self.browser_btn = self._create_nav_button(create_browser_icon(18, QColor(theme.TEXT)), "启动浏览器")
-        self.browser_btn.clicked.connect(self._on_browser_click)
-        nav_layout.addWidget(self.browser_btn)
-
-        # Settings button
-        self.settings_btn = self._create_nav_button(create_settings_icon(18, QColor(theme.TEXT)), "设置")
-        self.settings_btn.clicked.connect(self._on_settings_click)
-        nav_layout.addWidget(self.settings_btn)
-
-        # Separator
-        nav_separator = QFrame()
-        nav_separator.setFrameShape(QFrame.Shape.HLine)
-        nav_separator.setStyleSheet(f"background-color: {theme.BORDER}; max-height: 1px;")
-        nav_layout.addWidget(nav_separator)
-
-        # New session button
+        # New session button (high-frequency action)
         self.new_session_btn = self._create_nav_button(create_add_icon(18, QColor(theme.TEXT)), "新建会话")
         self.new_session_btn.clicked.connect(self._on_new_session)
         nav_layout.addWidget(self.new_session_btn)
@@ -191,6 +163,11 @@ class SidebarPanel(QWidget):
         """)
         self._main_layout.addWidget(self.session_list, 1)
 
+        # Settings button at bottom
+        self.settings_btn = self._create_nav_button(create_settings_icon(18, QColor(theme.TEXT)), "设置")
+        self.settings_btn.clicked.connect(self._on_settings_click)
+        self._main_layout.addWidget(self.settings_btn)
+
         # Set fixed size
         self.setFixedWidth(self.FIXED_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
@@ -198,55 +175,6 @@ class SidebarPanel(QWidget):
     def _on_settings_click(self):
         """Handle settings button click."""
         self.settings_requested.emit()
-
-    def _on_schedule_click(self):
-        """Handle schedule button click."""
-        self.schedule_requested.emit()
-
-    def _on_browser_click(self):
-        """Handle browser button click."""
-        self.browser_toggle_requested.emit()
-
-    def update_browser_status(self, is_active: bool, browser_type: str = ""):
-        """Update browser button status.
-
-        Args:
-            is_active: Whether browser is running
-            browser_type: Browser type name (e.g., "msedge")
-        """
-        theme = get_theme()
-        if is_active:
-            # Green dot indicator for active state
-            self.browser_btn.setText(f"● 浏览器")
-            self.browser_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {theme.ACCENT};
-                    border-radius: {theme.RADIUS_MD};
-                    padding: 12px 16px;
-                    color: white;
-                    font-size: {theme.FONT_SIZE_MD};
-                    text-align: left;
-                }}
-                QPushButton:hover {{
-                    background-color: {theme.ACCENT_HOVER};
-                }}
-            """)
-        else:
-            # No dot for inactive state
-            self.browser_btn.setText("  浏览器")
-            self.browser_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: transparent;
-                    border-radius: {theme.RADIUS_MD};
-                    padding: 12px 16px;
-                    color: {theme.TEXT};
-                    font-size: {theme.FONT_SIZE_MD};
-                    text-align: left;
-                }}
-                QPushButton:hover {{
-                    background-color: {theme.HOVER_NEUTRAL};
-                }}
-            """)
 
     def _on_new_session(self):
         """Handle new session button click."""
@@ -363,7 +291,7 @@ class SidebarPanel(QWidget):
             }}
         """)
 
-        # Update navigation buttons
+        # Update chat button
         self.chat_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -379,40 +307,7 @@ class SidebarPanel(QWidget):
         """)
         self.chat_btn.setIcon(create_chat_icon(18, QColor(theme.TEXT)))
 
-        self.schedule_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_MD};
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-        self.schedule_btn.setIcon(create_schedule_icon(18, QColor(theme.TEXT)))
-
-        # Browser button - update based on active state
-        self.browser_btn.setIcon(create_browser_icon(18, QColor(theme.TEXT)))
-        # Note: update_browser_status() handles the style based on active state
-
-        self.settings_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_MD};
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-        self.settings_btn.setIcon(create_settings_icon(18, QColor(theme.TEXT)))
-
+        # Update new session button
         self.new_session_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -427,6 +322,22 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.new_session_btn.setIcon(create_add_icon(18, QColor(theme.TEXT)))
+
+        # Update settings button
+        self.settings_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_MD};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        self.settings_btn.setIcon(create_settings_icon(18, QColor(theme.TEXT)))
 
         # Update session list
         self.session_list.setSpacing(0)

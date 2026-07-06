@@ -844,8 +844,190 @@ class FileTreeSection(CollapsibleSection):
         """)
 
 
+class MoreToolsSection(CollapsibleSection):
+    """Section containing secondary tools: Skills, MCP, Monitoring, Schedule, Browser."""
+
+    # Forward signals from child sections
+    skill_double_clicked = pyqtSignal(str)
+    add_skill_requested = pyqtSignal()
+    server_double_clicked = pyqtSignal(str)
+    add_mcp_server_requested = pyqtSignal()
+    toggle_mcp_server_requested = pyqtSignal(str)
+    schedule_requested = pyqtSignal()
+    browser_toggle_requested = pyqtSignal()
+
+    def __init__(self, monitoring_controller=None, parent=None):
+        super().__init__("更多工具", parent)
+        self._monitoring_controller = monitoring_controller
+        self._setup_content()
+
+    def _setup_content(self):
+        """Setup the tools content."""
+        theme = get_theme()
+
+        # Container for all tools
+        tools_widget = QWidget()
+        tools_layout = QVBoxLayout(tools_widget)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(8)
+
+        # Skills section (nested, no separate collapse)
+        self.skills_section = SkillsSection()
+        self.skills_section.skill_double_clicked.connect(self.skill_double_clicked)
+        self.skills_section.add_skill_requested.connect(self.add_skill_requested)
+        tools_layout.addWidget(self.skills_section)
+
+        # MCP section (nested)
+        self.mcp_section = MCPServersSection()
+        self.mcp_section.server_double_clicked.connect(self.server_double_clicked)
+        self.mcp_section.add_server_requested.connect(self.add_mcp_server_requested)
+        self.mcp_section.toggle_server_requested.connect(self.toggle_mcp_server_requested)
+        tools_layout.addWidget(self.mcp_section)
+
+        # Monitoring sections (if controller provided)
+        if self._monitoring_controller:
+            from harness_client.ui.monitoring_panel import ExecutionLogSection, MonitoringSection
+            self.monitoring_section = MonitoringSection(self._monitoring_controller)
+            tools_layout.addWidget(self.monitoring_section)
+
+            self.log_section = ExecutionLogSection(self._monitoring_controller)
+            tools_layout.addWidget(self.log_section)
+        else:
+            self.monitoring_section = None
+            self.log_section = None
+
+        # Schedule button (simple button, not collapsible)
+        self.schedule_btn = QPushButton("📅 排程")
+        self.schedule_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+        self.schedule_btn.clicked.connect(self.schedule_requested)
+        tools_layout.addWidget(self.schedule_btn)
+
+        # Browser button (simple button)
+        self.browser_btn = QPushButton("🌐 浏览器")
+        self.browser_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+        self.browser_btn.clicked.connect(self.browser_toggle_requested)
+        tools_layout.addWidget(self.browser_btn)
+
+        self.add_widget(tools_widget)
+
+        # Collapse nested sections by default
+        self.skills_section.set_collapsed(True, animate=False)
+        self.mcp_section.set_collapsed(True, animate=False)
+        if self.monitoring_section:
+            self.monitoring_section.set_collapsed(True, animate=False)
+        if self.log_section:
+            self.log_section.set_collapsed(True, animate=False)
+
+    def update_skills(self, skills: list):
+        """Update skills list."""
+        self.skills_section.update_skills(skills)
+
+    def update_servers(self, servers: list):
+        """Update MCP servers list."""
+        self.mcp_section.update_servers(servers)
+
+    def update_browser_status(self, is_active: bool, browser_type: str = ""):
+        """Update browser button status."""
+        theme = get_theme()
+        if is_active:
+            self.browser_btn.setText(f"● 浏览器 ({browser_type})")
+            self.browser_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.ACCENT};
+                    border: none;
+                    border-radius: {theme.RADIUS_MD};
+                    padding: 12px 16px;
+                    color: white;
+                    font-size: {theme.FONT_SIZE_SM};
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.ACCENT_HOVER};
+                }}
+            """)
+        else:
+            self.browser_btn.setText("🌐 浏览器")
+            self.browser_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.APP_BACKGROUND};
+                    border: 1px solid {theme.BORDER};
+                    border-radius: {theme.RADIUS_MD};
+                    padding: 12px 16px;
+                    color: {theme.TEXT};
+                    font-size: {theme.FONT_SIZE_SM};
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.HOVER_NEUTRAL};
+                    border-color: {theme.ACCENT};
+                }}
+            """)
+
+    def _on_theme_changed(self):
+        """Handle theme change."""
+        super()._on_theme_changed()
+        theme = get_theme()
+
+        # Update schedule button
+        self.schedule_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD};
+                padding: 12px 16px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+
+        # Update browser button
+        self.update_browser_status(
+            "●" in self.browser_btn.text(),
+            self.browser_btn.text().split("(")[-1].rstrip(")") if "(" in self.browser_btn.text() else ""
+        )
+
+
 class RightPanel(QWidget):
-    """Right panel with collapsible sections for memory, monitoring, skills, MCP, and files."""
+    """Right panel with collapsible sections for memory, files, and tools.
+
+    Layout priorities:
+    1. Memory (context-driven, expanded by default)
+    2. Files (context-driven, collapsed by default)
+    3. More Tools (collapsed by default) - Skills, MCP, Monitoring, Schedule, Browser
+    """
 
     # Signals
     memory_add_requested = pyqtSignal(str)
@@ -859,6 +1041,8 @@ class RightPanel(QWidget):
     toggle_mcp_server_requested = pyqtSignal(str)
     file_clicked = pyqtSignal(Path)
     work_dir_changed = pyqtSignal(Path)
+    schedule_requested = pyqtSignal()
+    browser_toggle_requested = pyqtSignal()
 
     def __init__(self, monitoring_controller=None, parent=None):
         super().__init__(parent)
@@ -876,7 +1060,7 @@ class RightPanel(QWidget):
             pass
 
     def _setup_ui(self):
-        """Setup the right panel UI."""
+        """Setup the right panel UI - context-driven layout."""
         theme = get_theme()
 
         self.setStyleSheet(f"""
@@ -889,54 +1073,34 @@ class RightPanel(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        # Memory section (first, before Skills)
+        # 1. Memory section (primary - context-driven, expanded by default)
         from harness_client.ui.memory_panel import MemorySection
         self.memory_section = MemorySection()
         self.memory_section.add_entry_requested.connect(self.memory_add_requested)
         self.memory_section.edit_entry_requested.connect(self.memory_edit_requested)
         self.memory_section.remove_entry_requested.connect(self.memory_remove_requested)
         self.memory_section.importance_changed.connect(self.memory_importance_changed)
+        # Memory is expanded by default (not collapsed)
         layout.addWidget(self.memory_section)
 
-        # Monitoring section (if controller is provided)
-        if self._monitoring_controller:
-            from harness_client.ui.monitoring_panel import ExecutionLogSection, MonitoringSection
-            self.monitoring_section = MonitoringSection(self._monitoring_controller)
-            layout.addWidget(self.monitoring_section)
-
-            self.log_section = ExecutionLogSection(self._monitoring_controller)
-            layout.addWidget(self.log_section)
-        else:
-            self.monitoring_section = None
-            self.log_section = None
-
-        # Skills section
-        self.skills_section = SkillsSection()
-        self.skills_section.skill_double_clicked.connect(self.skill_double_clicked)
-        self.skills_section.add_skill_requested.connect(self.add_skill_requested)
-        layout.addWidget(self.skills_section)
-
-        # MCP servers section
-        self.mcp_section = MCPServersSection()
-        self.mcp_section.server_double_clicked.connect(self.server_double_clicked)
-        self.mcp_section.add_server_requested.connect(self.add_mcp_server_requested)
-        self.mcp_section.toggle_server_requested.connect(self.toggle_mcp_server_requested)
-        layout.addWidget(self.mcp_section)
-
-        # File tree section
+        # 2. File tree section (context-driven, collapsed by default)
         self.file_section = FileTreeSection()
         self.file_section.file_clicked.connect(self.file_clicked)
         self.file_section.work_dir_changed.connect(self.work_dir_changed)
+        self.file_section.set_collapsed(True, animate=False)
         layout.addWidget(self.file_section, 1)  # stretch=1 to fill remaining space
 
-        # Set collapsed state for sections (all collapsed by default, no animation)
-        self.memory_section.set_collapsed(True, animate=False)
-        if self.monitoring_section:
-            self.monitoring_section.set_collapsed(True, animate=False)
-        if self.log_section:
-            self.log_section.set_collapsed(True, animate=False)
-        self.skills_section.set_collapsed(True, animate=False)
-        self.mcp_section.set_collapsed(True, animate=False)
+        # 3. More Tools section (collapsed by default)
+        self.more_tools_section = MoreToolsSection(self._monitoring_controller)
+        self.more_tools_section.skill_double_clicked.connect(self.skill_double_clicked)
+        self.more_tools_section.add_skill_requested.connect(self.add_skill_requested)
+        self.more_tools_section.server_double_clicked.connect(self.server_double_clicked)
+        self.more_tools_section.add_mcp_server_requested.connect(self.add_mcp_server_requested)
+        self.more_tools_section.toggle_mcp_server_requested.connect(self.toggle_mcp_server_requested)
+        self.more_tools_section.schedule_requested.connect(self.schedule_requested)
+        self.more_tools_section.browser_toggle_requested.connect(self.browser_toggle_requested)
+        self.more_tools_section.set_collapsed(True, animate=False)
+        layout.addWidget(self.more_tools_section)
 
     def update_memory(self, sections):
         """Update memory display."""
@@ -953,11 +1117,15 @@ class RightPanel(QWidget):
 
     def update_skills(self, skills: list):
         """Update skills list."""
-        self.skills_section.update_skills(skills)
+        self.more_tools_section.update_skills(skills)
 
     def update_servers(self, servers: list):
         """Update MCP servers list."""
-        self.mcp_section.update_servers(servers)
+        self.more_tools_section.update_servers(servers)
+
+    def update_browser_status(self, is_active: bool, browser_type: str = ""):
+        """Update browser button status."""
+        self.more_tools_section.update_browser_status(is_active, browser_type)
 
     def set_work_dir(self, path: Path):
         """Set work directory for file tree."""
@@ -981,14 +1149,8 @@ class RightPanel(QWidget):
         # Notify sections to update their styles
         if hasattr(self.memory_section, '_on_theme_changed'):
             self.memory_section._on_theme_changed()
-        if self.monitoring_section and hasattr(self.monitoring_section, '_on_theme_changed'):
-            self.monitoring_section._on_theme_changed()
-        if self.log_section and hasattr(self.log_section, '_on_theme_changed'):
-            self.log_section._on_theme_changed()
-        if hasattr(self.skills_section, '_on_theme_changed'):
-            self.skills_section._on_theme_changed()
-        if hasattr(self.mcp_section, '_on_theme_changed'):
-            self.mcp_section._on_theme_changed()
+        if hasattr(self.more_tools_section, '_on_theme_changed'):
+            self.more_tools_section._on_theme_changed()
         if hasattr(self.file_section, '_on_theme_changed'):
             self.file_section._on_theme_changed()
 

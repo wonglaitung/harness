@@ -112,8 +112,7 @@ class MainWindow(QMainWindow):
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
         self.sidebar.settings_requested.connect(self._on_preferences)
-        self.sidebar.schedule_requested.connect(self._on_schedule_panel)
-        self.sidebar.browser_toggle_requested.connect(self._on_browser_toggle)
+        # Right panel signals (including schedule and browser moved from sidebar)
         self.right_panel.work_dir_changed.connect(self._on_work_dir_changed)
         self.right_panel.add_mcp_server_requested.connect(self._on_add_mcp_server)
         self.right_panel.toggle_mcp_server_requested.connect(self._on_toggle_mcp_server)
@@ -124,6 +123,8 @@ class MainWindow(QMainWindow):
         self.right_panel.memory_edit_requested.connect(self._on_memory_edit)
         self.right_panel.memory_remove_requested.connect(self._on_memory_remove)
         self.right_panel.memory_importance_changed.connect(self._on_memory_importance_changed)
+        self.right_panel.schedule_requested.connect(self._on_schedule_panel)
+        self.right_panel.browser_toggle_requested.connect(self._on_browser_toggle)
 
         # Load saved settings
         self._load_saved_settings()
@@ -714,7 +715,7 @@ class MainWindow(QMainWindow):
             success, message = await browser_ctrl.stop_browser()
             if success:
                 self.statusbar.showMessage(message, 3000)
-                self.sidebar.update_browser_status(False)
+                self.right_panel.update_browser_status(False)
                 self.chat_panel.set_browser_active(False)
                 # Reset agent to remove browser tools
                 self.chat_controller.refresh_browser_tools()
@@ -725,7 +726,7 @@ class MainWindow(QMainWindow):
             success, message = browser_ctrl.start_browser()
             if success:
                 self.statusbar.showMessage(message, 3000)
-                self.sidebar.update_browser_status(True, browser_ctrl.get_config().browser_type)
+                self.right_panel.update_browser_status(True, browser_ctrl.get_config().browser_type)
                 self.chat_panel.set_browser_active(True, len(browser_ctrl.get_browser_tools()))
                 # Reset agent to add browser tools
                 self.chat_controller.refresh_browser_tools()
