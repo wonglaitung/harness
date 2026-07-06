@@ -148,7 +148,7 @@ class SidebarPanel(QWidget):
                 font-size: {theme.FONT_SIZE_SM};
             }}
             QListWidget::item {{
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: {theme.RADIUS_SM};
                 margin: 0px 2px;
             }}
@@ -350,7 +350,7 @@ class SidebarPanel(QWidget):
                 font-size: {theme.FONT_SIZE_SM};
             }}
             QListWidget::item {{
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: {theme.RADIUS_SM};
                 margin: 0px 2px;
             }}

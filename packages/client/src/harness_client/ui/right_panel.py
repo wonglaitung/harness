@@ -938,13 +938,8 @@ class MoreToolsSection(CollapsibleSection):
 
         self.add_widget(tools_widget)
 
-        # Collapse nested sections by default
-        self.skills_section.set_collapsed(True, animate=False)
-        self.mcp_section.set_collapsed(True, animate=False)
-        if self.monitoring_section:
-            self.monitoring_section.set_collapsed(True, animate=False)
-        if self.log_section:
-            self.log_section.set_collapsed(True, animate=False)
+        # Nested sections should not collapse independently - they show content directly
+        # when "More Tools" is expanded
 
     def update_skills(self, skills: list):
         """Update skills list."""
@@ -1088,7 +1083,7 @@ class RightPanel(QWidget):
         self.file_section.file_clicked.connect(self.file_clicked)
         self.file_section.work_dir_changed.connect(self.work_dir_changed)
         self.file_section.set_collapsed(True, animate=False)
-        layout.addWidget(self.file_section, 1)  # stretch=1 to fill remaining space
+        layout.addWidget(self.file_section)
 
         # 3. More Tools section (collapsed by default)
         self.more_tools_section = MoreToolsSection(self._monitoring_controller)
@@ -1101,6 +1096,9 @@ class RightPanel(QWidget):
         self.more_tools_section.browser_toggle_requested.connect(self.browser_toggle_requested)
         self.more_tools_section.set_collapsed(True, animate=False)
         layout.addWidget(self.more_tools_section)
+
+        # Push all sections to the top when collapsed
+        layout.addStretch()
 
     def update_memory(self, sections):
         """Update memory display."""
