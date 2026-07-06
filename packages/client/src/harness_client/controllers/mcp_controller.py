@@ -71,6 +71,8 @@ class MCPController:
                 transport=config.transport,
                 status="未连接",
             )
+            if self._on_change:
+                self._on_change()
             return
 
         # Add to agent's MCP manager
