@@ -322,14 +322,20 @@ class MCPServerDialog(QDialog):
             config["command"] = self.command_edit.text()
             config["args"] = [a.strip() for a in self.args_edit.text().split(",") if a.strip()]
             if self.env_edit.text():
-                config["env"] = dict(
-                    e.split("=", 1) for e in self.env_edit.text().split(",") if "=" in e
-                )
+                env_dict = {}
+                for e in self.env_edit.text().split(","):
+                    if "=" in e:
+                        key, value = e.split("=", 1)
+                        env_dict[key.strip()] = value.strip()
+                config["env"] = env_dict
         else:
             config["url"] = self.url_edit.text()
             if self.headers_edit.text():
-                config["headers"] = dict(
-                    h.split(":", 1) for h in self.headers_edit.text().split(",") if ":" in h
-                )
+                headers_dict = {}
+                for h in self.headers_edit.text().split(","):
+                    if ":" in h:
+                        key, value = h.split(":", 1)
+                        headers_dict[key.strip()] = value.strip()
+                config["headers"] = headers_dict
 
         return config
