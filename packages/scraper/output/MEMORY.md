@@ -86,7 +86,27 @@
 
 ## 2026-07-07 提取
 
+## 2026-07-08 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股估值洼地+美债4.53%高位 — 降息预期左侧布局窗口延续**
+
+### 港股分析
+- **港股汽车板块七连涨-政策催化+出海逻辑左侧机会**
+
+### 港股分析
+- **港股AI应用端走强-科技股逆势暴涨-AI应用vs算力分化确认**
+
+### 新范式/工具
+- **Rowboat — 活体知识图谱+工作面一体化AI协作新范式** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Pocket TTS — CPU端百兆参数语音合成新范式** - https://github.com/kyutai-labs/pocket-tts
+
+### 新范式/工具
+- **TencentDB Agent Memory — 分层符号化Agent记忆新范式** - https://github.com/TencentCloud/TencentDB-Agent-Memory
 
 ### 港股分析
 - **港股回购潮900亿+南向19.54%+美债4.48% — 三重左侧信号持续共振**
