@@ -169,6 +169,9 @@ class MCPController:
         if self._agent:
             self._agent.remove_mcp_server(name)
 
+        # Remove from all caches
+        if name in self._cached_configs:
+            del self._cached_configs[name]
         del self._server_states[name]
         if self._on_change:
             self._on_change()
@@ -188,28 +191,37 @@ class MCPController:
         if old_name not in self._server_states:
             return False
 
-        # Remove old and add new
+        # Create new config
+        config = MCPServerConfig(
+            name=new_config.get("name", old_name),
+            transport=new_config.get("transport", "stdio"),
+            command=new_config.get("command"),
+            args=new_config.get("args", []),
+            url=new_config.get("url"),
+            env=new_config.get("env", {}),
+            headers=new_config.get("headers", {}),
+            enabled=new_config.get("enabled", True),
+            timeout=new_config.get("timeout", 30),
+        )
+
+        # Remove old and add new in agent if available
         if self._agent:
             self._agent.remove_mcp_server(old_name)
-
-            config = MCPServerConfig(
-                name=new_config.get("name", old_name),
-                transport=new_config.get("transport", "stdio"),
-                command=new_config.get("command"),
-                args=new_config.get("args", []),
-                url=new_config.get("url"),
-                timeout=new_config.get("timeout", 30),
-            )
             self._agent._mcp_manager.add_server(config)
 
+        # Update cached configs
+        if old_name in self._cached_configs:
+            del self._cached_configs[old_name]
+        self._cached_configs[config.name] = config
+
         # Update local tracking
-        new_name = new_config.get("name", old_name)
+        new_name = config.name
         if old_name != new_name:
             del self._server_states[old_name]
 
         self._server_states[new_name] = MCPServerInfo(
             name=new_name,
-            transport=new_config.get("transport", "stdio"),
+            transport=config.transport,
             status="未连接",
         )
 
