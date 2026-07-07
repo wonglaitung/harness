@@ -1105,13 +1105,15 @@ class MainWindow(QMainWindow):
         if not server_info:
             return
 
-        # Get current config from manager
-        server_config = self.mcp_controller.manager.get_server_config(server_name)
+        # Get current config (works even before agent is initialized)
+        server_config = self.mcp_controller.get_server_config(server_name)
         if not server_config:
             return
 
-        # Get tools if connected
-        tools = self.mcp_controller.manager.get_server_tools(server_name)
+        # Get tools if connected (only available after agent is initialized)
+        tools = None
+        if self.mcp_controller.manager:
+            tools = self.mcp_controller.manager.get_server_tools(server_name)
 
         config_dict = {
             "name": server_config.name,
