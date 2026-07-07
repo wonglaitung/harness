@@ -145,26 +145,7 @@ class CollapsibleSection(QWidget):
 
     def _toggle_collapsed(self):
         """Toggle collapsed state."""
-        # Store current content height before collapsing
-        if not self._is_collapsed:
-            self._content_height = self.content_widget.height()
-
-        self._is_collapsed = not self._is_collapsed
-
-        # Update arrow
-        arrow = "▶" if self._is_collapsed else "▼"
-        self.header_btn.setText(f"{arrow} {self._title}")
-
-        # Toggle visibility
-        self.content_widget.setVisible(not self._is_collapsed)
-
-        # Update size policy
-        if self._is_collapsed:
-            self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
-        else:
-            self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+        self.set_collapsed(not self._is_collapsed)
 
     def add_widget(self, widget: QWidget, stretch: int = 0):
         """Add a widget to the content area.
@@ -205,6 +186,15 @@ class CollapsibleSection(QWidget):
         else:
             self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            # Clear any fixed height constraints
+            self.setMinimumHeight(0)
+            # Force layout update for nested collapsible sections
+            self.content_widget.updateGeometry()
+            # Also update parent to propagate size changes
+            parent = self.parentWidget()
+            while parent:
+                parent.updateGeometry()
+                parent = parent.parentWidget()
 
     def _on_theme_changed(self):
         """Handle theme change - update header styles."""
@@ -249,29 +239,78 @@ class CollapsibleSection(QWidget):
             """)
 
 
-class SkillsSection(CollapsibleSection):
-    """Section displaying loaded skills."""
+class SkillsSection(QWidget):
+    """Section displaying loaded skills (non-collapsible inside MoreToolsSection)."""
 
     skill_double_clicked = pyqtSignal(str)  # skill name
     add_skill_requested = pyqtSignal()  # request to add new skill
 
     def __init__(self, parent=None):
-        super().__init__("技能", parent)
-        # Add "+" button in header
-        self.add_header_button("+", self._on_add_clicked, "新建技能")
-        self._setup_content()
+        super().__init__(parent)
+        self._skill_items: dict[str, dict] = {}
+        self._setup_ui()
+        register_theme_listener(self._on_theme_changed)
 
-    def _setup_content(self):
-        """Setup skills list content."""
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
+
+    def _setup_ui(self):
+        """Setup UI."""
+        theme = get_theme()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # Header row with title and add button
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setSpacing(8)
+
+        title_label = QLabel("技能")
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: bold;
+            }}
+        """)
+        header_layout.addWidget(title_label)
+
+        add_btn = QPushButton("+")
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        add_btn.clicked.connect(self._on_add_clicked)
+        header_layout.addWidget(add_btn)
+        header_layout.addStretch()
+
+        layout.addWidget(header_widget)
+
         # Skills list container
         self.skills_list_widget = QWidget()
         self.skills_list_layout = QVBoxLayout(self.skills_list_widget)
         self.skills_list_layout.setContentsMargins(0, 4, 0, 0)
         self.skills_list_layout.setSpacing(4)
-        self.add_widget(self.skills_list_widget)
+        layout.addWidget(self.skills_list_widget)
 
         # Placeholder label
-        theme = get_theme()
         self.placeholder_label = QLabel("暂无已加载的技能")
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
@@ -281,10 +320,6 @@ class SkillsSection(CollapsibleSection):
             }}
         """)
         self.skills_list_layout.addWidget(self.placeholder_label)
-
-        # Store skill item widgets with their sub-widgets for theme updates
-        # key: skill name, value: dict with 'widget', 'name_label', 'indicator', 'enabled'
-        self._skill_items: dict[str, dict] = {}
 
     def _on_add_clicked(self):
         """Handle add skill button click."""
@@ -324,12 +359,14 @@ class SkillsSection(CollapsibleSection):
         """
         theme = get_theme()
         widget = QWidget()
+        widget.setMinimumHeight(32)
         widget.setStyleSheet(f"""
-            QWidget {{
+            QWidget#skillItem {{
                 background-color: {theme.APP_BACKGROUND};
                 border-radius: {theme.RADIUS_SM};
             }}
         """)
+        widget.setObjectName("skillItem")
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(10)
@@ -363,7 +400,6 @@ class SkillsSection(CollapsibleSection):
 
     def _on_theme_changed(self):
         """Handle theme change - update content styles."""
-        super()._on_theme_changed()
         theme = get_theme()
 
         # Update placeholder
@@ -384,7 +420,7 @@ class SkillsSection(CollapsibleSection):
 
             # Update widget background
             widget.setStyleSheet(f"""
-                QWidget {{
+                QWidget#skillItem {{
                     background-color: {theme.APP_BACKGROUND};
                     border-radius: {theme.RADIUS_SM};
                 }}
@@ -398,30 +434,79 @@ class SkillsSection(CollapsibleSection):
             indicator.setStyleSheet(f"color: {indicator_color}; font-size: {theme.FONT_SIZE_SM};")
 
 
-class MCPServersSection(CollapsibleSection):
-    """Section displaying MCP server status."""
+class MCPServersSection(QWidget):
+    """Section displaying MCP server status (non-collapsible inside MoreToolsSection)."""
 
     server_double_clicked = pyqtSignal(str)  # server name
     add_server_requested = pyqtSignal()  # request to add server
     toggle_server_requested = pyqtSignal(str)  # server name to connect/disconnect
 
     def __init__(self, parent=None):
-        super().__init__("MCP", parent)
-        # Add "+" button in header
-        self.add_header_button("+", self._on_add_clicked, "添加服务器")
-        self._setup_content()
+        super().__init__(parent)
+        self._server_items: dict[str, dict] = {}
+        self._setup_ui()
+        register_theme_listener(self._on_theme_changed)
 
-    def _setup_content(self):
-        """Setup MCP servers list content."""
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
+
+    def _setup_ui(self):
+        """Setup UI."""
+        theme = get_theme()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # Header row with title and add button
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setSpacing(8)
+
+        title_label = QLabel("MCP")
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: bold;
+            }}
+        """)
+        header_layout.addWidget(title_label)
+
+        add_btn = QPushButton("+")
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.APP_BACKGROUND};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
+            }}
+        """)
+        add_btn.clicked.connect(self._on_add_clicked)
+        header_layout.addWidget(add_btn)
+        header_layout.addStretch()
+
+        layout.addWidget(header_widget)
+
         # Server list container
         self.server_list_widget = QWidget()
         self.server_list_layout = QVBoxLayout(self.server_list_widget)
         self.server_list_layout.setContentsMargins(0, 4, 0, 0)
         self.server_list_layout.setSpacing(4)
-        self.add_widget(self.server_list_widget)
+        layout.addWidget(self.server_list_widget)
 
         # Placeholder label
-        theme = get_theme()
         self.placeholder_label = QLabel("暂无 MCP 配置")
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
@@ -431,10 +516,6 @@ class MCPServersSection(CollapsibleSection):
             }}
         """)
         self.server_list_layout.addWidget(self.placeholder_label)
-
-        # Store server item widgets with their sub-widgets for theme updates
-        # key: server name, value: dict with 'widget', 'name_label', 'status_label', 'action_btn'
-        self._server_items: dict[str, dict] = {}
 
     def _on_add_clicked(self):
         """Handle add server button click."""
@@ -475,12 +556,14 @@ class MCPServersSection(CollapsibleSection):
         """
         theme = get_theme()
         widget = QWidget()
+        widget.setMinimumHeight(32)
         widget.setStyleSheet(f"""
-            QWidget {{
+            QWidget#mcpItem {{
                 background-color: {theme.APP_BACKGROUND};
                 border-radius: {theme.RADIUS_SM};
             }}
         """)
+        widget.setObjectName("mcpItem")
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(10)
@@ -591,7 +674,6 @@ class MCPServersSection(CollapsibleSection):
 
     def _on_theme_changed(self):
         """Handle theme change - update content styles."""
-        super()._on_theme_changed()
         theme = get_theme()
 
         # Update placeholder
@@ -614,7 +696,7 @@ class MCPServersSection(CollapsibleSection):
 
             # Update widget background
             widget.setStyleSheet(f"""
-                QWidget {{
+                QWidget#mcpItem {{
                     background-color: {theme.APP_BACKGROUND};
                     border-radius: {theme.RADIUS_SM};
                 }}
