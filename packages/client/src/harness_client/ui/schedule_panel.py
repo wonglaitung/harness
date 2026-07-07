@@ -440,7 +440,7 @@ class ScheduleSection(CollapsibleSection):
 
     def __init__(self, parent=None):
         """Initialize schedule section."""
-        super().__init__("排程", parent)
+        super().__init__("排程", parent=parent)
         self._setup_content()
         # Theme listener registered in CollapsibleSection
 

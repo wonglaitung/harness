@@ -485,7 +485,7 @@ class MemorySection(CollapsibleSection):
     }
 
     def __init__(self, parent=None):
-        super().__init__("记忆", parent)
+        super().__init__("记忆", parent=parent)
         self._setup_content()
         # Note: Theme listener is registered in CollapsibleSection.__init__
 

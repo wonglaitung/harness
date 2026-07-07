@@ -182,7 +182,7 @@ class MonitoringSection(CollapsibleSection):
 
     def __init__(self, controller: MonitoringController, parent=None):
         self._controller = controller
-        super().__init__("监控", parent)
+        super().__init__("监控", parent=parent)
         self._setup_content()
 
         # 连接信号
@@ -389,7 +389,7 @@ class ExecutionLogSection(CollapsibleSection):
 
     def __init__(self, controller: MonitoringController, parent=None):
         self._controller = controller
-        super().__init__("执行日志", parent)
+        super().__init__("执行日志", parent=parent)
         self._setup_content()
 
         # 连接信号

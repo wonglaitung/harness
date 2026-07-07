@@ -4,16 +4,26 @@ Right panel with collapsible sections for skills, MCP servers, and file tree.
 
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, pyqtSignal
+from PyQt6.QtCore import (
+    QAbstractAnimation,
+    QDir,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
+    Qt,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QFileSystemModel
 from PyQt6.QtWidgets import (
     QApplication,
     QFileIconProvider,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QStyle,
+    QToolButton,
     QTreeView,
     QVBoxLayout,
     QWidget,
@@ -47,14 +57,24 @@ class CustomFileIconProvider(QFileIconProvider):
 
 
 class CollapsibleSection(QWidget):
-    """A collapsible section widget with header and content."""
+    """A collapsible section widget with header and content using QPropertyAnimation.
 
-    def __init__(self, title: str, parent=None):
+    Based on: https://github.com/MichaelVoelkel/qt-collapsible-section
+    Key: Animate both widget and contentArea height simultaneously.
+    """
+
+    def __init__(self, title: str, animation_duration: int = 100, parent=None):
         super().__init__(parent)
-        self._is_collapsed = False
         self._title = title
+        self._animation_duration = animation_duration
+        self._is_collapsed = True  # Start collapsed
         self._header_buttons: list[QPushButton] = []
-        self._content_height = 0  # Store original content height
+
+        # Content area (QScrollArea) - must create before _setup_ui
+        self.content_area = QScrollArea(self)
+        self.content_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.content_area.setStyleSheet("background-color: transparent;")
+
         self._setup_ui()
         # Register theme listener
         register_theme_listener(self._on_theme_changed)
@@ -66,53 +86,85 @@ class CollapsibleSection(QWidget):
             pass
 
     def _setup_ui(self):
-        """Setup the collapsible section UI."""
+        """Setup the collapsible section UI with animation support."""
         theme = get_theme()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
 
-        # Header container
+        # Content area (QScrollArea for proper sizing) - must create first
+        self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.content_area.setMaximumHeight(0)  # Start collapsed
+        self.content_area.setMinimumHeight(0)  # Start collapsed
+
+        # Toggle button (arrow + title)
+        self.toggle_button = QToolButton(self)
+        self.toggle_button.setStyleSheet("QToolButton {border: none;}")
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)  # Start collapsed (right arrow)
+        self.toggle_button.setText(f" {self._title}")
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)  # Start collapsed (unchecked)
+        self.toggle_button.clicked.connect(self._on_toggle)
+
+        # Apply theme style to toggle button
+        self._apply_toggle_style()
+
+        # Header line
+        self.header_line = QFrame(self)
+        self.header_line.setFrameShape(QFrame.Shape.HLine)
+        self.header_line.setFrameShadow(QFrame.Shadow.Sunken)
+        self.header_line.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        # Animation group for simultaneous animations
+        self.toggle_animation = QParallelAnimationGroup(self)
+
+        # Animate: self.minimumHeight, self.maximumHeight, content_area.maximumHeight
+        self.toggle_animation.addAnimation(QPropertyAnimation(self, b"minimumHeight"))
+        self.toggle_animation.addAnimation(QPropertyAnimation(self, b"maximumHeight"))
+        self.toggle_animation.addAnimation(QPropertyAnimation(self.content_area, b"maximumHeight"))
+
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Header row
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
+        header_layout.addWidget(self.toggle_button)
+        # Container for extra header buttons (e.g., "+")
+        self.header_buttons_widget = QWidget()
+        self.header_buttons_layout = QHBoxLayout(self.header_buttons_widget)
+        self.header_buttons_layout.setContentsMargins(0, 0, 8, 0)
+        self.header_buttons_layout.setSpacing(4)
+        header_layout.addWidget(self.header_buttons_widget)
+        header_layout.addWidget(self.header_line)
 
-        # Header button (fold/unfold)
-        self.header_btn = QPushButton(f"▼ {self._title}")
-        self.header_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {theme.CHROME};
+        main_layout.addWidget(header_widget)
+        main_layout.addWidget(self.content_area)
+
+        # Set initial collapsed state height
+        header_height = self.toggle_button.sizeHint().height()
+        self.setMinimumHeight(header_height)
+        self.setMaximumHeight(header_height)
+
+    def _apply_toggle_style(self):
+        """Apply theme style to toggle button."""
+        theme = get_theme()
+        self.toggle_button.setStyleSheet(f"""
+            QToolButton {{
                 border: none;
+                background-color: {theme.CHROME};
                 border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
-                text-align: left;
+                padding: 8px 12px;
                 color: {theme.TEXT};
                 font-weight: bold;
                 font-size: {theme.FONT_SIZE_MD};
             }}
-            QPushButton:hover {{
+            QToolButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
-        self.header_btn.clicked.connect(self._toggle_collapsed)
-        header_layout.addWidget(self.header_btn, 1)  # stretch=1 to take remaining space
-
-        # Container for extra header buttons (e.g., "+")
-        self.header_buttons_widget = QWidget()
-        self.header_buttons_layout = QHBoxLayout(self.header_buttons_widget)
-        self.header_buttons_layout.setContentsMargins(0, 0, 8, 0)  # right margin
-        self.header_buttons_layout.setSpacing(4)
-        header_layout.addWidget(self.header_buttons_widget)
-
-        layout.addWidget(header_widget)
-
-        # Content container
-        self.content_widget = QWidget()
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(8, 4, 8, 8)
-        self.content_layout.setSpacing(4)
-        layout.addWidget(self.content_widget)
 
     def add_header_button(self, text: str, callback, tooltip: str = "") -> QPushButton:
         """Add a button to the header row."""
@@ -143,9 +195,58 @@ class CollapsibleSection(QWidget):
         self._header_buttons.append(btn)
         return btn
 
-    def _toggle_collapsed(self):
-        """Toggle collapsed state."""
-        self.set_collapsed(not self._is_collapsed)
+    def _on_toggle(self, checked: bool):
+        """Handle toggle button click."""
+        self._is_collapsed = not checked
+
+        if checked:  # Expanded
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+        else:  # Collapsed
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
+
+        self.toggle_animation.start()
+
+    def set_content_layout(self, content_layout: QVBoxLayout):
+        """Set the content layout for this section.
+
+        This is the key method that sets up animations properly.
+        Must be called after adding all content widgets.
+
+        Args:
+            content_layout: The layout containing content widgets
+        """
+        # Clear old layout from content_area
+        old_layout = self.content_area.layout()
+        if old_layout:
+            # Reparent widgets to avoid deletion
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().setParent(None)
+
+        # Set new layout
+        self.content_area.setLayout(content_layout)
+
+        # Calculate heights for animation
+        collapsed_height = self.sizeHint().height() - self.content_area.maximumHeight()
+        content_height = content_layout.sizeHint().height()
+
+        # Setup animations for widget height
+        for i in range(self.toggle_animation.animationCount() - 1):
+            anim = self.toggle_animation.animationAt(i)
+            anim.setDuration(self._animation_duration)
+            anim.setStartValue(collapsed_height)
+            anim.setEndValue(collapsed_height + content_height)
+
+        # Setup animation for content area height
+        content_anim = self.toggle_animation.animationAt(self.toggle_animation.animationCount() - 1)
+        content_anim.setDuration(self._animation_duration)
+        content_anim.setStartValue(0)
+        content_anim.setEndValue(content_height)
+        # Re-bind to content_area
+        content_anim.setTargetObject(self.content_area)
 
     def add_widget(self, widget: QWidget, stretch: int = 0):
         """Add a widget to the content area.
@@ -154,70 +255,86 @@ class CollapsibleSection(QWidget):
             widget: Widget to add
             stretch: Stretch factor (0 = no stretch, >0 = proportional stretch)
         """
-        self.content_layout.addWidget(widget, stretch)
+        # Get or create content widget and layout
+        content_widget = self.content_area.widget()
+        if content_widget is None:
+            content_widget = QWidget()
+            content_widget.setStyleSheet("background-color: transparent;")
+            self._content_layout = QVBoxLayout(content_widget)
+            self._content_layout.setContentsMargins(8, 4, 8, 8)
+            self._content_layout.setSpacing(4)
+            self.content_area.setWidget(content_widget)
+            self.content_area.setWidgetResizable(True)
+
+        self._content_layout.addWidget(widget, stretch)
+        # Update animation values after adding widget
+        self._update_animation_values()
+
+    def _update_animation_values(self):
+        """Update animation values based on current content."""
+        content_widget = self.content_area.widget()
+        if content_widget is None:
+            return
+
+        collapsed_height = self.toggle_button.sizeHint().height()
+        content_height = content_widget.sizeHint().height()
+
+        for i in range(self.toggle_animation.animationCount() - 1):
+            anim = self.toggle_animation.animationAt(i)
+            anim.setDuration(self._animation_duration)
+            anim.setStartValue(collapsed_height)
+            anim.setEndValue(collapsed_height + content_height)
+
+        content_anim = self.toggle_animation.animationAt(self.toggle_animation.animationCount() - 1)
+        content_anim.setDuration(self._animation_duration)
+        content_anim.setStartValue(0)
+        content_anim.setEndValue(content_height)
 
     def set_collapsed(self, collapsed: bool, animate: bool = True):
         """Set collapsed state.
 
         Args:
             collapsed: True to collapse, False to expand
-            animate: Ignored (kept for API compatibility)
+            animate: Whether to animate the transition
         """
         if self._is_collapsed == collapsed:
             return
 
-        # Store current content height before collapsing
-        if not collapsed:
-            self._content_height = self.content_widget.height()
-
         self._is_collapsed = collapsed
 
-        # Update arrow
-        arrow = "▶" if collapsed else "▼"
-        self.header_btn.setText(f"{arrow} {self._title}")
+        # Update button state
+        self.toggle_button.setChecked(not collapsed)
 
-        # Toggle visibility
-        self.content_widget.setVisible(not collapsed)
-
-        # Update size policy
         if collapsed:
-            self.content_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            self.setMaximumHeight(self.header_btn.sizeHint().height() + 16)
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
         else:
-            self.content_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
-            # Clear any fixed height constraints
-            self.setMinimumHeight(0)
-            # Force layout update for nested collapsible sections
-            self.content_widget.updateGeometry()
-            # Also update parent to propagate size changes
-            parent = self.parentWidget()
-            while parent:
-                parent.updateGeometry()
-                parent = parent.parentWidget()
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+
+        if animate:
+            self.toggle_animation.start()
+        else:
+            # Jump to end state immediately - set values directly
+            collapsed_height = self.toggle_button.sizeHint().height()
+            content_widget = self.content_area.widget()
+            content_height = content_widget.sizeHint().height() if content_widget else 0
+
+            if collapsed:
+                self.setMinimumHeight(collapsed_height)
+                self.setMaximumHeight(collapsed_height)
+                self.content_area.setMaximumHeight(0)
+            else:
+                self.setMinimumHeight(collapsed_height + content_height)
+                self.setMaximumHeight(collapsed_height + content_height)
+                self.content_area.setMaximumHeight(content_height)
 
     def _on_theme_changed(self):
         """Handle theme change - update header styles."""
-        theme = get_theme()
-
-        # Update header button
-        self.header_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {theme.CHROME};
-                border: none;
-                border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
-                text-align: left;
-                color: {theme.TEXT};
-                font-weight: bold;
-                font-size: {theme.FONT_SIZE_MD};
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
+        self._apply_toggle_style()
 
         # Update header buttons
+        theme = get_theme()
         for btn in self._header_buttons:
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -754,7 +871,7 @@ class FileTreeSection(CollapsibleSection):
     work_dir_changed = pyqtSignal(Path)
 
     def __init__(self, parent=None):
-        super().__init__("工作区", parent)
+        super().__init__("工作区", parent=parent)
         self._work_dir = Path.cwd()
         # Add folder button in header for changing directory
         self.add_header_button("📁", self._on_change_dir, "更改工作目录")
@@ -895,7 +1012,7 @@ class MoreToolsSection(CollapsibleSection):
     browser_toggle_requested = pyqtSignal()
 
     def __init__(self, monitoring_controller=None, parent=None):
-        super().__init__("更多工具", parent)
+        super().__init__("更多工具", parent=parent)
         self._monitoring_controller = monitoring_controller
         self._setup_content()
 
