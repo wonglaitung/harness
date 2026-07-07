@@ -573,14 +573,35 @@ class MainWindow(QMainWindow):
             logger.warning("Event loop not ready, schedules will start on first message")
 
     def _on_agent_ready(self, agent):
-        """Handle agent ready - start schedule controller."""
-        logger.info("Agent ready, starting ScheduleController...")
+        """Handle agent ready - start schedule controller and load MCP/Skill configs."""
+        logger.info("Agent ready, initializing controllers...")
 
         self.schedule_controller.set_agent(agent)
 
         # Set agent to skill and MCP controllers
         self.skill_controller.set_agent(agent)
         self.mcp_controller.set_agent(agent)
+
+        # Sync cached MCP configs to SDK's MCPManager
+        # (Configs were cached during startup before agent was available)
+        for name, info in self.mcp_controller.servers.items():
+            config = self.mcp_controller.get_server_config(name)
+            if config and agent._mcp_manager:
+                # Check if server already exists in manager
+                existing = agent._mcp_manager.get_server_config(name)
+                if not existing:
+                    logger.info(f"Syncing cached MCP config '{name}' to SDK")
+                    agent._mcp_manager.add_server(config)
+                else:
+                    logger.info(f"MCP config '{name}' already in SDK, skipping")
+
+        # Load skills now that agent is available
+        logger.info("Loading skills after agent ready...")
+        skills_loaded = self.skill_controller.load_defaults()
+        logger.info(f"Loaded {skills_loaded} skills")
+
+        # Auto-connect enabled MCP servers
+        self._auto_connect_mcp_servers()
 
         # Start schedule controller in background
         async def start_schedule_controller():
@@ -1004,16 +1025,17 @@ class MainWindow(QMainWindow):
         if config_file.exists():
             self.mcp_controller.load_from_file(config_file)
             logger.info(f"Loaded {len(self.mcp_controller.servers)} MCP servers")
-
-            # Auto-connect enabled servers after UI is ready
-            # Use QTimer to ensure event loop is running
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, self._auto_connect_mcp_servers)
+            # Note: Auto-connect is handled in _on_agent_ready() after agent is initialized
 
     def _auto_connect_mcp_servers(self):
         """Auto-connect to enabled MCP servers."""
         import logging
         logger = logging.getLogger(__name__)
+
+        # Check if agent is available
+        if not self.chat_controller.agent:
+            logger.info("Agent not ready, skipping auto-connect (will retry when agent is initialized)")
+            return
 
         for name, info in self.mcp_controller.servers.items():
             config = self.mcp_controller.get_server_config(name)

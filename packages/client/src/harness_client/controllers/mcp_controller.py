@@ -41,6 +41,8 @@ class MCPController:
         self._on_change: Callable | None = None
         # Local cache for UI display
         self._server_states: dict[str, MCPServerInfo] = {}
+        # Cache full configs before agent is available
+        self._cached_configs: dict[str, MCPServerConfig] = {}
 
     def set_agent(self, agent) -> None:
         """
@@ -65,7 +67,8 @@ class MCPController:
             config: Server configuration
         """
         if not self._agent:
-            # Store locally until agent is set
+            # Store full config locally until agent is set
+            self._cached_configs[config.name] = config
             self._server_states[config.name] = MCPServerInfo(
                 name=config.name,
                 transport=config.transport,
@@ -266,6 +269,9 @@ class MCPController:
                     timeout=server_config.get("timeout", 30.0),
                 )
 
+                # Cache full config for later sync to SDK
+                self._cached_configs[config.name] = config
+
                 # Add to agent's manager if available
                 if self._agent:
                     self._agent._mcp_manager.add_server(config)
@@ -295,16 +301,21 @@ class MCPController:
         Args:
             path: Path to save config file
         """
-        if not self._agent:
-            return
-
         import json
 
         config = {"mcpServers": {}}
-        for name, _info in self._server_states.items():
-            c = self._agent.get_mcp_server_config(name)
-            if c:
-                config["mcpServers"][name] = c.to_dict()
+
+        # Use cached configs first (populated before agent was available)
+        for name, cached_config in self._cached_configs.items():
+            config["mcpServers"][name] = cached_config.to_dict()
+
+        # Then add configs from agent's manager (for servers added after agent was set)
+        if self._agent:
+            for name in self._server_states:
+                if name not in config["mcpServers"]:
+                    c = self._agent.get_mcp_server_config(name)
+                    if c:
+                        config["mcpServers"][name] = c.to_dict()
 
         path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
 
@@ -324,8 +335,8 @@ class MCPController:
         """
         List all server configurations.
 
-        Returns configurations from agent's manager if available,
-        otherwise from local cache.
+        Returns configurations from cached configs if agent not available,
+        otherwise from agent's manager.
 
         Returns:
             List of MCPServerConfig objects
@@ -333,17 +344,8 @@ class MCPController:
         if self._agent and self._agent._mcp_manager:
             return self._agent._mcp_manager.list_server_configs()
 
-        # Return configs from local cache (convert MCPServerInfo to minimal MCPServerConfig)
-        configs = []
-        for name, info in self._server_states.items():
-            # Create minimal config from cached info
-            config = MCPServerConfig(
-                name=name,
-                transport=info.transport,
-                enabled=True,
-            )
-            configs.append(config)
-        return configs
+        # Return cached configs (populated before agent was available)
+        return list(self._cached_configs.values())
 
     def get_server_config(self, name: str):
         """
@@ -355,15 +357,12 @@ class MCPController:
         Returns:
             MCPServerConfig or None
         """
+        # First check cached configs (populated before agent was available)
+        if name in self._cached_configs:
+            return self._cached_configs[name]
+
+        # Then check agent's MCP manager
         if self._agent:
             return self._agent.get_mcp_server_config(name)
 
-        # Return minimal config from local cache
-        info = self._server_states.get(name)
-        if info:
-            return MCPServerConfig(
-                name=name,
-                transport=info.transport,
-                enabled=True,
-            )
         return None
