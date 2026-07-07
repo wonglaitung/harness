@@ -1121,6 +1121,8 @@ class MainWindow(QMainWindow):
             "command": server_config.command,
             "args": server_config.args,
             "url": server_config.url,
+            "env": server_config.env,
+            "headers": server_config.headers,
             "timeout": server_config.timeout,
             "enabled": server_config.enabled,
         }
