@@ -9,9 +9,13 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # SDK imports
 from harness import MCPServerConfig
+
+if TYPE_CHECKING:
+    from harness.mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,8 @@ class MCPController:
         self._server_states: dict[str, MCPServerInfo] = {}
         # Cache full configs before agent is available
         self._cached_configs: dict[str, MCPServerConfig] = {}
+        # Standalone MCP clients (used before agent is available)
+        self._standalone_clients: dict[str, "MCPClient"] = {}
 
     def set_agent(self, agent) -> None:
         """
@@ -52,6 +58,24 @@ class MCPController:
             agent: AgentHarness instance
         """
         self._agent = agent
+
+        # Sync any connected standalone clients to the agent
+        if agent and self._standalone_clients:
+            logger.info(f"Syncing {len(self._standalone_clients)} standalone MCP clients to agent")
+            for name, client in list(self._standalone_clients.items()):
+                # Disconnect standalone client and reconnect via agent
+                try:
+                    # Get config from cache
+                    config = self._cached_configs.get(name)
+                    if config and agent._mcp_manager:
+                        # Add config to manager (it will reconnect internally)
+                        agent._mcp_manager.add_server(config)
+                        # Note: The agent's MCP manager will create its own connection
+                        # We just close our standalone one
+                    del self._standalone_clients[name]
+                except Exception as e:
+                    logger.warning(f"Failed to sync standalone client {name}: {e}")
+
         if self._on_change:
             self._on_change()
 
@@ -98,24 +122,66 @@ class MCPController:
         Returns:
             True if connected successfully
         """
-        if not self._agent:
-            return False
-
         if name not in self._server_states:
             return False
 
         server_info = self._server_states[name]
         server_info.status = "连接中..."
 
-        try:
-            # Connect via agent
-            await self._agent.add_mcp_server(name)
+        if self._on_change:
+            self._on_change()
 
-            # Update status
-            tools = self._agent.get_mcp_server_tools(name)
-            server_info.status = "已连接"
-            server_info.tools_count = len(tools) if tools else 0
-            server_info.error_message = ""
+        try:
+            if self._agent:
+                # Connect via agent
+                await self._agent.add_mcp_server(name)
+
+                # Update status
+                tools = self._agent.get_mcp_server_tools(name)
+                server_info.status = "已连接"
+                server_info.tools_count = len(tools) if tools else 0
+                server_info.error_message = ""
+            else:
+                # Agent not available, use standalone MCPClient to test connection
+                config = self._cached_configs.get(name)
+                if not config:
+                    server_info.status = "错误"
+                    server_info.error_message = "服务器配置未找到"
+                    if self._on_change:
+                        self._on_change()
+                    return False
+
+                # Use standalone client (similar to MCPServerDialog test)
+                from harness.mcp.client import MCPClient
+                from harness.mcp.transport import HTTPTransport, StdioTransport
+
+                if config.transport == "stdio":
+                    if not config.command:
+                        raise ValueError("Stdio transport requires command")
+                    transport = StdioTransport(
+                        command=config.command,
+                        args=config.args,
+                        env=config.env,
+                    )
+                else:
+                    if not config.url:
+                        raise ValueError("HTTP transport requires URL")
+                    transport = HTTPTransport(
+                        url=config.url,
+                        headers=config.headers,
+                        timeout=config.timeout,
+                    )
+
+                client = MCPClient(transport)
+                await client.connect()
+
+                # Update status with discovered tools
+                server_info.status = "已连接"
+                server_info.tools_count = len(client.tools) if client.tools else 0
+                server_info.error_message = ""
+
+                # Store client for later use (will be synced to agent when available)
+                self._standalone_clients[name] = client
 
             if self._on_change:
                 self._on_change()
@@ -138,19 +204,27 @@ class MCPController:
         Returns:
             True if disconnected successfully
         """
-        if not self._agent:
-            return False
-
         try:
-            await self._agent.disconnect_mcp_server(name)
-            self._server_states[name].status = "未连接"
-            self._server_states[name].tools_count = 0
+            # Disconnect standalone client if exists
+            if name in self._standalone_clients:
+                client = self._standalone_clients[name]
+                await client.disconnect()
+                del self._standalone_clients[name]
+
+            # Disconnect via agent if available
+            if self._agent:
+                await self._agent.disconnect_mcp_server(name)
+
+            if name in self._server_states:
+                self._server_states[name].status = "未连接"
+                self._server_states[name].tools_count = 0
 
             if self._on_change:
                 self._on_change()
             return True
 
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error disconnecting MCP server {name}: {e}")
             return False
 
     def remove_server(self, name: str) -> bool:
