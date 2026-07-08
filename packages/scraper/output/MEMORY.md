@@ -88,7 +88,27 @@
 
 ## 2026-07-08 提取
 
+## 2026-07-09 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债4.57%逼近4.6%红线-降息预期左侧布局窗口临界点**
+
+### 港股分析
+- **港股云计算板块联动爆发 — AI应用SaaS化估值重估左侧信号**
+
+### 港股分析
+- **港股科网股集体爆发-AI应用端右侧超强确认信号**
+
+### 新范式/工具
+- **Robostral Navigate — 单RGB相机具身导航新范式** - https://mistral.ai/news/robostral-navigate/
+
+### 新范式/工具
+- **SkillOpt — 技能即训练状态：Agent技能文本空间优化器** - https://github.com/microsoft/SkillOpt
+
+### 新范式/工具
+- **Flint — AI Agent 可视化中间语言新范式** - https://microsoft.github.io/flint-chart/
 
 ### 港股分析
 - **港股估值洼地+美债4.53%高位 — 降息预期左侧布局窗口延续**
