@@ -58,23 +58,11 @@ class MCPController:
             agent: AgentHarness instance
         """
         self._agent = agent
-
-        # Sync any connected standalone clients to the agent
-        if agent and self._standalone_clients:
-            logger.info(f"Syncing {len(self._standalone_clients)} standalone MCP clients to agent")
-            for name, client in list(self._standalone_clients.items()):
-                # Disconnect standalone client and reconnect via agent
-                try:
-                    # Get config from cache
-                    config = self._cached_configs.get(name)
-                    if config and agent._mcp_manager:
-                        # Add config to manager (it will reconnect internally)
-                        agent._mcp_manager.add_server(config)
-                        # Note: The agent's MCP manager will create its own connection
-                        # We just close our standalone one
-                    del self._standalone_clients[name]
-                except Exception as e:
-                    logger.warning(f"Failed to sync standalone client {name}: {e}")
+        # Note: MCP tools are already registered via chat_controller.initialize()
+        # which gets tools from get_all_tools() and passes them to AgentHarness.
+        # We just keep the standalone clients for tool execution.
+        if self._on_change:
+            self._on_change()
 
         if self._on_change:
             self._on_change()
@@ -133,8 +121,26 @@ class MCPController:
 
         try:
             if self._agent:
-                # Connect via agent
-                await self._agent.add_mcp_server(name)
+                # Connect via agent - need to get config and pass it
+                config = self._cached_configs.get(name)
+                if not config:
+                    server_info.status = "错误"
+                    server_info.error_message = "服务器配置未找到"
+                    if self._on_change:
+                        self._on_change()
+                    return False
+
+                # Build config dict for agent
+                config_dict = {
+                    "transport": config.transport,
+                    "command": config.command,
+                    "args": config.args,
+                    "url": config.url,
+                    "env": config.env,
+                    "headers": config.headers,
+                    "timeout": config.timeout,
+                }
+                await self._agent.add_mcp_server(name, config=config_dict)
 
                 # Update status
                 tools = self._agent.get_mcp_server_tools(name)
