@@ -29,7 +29,6 @@ from harness_client.controllers.monitoring_controller import (
     MonitoringController,
 )
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
-from harness_client.ui.right_panel import CollapsibleSection
 
 logger = logging.getLogger(__name__)
 
@@ -177,20 +176,46 @@ class MetricsRow(QWidget):
         """)
 
 
-class MonitoringSection(CollapsibleSection):
-    """监控区块 - 可折叠"""
+class MonitoringSection(QWidget):
+    """监控区块 - 直接显示内容，无独立折叠"""
 
     def __init__(self, controller: MonitoringController, parent=None):
+        super().__init__(parent)
         self._controller = controller
-        super().__init__("监控", parent=parent)
-        self._setup_content()
+        self._setup_ui()
 
         # 连接信号
         self._controller.metrics_updated.connect(self._on_metrics_updated)
 
-    def _setup_content(self):
-        """设置内容"""
+        register_theme_listener(self._theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._theme_changed)
+        except Exception:
+            pass
+
+    def _setup_ui(self):
+        """设置UI"""
         theme = get_theme()
+
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 区块标题
+        header = QLabel("监控")
+        header.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                text-transform: uppercase;
+                padding: 8px 0 4px 0;
+                letter-spacing: 0.5px;
+            }}
+        """)
+        main_layout.addWidget(header)
 
         # 滚动区域
         scroll = QScrollArea()
@@ -209,13 +234,13 @@ class MonitoringSection(CollapsibleSection):
                 border-radius: 3px;
             }}
         """)
-        self.add_widget(scroll, 1)
+        main_layout.addWidget(scroll, 1)
 
         # 容器
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         scroll.setWidget(container)
 
         # === Token 使用区块 ===
@@ -349,10 +374,22 @@ class MonitoringSection(CollapsibleSection):
         # 趋势图
         self._trend_chart.set_data(metrics.token_history)
 
-    def _on_theme_changed(self):
+    def _theme_changed(self):
         """主题切换"""
-        super()._on_theme_changed()
         theme = get_theme()
+
+        # 更新标题样式
+        header = self.findChild(QLabel, "")
+        if header:
+            header.setStyleSheet(f"""
+                QLabel {{
+                    color: {theme.TEXT_SUBTLE};
+                    font-size: {theme.FONT_SIZE_XS};
+                    text-transform: uppercase;
+                    padding: 8px 0 4px 0;
+                    letter-spacing: 0.5px;
+                }}
+            """)
 
         # 更新分组框样式
         for group in self.findChildren(QGroupBox):
@@ -384,20 +421,46 @@ class MonitoringSection(CollapsibleSection):
         # 趋势图会自动重绘
 
 
-class ExecutionLogSection(CollapsibleSection):
-    """执行日志区块 - 可折叠"""
+class ExecutionLogSection(QWidget):
+    """执行日志区块 - 直接显示内容，无独立折叠"""
 
     def __init__(self, controller: MonitoringController, parent=None):
+        super().__init__(parent)
         self._controller = controller
-        super().__init__("执行日志", parent=parent)
-        self._setup_content()
+        self._setup_ui()
 
         # 连接信号
         self._controller.log_entry_added.connect(self._add_log_entry)
 
-    def _setup_content(self):
-        """设置内容"""
+        register_theme_listener(self._theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._theme_changed)
+        except Exception:
+            pass
+
+    def _setup_ui(self):
+        """设置UI"""
         theme = get_theme()
+
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 区块标题
+        header = QLabel("执行日志")
+        header.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                text-transform: uppercase;
+                padding: 8px 0 4px 0;
+                letter-spacing: 0.5px;
+            }}
+        """)
+        main_layout.addWidget(header)
 
         # 日志容器
         self._log_container = QWidget()
@@ -435,7 +498,7 @@ class ExecutionLogSection(CollapsibleSection):
             }}
         """)
         scroll.setWidget(self._log_container)
-        self.add_widget(scroll, 1)
+        main_layout.addWidget(scroll, 1)
 
         # 占位符
         self._placeholder = QLabel("执行过程中将显示日志...")
@@ -487,9 +550,9 @@ class ExecutionLogSection(CollapsibleSection):
         """)
         self._log_layout.insertWidget(0, self._placeholder)
 
-    def _on_theme_changed(self):
+    def _theme_changed(self):
         """主题切换"""
-        super()._on_theme_changed()
+        theme = get_theme()
 
         # 更新所有日志条目
         for widget in self._log_widgets:
