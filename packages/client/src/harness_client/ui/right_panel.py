@@ -2,6 +2,7 @@
 Right panel with collapsible sections for skills, MCP servers, and file tree.
 """
 
+import logging
 from pathlib import Path
 
 from PyQt6.QtCore import (
@@ -1109,7 +1110,103 @@ class MoreToolsSection(CollapsibleSection):
     def __init__(self, monitoring_controller=None, parent=None):
         super().__init__("更多工具", parent=parent)
         self._monitoring_controller = monitoring_controller
+        self._logger = logging.getLogger(__name__)
+        self._capped_content_height = 0
+        self._collapsed_header_height = 0
+        self._animation_connected = False  # Track if we connected the signal
         self._setup_content()
+        # Connect animation finished signal AFTER setup to avoid early triggers
+        self.toggle_animation.finished.connect(self._on_animation_finished)
+        self._animation_connected = True
+        self._logger.debug(
+            f"MoreToolsSection.__init__: initial max_height={self.maximumHeight()}, "
+            f"content_max_height={self.content_area.maximumHeight()}"
+        )
+
+    def _on_toggle(self, checked: bool):
+        """Override to cap animation values before starting animation.
+
+        The base class _on_toggle starts the animation directly, but we need
+        to cap the end values to _MAX_CONTENT_HEIGHT first.
+        """
+        self._is_collapsed = not checked
+
+        # Update button arrow
+        if checked:  # Expanded
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+        else:  # Collapsed
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
+
+        # Get current content height
+        content_widget = self.content_area.widget()
+        content_height = content_widget.sizeHint().height() if content_widget else 0
+        collapsed_height = self.toggle_button.sizeHint().height()
+
+        # Cap the height
+        capped_height = min(content_height, self._MAX_CONTENT_HEIGHT)
+
+        self._logger.debug(
+            f"MoreToolsSection._on_toggle: checked={checked}, "
+            f"content_height={content_height}, capped_height={capped_height}, "
+            f"collapsed_height={collapsed_height}"
+        )
+
+        # Set animation values with cap
+        for i in range(self.toggle_animation.animationCount() - 1):
+            anim = self.toggle_animation.animationAt(i)
+            anim.setDuration(self._animation_duration)
+            anim.setStartValue(collapsed_height)
+            anim.setEndValue(collapsed_height + capped_height)
+
+        content_anim = self.toggle_animation.animationAt(
+            self.toggle_animation.animationCount() - 1
+        )
+        content_anim.setDuration(self._animation_duration)
+        content_anim.setStartValue(0)
+        content_anim.setEndValue(capped_height)
+
+        # Store capped height for use after animation
+        self._capped_content_height = capped_height if checked else 0
+        self._collapsed_header_height = collapsed_height
+
+        self._logger.debug(
+            f"Animation end values: widget={collapsed_height + capped_height}, "
+            f"content_area={capped_height}"
+        )
+
+        self.toggle_animation.start()
+
+    def _on_animation_finished(self):
+        """Lock the height after animation completes to prevent resizing.
+
+        This is critical: QScrollArea can resize itself after animation ends,
+        so we need to enforce the maximum height constraint.
+        """
+        # Skip if header height not set yet (initialization phase)
+        if self._collapsed_header_height <= 0:
+            self._logger.debug(
+                f"Animation finished skipped: header_height={self._collapsed_header_height} (initialization)"
+            )
+            return
+
+        if self._is_collapsed:
+            # Collapsed state - lock to header height only
+            self.setMaximumHeight(self._collapsed_header_height)
+            self.content_area.setMaximumHeight(0)
+            self._logger.debug(
+                f"Animation finished (collapsed): max_height={self._collapsed_header_height}"
+            )
+        else:
+            # Expanded state - lock to capped height
+            total_height = self._collapsed_header_height + self._capped_content_height
+            self.setMaximumHeight(total_height)
+            self.content_area.setMaximumHeight(self._capped_content_height)
+            self._logger.debug(
+                f"Animation finished (expanded): max_height={total_height}, "
+                f"content_max_height={self._capped_content_height}"
+            )
 
     def set_collapsed(self, collapsed: bool, animate: bool = True):
         """Override to cap expanded content height.
@@ -1245,14 +1342,9 @@ class MoreToolsSection(CollapsibleSection):
 
         self.add_widget(tools_widget)
 
-        # Limit the content area's maximum height so the CollapsibleSection
-        # doesn't grow to fill the entire panel. The internal QScrollArea
-        # will scroll the overflow.
-        self.content_area.setMaximumHeight(350)
-        self.content_area.setMinimumHeight(0)
-
-        # Nested sections should not collapse independently - they show content directly
-        # when "More Tools" is expanded
+        # NOTE: Do NOT set content_area maximumHeight here!
+        # Base class already sets it to 0 for collapsed state.
+        # Height is controlled by _on_toggle() animation with capping.
 
     def update_skills(self, skills: list):
         """Update skills list."""
