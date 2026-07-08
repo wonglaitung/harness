@@ -217,9 +217,10 @@ class MonitoringSection(QWidget):
         """)
         main_layout.addWidget(header)
 
-        # 滚动区域
+        # 滚动区域 - 设置固定高度避免 sizeHint 返回过大值
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFixedHeight(280)  # 固定高度，足够显示所有指标
         scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: transparent;
@@ -234,7 +235,7 @@ class MonitoringSection(QWidget):
                 border-radius: 3px;
             }}
         """)
-        main_layout.addWidget(scroll, 1)
+        main_layout.addWidget(scroll)
 
         # 容器
         container = QWidget()
@@ -469,11 +470,11 @@ class ExecutionLogSection(QWidget):
         self._log_layout.setSpacing(2)
         self._log_layout.addStretch()
 
-        # 滚动区域 - 设置最小高度以便能看到更多日志
+        # 滚动区域 - 设置固定高度避免 sizeHint 返回过大值
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        scroll.setMinimumHeight(150)  # 最小高度，确保能看到多条日志
+        scroll.setFixedHeight(150)  # 固定高度
         scroll.setStyleSheet(f"""
             QScrollArea {{
                 background-color: {theme.APP_BACKGROUND};
@@ -498,7 +499,7 @@ class ExecutionLogSection(QWidget):
             }}
         """)
         scroll.setWidget(self._log_container)
-        main_layout.addWidget(scroll, 1)
+        main_layout.addWidget(scroll)
 
         # 占位符
         self._placeholder = QLabel("执行过程中将显示日志...")

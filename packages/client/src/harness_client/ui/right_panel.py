@@ -261,8 +261,8 @@ class CollapsibleSection(QWidget):
             content_widget = QWidget()
             content_widget.setStyleSheet("background-color: transparent;")
             self._content_layout = QVBoxLayout(content_widget)
-            self._content_layout.setContentsMargins(8, 4, 8, 8)
-            self._content_layout.setSpacing(4)
+            self._content_layout.setContentsMargins(0, 0, 0, 0)  # 无边距，由子组件控制
+            self._content_layout.setSpacing(8)
             self.content_area.setWidget(content_widget)
             self.content_area.setWidgetResizable(True)
 
