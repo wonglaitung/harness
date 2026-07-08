@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         self.chat_controller.set_thinking_callback(self._on_thinking)
         self.chat_controller.set_confirm_callback(self._confirm_dangerous_operation)
         self.chat_controller.set_progress_callback(self._on_progress_event)
+        self.chat_controller.set_mcp_controller(self.mcp_controller)
 
         # Set callback to start schedule controller when agent is ready
         self.chat_controller._on_agent_ready = self._on_agent_ready

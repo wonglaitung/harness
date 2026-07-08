@@ -109,6 +109,7 @@ class ChatController:
         self._is_running = False
         self._initializing = False  # Flag to track if initialization is in progress
         self._mcp_tools: list = []  # MCP tools from connected servers
+        self._mcp_controller = None  # MCP controller for dynamic tool retrieval
         self._on_progress: Callable | None = None
         self._on_stream: Callable | None = None
         self._on_tool_call: Callable | None = None
@@ -130,6 +131,14 @@ class ChatController:
         # Only reset if agent was already initialized AND we're not currently initializing
         if self.agent is not None and not self._initializing:
             self.agent = None
+
+    def set_mcp_controller(self, controller):
+        """Set MCP controller for dynamic tool retrieval.
+
+        Args:
+            controller: MCPController instance
+        """
+        self._mcp_controller = controller
 
     def set_progress_callback(self, callback: Callable[[ProgressEvent], None]):
         """Set callback for progress events."""
@@ -244,11 +253,6 @@ class ChatController:
             if mcp_tools:
                 tools.extend(mcp_tools)
                 logger.info(f"Added {len(mcp_tools)} MCP tools")
-
-            # Add stored MCP tools
-            if self._mcp_tools:
-                tools.extend(self._mcp_tools)
-                logger.info(f"Added {len(self._mcp_tools)} stored MCP tools")
 
             # Add UpdateCoreMemoryTool if auto_update_memory is enabled
             if self.config.auto_update_memory:
@@ -393,7 +397,13 @@ class ChatController:
 
         if not self.agent:
             logger.info("Agent not initialized, initializing now...")
-            await self.initialize()
+            # Get MCP tools from connected servers before initializing
+            mcp_tools = []
+            if self._mcp_controller:
+                mcp_tools = self._mcp_controller.get_all_tools()
+                if mcp_tools:
+                    logger.info(f"Found {len(mcp_tools)} MCP tools from connected servers")
+            await self.initialize(mcp_tools)
 
         self._is_running = True
 

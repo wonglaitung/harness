@@ -310,9 +310,27 @@ class MCPController:
         Returns:
             List of tool instances
         """
-        if not self._agent:
-            return []
-        return self._agent.get_all_mcp_tools()
+        tools = []
+
+        # Get tools from standalone clients (before agent is available)
+        for name, client in self._standalone_clients.items():
+            for tool in client.tools:
+                # Wrap MCP tool as Harness tool
+                from harness.mcp.tool_wrapper import MCPToolWrapper
+                wrapper = MCPToolWrapper(
+                    mcp_client=client,
+                    server_name=name,
+                    tool_name=tool.name,
+                    description=tool.description,
+                    input_schema=tool.input_schema,
+                )
+                tools.append(wrapper)
+
+        # Also get tools from agent if available
+        if self._agent:
+            tools.extend(self._agent.get_all_mcp_tools())
+
+        return tools
 
     def get_server_list(self) -> list[MCPServerInfo]:
         """Get list of all servers."""
