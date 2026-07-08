@@ -1089,7 +1089,10 @@ class FileTreeSection(CollapsibleSection):
 
 
 class MoreToolsSection(CollapsibleSection):
-    """Section containing secondary tools: Skills, MCP, Monitoring, Schedule, Browser."""
+    """Section containing secondary tools: Skills, MCP, Monitoring, Schedule, Browser.
+
+    Caps its expanded height so it doesn't overflow the right panel.
+    """
 
     # Forward signals from child sections
     skill_double_clicked = pyqtSignal(str)
@@ -1100,10 +1103,64 @@ class MoreToolsSection(CollapsibleSection):
     schedule_requested = pyqtSignal()
     browser_toggle_requested = pyqtSignal()
 
+    # Max content height — when expanded, internal scroll handles overflow
+    _MAX_CONTENT_HEIGHT = 350
+
     def __init__(self, monitoring_controller=None, parent=None):
         super().__init__("更多工具", parent=parent)
         self._monitoring_controller = monitoring_controller
         self._setup_content()
+
+    def set_collapsed(self, collapsed: bool, animate: bool = True):
+        """Override to cap expanded content height.
+
+        Caps the animation end value so content_area maximumHeight
+        never exceeds _MAX_CONTENT_HEIGHT. This prevents the section
+        from filling the entire right panel when expanded.
+        """
+        if self._is_collapsed == collapsed:
+            return
+        self._is_collapsed = collapsed
+
+        # Update button state
+        self.toggle_button.setChecked(not collapsed)
+
+        if collapsed:
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
+        else:
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+
+        if animate:
+            # Cap the animation end value for the widget height (indices 0,1)
+            collapsed_height = self.toggle_button.sizeHint().height()
+            for i in range(self.toggle_animation.animationCount() - 1):
+                anim = self.toggle_animation.animationAt(i)
+                anim.setEndValue(collapsed_height + self._MAX_CONTENT_HEIGHT)
+            # Cap the animation end value for content_area
+            content_anim = self.toggle_animation.animationAt(
+                self.toggle_animation.animationCount() - 1
+            )
+            content_anim.setEndValue(self._MAX_CONTENT_HEIGHT)
+            self.toggle_animation.start()
+        else:
+            collapsed_height = self.toggle_button.sizeHint().height()
+            content_widget = self.content_area.widget()
+            content_height = (
+                min(content_widget.sizeHint().height(), self._MAX_CONTENT_HEIGHT)
+                if content_widget
+                else 0
+            )
+
+            if collapsed:
+                self.setMinimumHeight(collapsed_height)
+                self.setMaximumHeight(collapsed_height)
+                self.content_area.setMaximumHeight(0)
+            else:
+                self.setMinimumHeight(collapsed_height + content_height)
+                self.setMaximumHeight(collapsed_height + content_height)
+                self.content_area.setMaximumHeight(content_height)
 
     def _setup_content(self):
         """Setup the tools content with clean banking-app style."""
@@ -1187,6 +1244,12 @@ class MoreToolsSection(CollapsibleSection):
         tools_layout.addWidget(actions_widget)
 
         self.add_widget(tools_widget)
+
+        # Limit the content area's maximum height so the CollapsibleSection
+        # doesn't grow to fill the entire panel. The internal QScrollArea
+        # will scroll the overflow.
+        self.content_area.setMaximumHeight(350)
+        self.content_area.setMinimumHeight(0)
 
         # Nested sections should not collapse independently - they show content directly
         # when "More Tools" is expanded
