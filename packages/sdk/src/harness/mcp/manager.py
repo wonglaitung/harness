@@ -255,6 +255,7 @@ class MCPManager:
             RuntimeError: If connection fails
         """
         if name in self._clients:
+            logger.debug(f"MCP server {name} already connected")
             return self._clients[name]
 
         config = self._configs.get(name)
@@ -263,6 +264,8 @@ class MCPManager:
 
         if not config.enabled:
             raise ValueError(f"MCP server {name} is disabled")
+
+        logger.info(f"Connecting to MCP server: {name} (transport={config.transport})")
 
         # Create transport based on config
         if config.transport == "stdio":
@@ -292,6 +295,7 @@ class MCPManager:
         self._register_tools(name, client)
 
         self._clients[name] = client
+        logger.info(f"MCP server {name} connected successfully")
         return client
 
     async def connect_all(self) -> Dict[str, MCPServerInfo]:
@@ -301,20 +305,23 @@ class MCPManager:
         Returns:
             Dictionary of server name to server info
         """
+        logger.info(f"Connecting to all MCP servers ({len(self._configs)} configured)")
         results: Dict[str, MCPServerInfo] = {}
 
         for name, config in self._configs.items():
             if not config.enabled:
+                logger.debug(f"Skipping disabled MCP server: {name}")
                 continue
 
             try:
                 client = await self.connect_server(name)
                 if client.server_info:
                     results[name] = client.server_info
-            except Exception:
+            except Exception as e:
                 # Continue with other servers on failure
-                pass
+                logger.error(f"Failed to connect MCP server {name}: {e}")
 
+        logger.info(f"Connected to {len(results)} MCP servers: {list(results.keys())}")
         return results
 
     async def disconnect_server(self, name: str) -> bool:
@@ -328,8 +335,10 @@ class MCPManager:
             True if server was disconnected
         """
         if name not in self._clients:
+            logger.debug(f"MCP server {name} not connected")
             return False
 
+        logger.info(f"Disconnecting MCP server: {name}")
         client = self._clients.pop(name)
         await client.disconnect()
 
@@ -340,6 +349,7 @@ class MCPManager:
 
     async def disconnect_all(self) -> None:
         """Disconnect from all MCP servers."""
+        logger.info(f"Disconnecting all MCP servers ({len(self._clients)} connected)")
         for name in list(self._clients.keys()):
             await self.disconnect_server(name)
 
@@ -368,13 +378,15 @@ class MCPManager:
             if self.tool_registry:
                 try:
                     self.tool_registry.register(wrapper, category="mcp")
-                except ValueError:
+                    logger.debug(f"Registered MCP tool: {wrapper.name}")
+                except ValueError as e:
                     # Tool name conflict, skip
-                    pass
+                    logger.warning(f"Tool name conflict, skipping {wrapper.name}: {e}")
 
             wrappers.append(wrapper)
 
         self._tool_wrappers[server_name] = wrappers
+        logger.info(f"Registered {len(wrappers)} MCP tools from {server_name}")
 
     def _unregister_tools(self, server_name: str) -> None:
         """
@@ -384,6 +396,7 @@ class MCPManager:
             server_name: Server name
         """
         wrappers = self._tool_wrappers.pop(server_name, [])
+        logger.info(f"Unregistering {len(wrappers)} MCP tools from {server_name}")
 
         if self.tool_registry:
             for wrapper in wrappers:

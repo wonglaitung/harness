@@ -116,6 +116,7 @@ class MCPController:
         server_info = self._server_states[name]
         server_info.status = "连接中..."
 
+        logger.info(f"Connecting to MCP server: {name}")
         if self._on_change:
             self._on_change()
 
@@ -126,6 +127,7 @@ class MCPController:
                 if not config:
                     server_info.status = "错误"
                     server_info.error_message = "服务器配置未找到"
+                    logger.error(f"MCP server {name}: config not found")
                     if self._on_change:
                         self._on_change()
                     return False
@@ -140,6 +142,7 @@ class MCPController:
                     "headers": config.headers,
                     "timeout": config.timeout,
                 }
+                logger.info(f"Connecting via agent with transport={config.transport}")
                 await self._agent.add_mcp_server(name, config=config_dict)
 
                 # Update status
@@ -147,16 +150,19 @@ class MCPController:
                 server_info.status = "已连接"
                 server_info.tools_count = len(tools) if tools else 0
                 server_info.error_message = ""
+                logger.info(f"MCP server {name} connected: {server_info.tools_count} tools")
             else:
                 # Agent not available, use standalone MCPClient to test connection
                 config = self._cached_configs.get(name)
                 if not config:
                     server_info.status = "错误"
                     server_info.error_message = "服务器配置未找到"
+                    logger.error(f"MCP server {name}: config not found")
                     if self._on_change:
                         self._on_change()
                     return False
 
+                logger.info(f"Connecting via standalone client (agent not available)")
                 # Use standalone client (similar to MCPServerDialog test)
                 from harness.mcp.client import MCPClient
                 from harness.mcp.transport import HTTPTransport, StdioTransport
@@ -185,6 +191,7 @@ class MCPController:
                 server_info.status = "已连接"
                 server_info.tools_count = len(client.tools) if client.tools else 0
                 server_info.error_message = ""
+                logger.info(f"MCP server {name} connected via standalone client: {server_info.tools_count} tools")
 
                 # Store client for later use (will be synced to agent when available)
                 self._standalone_clients[name] = client
@@ -196,6 +203,7 @@ class MCPController:
         except Exception as e:
             server_info.status = "错误"
             server_info.error_message = str(e)
+            logger.error(f"Failed to connect MCP server {name}: {e}")
             if self._on_change:
                 self._on_change()
             return False
@@ -210,16 +218,19 @@ class MCPController:
         Returns:
             True if disconnected successfully
         """
+        logger.info(f"Disconnecting MCP server: {name}")
         try:
             # Disconnect standalone client if exists
             if name in self._standalone_clients:
                 client = self._standalone_clients[name]
                 await client.disconnect()
                 del self._standalone_clients[name]
+                logger.info(f"Disconnected standalone client for {name}")
 
             # Disconnect via agent if available
             if self._agent:
                 await self._agent.disconnect_mcp_server(name)
+                logger.info(f"Disconnected via agent for {name}")
 
             if name in self._server_states:
                 self._server_states[name].status = "未连接"
@@ -227,6 +238,7 @@ class MCPController:
 
             if self._on_change:
                 self._on_change()
+            logger.info(f"MCP server {name} disconnected successfully")
             return True
 
         except Exception as e:
@@ -246,6 +258,7 @@ class MCPController:
         if name not in self._server_states:
             return False
 
+        logger.info(f"Removing MCP server: {name}")
         if self._agent:
             self._agent.remove_mcp_server(name)
 
@@ -331,11 +344,17 @@ class MCPController:
                     input_schema=tool.input_schema,
                 )
                 tools.append(wrapper)
+            logger.debug(f"Got {len(client.tools)} tools from standalone client {name}")
 
         # Also get tools from agent if available
         if self._agent:
-            tools.extend(self._agent.get_all_mcp_tools())
+            agent_tools = self._agent.get_all_mcp_tools()
+            tools.extend(agent_tools)
+            if agent_tools:
+                logger.debug(f"Got {len(agent_tools)} tools from agent")
 
+        if tools:
+            logger.info(f"get_all_tools: returning {len(tools)} tools from {len(self._standalone_clients)} standalone + agent")
         return tools
 
     def get_server_list(self) -> list[MCPServerInfo]:

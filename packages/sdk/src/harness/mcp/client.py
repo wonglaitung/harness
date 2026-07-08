@@ -146,6 +146,7 @@ class MCPClient:
 
     async def disconnect(self) -> None:
         """Disconnect from MCP server."""
+        logger.info(f"Disconnecting from MCP server: {self._server_info.name if self._server_info else 'unknown'}")
         self._connected = False
 
         if self._message_task:
@@ -163,6 +164,7 @@ class MCPClient:
         self._request_handlers.clear()
 
         await self.transport.disconnect()
+        logger.info("MCP server disconnected")
 
     async def _discover_tools(self) -> None:
         """Discover available tools from server."""
@@ -178,8 +180,10 @@ class MCPClient:
                 )
                 for tool in tools
             ]
-        except Exception:
+            logger.info(f"Discovered {len(self._tools)} tools: {[t.name for t in self._tools]}")
+        except Exception as e:
             # Server may not support tools
+            logger.warning(f"Failed to discover tools: {e}")
             self._tools = []
 
     async def _discover_resources(self) -> None:
@@ -187,8 +191,10 @@ class MCPClient:
         try:
             response = await self._request("resources/list", {}, timeout=5.0)
             self._resources = response.get("resources", [])
-        except Exception:
+            logger.info(f"Discovered {len(self._resources)} resources")
+        except Exception as e:
             # Server may not support resources
+            logger.debug(f"Failed to discover resources: {e}")
             self._resources = []
 
     async def call_tool(
@@ -211,6 +217,8 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Client not connected")
 
+        logger.info(f"Calling MCP tool: {name} with args: {list(arguments.keys())}")
+
         response = await self._request(
             "tools/call",
             {
@@ -230,6 +238,9 @@ class MCPClient:
             for item in content_items
             if item.get("type") == "text"
         )
+
+        result_len = len(text_content) if text_content else 0
+        logger.info(f"MCP tool {name} returned: error={is_error}, content_len={result_len}")
 
         return {
             "content": text_content,
