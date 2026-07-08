@@ -172,6 +172,19 @@ class MCPToolWrapper:
                 error=f"MCP tool execution failed: {e}",
             )
 
+    def to_definition(self) -> Dict[str, Any]:
+        """
+        Convert to tool definition format (same as Anthropic schema).
+
+        Returns:
+            Tool definition dict
+        """
+        return {
+            "name": self._name,
+            "description": self._description,
+            "input_schema": self._input_schema,
+        }
+
     def to_anthropic_schema(self) -> Dict[str, Any]:
         """
         Convert to Anthropic tool schema format.
@@ -179,11 +192,7 @@ class MCPToolWrapper:
         Returns:
             Anthropic-compatible tool schema
         """
-        return {
-            "name": self._name,
-            "description": self._description,
-            "input_schema": self._input_schema,
-        }
+        return self.to_definition()
 
     def to_openai_schema(self) -> Dict[str, Any]:
         """

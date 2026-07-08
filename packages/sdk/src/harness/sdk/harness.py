@@ -4,9 +4,12 @@ Main AgentHarness class - The primary SDK entry point.
 This is the main interface users interact with to create and run agents.
 """
 
+import logging
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from harness.core.agent_loop import AgentLoop, LoopConfig
 from harness.core.hooks import HookPoint, LifecycleHook
@@ -127,8 +130,14 @@ class AgentHarness:
         # Initialize tool registry
         self._tool_registry = ToolRegistry()
         if tools:
+            import logging
+            _logger = logging.getLogger(__name__)
             for tool in tools:
-                self._tool_registry.register(tool)
+                try:
+                    self._tool_registry.register(tool)
+                    _logger.debug(f"Registered tool: {tool.name}")
+                except ValueError as e:
+                    _logger.warning(f"Failed to register tool: {e}")
 
         # Initialize tool executor
         self._tool_executor = ToolExecutor(self._tool_registry)
@@ -861,13 +870,15 @@ class AgentHarness:
         session = self._session_manager.get_or_create(session_id)
 
         # Get tool definitions
+        all_tools = self._tool_registry.get_all()
+        logger.info(f"Tool registry has {len(all_tools)} tools: {[t.name for t in all_tools]}")
         tool_defs = [
             ToolDefinition(
                 name=t.name,
                 description=t.description,
                 input_schema=t.input_schema,
             )
-            for t in self._tool_registry.get_all()
+            for t in all_tools
         ]
 
         # Run the loop

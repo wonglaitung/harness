@@ -305,7 +305,8 @@ class AgentLoop:
         on_progress: ProgressCallback | None = None,
     ) -> LoopResult:
         """Internal implementation of run."""
-        logger.info(f"_run_impl called, prompt length={len(prompt)}, tools={len(tools) if tools else 0}")
+        tool_names = [t.name for t in tools] if tools else []
+        logger.info(f"_run_impl called, prompt length={len(prompt)}, tools={len(tools) if tools else 0}: {tool_names}")
 
         # Input validation
         if self._input_validator:

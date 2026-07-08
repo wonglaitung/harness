@@ -251,8 +251,10 @@ class ChatController:
 
             # Add MCP tools if provided
             if mcp_tools:
+                # Log each MCP tool name
+                mcp_tool_names = [t.name for t in mcp_tools]
+                logger.info(f"Adding {len(mcp_tools)} MCP tools: {mcp_tool_names}")
                 tools.extend(mcp_tools)
-                logger.info(f"Added {len(mcp_tools)} MCP tools")
 
             # Add UpdateCoreMemoryTool if auto_update_memory is enabled
             if self.config.auto_update_memory:
