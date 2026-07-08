@@ -375,65 +375,92 @@ class SkillsSection(QWidget):
             pass
 
     def _setup_ui(self):
-        """Setup UI."""
+        """Setup UI with clean banking-app style."""
         theme = get_theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
 
-        # Header row with title and add button
+        # Header row - cleaner style without separate add button
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setContentsMargins(0, 0, 0, 6)
         header_layout.setSpacing(8)
 
+        # Section title with subtle styling
         title_label = QLabel("技能")
         title_label.setStyleSheet(f"""
             QLabel {{
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
-                font-weight: bold;
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                font-weight: 600;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
             }}
         """)
         header_layout.addWidget(title_label)
 
+        # Count badge instead of add button (cleaner)
+        self.count_label = QLabel("0")
+        self.count_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                background-color: {theme.CHROME};
+                border-radius: 8px;
+                padding: 2px 8px;
+            }}
+        """)
+        header_layout.addWidget(self.count_label)
+        header_layout.addStretch()
+
+        # Add button - subtle, aligned right
         add_btn = QPushButton("+")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                background-color: transparent;
+                border: none;
                 border-radius: {theme.RADIUS_SM};
-                min-width: 24px;
-                max-width: 24px;
-                min-height: 24px;
-                max-height: 24px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 28px;
+                max-height: 28px;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 18px;
+                font-weight: 300;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
+                color: {theme.ACCENT};
             }}
         """)
         add_btn.clicked.connect(self._on_add_clicked)
         header_layout.addWidget(add_btn)
-        header_layout.addStretch()
 
         layout.addWidget(header_widget)
 
-        # Skills list container
+        # Skills list container with subtle background
         self.skills_list_widget = QWidget()
+        self.skills_list_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_MD};
+            }}
+        """)
         self.skills_list_layout = QVBoxLayout(self.skills_list_widget)
-        self.skills_list_layout.setContentsMargins(0, 4, 0, 0)
-        self.skills_list_layout.setSpacing(4)
+        self.skills_list_layout.setContentsMargins(0, 4, 0, 4)
+        self.skills_list_layout.setSpacing(0)
         layout.addWidget(self.skills_list_widget)
 
         # Placeholder label
-        self.placeholder_label = QLabel("暂无已加载的技能")
+        self.placeholder_label = QLabel("暂无技能")
+        self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: {theme.FONT_SIZE_SM};
-                padding: 4px;
+                padding: 16px 8px;
             }}
         """)
         self.skills_list_layout.addWidget(self.placeholder_label)
@@ -453,6 +480,9 @@ class SkillsSection(QWidget):
             item_data['widget'].deleteLater()
         self._skill_items.clear()
 
+        # Update count badge
+        self.count_label.setText(str(len(skills)))
+
         if not skills:
             self.placeholder_label.setVisible(True)
             return
@@ -469,37 +499,52 @@ class SkillsSection(QWidget):
             self._skill_items[name] = item_data
 
     def _create_skill_item(self, name: str, enabled: bool) -> dict:
-        """Create a skill item widget.
+        """Create a skill item widget with clean list style.
 
         Returns:
-            dict with 'widget', 'name_label', 'indicator', 'enabled'
+            dict with 'widget', 'name_label', 'enabled'
         """
         theme = get_theme()
         widget = QWidget()
-        widget.setMinimumHeight(32)
+        widget.setMinimumHeight(36)
+        widget.setCursor(Qt.CursorShape.PointingHandCursor)
         widget.setStyleSheet(f"""
             QWidget#skillItem {{
-                background-color: {theme.APP_BACKGROUND};
-                border-radius: {theme.RADIUS_SM};
+                background-color: transparent;
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+            QWidget#skillItem:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
         widget.setObjectName("skillItem")
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(10)
 
-        # Status indicator
-        indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
-        indicator = QLabel("●")
-        indicator.setStyleSheet(f"color: {indicator_color}; font-size: {theme.FONT_SIZE_SM};")
-        layout.addWidget(indicator)
-
-        # Skill name
+        # Skill name with status via opacity
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+        name_color = theme.TEXT if enabled else theme.TEXT_SUBTLE
+        name_label.setStyleSheet(f"""
+            color: {name_color};
+            font-size: {theme.FONT_SIZE_SM};
+        """)
         layout.addWidget(name_label)
 
         layout.addStretch()
+
+        # Status indicator as small badge
+        status_text = "启用" if enabled else "禁用"
+        status_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
+        status_label = QLabel(status_text)
+        status_label.setStyleSheet(f"""
+            color: {status_color};
+            font-size: {theme.FONT_SIZE_XS};
+            background-color: transparent;
+            padding: 2px 6px;
+            border-radius: 4px;
+        """)
+        layout.addWidget(status_label)
 
         # Double-click to edit
         widget.mouseDoubleClickEvent = lambda event, n=name: self._on_double_click(n)
@@ -507,7 +552,7 @@ class SkillsSection(QWidget):
         return {
             'widget': widget,
             'name_label': name_label,
-            'indicator': indicator,
+            'status_label': status_label,
             'enabled': enabled,
         }
 
@@ -524,7 +569,13 @@ class SkillsSection(QWidget):
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: {theme.FONT_SIZE_SM};
-                padding: 4px;
+                padding: 16px 8px;
+            }}
+        """)
+        self.skills_list_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_MD};
             }}
         """)
 
@@ -532,23 +583,27 @@ class SkillsSection(QWidget):
         for _name, item_data in self._skill_items.items():
             widget = item_data['widget']
             name_label = item_data['name_label']
-            indicator = item_data['indicator']
+            status_label = item_data['status_label']
             enabled = item_data['enabled']
 
-            # Update widget background
+            # Update widget style
             widget.setStyleSheet(f"""
                 QWidget#skillItem {{
-                    background-color: {theme.APP_BACKGROUND};
-                    border-radius: {theme.RADIUS_SM};
+                    background-color: transparent;
+                    border-bottom: 1px solid {theme.BORDER};
+                }}
+                QWidget#skillItem:hover {{
+                    background-color: {theme.HOVER_NEUTRAL};
                 }}
             """)
 
             # Update name label
-            name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+            name_color = theme.TEXT if enabled else theme.TEXT_SUBTLE
+            name_label.setStyleSheet(f"color: {name_color}; font-size: {theme.FONT_SIZE_SM};")
 
-            # Update indicator color
-            indicator_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
-            indicator.setStyleSheet(f"color: {indicator_color}; font-size: {theme.FONT_SIZE_SM};")
+            # Update status label
+            status_color = theme.SUCCESS if enabled else theme.TEXT_SUBTLE
+            status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
 
 
 class MCPServersSection(QWidget):
@@ -571,65 +626,91 @@ class MCPServersSection(QWidget):
             pass
 
     def _setup_ui(self):
-        """Setup UI."""
+        """Setup UI with clean banking-app style."""
         theme = get_theme()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(2)
 
-        # Header row with title and add button
+        # Header row - cleaner style
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 4)
+        header_layout.setContentsMargins(0, 0, 0, 6)
         header_layout.setSpacing(8)
 
+        # Section title
         title_label = QLabel("MCP")
         title_label.setStyleSheet(f"""
             QLabel {{
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
-                font-weight: bold;
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                font-weight: 600;
+                letter-spacing: 0.5px;
             }}
         """)
         header_layout.addWidget(title_label)
 
+        # Count badge
+        self.count_label = QLabel("0")
+        self.count_label.setStyleSheet(f"""
+            QLabel {{
+                color: {theme.TEXT_SUBTLE};
+                font-size: {theme.FONT_SIZE_XS};
+                background-color: {theme.CHROME};
+                border-radius: 8px;
+                padding: 2px 8px;
+            }}
+        """)
+        header_layout.addWidget(self.count_label)
+        header_layout.addStretch()
+
+        # Add button - subtle
         add_btn = QPushButton("+")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                background-color: transparent;
+                border: none;
                 border-radius: {theme.RADIUS_SM};
-                min-width: 24px;
-                max-width: 24px;
-                min-height: 24px;
-                max-height: 24px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 28px;
+                max-height: 28px;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 18px;
+                font-weight: 300;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
+                color: {theme.ACCENT};
             }}
         """)
         add_btn.clicked.connect(self._on_add_clicked)
         header_layout.addWidget(add_btn)
-        header_layout.addStretch()
 
         layout.addWidget(header_widget)
 
-        # Server list container
+        # Server list container with subtle background
         self.server_list_widget = QWidget()
+        self.server_list_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_MD};
+            }}
+        """)
         self.server_list_layout = QVBoxLayout(self.server_list_widget)
-        self.server_list_layout.setContentsMargins(0, 4, 0, 0)
-        self.server_list_layout.setSpacing(4)
+        self.server_list_layout.setContentsMargins(0, 4, 0, 4)
+        self.server_list_layout.setSpacing(0)
         layout.addWidget(self.server_list_widget)
 
         # Placeholder label
-        self.placeholder_label = QLabel("暂无 MCP 配置")
+        self.placeholder_label = QLabel("暂无服务器")
+        self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: {theme.FONT_SIZE_SM};
-                padding: 4px;
+                padding: 16px 8px;
             }}
         """)
         self.server_list_layout.addWidget(self.placeholder_label)
@@ -649,6 +730,10 @@ class MCPServersSection(QWidget):
             item_data['widget'].deleteLater()
         self._server_items.clear()
 
+        # Update count badge
+        connected_count = sum(1 for s in servers if s.get("status") == "已连接")
+        self.count_label.setText(f"{connected_count}/{len(servers)}")
+
         if not servers:
             self.placeholder_label.setVisible(True)
             return
@@ -666,110 +751,101 @@ class MCPServersSection(QWidget):
             self._server_items[name] = item_data
 
     def _create_server_item(self, name: str, status: str, tools_count: int) -> dict:
-        """Create a server item widget.
+        """Create a server item widget with clean list style.
 
         Returns:
             dict with 'widget', 'name_label', 'status_label', 'action_btn', 'is_connected'
         """
         theme = get_theme()
         widget = QWidget()
-        widget.setMinimumHeight(32)
+        widget.setMinimumHeight(44)
+        widget.setCursor(Qt.CursorShape.PointingHandCursor)
         widget.setStyleSheet(f"""
             QWidget#mcpItem {{
-                background-color: {theme.APP_BACKGROUND};
-                border-radius: {theme.RADIUS_SM};
+                background-color: transparent;
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+            QWidget#mcpItem:hover {{
+                background-color: {theme.HOVER_NEUTRAL};
             }}
         """)
         widget.setObjectName("mcpItem")
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(10)
-
-        # Status indicator with animation
-        from harness_client.ui.interactive import StatusDot
 
         is_connected = status == "已连接"
         is_connecting = status == "连接中..."
         is_error = status == "错误"
 
-        indicator = StatusDot(size=10, parent=self)
-        if is_connected:
-            indicator.setStatus("connected")
-        elif is_connecting:
-            indicator.setStatus("connecting")
-        elif is_error:
-            indicator.setStatus("error")
-        else:
-            indicator.setStatus("disconnected")
-        layout.addWidget(indicator)
-
         # Server name
         name_label = QLabel(name)
-        name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+        name_label.setStyleSheet(f"""
+            color: {theme.TEXT};
+            font-size: {theme.FONT_SIZE_SM};
+            font-weight: 500;
+        """)
         layout.addWidget(name_label)
 
-        # Status text
+        # Status as compact badge
         if is_connected:
-            status_text = f"已连接 ({tools_count} 工具)"
-            status_color = theme.STATUS_CONNECTED
+            status_badge = f"● {tools_count} 工具"
+            status_color = theme.SUCCESS
         elif is_connecting:
-            status_text = status
+            status_badge = "● 连接中"
             status_color = theme.STATUS_CONNECTING
         elif is_error:
-            status_text = status
+            status_badge = "● 错误"
             status_color = theme.STATUS_ERROR
         else:
-            status_text = status
-            status_color = theme.STATUS_DISCONNECTED
+            status_badge = "○ 未连接"
+            status_color = theme.TEXT_SUBTLE
 
-        status_label = QLabel(status_text)
-        status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
+        status_label = QLabel(status_badge)
+        status_label.setStyleSheet(f"""
+            color: {status_color};
+            font-size: {theme.FONT_SIZE_XS};
+        """)
         layout.addWidget(status_label)
 
         layout.addStretch()
 
-        # Connect/Disconnect button with glow effect
-        from PyQt6.QtGui import QColor
-
-        from harness_client.ui.interactive import GlowButton
-
+        # Action button - subtle text button
+        action_btn = QPushButton("断开" if is_connected else "连接")
+        action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         if is_connected:
-            action_btn = GlowButton(glow_color=QColor(theme.DANGER), parent=self)
-            action_btn.setText("断开")
             action_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {theme.MCP_DISCONNECT_BG};
+                    background-color: transparent;
                     border: none;
                     border-radius: {theme.RADIUS_SM};
-                    padding: 4px 8px;
-                    color: {theme.MCP_DISCONNECT_TEXT};
+                    padding: 4px 10px;
+                    color: {theme.DANGER};
                     font-size: {theme.FONT_SIZE_XS};
                 }}
                 QPushButton:hover {{
-                    background-color: {theme.MCP_DISCONNECT_BG_HOVER};
+                    background-color: {theme.HOVER_NEUTRAL};
                 }}
             """)
         else:
-            action_btn = GlowButton(glow_color=QColor(theme.ACCENT), parent=self)
-            action_btn.setText("连接")
             action_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {theme.MCP_CONNECT_BG};
+                    background-color: transparent;
                     border: none;
                     border-radius: {theme.RADIUS_SM};
-                    padding: 4px 8px;
-                    color: {theme.MCP_CONNECT_TEXT};
+                    padding: 4px 10px;
+                    color: {theme.ACCENT};
                     font-size: {theme.FONT_SIZE_XS};
                 }}
                 QPushButton:hover {{
-                    background-color: {theme.MCP_CONNECT_BG_HOVER};
+                    background-color: {theme.HOVER_NEUTRAL};
                 }}
             """)
 
         action_btn.clicked.connect(lambda checked, n=name: self._on_toggle_server(n))
         layout.addWidget(action_btn)
 
-        # Double-click to toggle
+        # Double-click to edit
         widget.mouseDoubleClickEvent = lambda event, n=name: self._on_double_click(n)
 
         return {
@@ -798,7 +874,13 @@ class MCPServersSection(QWidget):
             QLabel {{
                 color: {theme.TEXT_SUBTLE};
                 font-size: {theme.FONT_SIZE_SM};
-                padding: 4px;
+                padding: 16px 8px;
+            }}
+        """)
+        self.server_list_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme.APP_BACKGROUND};
+                border-radius: {theme.RADIUS_MD};
             }}
         """)
 
@@ -811,55 +893,62 @@ class MCPServersSection(QWidget):
             is_connected = item_data['is_connected']
             status = item_data['status']
 
-            # Update widget background
+            # Update widget style
             widget.setStyleSheet(f"""
                 QWidget#mcpItem {{
-                    background-color: {theme.APP_BACKGROUND};
-                    border-radius: {theme.RADIUS_SM};
+                    background-color: transparent;
+                    border-bottom: 1px solid {theme.BORDER};
+                }}
+                QWidget#mcpItem:hover {{
+                    background-color: {theme.HOVER_NEUTRAL};
                 }}
             """)
 
             # Update name label
-            name_label.setStyleSheet(f"color: {theme.TEXT}; font-size: {theme.FONT_SIZE_SM};")
+            name_label.setStyleSheet(f"""
+                color: {theme.TEXT};
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: 500;
+            """)
 
             # Update status label with theme colors
             if is_connected:
-                status_color = theme.STATUS_CONNECTED
+                status_color = theme.SUCCESS
             elif status == "连接中...":
                 status_color = theme.STATUS_CONNECTING
             elif status == "错误":
                 status_color = theme.STATUS_ERROR
             else:
-                status_color = theme.STATUS_DISCONNECTED
+                status_color = theme.TEXT_SUBTLE
             status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
 
             # Update action button
             if is_connected:
                 action_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {theme.MCP_DISCONNECT_BG};
+                        background-color: transparent;
                         border: none;
                         border-radius: {theme.RADIUS_SM};
-                        padding: 4px 8px;
-                        color: {theme.MCP_DISCONNECT_TEXT};
+                        padding: 4px 10px;
+                        color: {theme.DANGER};
                         font-size: {theme.FONT_SIZE_XS};
                     }}
                     QPushButton:hover {{
-                        background-color: {theme.MCP_DISCONNECT_BG_HOVER};
+                        background-color: {theme.HOVER_NEUTRAL};
                     }}
                 """)
             else:
                 action_btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {theme.MCP_CONNECT_BG};
+                        background-color: transparent;
                         border: none;
                         border-radius: {theme.RADIUS_SM};
-                        padding: 4px 8px;
-                        color: {theme.MCP_CONNECT_TEXT};
+                        padding: 4px 10px;
+                        color: {theme.ACCENT};
                         font-size: {theme.FONT_SIZE_XS};
                     }}
                     QPushButton:hover {{
-                        background-color: {theme.MCP_CONNECT_BG_HOVER};
+                        background-color: {theme.HOVER_NEUTRAL};
                     }}
                 """)
 
@@ -1017,14 +1106,14 @@ class MoreToolsSection(CollapsibleSection):
         self._setup_content()
 
     def _setup_content(self):
-        """Setup the tools content."""
+        """Setup the tools content with clean banking-app style."""
         theme = get_theme()
 
         # Container for all tools
         tools_widget = QWidget()
         tools_layout = QVBoxLayout(tools_widget)
         tools_layout.setContentsMargins(0, 0, 0, 0)
-        tools_layout.setSpacing(8)
+        tools_layout.setSpacing(12)
 
         # Skills section (nested, no separate collapse)
         self.skills_section = SkillsSection()
@@ -1051,45 +1140,51 @@ class MoreToolsSection(CollapsibleSection):
             self.monitoring_section = None
             self.log_section = None
 
-        # Schedule button (simple button, not collapsible)
-        self.schedule_btn = QPushButton("📅 排程")
+        # Quick actions row - clean icon buttons
+        actions_widget = QWidget()
+        actions_layout = QHBoxLayout(actions_widget)
+        actions_layout.setContentsMargins(0, 8, 0, 0)
+        actions_layout.setSpacing(8)
+
+        # Schedule button - clean, minimal
+        self.schedule_btn = QPushButton("排程")
+        self.schedule_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.schedule_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                border: none;
                 border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
+                padding: 10px 14px;
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
-                text-align: left;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.ACCENT};
             }}
         """)
         self.schedule_btn.clicked.connect(self.schedule_requested)
-        tools_layout.addWidget(self.schedule_btn)
+        actions_layout.addWidget(self.schedule_btn)
 
-        # Browser button (simple button)
-        self.browser_btn = QPushButton("🌐 浏览器")
+        # Browser button - clean, minimal
+        self.browser_btn = QPushButton("浏览器")
+        self.browser_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.browser_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                border: none;
                 border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
+                padding: 10px 14px;
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
-                text-align: left;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.ACCENT};
             }}
         """)
         self.browser_btn.clicked.connect(self.browser_toggle_requested)
-        tools_layout.addWidget(self.browser_btn)
+        actions_layout.addWidget(self.browser_btn)
+
+        tools_layout.addWidget(actions_widget)
 
         self.add_widget(tools_widget)
 
@@ -1108,36 +1203,33 @@ class MoreToolsSection(CollapsibleSection):
         """Update browser button status."""
         theme = get_theme()
         if is_active:
-            self.browser_btn.setText(f"● 浏览器 ({browser_type})")
+            self.browser_btn.setText(f"● {browser_type}")
             self.browser_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {theme.ACCENT};
                     border: none;
                     border-radius: {theme.RADIUS_MD};
-                    padding: 12px 16px;
+                    padding: 10px 14px;
                     color: white;
                     font-size: {theme.FONT_SIZE_SM};
-                    text-align: left;
                 }}
                 QPushButton:hover {{
                     background-color: {theme.ACCENT_HOVER};
                 }}
             """)
         else:
-            self.browser_btn.setText("🌐 浏览器")
+            self.browser_btn.setText("浏览器")
             self.browser_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {theme.APP_BACKGROUND};
-                    border: 1px solid {theme.BORDER};
+                    border: none;
                     border-radius: {theme.RADIUS_MD};
-                    padding: 12px 16px;
+                    padding: 10px 14px;
                     color: {theme.TEXT};
                     font-size: {theme.FONT_SIZE_SM};
-                    text-align: left;
                 }}
                 QPushButton:hover {{
                     background-color: {theme.HOVER_NEUTRAL};
-                    border-color: {theme.ACCENT};
                 }}
             """)
 
@@ -1150,16 +1242,14 @@ class MoreToolsSection(CollapsibleSection):
         self.schedule_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                border: none;
                 border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
+                padding: 10px 14px;
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
-                text-align: left;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.ACCENT};
             }}
         """)
 
