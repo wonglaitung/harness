@@ -90,7 +90,27 @@
 
 ## 2026-07-09 提取
 
+## 2026-07-10 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股互联网指数估值洼地 — PE 22x 处历史 15% 分位左侧布局机会**
+
+### 港股分析
+- **港股芯片板块集体走强 — 半导体国产替代+AI算力双轮驱动左侧信号**
+
+### 港股分析
+- **港股科技ETF 75亿资金回流 — Q2出清后右侧反转确认信号**
+
+### 新范式/工具
+- **ChatGPT Work — 跨应用行动Agent新范式** - https://openai.com/index/chatgpt-for-your-most-ambitious-work
+
+### 新范式/工具
+- **FableCut — 项目文件即接口的Agent驱动视频编辑范式** - https://github.com/ronak-create/FableCut
+
+### 新范式/工具
+- **GPT-Live — 全双工语音交互新范式** - https://openai.com/index/introducing-gpt-live
 
 ### 港股分析
 - **美债4.57%逼近4.6%红线-降息预期左侧布局窗口临界点**
