@@ -4,6 +4,80 @@
 
 ---
 
+## 2026-07-09: QSizePolicy.Fixed 阻止布局扩展
+
+### 问题
+
+实现 `MoreToolsSection` 自动伸展到底部时，标题区域被错误拉伸（高度从 37px 变成 265px），内容区域反而显示在下方。
+
+### 现象
+
+展开"更多工具"后：
+- `header_widget.height()=265`（预期 37px）
+- `content_area.height()=360`（正常）
+- 顶部出现大片空白，header 的 y 坐标变成 76
+
+### 根因分析
+
+`CollapsibleSection` 基类中：
+1. `content_area` 的 vertical size policy 是 `Fixed`
+2. `header_widget` 没有设置 size policy（默认为 `Preferred`）
+3. 当外部布局设置 stretch=1 时，空间需要被分配
+
+**Qt 布局分配逻辑**：
+- stretch factor 决定空间分配比例
+- 但 `Fixed` policy 的 widget 不能扩展
+- 空间被分配到其他可以扩展的 widget
+- `header_widget` 使用默认 `Preferred`，可以扩展，于是被拉伸
+
+### 解决方案
+
+1. **header_widget 设置 Fixed policy**：
+   ```python
+   header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+   ```
+   水平方向 Expanding（填满宽度），垂直方向 Fixed（高度固定）。
+
+2. **content_area 展开时改为 Expanding**：
+   ```python
+   # 展开时
+   self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+   # 折叠时
+   self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+   ```
+
+3. **布局设置 stretch factor**：
+   ```python
+   main_layout.addWidget(header_widget, 0)  # stretch=0
+   main_layout.addWidget(self.content_area, 1)  # stretch=1
+   ```
+
+### 教训
+
+1. **QSizePolicy 是布局扩展的关键**：不设置时使用默认值 `Preferred`，可能导致意外扩展
+2. **Fixed 阻止扩展**：如果 widget 不应该扩展，必须显式设置 `Fixed` policy
+3. **stretch factor 配合 size policy**：stretch 决定分配比例，size policy 决定能否接受分配
+4. **调试布局问题**：打印 geometry 和 size policy 可以快速定位问题
+
+### 调试技巧
+
+```python
+# 打印关键信息定位布局问题
+print(f"header y={header_widget.geometry().y()}")
+print(f"content y={content_area.geometry().y()}")
+print(f"content_area sizePolicy: {content_area.sizePolicy().verticalPolicy()}")
+```
+
+如果 header 的 y 坐标不为 0，说明上面有空白，可能是某个 widget 被意外拉伸。
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/ui/right_panel.py` | CollapsibleSection header 设置 Fixed policy，MoreToolsSection 展开时 content_area 改为 Expanding |
+
+---
+
 ## 2026-06-28: GoalVerifier 无状态设计支持并发执行
 
 ### 问题

@@ -129,6 +129,7 @@ class CollapsibleSection(QWidget):
 
         # Header row
         header_widget = QWidget()
+        header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
@@ -141,8 +142,8 @@ class CollapsibleSection(QWidget):
         header_layout.addWidget(self.header_buttons_widget)
         header_layout.addWidget(self.header_line)
 
-        main_layout.addWidget(header_widget)
-        main_layout.addWidget(self.content_area)
+        main_layout.addWidget(header_widget, 0)  # stretch=0 - header should not expand
+        main_layout.addWidget(self.content_area, 1)  # stretch=1 - content fills extra space
 
         # Set initial collapsed state height
         header_height = self.toggle_button.sizeHint().height()
@@ -1093,6 +1094,7 @@ class MoreToolsSection(CollapsibleSection):
     """Section containing secondary tools: Skills, MCP, Monitoring, Schedule, Browser.
 
     Caps its expanded height so it doesn't overflow the right panel.
+    When expanded and there's space below, auto-stretch to fill available space.
     """
 
     # Forward signals from child sections
@@ -1103,6 +1105,9 @@ class MoreToolsSection(CollapsibleSection):
     toggle_mcp_server_requested = pyqtSignal(str)
     schedule_requested = pyqtSignal()
     browser_toggle_requested = pyqtSignal()
+
+    # Signal for auto-stretch mode
+    stretch_mode_changed = pyqtSignal(bool)  # True=stretch to fill space
 
     # Max content height — when expanded, internal scroll handles overflow
     _MAX_CONTENT_HEIGHT = 350
@@ -1118,10 +1123,6 @@ class MoreToolsSection(CollapsibleSection):
         # Connect animation finished signal AFTER setup to avoid early triggers
         self.toggle_animation.finished.connect(self._on_animation_finished)
         self._animation_connected = True
-        self._logger.debug(
-            f"MoreToolsSection.__init__: initial max_height={self.maximumHeight()}, "
-            f"content_max_height={self.content_area.maximumHeight()}"
-        )
 
     def _on_toggle(self, checked: bool):
         """Override to cap animation values before starting animation.
@@ -1147,12 +1148,6 @@ class MoreToolsSection(CollapsibleSection):
         # Cap the height
         capped_height = min(content_height, self._MAX_CONTENT_HEIGHT)
 
-        self._logger.debug(
-            f"MoreToolsSection._on_toggle: checked={checked}, "
-            f"content_height={content_height}, capped_height={capped_height}, "
-            f"collapsed_height={collapsed_height}"
-        )
-
         # Set animation values with cap
         for i in range(self.toggle_animation.animationCount() - 1):
             anim = self.toggle_animation.animationAt(i)
@@ -1171,42 +1166,36 @@ class MoreToolsSection(CollapsibleSection):
         self._capped_content_height = capped_height if checked else 0
         self._collapsed_header_height = collapsed_height
 
-        self._logger.debug(
-            f"Animation end values: widget={collapsed_height + capped_height}, "
-            f"content_area={capped_height}"
-        )
-
         self.toggle_animation.start()
 
     def _on_animation_finished(self):
-        """Lock the height after animation completes to prevent resizing.
+        """Handle animation completion - enable auto-stretch when expanded.
 
-        This is critical: QScrollArea can resize itself after animation ends,
-        so we need to enforce the maximum height constraint.
+        When expanded, remove maximum height limit to allow auto-stretch.
+        When collapsed, restore fixed height.
         """
         # Skip if header height not set yet (initialization phase)
         if self._collapsed_header_height <= 0:
-            self._logger.debug(
-                f"Animation finished skipped: header_height={self._collapsed_header_height} (initialization)"
-            )
             return
 
         if self._is_collapsed:
             # Collapsed state - lock to header height only
             self.setMaximumHeight(self._collapsed_header_height)
+            self.content_area.setMinimumHeight(0)
             self.content_area.setMaximumHeight(0)
-            self._logger.debug(
-                f"Animation finished (collapsed): max_height={self._collapsed_header_height}"
-            )
+            self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self.stretch_mode_changed.emit(False)
         else:
-            # Expanded state - lock to capped height
-            total_height = self._collapsed_header_height + self._capped_content_height
-            self.setMaximumHeight(total_height)
-            self.content_area.setMaximumHeight(self._capped_content_height)
-            self._logger.debug(
-                f"Animation finished (expanded): max_height={total_height}, "
-                f"content_max_height={self._capped_content_height}"
-            )
+            # Expanded state - set minimum height but allow auto-stretch
+            min_height = self._collapsed_header_height + self._capped_content_height
+            self.setMinimumHeight(min_height)
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX - allow expansion
+            # Also allow content_area to expand to fill available space
+            self.content_area.setMinimumHeight(self._capped_content_height)
+            self.content_area.setMaximumHeight(16777215)  # Allow expansion
+            # Change size policy to Expanding so it can fill extra space
+            self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.stretch_mode_changed.emit(True)
 
     def set_collapsed(self, collapsed: bool, animate: bool = True):
         """Override to cap expanded content height.
@@ -1253,11 +1242,17 @@ class MoreToolsSection(CollapsibleSection):
             if collapsed:
                 self.setMinimumHeight(collapsed_height)
                 self.setMaximumHeight(collapsed_height)
+                self.content_area.setMinimumHeight(0)
                 self.content_area.setMaximumHeight(0)
+                self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                self.stretch_mode_changed.emit(False)
             else:
                 self.setMinimumHeight(collapsed_height + content_height)
-                self.setMaximumHeight(collapsed_height + content_height)
-                self.content_area.setMaximumHeight(content_height)
+                self.setMaximumHeight(16777215)  # Allow auto-stretch
+                self.content_area.setMinimumHeight(content_height)
+                self.content_area.setMaximumHeight(16777215)  # Allow expansion
+                self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                self.stretch_mode_changed.emit(True)
 
     def _setup_content(self):
         """Setup the tools content with clean banking-app style."""
@@ -1494,11 +1489,38 @@ class RightPanel(QWidget):
         self.more_tools_section.toggle_mcp_server_requested.connect(self.toggle_mcp_server_requested)
         self.more_tools_section.schedule_requested.connect(self.schedule_requested)
         self.more_tools_section.browser_toggle_requested.connect(self.browser_toggle_requested)
+        self.more_tools_section.stretch_mode_changed.connect(self._on_more_tools_stretch_changed)
         self.more_tools_section.set_collapsed(True, animate=False)
         layout.addWidget(self.more_tools_section)
 
         # Push all sections to the top when collapsed
         layout.addStretch()
+
+    def _on_more_tools_stretch_changed(self, stretch: bool):
+        """Handle MoreToolsSection stretch mode change.
+
+        When expanded, remove trailing stretch and give more_tools_section
+        a stretch factor to fill remaining space.
+        When collapsed, restore trailing stretch.
+        """
+        layout = self.layout()
+        if layout is None:
+            return
+
+        if stretch:
+            # Remove trailing stretch item if present
+            last_item = layout.itemAt(layout.count() - 1)
+            if last_item and last_item.spacerItem():
+                layout.takeAt(layout.count() - 1)
+            # Give more_tools_section (index 2) stretch factor
+            layout.setStretch(2, 1)
+        else:
+            # Remove stretch factor from more_tools_section
+            layout.setStretch(2, 0)
+            # Re-add trailing stretch if not present
+            last_item = layout.itemAt(layout.count() - 1)
+            if not last_item or not last_item.spacerItem():
+                layout.addStretch()
 
     def update_memory(self, sections):
         """Update memory display."""
