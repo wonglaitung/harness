@@ -214,7 +214,53 @@ async def initialize(self):
 
 ## 二、关键踩坑教训
 
-### 0. QScrollArea 布局陷阱（2026-06-25）⭐ 新增
+### 0. QSizePolicy.Fixed 阻止布局扩展（2026-07-09）⭐ 新增
+
+#### 问题现象
+
+实现 `MoreToolsSection` 自动伸展到底部时，标题区域被错误拉伸（高度从 37px 变成 265px），内容区域反而显示在下方。
+
+#### 根因分析
+
+`CollapsibleSection` 基类中：
+1. `content_area` 的 vertical size policy 是 `Fixed`
+2. `header_widget` 没有设置 size policy（默认为 `Preferred`）
+3. 当外部布局设置 `stretch=1` 时，空间需要被分配
+
+**Qt 布局分配逻辑**：
+- stretch factor 决定空间分配比例
+- 但 `Fixed` policy 的 widget 不能扩展
+- 空间被分配到其他可以扩展的 widget
+- `header_widget` 使用默认 `Preferred`，可以扩展，于是被拉伸
+
+#### 解决方案
+
+```python
+# 1. header_widget 设置 Fixed policy
+header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+# 2. content_area 展开时改为 Expanding
+if expanded:
+    self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+else:
+    self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+# 3. 布局设置 stretch factor
+main_layout.addWidget(header_widget, 0)  # stretch=0
+main_layout.addWidget(self.content_area, 1)  # stretch=1
+```
+
+#### 关键洞察
+
+- **QSizePolicy 是布局扩展的关键**：不设置时使用默认值 `Preferred`，可能导致意外扩展
+- **Fixed 阻止扩展**：如果 widget 不应该扩展，必须显式设置 `Fixed` policy
+- **stretch factor 配合 size policy**：stretch 决定分配比例，size policy 决定能否接受分配
+
+> **详细分析**：参见根目录 [lessons.md](../../../lessons.md) 的 "2026-07-09: QSizePolicy.Fixed 阻止布局扩展" 章节。
+
+---
+
+### 1. QScrollArea 布局陷阱（2026-06-25）
 
 #### 问题现象
 

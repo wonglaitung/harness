@@ -1373,8 +1373,112 @@ class MonitoringPanel(ThemeAwareWidget):
         self._trend_chart.update()
 ```
 
+## 可折叠区块组件 (CollapsibleSection)
+
+可折叠区块是右侧面板的核心组件，支持动画展开/折叠。
+
+### 实现模式
+
+使用 QScrollArea + QPropertyAnimation 模式：
+
+```python
+class CollapsibleSection(QWidget):
+    """可折叠区块 - 使用 QScrollArea + QPropertyAnimation"""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self._is_collapsed = True
+
+        # QScrollArea 作为内容容器
+        self.content_area = QScrollArea()
+        self.content_area.setWidgetResizable(True)
+        self.content_area.setMaximumHeight(0)  # 初始折叠
+        self.content_area.setMinimumHeight(0)
+
+        # 动画组
+        self.toggle_animation = QParallelAnimationGroup()
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"maximumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self, b"minimumHeight")
+        )
+        self.toggle_animation.addAnimation(
+            QPropertyAnimation(self.content_area, b"maximumHeight")
+        )
+```
+
+### 关键设计点
+
+1. **QScrollArea 作为内容容器**：允许内容超出可视区域时滚动
+2. **QParallelAnimationGroup**：同时动画整体高度和内容区域高度
+3. **header_widget 使用 Fixed 垂直 policy**：防止标题区域被意外拉伸
+
+```python
+# 标题区域固定高度
+header_widget = QWidget()
+header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+# 布局设置 stretch factor
+main_layout.addWidget(header_widget, 0)  # stretch=0
+main_layout.addWidget(self.content_area, 1)  # stretch=1
+```
+
+### MoreToolsSection 自动伸展
+
+`MoreToolsSection` 在展开状态下可以自动填充面板底部剩余空间：
+
+```python
+class MoreToolsSection(CollapsibleSection):
+    """更多工具区块 - 展开时自动伸展到底部"""
+
+    stretch_mode_changed = pyqtSignal(bool)  # True=stretch to fill space
+
+    def _on_animation_finished(self):
+        if self._is_collapsed:
+            # 折叠状态 - 固定高度
+            self.setMaximumHeight(self._collapsed_header_height)
+            self.content_area.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
+            self.stretch_mode_changed.emit(False)
+        else:
+            # 展开状态 - 允许伸展
+            self.setMinimumHeight(min_height)
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            self.content_area.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
+            self.stretch_mode_changed.emit(True)
+```
+
+**RightPanel 响应伸展模式**：
+
+```python
+def _on_more_tools_stretch_changed(self, stretch: bool):
+    layout = self.layout()
+    if stretch:
+        # 移除尾部 stretch，给 more_tools_section stretch factor
+        layout.setStretch(2, 1)
+    else:
+        # 恢复尾部 stretch
+        layout.setStretch(2, 0)
+        layout.addStretch()
+```
+
+### 子类继承要点
+
+所有子类必须使用 `parent=parent` 关键字参数：
+
+```python
+class FileTreeSection(CollapsibleSection):
+    def __init__(self, root_dir: Path, parent=None):
+        super().__init__("文件树", parent=parent)  # 使用 parent=parent
+```
+
 ## 下一步
 
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
 - [03-controllers.md](./03-controllers.md) - 了解控制器层设计（BrowserController、ScheduleController）
 - [04-configuration.md](./04-configuration.md) - 了解配置管理（浏览器配置、schedules.json）
+- [05-client-lessons.md](./05-client-lessons.md) - 了解客户端开发经验教训（QSizePolicy、布局陷阱等）

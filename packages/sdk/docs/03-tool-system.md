@@ -664,6 +664,50 @@ await agent.disconnect_mcp_server("github")
 
 详见 [07-sdk-api.md](./07-sdk-api.md) 的 MCP 方法章节。
 
+### MCP 操作日志
+
+SDK 提供详细的 MCP 操作日志，便于调试连接问题和跟踪工具可用性：
+
+#### 日志位置
+
+| 组件 | 文件 | 日志内容 |
+|------|------|----------|
+| MCP Client | `harness/mcp/client.py` | 工具发现、工具调用、断开连接 |
+| MCP Manager | `harness/mcp/manager.py` | 服务器连接/断开、工具注册/注销 |
+| MCP Controller | `harness_client/controllers/mcp_controller.py` | 客户端连接/断开操作 |
+
+#### 日志示例
+
+```
+# 服务器连接
+INFO - MCP server 'github' connected with 5 tools: ['search_repos', 'create_issue', ...]
+
+# 工具发现
+DEBUG - MCP tool discovered: mcp_github_search_repos
+
+# 工具调用
+DEBUG - MCP tool call: mcp_github_search_repos(args={'query': 'todo'})
+
+# 服务器断开
+INFO - MCP server 'github' disconnected
+```
+
+#### 启用详细日志
+
+```python
+import logging
+
+# 启用 MCP 模块详细日志
+logging.getLogger("harness.mcp").setLevel(logging.DEBUG)
+logging.getLogger("harness_client.mcp_controller").setLevel(logging.DEBUG)
+```
+
+#### 日志用途
+
+- **调试连接问题**：查看服务器是否成功连接、工具是否正确发现
+- **跟踪工具可用性**：监控工具的注册和注销
+- **性能分析**：分析工具调用耗时
+
 ## 下一步
 
 - [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
