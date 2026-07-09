@@ -12,6 +12,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **参考文档**：https://doc.qt.io/qt-6/ 或使用 Context7 查阅
 
+**关键教训**（详见 `lessons.md`）：
+- `QSizePolicy.Fixed` 阻止布局扩展：如果 widget 不应该扩展，必须显式设置 `Fixed` policy
+- `QTextBrowser` 不支持 flexbox/grid：复杂布局用 `<table>` + `valign`
+- `QLabel.sizeHint()` 比 `QTextBrowser.sizeHint()` 更可靠：静态文本优先用 QLabel
+- `setWidgetResizable(True)` 会覆盖 sizePolicy 和 setAlignment
+
 ---
 
 ## ⚠️ 重要原则：Java SDK 禁止简化实现
@@ -129,72 +135,6 @@ class MainWindow(QMainWindow):
 
 **禁止**：不要在 `QThread` 中创建新的 event loop，这会导致程序静默崩溃。
 
-**QTextBrowser HTML/CSS 限制**：
-
-QTextBrowser 只支持有限的 CSS 属性和 HTML 标签（参考 https://doc.qt.io/qt-6/richtext-html-subset.html）：
-
-- **支持的 CSS**：`background-color`, `color`, `font-*`, `margin-*`, `padding-*`, `border-*`, `vertical-align`, `text-align`, `line-height`
-- **不支持**：`flexbox`, `grid`, `position`, `float`, `display: flex/grid`, CSS 变量
-- **布局方案**：复杂布局必须用 `<table>` + `valign="top"` 替代 flexbox
-
-```html
-<!-- 错误：flexbox 在 QTextBrowser 中不工作 -->
-<div style="display: flex; align-items: flex-start;">...</div>
-
-<!-- 正确：使用 table 布局 -->
-<table width="100%" style="border: none; border-spacing: 0;">
-    <tr>
-        <td width="40" valign="top">头像</td>
-        <td valign="top">内容</td>
-    </tr>
-</table>
-```
-
-**矢量图标绘制**：
-
-使用 `QPainter` + `QPixmap` 绘制矢量图标，避免 Unicode 字符图标模糊问题：
-
-```python
-def create_play_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)  # 注意：PyQt6 使用小写 transparent
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QPen(Qt.PenStyle.NoPen))
-    painter.setBrush(QBrush(color))
-    # 绘制三角形
-    triangle = [QPointF(x1, y1), QPointF(x2, y2), QPointF(x3, y3)]
-    painter.drawPolygon(QPolygonF(triangle))
-    painter.end()
-    return QIcon(pixmap)
-```
-
-**自定义绘制组件**：
-
-对于需要精细视觉控制的组件（如滑动条、进度条），使用 `QWidget` + `paintEvent` 自定义绘制：
-
-```python
-class ImportanceSlider(QWidget):
-    """自定义绘制的滑动条，支持颜色渐变和手柄放大效果"""
-
-    valueChanged = pyqtSignal(float)
-
-    def __init__(self, initial_value: float = 0.5, parent=None):
-        super().__init__(parent)
-        self._value = initial_value
-        self._hover = False
-        self.setFixedHeight(20)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        theme = get_theme()  # 动态获取当前主题
-        # 绘制轨道、进度、手柄...
-
-    def mousePressEvent(self, event):
-        # 处理拖拽交互
-```
-
 **主题感知组件**：
 
 继承 `ThemeAwareWidget` 确保组件响应主题切换：
@@ -260,51 +200,6 @@ uv run harness-scraper agent "抓取 HN 上关于 MCP 的讨论"
 
 ## 架构
 
-### Monorepo 结构
-
-```
-harness/
-├── packages/
-│   ├── sdk/                      # harness-sdk 包
-│   │   ├── src/harness/          # SDK 核心代码
-│   │   ├── tests/                # 测试文件
-│   │   ├── examples/             # 示例代码
-│   │   └── docs/                 # 文档
-│   │
-│   ├── client/                   # harness-client 包
-│   │   ├── src/harness_client/
-│   │   │   ├── ui/               # PyQt6 UI 组件
-│   │   │   └── controllers/      # 控制器（连接 SDK）
-│   │   ├── resources/            # 样式、模板
-│   │   └── harness-client.spec   # PyInstaller 配置
-│   │
-│   └── cloud/                    # harness-cloud 包
-│       ├── src/harness_cloud/
-│       │   ├── agent/            # 容器内 Agent 服务
-│       │   ├── gateway/          # Gateway 控制层
-│       │   └── common/           # 共享消息定义
-│       ├── docker/               # Dockerfile
-│       ├── scripts/              # 构建脚本
-│       ├── frontend/             # Vue 前端
-│       └── docker-compose.yml
-│
-│   └── scraper/                  # harness-scraper 包
-│       ├── src/harness_scraper/
-│       │   ├── agent.py          # IntelAgent（通用信息提取代理）
-│       │   ├── tools/            # 数据源工具
-│       │   └── cli.py            # CLI 入口
-│       ├── skills/               # 技能文件（领域知识）
-│       │   ├── ai-intelligence.md
-│       │   └── hk-stocks-alpha.md
-│       └── output/               # One-Pager 输出
-│
-├── pyproject.toml                # Workspace 根配置
-├── uv.lock                       # 锁定依赖
-├── CLAUDE.md
-├── lessons.md
-└── progress.txt
-```
-
 ### SDK 核心组件
 
 ```
@@ -364,11 +259,6 @@ packages/client/src/harness_client/
 - **中央区**：对话面板（Markdown 渲染 + 流式输出）
 - **右侧面板**：可折叠区块（**记忆**/技能/MCP 服务器/文件树）
 
-**全局记忆**：
-- 记忆文件存储在 `~/.harness/MEMORY.md`
-- 通过 `MemoryController` 管理 CRUD 操作
-- 自动注入到 Agent 上下文中
-
 **会话管理数据流**：
 ```
 SessionManager (单一数据源)
@@ -377,38 +267,6 @@ MainWindow._refresh_session_list()
     ↓
 SidebarPanel.update_sessions() (纯渲染)
 ```
-
-### 数据流
-
-```
-用户输入 → AgentHarness.run() → AgentLoop.run()
-    ↓
-[构建上下文 → 调用 LLM → 解析响应 → 执行工具] (循环)
-    ↓
-返回 LoopResult
-```
-
-### 代码社区结构（Graph 分析）
-
-基于 code-review-graph 的社区检测，代码库分为 25 个自然社区：
-
-| 社区 | 节点数 | 内聚度 | 描述 |
-|------|--------|--------|------|
-| `core-config` | 1582 | 0.36 | SDK 核心配置和连接器 |
-| `core-builder` | 1414 | 0.20 | 构建器模式组件 |
-| `tests-config` | 1124 | 0.15 | 测试配置 |
-| `ui-theme` | 650 | 0.23 | PyQt6 客户端 UI |
-| `types-goal` | 477 | 0.26 | Goal 类型定义 |
-| `orchestrator-builder` | 329 | 0.18 | 编排器 |
-| `memory-memory` | 327 | 0.27 | 记忆系统 |
-| `tools-tool` | 208 | 0.12 | 工具系统 |
-| `mcp-tool` | 120 | 0.26 | MCP 集成 |
-| `llm-call` | 87 | 0.21 | LLM 调用层 |
-
-**关键洞察**：
-- **高内聚区域**：`memory-memory` (0.27)、`types-goal` (0.26)、`mcp-tool` (0.26) 是模块化最好的部分
-- **高连接节点（Hub）**：`AgentLoop._run_impl` (128 连接)、`ToolResult` 类 (79 入度)、`get_theme()` (77 入度)
-- **关键执行流**：`session_websocket` (criticality 0.77)、`run` (0.71)、`stream` (0.71)
 
 ### Loop Engineering（目标驱动执行）
 
@@ -442,25 +300,6 @@ if result.status == GoalStatus.ACHIEVED:
 - **上下文自动重置**：防止 "context anxiety"（token 接近模型限制时自动重置）
 - **VERIFIER_FAULT**：区分基础设施故障和 Agent 执行错误
 
-### Scraper 架构（技能驱动）
-
-```
-IntelAgent（通用代理）
-    ↓ 加载 Skill 文件
-    ↓ Skill 定义：工具清单、判断标准、输出模板
-    ↓
-AgentHarness.run(prompt)
-    ↓
-LLM 根据 Skill 自主决策工具调用
-    ↓
-One-Pager 输出 + MEMORY.md 自动更新
-```
-
-**核心设计**：
-- Agent 不硬编码控制流，遵循 Bitter Lesson
-- Skill 文件定义一切：工具选择、判断标准、工作流程
-- 新领域只需创建 skill 文件（`skills/*.md`）
-
 ### Cloud 架构
 
 ```
@@ -479,22 +318,6 @@ Agent Container (FastAPI)
 **双网络设计**：
 - `cloud-net`: Gateway ↔ Redis（内部通信）
 - `harness-net`: Gateway ↔ Agent（可访问外网 LLM API）
-
-**双层认证**：
-1. Gateway: JWT Token（用户认证，测试模式接受任意 token）
-2. Agent: API Key（LLM Provider 认证）
-
-**Vue 前端**：
-- 位于 `packages/cloud/frontend/`
-- 技术栈：Vue 3.4+ + TypeScript 5.0+ + Vite 5.0+ + Pinia + TailwindCSS
-- 构建后挂载到 Gateway 容器提供静态文件服务
-
-**Spring Cloud 集成**（可选依赖）：
-- W3C TraceContext 追踪
-- Prometheus 指标导出
-- Redis 分布式会话存储
-- Nacos/Eureka 服务发现
-- 详见 `packages/sdk/docs/14-spring-cloud-integration.md`
 
 ### Java SDK 架构差异
 
@@ -518,11 +341,8 @@ Python SDK 和 Java SDK 定位不同：
 - **简洁优先**：用最少的代码解决问题，不过度工程化
 - **精准修改**：只碰必须碰的，不重构没坏的东西
 - **需求分析优先**：编码前深入理解需求，不假设、不猜测；**API 和框架代码必须查阅官方文档**
-- **API/框架文档必须查阅**：修改 API 调用、框架组件、库的使用方式前必须查阅官方文档，不能凭经验假设。**禁止凭经验猜测，必须先用 Context7 或官方文档查阅**
 - **消息结构固定**：LLM API 消息有固定格式要求，Session 是单一数据源，用户消息必须持久化到 session
 - **测试多轮迭代**：任何涉及消息处理的代码，都要测试第二轮迭代是否正常
-- **QTextBrowser 限制**：只支持基础 CSS，复杂布局用 `<table>`，不支持 flexbox/grid
-- **高连接节点谨慎修改**：`AgentLoop._run_impl`、`ToolResult`、`get_theme()` 是高连接节点，修改时需评估影响范围
 
 ---
 
@@ -566,20 +386,6 @@ def add(a: int, b: int) -> int:
     return a + b
 ```
 
-### MCP 工具包装器
-
-MCP 工具通过 `MCPToolWrapper` 包装为 Harness Tool 接口：
-
-```python
-class MCPToolWrapper:
-    @property
-    def name(self) -> str:         # 格式: mcp_{server}_{tool}
-    @property
-    def input_schema(self) -> dict # JSON Schema
-    def validate_arguments(self, args) -> tuple[bool, str | None]
-    async def execute(self, args, ctx) -> ToolResult
-```
-
 ### 第三方 OpenAI 格式 API
 
 ```python
@@ -603,14 +409,6 @@ safe_text, entities, has_pii = check_pii("我的手机号是13812345678")
 for entity in entities:
     print(f"Type: {entity.entity_type}")  # "PHONE_NUMBER"
     print(f"Text: {entity.text}")          # "13812345678"
-    print(f"Start: {entity.start}")        # 起始位置
-    print(f"End: {entity.end}")            # 结束位置
-    print(f"Score: {entity.score}")        # 置信度
-
-# scan_pii() 返回对象
-result = scan_pii(text)
-print(result.entities)
-print(result.has_pii)
 
 # 快速脱敏
 redacted = redact_pii(text)  # "我的手机号是<手机号>"
@@ -656,45 +454,3 @@ uv run python build.py
 **会话开始时**：读取 `progress.txt` 了解项目进展，审查 `lessons.md` 检查错误
 
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
-
-# currentDate
-Today's date is 2026-07-05.
-
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
-
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
-
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
-
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
