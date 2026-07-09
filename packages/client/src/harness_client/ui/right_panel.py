@@ -1105,8 +1105,8 @@ class MoreToolsSection(CollapsibleSection):
     browser_toggle_requested = pyqtSignal()
 
     # Max content height — when expanded, internal scroll handles overflow
-    # 25% larger than before (350 * 1.25 ≈ 438)
-    _MAX_CONTENT_HEIGHT = 438
+    # Original 350 * 1.25 * 1.25 ≈ 548
+    _MAX_CONTENT_HEIGHT = 548
 
     def __init__(self, monitoring_controller=None, parent=None):
         super().__init__("更多工具", parent=parent)
