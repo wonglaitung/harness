@@ -203,8 +203,15 @@ class CategorySection(QWidget):
     def _setup_ui(self):
         """Setup the category section UI."""
         theme = get_theme()
+        # Set object name for styling and add bottom border
+        self.setObjectName("categorySection")
+        self.setStyleSheet(f"""
+            QWidget#categorySection {{
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 6)  # Add bottom margin for border
         layout.setSpacing(6)
 
         # Header with category name and add button
@@ -226,22 +233,23 @@ class CategorySection(QWidget):
         header_layout.addStretch()
 
         self._add_btn = QPushButton("+")
+        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                background-color: transparent;
+                border: none;
                 border-radius: {theme.RADIUS_SM};
-                min-width: 22px;
-                max-width: 22px;
-                min-height: 22px;
-                max-height: 22px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
-                font-weight: bold;
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 28px;
+                max-height: 28px;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 18px;
+                font-weight: 300;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.ACCENT};
+                color: {theme.ACCENT};
             }}
         """)
         self._add_btn.setToolTip("添加记忆条目")
@@ -395,6 +403,12 @@ class CategorySection(QWidget):
     def _on_theme_changed(self):
         """Handle theme change - update all child widgets."""
         theme = get_theme()
+        # Update section border
+        self.setStyleSheet(f"""
+            QWidget#categorySection {{
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
         # Update header elements
         self._name_label.setStyleSheet(f"""
             QLabel {{
@@ -405,20 +419,20 @@ class CategorySection(QWidget):
         """)
         self._add_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.APP_BACKGROUND};
-                border: 1px solid {theme.BORDER};
+                background-color: transparent;
+                border: none;
                 border-radius: {theme.RADIUS_SM};
-                min-width: 22px;
-                max-width: 22px;
-                min-height: 22px;
-                max-height: 22px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_SM};
-                font-weight: bold;
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 28px;
+                max-height: 28px;
+                color: {theme.TEXT_SUBTLE};
+                font-size: 18px;
+                font-weight: 300;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
-                border-color: {theme.ACCENT};
+                color: {theme.ACCENT};
             }}
         """)
         # Update entry widgets and their children
