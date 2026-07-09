@@ -29,8 +29,8 @@ from harness_client.themes import get_theme, register_theme_listener, unregister
 from harness_client.ui.right_panel import CollapsibleSection
 
 # Maximum content height for memory section when expanded
-# 50% larger than MoreToolsSection (548 * 1.5 ≈ 822)
-MEMORY_MAX_CONTENT_HEIGHT = 822
+# 50% larger than MoreToolsSection (350 * 1.5 ≈ 525)
+MEMORY_MAX_CONTENT_HEIGHT = 525
 
 
 class ImportanceSlider(QWidget):
