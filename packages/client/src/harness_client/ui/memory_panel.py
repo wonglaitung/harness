@@ -7,9 +7,10 @@ Features:
 - Add/edit/remove entries with importance support
 """
 
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QPointF
+from PyQt6.QtCore import QAbstractAnimation, Qt, pyqtSignal, QRectF, QPointF, QPropertyAnimation, QParallelAnimationGroup
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 from PyQt6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,6 +27,10 @@ from PyQt6.QtWidgets import (
 from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.right_panel import CollapsibleSection
+
+# Maximum content height for memory section when expanded
+# 50% larger than MoreToolsSection (350 * 1.5 ≈ 525)
+MEMORY_MAX_CONTENT_HEIGHT = 525
 
 
 class ImportanceSlider(QWidget):
@@ -203,15 +208,8 @@ class CategorySection(QWidget):
     def _setup_ui(self):
         """Setup the category section UI."""
         theme = get_theme()
-        # Set object name for styling and add bottom border
-        self.setObjectName("categorySection")
-        self.setStyleSheet(f"""
-            QWidget#categorySection {{
-                border-bottom: 1px solid {theme.BORDER};
-            }}
-        """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 6)  # Add bottom margin for border
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
         # Header with category name and add button
@@ -403,12 +401,6 @@ class CategorySection(QWidget):
     def _on_theme_changed(self):
         """Handle theme change - update all child widgets."""
         theme = get_theme()
-        # Update section border
-        self.setStyleSheet(f"""
-            QWidget#categorySection {{
-                border-bottom: 1px solid {theme.BORDER};
-            }}
-        """)
         # Update header elements
         self._name_label.setStyleSheet(f"""
             QLabel {{
@@ -483,7 +475,10 @@ class CategorySection(QWidget):
 
 
 class MemorySection(CollapsibleSection):
-    """Section for managing global memory entries with importance support."""
+    """Section for managing global memory entries with importance support.
+
+    Caps its expanded height to prevent overflow in the right panel.
+    """
 
     add_entry_requested = pyqtSignal(str)  # category name
     edit_entry_requested = pyqtSignal(str, int)  # category, index
@@ -500,8 +495,112 @@ class MemorySection(CollapsibleSection):
 
     def __init__(self, parent=None):
         super().__init__("记忆", parent=parent)
+        self._capped_content_height = 0
+        self._collapsed_header_height = 0
         self._setup_content()
+        # Connect animation finished signal to lock height after animation
+        self.toggle_animation.finished.connect(self._on_animation_finished)
         # Note: Theme listener is registered in CollapsibleSection.__init__
+
+    def _on_toggle(self, checked: bool):
+        """Override to cap animation values before starting animation."""
+        self._is_collapsed = not checked
+
+        # Update button arrow
+        if checked:  # Expanded
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+        else:  # Collapsed
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
+
+        # Get current content height
+        content_widget = self.content_area.widget()
+        content_height = content_widget.sizeHint().height() if content_widget else 0
+        collapsed_height = self.toggle_button.sizeHint().height()
+
+        # Cap the height
+        capped_height = min(content_height, MEMORY_MAX_CONTENT_HEIGHT)
+
+        # Set animation values with cap
+        for i in range(self.toggle_animation.animationCount() - 1):
+            anim = self.toggle_animation.animationAt(i)
+            anim.setDuration(self._animation_duration)
+            anim.setStartValue(collapsed_height)
+            anim.setEndValue(collapsed_height + capped_height)
+
+        content_anim = self.toggle_animation.animationAt(
+            self.toggle_animation.animationCount() - 1
+        )
+        content_anim.setDuration(self._animation_duration)
+        content_anim.setStartValue(0)
+        content_anim.setEndValue(capped_height)
+
+        # Store capped height for use after animation
+        self._capped_content_height = capped_height if checked else 0
+        self._collapsed_header_height = collapsed_height
+
+        self.toggle_animation.start()
+
+    def _on_animation_finished(self):
+        """Lock the height after animation completes to prevent resizing."""
+        if self._collapsed_header_height <= 0:
+            return
+
+        if self._is_collapsed:
+            # Collapsed state - lock to header height only
+            self.setMaximumHeight(self._collapsed_header_height)
+            self.content_area.setMaximumHeight(0)
+        else:
+            # Expanded state - lock to capped height
+            total_height = self._collapsed_header_height + self._capped_content_height
+            self.setMaximumHeight(total_height)
+            self.content_area.setMaximumHeight(self._capped_content_height)
+
+    def set_collapsed(self, collapsed: bool, animate: bool = True):
+        """Override to cap expanded content height."""
+        if self._is_collapsed == collapsed:
+            return
+        self._is_collapsed = collapsed
+
+        # Update button state
+        self.toggle_button.setChecked(not collapsed)
+
+        if collapsed:
+            self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Backward)
+        else:
+            self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+            self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward)
+
+        if animate:
+            # Cap the animation end value
+            collapsed_height = self.toggle_button.sizeHint().height()
+            for i in range(self.toggle_animation.animationCount() - 1):
+                anim = self.toggle_animation.animationAt(i)
+                anim.setEndValue(collapsed_height + MEMORY_MAX_CONTENT_HEIGHT)
+            content_anim = self.toggle_animation.animationAt(
+                self.toggle_animation.animationCount() - 1
+            )
+            content_anim.setEndValue(MEMORY_MAX_CONTENT_HEIGHT)
+            self.toggle_animation.start()
+        else:
+            collapsed_height = self.toggle_button.sizeHint().height()
+            content_widget = self.content_area.widget()
+            content_height = (
+                min(content_widget.sizeHint().height(), MEMORY_MAX_CONTENT_HEIGHT)
+                if content_widget
+                else 0
+            )
+
+            if collapsed:
+                self.setMinimumHeight(collapsed_height)
+                self.setMaximumHeight(collapsed_height)
+                self.content_area.setMaximumHeight(0)
+            else:
+                self.setMinimumHeight(collapsed_height + content_height)
+                self.setMaximumHeight(collapsed_height + content_height)
+                self.content_area.setMaximumHeight(content_height)
 
     def _setup_content(self):
         """Setup the memory section content."""
@@ -549,12 +648,14 @@ class MemorySection(CollapsibleSection):
         # Create category sections
         self._category_sections: dict[MemoryCategory, CategorySection] = {}
 
-        for category in [
+        categories = [
             MemoryCategory.USER_PROFILE,
             MemoryCategory.KEY_DECISIONS,
             MemoryCategory.LEARNED_PATTERNS,
             MemoryCategory.PROJECT_CONTEXT,
-        ]:
+        ]
+
+        for i, category in enumerate(categories):
             display_name = self.CATEGORY_NAMES.get(category, category.value)
             section = CategorySection(category, display_name)
             section.add_clicked.connect(self._on_add_clicked)
@@ -563,6 +664,17 @@ class MemorySection(CollapsibleSection):
             section.importance_changed.connect(self._on_importance_changed)
             self._container_layout.addWidget(section)
             self._category_sections[category] = section
+
+            # Add separator between categories (not after the last one)
+            if i < len(categories) - 1:
+                separator = QWidget()
+                separator.setFixedHeight(1)
+                separator.setStyleSheet(f"""
+                    QWidget {{
+                        background-color: {theme.BORDER};
+                    }}
+                """)
+                self._container_layout.addWidget(separator)
 
         # Spacer
         self._container_layout.addStretch()
