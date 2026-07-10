@@ -70,8 +70,10 @@ class SkillController:
         """
         from harness.skills.loader import DEFAULT_SKILL_PATHS
 
+        logger.info(f"[SkillController] _discover_skills_from_filesystem called, current cache size: {len(self._cached_skills)}")
         skills = []
         for directory in DEFAULT_SKILL_PATHS:
+            logger.info(f"[SkillController] Scanning directory: {directory}, exists: {directory.exists()}")
             if not directory.exists():
                 continue
 
@@ -80,8 +82,13 @@ class SkillController:
                 try:
                     skill_info = self._parse_skill_file(skill_file)
                     if skill_info:
-                        skills.append(skill_info)
-                        self._cached_skills[skill_info.name] = skill_info
+                        # Skip if already in cache (avoid duplicates across directories)
+                        if skill_info.name not in self._cached_skills:
+                            logger.info(f"[SkillController] Found SKILL.md: {skill_file} -> {skill_info.name}")
+                            skills.append(skill_info)
+                            self._cached_skills[skill_info.name] = skill_info
+                        else:
+                            logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
 
                 except Exception as e:
                     logger.warning(f"Failed to read skill {skill_file}: {e}")
@@ -93,12 +100,18 @@ class SkillController:
                 try:
                     skill_info = self._parse_skill_file(skill_file)
                     if skill_info:
-                        skills.append(skill_info)
-                        self._cached_skills[skill_info.name] = skill_info
+                        # Skip if already in cache (avoid duplicates across directories)
+                        if skill_info.name not in self._cached_skills:
+                            logger.info(f"[SkillController] Found {skill_file.name} -> {skill_info.name}")
+                            skills.append(skill_info)
+                            self._cached_skills[skill_info.name] = skill_info
+                        else:
+                            logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
 
                 except Exception as e:
                     logger.warning(f"Failed to read skill {skill_file}: {e}")
 
+        logger.info(f"[SkillController] _discover_skills_from_filesystem done, found {len(skills)} skills, cache size now: {len(self._cached_skills)}")
         return skills
 
     def _parse_skill_file(self, skill_file: Path) -> SkillInfo | None:
@@ -206,6 +219,7 @@ class SkillController:
 
     def load_defaults(self) -> int:
         """Load skills from default directories."""
+        logger.info(f"[SkillController] load_defaults called, agent: {self._agent is not None}")
         if self._agent:
             # AgentHarness loads skills on init, just trigger callback
             if self._on_change:
@@ -274,10 +288,13 @@ class SkillController:
 
     def get_skill_list(self) -> list[SkillInfo]:
         """Get list of all discovered skills (including metadata-only)."""
+        logger.info(f"[SkillController] get_skill_list called, agent: {self._agent is not None}")
         if self._agent:
+            discovered = self._agent.list_discovered_skills()
+            logger.info(f"[SkillController] SDK list_discovered_skills returned {len(discovered)} skills: {[m.name for m in discovered]}")
             skills = []
             # Use list_discovered_skills() to get all skills (Level 1 metadata)
-            for meta in self._agent.list_discovered_skills():
+            for meta in discovered:
                 enabled = self._skill_states.get(meta.name, True)
                 # Get source_path from cached skills if available
                 cached = self._cached_skills.get(meta.name)
@@ -288,9 +305,11 @@ class SkillController:
                     enabled=enabled,
                     source_path=cached.source_path if cached else None,
                 ))
+            logger.info(f"[SkillController] get_skill_list returning {len(skills)} skills")
             return skills
 
         # Return cached skills (populated before agent was available)
+        logger.info(f"[SkillController] Returning cached skills: {len(self._cached_skills)} items")
         return list(self._cached_skills.values())
 
     def get_skill(self, name: str) -> SkillInfo | None:

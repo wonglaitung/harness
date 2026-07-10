@@ -300,6 +300,38 @@ for skill in agent.list_skills():
 2. **激活**：`activate_skill()` 触发 Level 2 加载，注册到 SkillRegistry
 3. **运行**：`run()` 根据用户输入匹配技能，自动加载匹配技能的完整内容
 
+### 技能去重
+
+当多个技能目录中存在同名技能时，`_load_skill_metadata()` 会自动去重：
+
+```python
+# DEFAULT_SKILL_PATHS 扫描顺序（优先级从高到低）：
+# 1. ~/.harness/skills      - 用户级（最高优先级）
+# 2. ~/.harness/shared-skills - 共享
+# 3. ./.agent/skills         - 项目级
+# 4. ./skills                - 项目级（备用）
+
+# 如果 ~/.harness/skills/convert/SKILL.md 和 .agent/skills/convert/SKILL.md 都存在，
+# 只有第一个被加载（用户级优先），后续同名技能会被跳过
+```
+
+**去重逻辑**：
+
+```python
+# SDK 内部实现 (harness/sdk/harness.py)
+for directory in DEFAULT_SKILL_PATHS:
+    if directory.exists():
+        skills = self._progressive_loader.discover_skills(directory)
+        for meta in skills:
+            if meta.name not in self._skill_metadata_by_name:
+                self._skill_metadata.append(meta)
+                self._skill_metadata_by_name[meta.name] = meta
+            else:
+                logger.info(f"Skipping duplicate skill: {meta.name} from {meta.path}")
+```
+
+**设计原则**：用户级技能 (`~/.harness/skills`) 优先级最高，确保用户可以覆盖项目级技能。
+
 ### 各级别的内容格式
 
 **Level 1: FRONTMATTER 级别**（最小上下文占用，仅元数据）：

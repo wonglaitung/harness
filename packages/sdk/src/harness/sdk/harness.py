@@ -455,17 +455,23 @@ class AgentHarness:
         """
         from harness.skills.loader import DEFAULT_SKILL_PATHS
 
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[AgentHarness] _load_skill_metadata called, id={id(self)}")
+
         for directory in DEFAULT_SKILL_PATHS:
             if directory.exists():
                 skills = self._progressive_loader.discover_skills(directory)
-                self._skill_metadata.extend(skills)
-                # Build name lookup
+                logger.info(f"[AgentHarness] Discovered {len(skills)} skills from {directory}: {[m.name for m in skills]}")
+                # Add only unique skills (avoid duplicates across directories)
                 for meta in skills:
-                    self._skill_metadata_by_name[meta.name] = meta
+                    if meta.name not in self._skill_metadata_by_name:
+                        self._skill_metadata.append(meta)
+                        self._skill_metadata_by_name[meta.name] = meta
+                    else:
+                        logger.info(f"[AgentHarness] Skipping duplicate skill: {meta.name} from {meta.path}")
 
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Discovered {len(self._skill_metadata)} skills (metadata only)")
+        logger.info(f"[AgentHarness] Total skills in _skill_metadata: {len(self._skill_metadata)}, unique names: {len(self._skill_metadata_by_name)}")
 
     def _load_skills(self) -> None:
         """

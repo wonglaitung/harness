@@ -554,13 +554,64 @@ class MCPController:
 
 ## SkillController
 
-技能管理控制器。
+技能管理控制器，作为 UI 和 SDK AgentHarness 的中间层。
 
 ### 职责
 
-- 加载技能目录
+- 加载技能目录（支持 Agent 可用前后的不同加载策略）
 - 获取技能列表
 - 匹配用户输入的技能
+- 技能去重（避免多目录同名技能重复显示）
+
+### 技能发现与缓存
+
+SkillController 使用两层缓存机制：
+
+1. **Agent 可用前**：`_cached_skills` dict 缓存从文件系统发现的技能元数据
+2. **Agent 可用后**：代理到 SDK 的 `list_discovered_skills()` 方法
+
+```python
+class SkillController:
+    def __init__(self):
+        self._agent = None
+        self._cached_skills: dict[str, SkillInfo] = {}  # 技能名 -> SkillInfo
+
+    def _discover_skills_from_filesystem(self) -> list[SkillInfo]:
+        """从文件系统发现技能（Agent 可用前）"""
+        skills = []
+        for directory in DEFAULT_SKILL_PATHS:
+            for skill_file in directory.rglob("SKILL.md"):
+                skill_info = self._parse_skill_file(skill_file)
+                if skill_info:
+                    # 去重：跳过已缓存的同名技能
+                    if skill_info.name not in self._cached_skills:
+                        skills.append(skill_info)
+                        self._cached_skills[skill_info.name] = skill_info
+        return skills
+
+    def get_skill_list(self) -> list[SkillInfo]:
+        """获取技能列表"""
+        if self._agent:
+            # 代理到 SDK
+            return self._agent.list_discovered_skills()
+        # 返回缓存
+        return list(self._cached_skills.values())
+```
+
+### 去重逻辑
+
+当多个技能目录中存在同名技能时，SkillController 自动去重：
+
+```
+技能目录优先级（从高到低）：
+1. ~/.harness/skills         - 用户级（最高优先级）
+2. ~/.harness/shared-skills  - 共享
+3. ./.agent/skills           - 项目级
+4. ./skills                  - 项目级（备用）
+
+如果 ~/.harness/skills/md-to-word/SKILL.md 和 .agent/skills/md-to-word/SKILL.md 都存在，
+UI 只显示第一个发现的（用户级优先）。
+```
 
 ### 核心方法
 
