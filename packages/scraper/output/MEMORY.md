@@ -92,7 +92,27 @@
 
 ## 2026-07-10 提取
 
+## 2026-07-11 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股解禁高峰8731亿-次新股左侧风险与逆向机会**
+
+### 港股分析
+- **美债4.57%高位运行-降息预期左侧布局窗口临界点延续**
+
+### 港股分析
+- **南向资金19.58%再创新高-左侧建仓信号持续强化**
+
+### 新范式/工具
+- **Frigade — Web API自动逆向为Agent工具新范式** - https://news.ycombinator.com/item?id=48847834
+
+### 新范式/工具
+- **Memtrace — 双时序结构化Agent记忆图** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Agent Governance Toolkit — Agent治理即代码新范式** - https://github.com/microsoft/agent-governance-toolkit
 
 ### 港股分析
 - **港股互联网指数估值洼地 — PE 22x 处历史 15% 分位左侧布局机会**
