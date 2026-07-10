@@ -46,6 +46,10 @@ logging.basicConfig(
         logging.StreamHandler(sys.stderr),
     ],
 )
+
+# Enable DEBUG logging for harness SDK (MCP, transport, etc.)
+logging.getLogger("harness").setLevel(logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 
 
@@ -956,19 +960,29 @@ class MainWindow(QMainWindow):
     @asyncSlot(str)
     async def _on_toggle_mcp_server(self, name: str):
         """Handle connect/disconnect toggle for MCP server."""
+        logger.info(f"[MainWindow] _on_toggle_mcp_server called for: {name}")
         server_info = self.mcp_controller.servers.get(name)
         if not server_info:
+            logger.warning(f"[MainWindow] Server '{name}' not found in servers dict")
             return
 
+        logger.debug(f"[MainWindow] Server '{name}' current status: {server_info.status}")
         if server_info.status == "已连接":
+            logger.info(f"[MainWindow] Disconnecting from {name}...")
             await self._disconnect_mcp_server(name)
         else:
+            logger.info(f"[MainWindow] Connecting to {name}...")
             await self._connect_mcp_server_async(name)
 
     async def _connect_mcp_server(self, name: str) -> bool:
         """Connect to an MCP server."""
+        logger.info(f"[MainWindow] _connect_mcp_server called for: {name}")
+        logger.debug(f"[MainWindow] Agent available: {self.chat_controller.agent is not None}")
+        logger.debug(f"[MainWindow] MCP controller cached configs: {list(self.mcp_controller._cached_configs.keys())}")
+
         self.statusbar.showMessage(f"正在连接 {name}...")
         success = await self.mcp_controller.connect_server(name)
+        logger.info(f"[MainWindow] connect_server returned: {success}")
         if success:
             self.statusbar.showMessage(f"{name} 已连接", 3000)
             # Reset agent to pick up new tools
@@ -976,6 +990,7 @@ class MainWindow(QMainWindow):
         else:
             server_info = self.mcp_controller.servers.get(name)
             error_msg = server_info.error_message if server_info else "未知错误"
+            logger.error(f"[MainWindow] Connection failed: {error_msg}")
             self.statusbar.showMessage(f"连接失败: {error_msg}", 5000)
         return success
 
@@ -985,8 +1000,10 @@ class MainWindow(QMainWindow):
 
     async def _disconnect_mcp_server(self, name: str):
         """Disconnect from an MCP server."""
+        logger.info(f"[MainWindow] _disconnect_mcp_server called for: {name}")
         self.statusbar.showMessage(f"正在断开 {name}...")
         success = await self.mcp_controller.disconnect_server(name)
+        logger.info(f"[MainWindow] disconnect_server returned: {success}")
         if success:
             self.statusbar.showMessage(f"{name} 已断开", 3000)
             # Reset agent to update tools

@@ -110,13 +110,19 @@ class MCPController:
         Returns:
             True if connected successfully
         """
+        logger.info(f"[MCPController] connect_server() called for: {name}")
+
         if name not in self._server_states:
+            logger.error(f"[MCPController] Server {name} not found in _server_states")
             return False
 
         server_info = self._server_states[name]
         server_info.status = "连接中..."
 
-        logger.info(f"Connecting to MCP server: {name}")
+        logger.info(f"[MCPController] Connecting to MCP server: {name}")
+        logger.debug(f"[MCPController] Agent available: {self._agent is not None}")
+        logger.debug(f"[MCPController] Cached configs: {list(self._cached_configs.keys())}")
+
         if self._on_change:
             self._on_change()
 
@@ -127,7 +133,7 @@ class MCPController:
                 if not config:
                     server_info.status = "错误"
                     server_info.error_message = "服务器配置未找到"
-                    logger.error(f"MCP server {name}: config not found")
+                    logger.error(f"[MCPController] MCP server {name}: config not found in _cached_configs")
                     if self._on_change:
                         self._on_change()
                     return False
@@ -142,7 +148,13 @@ class MCPController:
                     "headers": config.headers,
                     "timeout": config.timeout,
                 }
-                logger.info(f"Connecting via agent with transport={config.transport}")
+                logger.info(f"[MCPController] Connecting via agent with transport={config.transport}")
+                logger.debug(f"[MCPController] Config dict: command={config.command}, args={config.args}")
+                if config.env:
+                    # Mask sensitive env vars in log
+                    masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in config.env.items()}
+                    logger.debug(f"[MCPController] Environment variables: {list(masked_env.keys())}")
+
                 await self._agent.add_mcp_server(name, config=config_dict)
 
                 # Update status
@@ -150,26 +162,29 @@ class MCPController:
                 server_info.status = "已连接"
                 server_info.tools_count = len(tools) if tools else 0
                 server_info.error_message = ""
-                logger.info(f"MCP server {name} connected: {server_info.tools_count} tools")
+                logger.info(f"[MCPController] MCP server {name} connected: {server_info.tools_count} tools")
             else:
                 # Agent not available, use standalone MCPClient to test connection
                 config = self._cached_configs.get(name)
                 if not config:
                     server_info.status = "错误"
                     server_info.error_message = "服务器配置未找到"
-                    logger.error(f"MCP server {name}: config not found")
+                    logger.error(f"[MCPController] MCP server {name}: config not found")
                     if self._on_change:
                         self._on_change()
                     return False
 
-                logger.info(f"Connecting via standalone client (agent not available)")
+                logger.info(f"[MCPController] Connecting via standalone client (agent not available)")
+                logger.debug(f"[MCPController] Config: transport={config.transport}, command={config.command}, args={config.args}")
                 # Use standalone client (similar to MCPServerDialog test)
                 from harness.mcp.client import MCPClient
                 from harness.mcp.transport import HTTPTransport, StdioTransport
 
                 if config.transport == "stdio":
                     if not config.command:
+                        logger.error(f"[MCPController] Stdio transport requires command")
                         raise ValueError("Stdio transport requires command")
+                    logger.debug(f"[MCPController] Creating StdioTransport: {config.command} {config.args}")
                     transport = StdioTransport(
                         command=config.command,
                         args=config.args,
@@ -177,21 +192,29 @@ class MCPController:
                     )
                 else:
                     if not config.url:
+                        logger.error(f"[MCPController] HTTP transport requires URL")
                         raise ValueError("HTTP transport requires URL")
+                    logger.debug(f"[MCPController] Creating HTTPTransport: {config.url}")
                     transport = HTTPTransport(
                         url=config.url,
                         headers=config.headers,
                         timeout=config.timeout,
                     )
 
+                logger.info(f"[MCPController] Creating MCPClient...")
                 client = MCPClient(transport)
+                logger.info(f"[MCPController] Calling client.connect()...")
                 await client.connect()
+                logger.info(f"[MCPController] client.connect() completed")
 
                 # Update status with discovered tools
                 server_info.status = "已连接"
                 server_info.tools_count = len(client.tools) if client.tools else 0
                 server_info.error_message = ""
-                logger.info(f"MCP server {name} connected via standalone client: {server_info.tools_count} tools")
+                logger.info(f"[MCPController] MCP server {name} connected via standalone client: {server_info.tools_count} tools")
+                if client.tools:
+                    tool_names = [t.name for t in client.tools]
+                    logger.debug(f"[MCPController] Tools: {tool_names}")
 
                 # Store client for later use (will be synced to agent when available)
                 self._standalone_clients[name] = client
@@ -203,7 +226,10 @@ class MCPController:
         except Exception as e:
             server_info.status = "错误"
             server_info.error_message = str(e)
-            logger.error(f"Failed to connect MCP server {name}: {e}")
+            logger.error(f"[MCPController] Failed to connect MCP server {name}: {e}")
+            logger.error(f"[MCPController] Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"[MCPController] Traceback: {traceback.format_exc()}")
             if self._on_change:
                 self._on_change()
             return False
@@ -373,18 +399,22 @@ class MCPController:
         """
         import json
 
+        logger.info(f"[MCPController] Loading config from: {path}")
+
         try:
             # Read config file directly
             config_path = Path(path)
             if not config_path.exists():
-                logger.warning(f"MCP config file not found: {path}")
+                logger.warning(f"[MCPController] MCP config file not found: {path}")
                 return 0
 
             config_data = json.loads(config_path.read_text(encoding="utf-8"))
             servers = config_data.get("mcpServers", {})
+            logger.info(f"[MCPController] Found {len(servers)} server(s) in config: {list(servers.keys())}")
             count = 0
 
             for name, server_config in servers.items():
+                logger.debug(f"[MCPController] Loading server '{name}': {server_config}")
                 # Create MCPServerConfig
                 config = MCPServerConfig(
                     name=name,
@@ -400,9 +430,11 @@ class MCPController:
 
                 # Cache full config for later sync to SDK
                 self._cached_configs[config.name] = config
+                logger.info(f"[MCPController] Cached config for '{name}': transport={config.transport}, command={config.command}")
 
                 # Add to agent's manager if available
                 if self._agent:
+                    logger.debug(f"[MCPController] Agent available, adding '{name}' to agent's MCP manager")
                     self._agent._mcp_manager.add_server(config)
 
                 # Update local tracking

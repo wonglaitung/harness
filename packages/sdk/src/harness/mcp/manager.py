@@ -254,23 +254,35 @@ class MCPManager:
             ValueError: If server config not found
             RuntimeError: If connection fails
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if name in self._clients:
-            logger.debug(f"MCP server {name} already connected")
+            logger.debug(f"[MCPManager] MCP server {name} already connected")
             return self._clients[name]
 
         config = self._configs.get(name)
         if not config:
+            logger.error(f"[MCPManager] Unknown MCP server: {name}")
+            logger.debug(f"[MCPManager] Available configs: {list(self._configs.keys())}")
             raise ValueError(f"Unknown MCP server: {name}")
 
         if not config.enabled:
+            logger.warning(f"[MCPManager] MCP server {name} is disabled")
             raise ValueError(f"MCP server {name} is disabled")
 
-        logger.info(f"Connecting to MCP server: {name} (transport={config.transport})")
+        logger.info(f"[MCPManager] Connecting to MCP server: {name} (transport={config.transport})")
+        logger.debug(f"[MCPManager] Config: command={config.command}, args={config.args}, url={config.url}")
+        if config.env:
+            masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in config.env.items()}
+            logger.debug(f"[MCPManager] Environment: {masked_env}")
 
         # Create transport based on config
         if config.transport == "stdio":
             if not config.command:
+                logger.error(f"[MCPManager] Stdio transport requires command for {name}")
                 raise ValueError(f"Stdio transport requires command for {name}")
+            logger.debug(f"[MCPManager] Creating StdioTransport")
             transport = StdioTransport(
                 command=config.command,
                 args=config.args,
@@ -278,24 +290,35 @@ class MCPManager:
             )
         elif config.transport == "http":
             if not config.url:
+                logger.error(f"[MCPManager] HTTP transport requires url for {name}")
                 raise ValueError(f"HTTP transport requires url for {name}")
+            logger.debug(f"[MCPManager] Creating HTTPTransport")
             transport = HTTPTransport(
                 url=config.url,
                 headers=config.headers,
                 timeout=config.timeout,
             )
         else:
+            logger.error(f"[MCPManager] Unknown transport type: {config.transport}")
             raise ValueError(f"Unknown transport type: {config.transport}")
 
         # Create client and connect
+        logger.debug(f"[MCPManager] Creating MCPClient")
         client = MCPClient(transport)
-        await client.connect()
+        logger.info(f"[MCPManager] Calling client.connect()")
+        try:
+            await client.connect()
+            logger.info(f"[MCPManager] client.connect() completed successfully")
+        except Exception as e:
+            logger.error(f"[MCPManager] client.connect() failed: {e}")
+            raise
 
         # Register tools
+        logger.debug(f"[MCPManager] Registering tools")
         self._register_tools(name, client)
 
         self._clients[name] = client
-        logger.info(f"MCP server {name} connected successfully")
+        logger.info(f"[MCPManager] MCP server {name} connected successfully")
         return client
 
     async def connect_all(self) -> Dict[str, MCPServerInfo]:
@@ -305,6 +328,9 @@ class MCPManager:
         Returns:
             Dictionary of server name to server info
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         logger.info(f"Connecting to all MCP servers ({len(self._configs)} configured)")
         results: Dict[str, MCPServerInfo] = {}
 
@@ -334,6 +360,9 @@ class MCPManager:
         Returns:
             True if server was disconnected
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if name not in self._clients:
             logger.debug(f"MCP server {name} not connected")
             return False
@@ -349,6 +378,9 @@ class MCPManager:
 
     async def disconnect_all(self) -> None:
         """Disconnect from all MCP servers."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         logger.info(f"Disconnecting all MCP servers ({len(self._clients)} connected)")
         for name in list(self._clients.keys()):
             await self.disconnect_server(name)
@@ -361,6 +393,9 @@ class MCPManager:
             server_name: Server name
             client: Connected MCP client
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         from harness.mcp.tool_wrapper import MCPToolWrapper
 
         wrappers: List[MCPToolWrapper] = []
@@ -395,6 +430,9 @@ class MCPManager:
         Args:
             server_name: Server name
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         wrappers = self._tool_wrappers.pop(server_name, [])
         logger.info(f"Unregistering {len(wrappers)} MCP tools from {server_name}")
 

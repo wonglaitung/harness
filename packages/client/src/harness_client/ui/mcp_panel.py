@@ -35,28 +35,45 @@ class TestConnectionThread(QThread):
 
     def run(self):
         """Run the connection test in a separate thread with its own event loop."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[TestConnectionThread] Starting connection test in background thread")
+
         try:
             # Create new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            logger.debug(f"[TestConnectionThread] Event loop created")
             try:
+                logger.info(f"[TestConnectionThread] Running _test_connection()...")
                 result = loop.run_until_complete(self._test_connection())
+                logger.info(f"[TestConnectionThread] Test result: {result}")
                 if result:
                     self.success.emit()
                 else:
                     self.failed.emit("连接失败")
             finally:
                 loop.close()
+                logger.debug(f"[TestConnectionThread] Event loop closed")
         except Exception as e:
+            logger.error(f"[TestConnectionThread] Exception: {e}")
+            import traceback
+            logger.error(f"[TestConnectionThread] Traceback: {traceback.format_exc()}")
             self.failed.emit(str(e))
 
     async def _test_connection(self) -> bool:
         """Test the MCP server connection."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         from harness import MCPServerConfig
         from harness.mcp.client import MCPClient
         from harness.mcp.transport import HTTPTransport, StdioTransport
 
         config = self.config
+        logger.info(f"[TestConnection] Starting test for transport={config['transport']}")
+        logger.debug(f"[TestConnection] Config: {config}")
+
         server_config = MCPServerConfig(
             name="_test_",
             transport=config["transport"],
@@ -71,7 +88,12 @@ class TestConnectionThread(QThread):
         # Create transport
         if server_config.transport == "stdio":
             if not server_config.command:
+                logger.error(f"[TestConnection] Stdio transport requires command")
                 raise ValueError("Stdio transport requires command")
+            logger.info(f"[TestConnection] Creating StdioTransport: {server_config.command} {server_config.args}")
+            if server_config.env:
+                masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in server_config.env.items()}
+                logger.debug(f"[TestConnection] Environment: {masked_env}")
             transport = StdioTransport(
                 command=server_config.command,
                 args=server_config.args,
@@ -79,7 +101,9 @@ class TestConnectionThread(QThread):
             )
         else:
             if not server_config.url:
+                logger.error(f"[TestConnection] HTTP transport requires URL")
                 raise ValueError("HTTP transport requires URL")
+            logger.info(f"[TestConnection] Creating HTTPTransport: {server_config.url}")
             transport = HTTPTransport(
                 url=server_config.url,
                 headers=server_config.headers,
@@ -87,12 +111,18 @@ class TestConnectionThread(QThread):
             )
 
         # Create client and test connection
+        logger.info(f"[TestConnection] Creating MCPClient...")
         client = MCPClient(transport)
+        logger.info(f"[TestConnection] Calling client.connect()...")
         await client.connect()
+        logger.info(f"[TestConnection] Connection successful!")
 
         # Check if we got tools
+        tool_count = len(client.tools) if client.tools else 0
+        logger.info(f"[TestConnection] Discovered {tool_count} tools")
         if client.tools:
-            return True
+            tool_names = [t.name for t in client.tools]
+            logger.debug(f"[TestConnection] Tool names: {tool_names}")
 
         await client.disconnect()
         return True  # Still success if no tools, just no tools available

@@ -85,33 +85,48 @@ class MCPClient:
             Server information after successful initialization
         """
         if self._connected:
+            logger.debug(f"[MCPClient] Already connected to {self._server_info.name if self._server_info else 'unknown'}")
             return self._server_info
 
+        logger.info(f"[MCPClient] Starting connection process...")
+        logger.debug(f"[MCPClient] Transport type: {type(self.transport).__name__}")
+
         # Connect transport
-        await self.transport.connect()
+        logger.info(f"[MCPClient] Connecting transport...")
+        try:
+            await self.transport.connect()
+            logger.info(f"[MCPClient] Transport connected successfully")
+        except Exception as e:
+            logger.error(f"[MCPClient] Transport connection failed: {e}")
+            raise
 
         # Start message handling loop
+        logger.debug(f"[MCPClient] Starting message loop task")
         self._message_task = asyncio.create_task(self._message_loop())
 
         # Send initialize request
         try:
-            logger.info(f"Sending initialize request to MCP server...")
+            logger.info(f"[MCPClient] Sending initialize request...")
+            init_params = {
+                "protocolVersion": "2024-11-05",
+                "clientInfo": {
+                    "name": self.client_name,
+                    "version": self.client_version,
+                },
+                "capabilities": {
+                    "tools": {},
+                    "resources": {},
+                },
+            }
+            logger.debug(f"[MCPClient] Initialize params: {init_params}")
+
             response = await self._request(
                 "initialize",
-                {
-                    "protocolVersion": "2024-11-05",
-                    "clientInfo": {
-                        "name": self.client_name,
-                        "version": self.client_version,
-                    },
-                    "capabilities": {
-                        "tools": {},
-                        "resources": {},
-                    },
-                },
+                init_params,
                 timeout=30.0,  # Increased timeout for npm-based servers that may need to download packages
             )
-            logger.info(f"Initialize response received: {response}")
+            logger.info(f"[MCPClient] Initialize response received")
+            logger.debug(f"[MCPClient] Initialize response: {response}")
 
             # Parse server info
             server_info = response.get("serverInfo", {})
@@ -120,25 +135,33 @@ class MCPClient:
                 version=server_info.get("version", "0.0.0"),
                 capabilities=list(response.get("capabilities", {}).keys()),
             )
+            logger.info(f"[MCPClient] Server: {self._server_info.name} v{self._server_info.version}")
+            logger.debug(f"[MCPClient] Capabilities: {self._server_info.capabilities}")
 
             # Send initialized notification
+            logger.debug(f"[MCPClient] Sending initialized notification")
             await self._notify("notifications/initialized", {})
 
             # Discover tools and resources
+            logger.info(f"[MCPClient] Discovering tools...")
             await self._discover_tools()
+            logger.info(f"[MCPClient] Discovering resources...")
             await self._discover_resources()
 
             self._connected = True
+            logger.info(f"[MCPClient] Connection complete: {len(self._tools)} tools, {len(self._resources)} resources")
             return self._server_info
 
         except Exception as e:
             # Clean up on failure
-            logger.error(f"Failed to connect to MCP server: {e}")
+            logger.error(f"[MCPClient] Failed to connect to MCP server: {e}")
+            logger.error(f"[MCPClient] Exception type: {type(e).__name__}")
             # Check stderr for more info
             if hasattr(self.transport, 'check_stderr'):
+                logger.debug(f"[MCPClient] Checking stderr for more info...")
                 stderr = await self.transport.check_stderr()
                 if stderr:
-                    logger.error(f"MCP server stderr: {stderr}")
+                    logger.error(f"[MCPClient] MCP server stderr: {stderr}")
             if self._message_task:
                 self._message_task.cancel()
             await self.transport.disconnect()

@@ -97,15 +97,26 @@ class StdioTransport(MCPTransport):
         # Merge environment variables
         full_env = {**os.environ, **self.env}
 
+        # Debug: log environment variables
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"[StdioTransport] Environment variables passed to subprocess: {list(self.env.keys())}")
+        if self.env:
+            for k, v in self.env.items():
+                # Mask sensitive values
+                if 'KEY' in k.upper() or 'SECRET' in k.upper() or 'TOKEN' in k.upper():
+                    logger.debug(f"[StdioTransport]   {k}=***{v[-4:] if len(v) > 4 else '****'}")
+                else:
+                    logger.debug(f"[StdioTransport]   {k}={v}")
+
         # Create subprocess with process group for proper cleanup
         def preexec_fn():
             # Create new session and process group
             # This ensures child processes can be terminated together
             os.setsid()
 
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Starting MCP server: {self.command} {' '.join(self.args)}")
+        logger.info(f"[StdioTransport] Starting MCP server: {self.command} {' '.join(self.args)}")
+        logger.debug(f"[StdioTransport] Full command: {self.command} with args {self.args}")
 
         try:
             self._process = await asyncio.create_subprocess_exec(
@@ -117,11 +128,23 @@ class StdioTransport(MCPTransport):
                 env=full_env,
                 preexec_fn=preexec_fn if os.name != "nt" else None,
             )
-            logger.info(f"MCP server started with PID: {self._process.pid}")
+            logger.info(f"[StdioTransport] MCP server started with PID: {self._process.pid}")
+
+            # Check if process is still running after a short delay
+            await asyncio.sleep(0.1)
+            if self._process.returncode is not None:
+                # Process exited immediately - read stderr for error
+                stderr = await self._process.stderr.read()
+                stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
+                logger.error(f"[StdioTransport] Process exited immediately with code {self._process.returncode}")
+                logger.error(f"[StdioTransport] stderr: {stderr_text}")
+                raise RuntimeError(f"MCP server process exited immediately (code {self._process.returncode}): {stderr_text}")
+
             self._connected = True
+            logger.debug(f"[StdioTransport] Process is running, stdin/stdout pipes ready")
         except Exception as e:
             self._connected = False
-            logger.error(f"Failed to start MCP server: {e}")
+            logger.error(f"[StdioTransport] Failed to start MCP server: {e}")
             raise RuntimeError(f"Failed to start MCP server: {e}") from e
 
     async def disconnect(self) -> None:
@@ -157,34 +180,62 @@ class StdioTransport(MCPTransport):
 
     async def send(self, message: dict) -> None:
         """Send message via stdin."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if self._process is None or self._process.stdin is None:
+            logger.error(f"[StdioTransport] send() called but process not connected")
             raise RuntimeError("Transport not connected")
+
+        # Debug: check if process is still running
+        if self._process.returncode is not None:
+            logger.error(f"[StdioTransport] Process already exited with code {self._process.returncode}")
+            raise RuntimeError(f"Process exited with code {self._process.returncode}")
 
         # JSON-RPC messages are newline-delimited
         data = json.dumps(message) + "\n"
+        logger.debug(f"[StdioTransport] Sending message: {message.get('method', 'unknown')} (id={message.get('id', 'none')})")
+        logger.debug(f"[StdioTransport] Raw data: {data.strip()[:200]}...")
         self._process.stdin.write(data.encode("utf-8"))
         await self._process.stdin.drain()
+        logger.debug(f"[StdioTransport] Message sent successfully")
 
     async def receive(self) -> AsyncIterator[dict]:
         """Receive messages from stdout."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if self._process is None or self._process.stdout is None:
+            logger.error(f"[StdioTransport] receive() called but process not connected")
             raise RuntimeError("Transport not connected")
 
+        logger.debug(f"[StdioTransport] Starting receive loop")
         while True:
             try:
                 line = await self._process.stdout.readline()
                 if not line:
                     # EOF reached
+                    logger.warning(f"[StdioTransport] EOF reached on stdout, process may have exited")
+                    # Check process status
+                    if self._process.returncode is not None:
+                        logger.error(f"[StdioTransport] Process exited with code {self._process.returncode}")
                     break
+
+                # Debug: log raw line
+                line_text = line.decode("utf-8").strip()
+                logger.debug(f"[StdioTransport] Received line: {line_text[:200]}...")
 
                 # Parse JSON-RPC message
                 try:
-                    message = json.loads(line.decode("utf-8").strip())
+                    message = json.loads(line_text)
+                    logger.debug(f"[StdioTransport] Parsed message: method={message.get('method', 'n/a')}, id={message.get('id', 'n/a')}")
                     yield message
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
                     # Skip invalid messages
+                    logger.warning(f"[StdioTransport] JSON decode error: {e}, line: {line_text[:100]}")
                     continue
             except asyncio.CancelledError:
+                logger.debug(f"[StdioTransport] Receive loop cancelled")
                 break
 
     @property
