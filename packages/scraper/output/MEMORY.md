@@ -94,7 +94,27 @@
 
 ## 2026-07-11 提取
 
+## 2026-07-12 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债4.57%持续高位+南向19.58%创新高 — 降息预期临界左侧信号延续**
+
+### 港股分析
+- **港股解禁高峰8731亿+次新股暴跌 — 左侧逆向机会与风险警示**
+
+### 港股分析
+- **希音SHEIN港股IPO获证监会备案-消费出海政策松绑左侧信号**
+
+### 新范式/工具
+- **OpenViking — Context Database for AI Agents 新范式** - https://github.com/volcengine/OpenViking
+
+### 新范式/工具
+- **Ghost Font — 运动隐写对抗AI感知新范式** - https://www.mixfont.com/ghost-font
+
+### 新范式/工具
+- **Colibri — Expert-Streaming MoE推理新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Getting%20GLM%205.2%20running%20on%20my%20slow%20computer
 
 ### 港股分析
 - **港股解禁高峰8731亿-次新股左侧风险与逆向机会**
