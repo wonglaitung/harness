@@ -159,7 +159,7 @@ def get_dialog_stylesheet() -> str:
             background-color: {theme.ACCENT_LIGHT};
         }}
         QPushButton:pressed {{
-            background-color: {theme.ACCENT_DARK};
+            background-color: {theme.ACCENT_HOVER};
         }}
         QPushButton:disabled {{
             background-color: {theme.BORDER};
