@@ -359,6 +359,18 @@ class ScheduleDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+        # Set up focus chain for keyboard navigation
+        self._setup_focus_chain()
+
+    def _setup_focus_chain(self):
+        """Set up tab order for keyboard navigation."""
+        self.setTabOrder(self._name_edit, self._goal_edit)
+        self.setTabOrder(self._goal_edit, self._trigger_type_combo)
+        self.setTabOrder(self._trigger_type_combo, self._cron_edit)
+        self.setTabOrder(self._cron_edit, self._interval_spin)
+        self.setTabOrder(self._interval_spin, self._max_iter_spin)
+        self.setTabOrder(self._max_iter_spin, self._timeout_spin)
+
     def _on_trigger_type_changed(self, index: int):
         """Handle trigger type change."""
         self._trigger_stack.setCurrentIndex(index)

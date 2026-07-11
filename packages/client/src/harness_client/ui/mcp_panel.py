@@ -273,6 +273,20 @@ class MCPServerDialog(QDialog):
         # Initial state
         self._on_transport_changed("stdio")
 
+        # Set up focus chain for keyboard navigation
+        self._setup_focus_chain()
+
+    def _setup_focus_chain(self):
+        """Set up tab order for keyboard navigation."""
+        self.setTabOrder(self.name_edit, self.transport_combo)
+        self.setTabOrder(self.transport_combo, self.command_edit)
+        self.setTabOrder(self.command_edit, self.args_edit)
+        self.setTabOrder(self.args_edit, self.env_edit)
+        self.setTabOrder(self.env_edit, self.url_edit)
+        self.setTabOrder(self.url_edit, self.headers_edit)
+        self.setTabOrder(self.headers_edit, self.timeout_spin)
+        self.setTabOrder(self.timeout_spin, self.enabled_check)
+
     def _update_save_location(self):
         """Update the save location label."""
         from pathlib import Path

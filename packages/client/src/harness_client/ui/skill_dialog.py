@@ -136,6 +136,19 @@ class SkillEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        # Set up focus chain for keyboard navigation
+        self._setup_focus_chain()
+
+    def _setup_focus_chain(self):
+        """Set up tab order for keyboard navigation."""
+        self.setTabOrder(self.name_edit, self.version_edit)
+        self.setTabOrder(self.version_edit, self.author_edit)
+        self.setTabOrder(self.author_edit, self.description_edit)
+        self.setTabOrder(self.description_edit, self.keywords_edit)
+        self.setTabOrder(self.keywords_edit, self.patterns_edit)
+        self.setTabOrder(self.patterns_edit, self.content_edit)
+        self.setTabOrder(self.content_edit, self.enabled_check)
+
     def _load_skill(self, path: Path):
         """Load skill from file."""
         try:

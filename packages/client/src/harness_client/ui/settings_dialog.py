@@ -384,6 +384,21 @@ class SettingsDialog(QDialog):
         buttons.clicked.connect(self._on_button_clicked)
         layout.addWidget(buttons)
 
+        # Set up focus chain for keyboard navigation
+        self._setup_focus_chain()
+
+    def _setup_focus_chain(self):
+        """Set up tab order for keyboard navigation."""
+        # API tab
+        self.setTabOrder(self.provider_combo, self.api_key_edit)
+        self.setTabOrder(self.api_key_edit, self.base_url_edit)
+        self.setTabOrder(self.base_url_edit, self.model_combo)
+        self.setTabOrder(self.model_combo, self.context_window_combo)
+        self.setTabOrder(self.context_window_combo, self.tool_role_combo)
+
+        # General tab (theme_combo is the first focusable widget in this tab)
+        # Note: Tab order within tabs is handled by Qt's default traversal
+
     def _on_button_clicked(self, button):
         """Handle button clicks including Apply."""
         from PyQt6.QtWidgets import QDialogButtonBox
