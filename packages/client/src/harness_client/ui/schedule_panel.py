@@ -377,6 +377,7 @@ class ScheduleDialog(QDialog):
 
     def _validate_cron(self, text: str):
         """Validate cron expression and show preview."""
+        theme = get_theme()
         if not text.strip():
             self._cron_preview.setText("下次运行: -")
             return
@@ -385,7 +386,7 @@ class ScheduleDialog(QDialog):
         parts = text.strip().split()
         if len(parts) != 5:
             self._cron_preview.setText("❌ Cron 表达式需要 5 个字段")
-            self._cron_preview.setStyleSheet(f"color: #ef4444; font-size: {get_theme().FONT_SIZE_XS};")
+            self._cron_preview.setStyleSheet(f"color: {theme.DANGER}; font-size: {theme.FONT_SIZE_XS};")
             return
 
         # Try to get next run time
@@ -395,13 +396,13 @@ class ScheduleDialog(QDialog):
             next_run = cron.get_next(datetime)
             next_str = next_run.strftime("%Y-%m-%d %H:%M:%S")
             self._cron_preview.setText(f"✓ 下次运行: {next_str}")
-            self._cron_preview.setStyleSheet(f"color: #22c55e; font-size: {get_theme().FONT_SIZE_XS};")
+            self._cron_preview.setStyleSheet(f"color: {theme.SUCCESS}; font-size: {theme.FONT_SIZE_XS};")
         except ImportError:
             self._cron_preview.setText("⚠ 安装 croniter 以获取预览")
-            self._cron_preview.setStyleSheet(f"color: #f59e0b; font-size: {get_theme().FONT_SIZE_XS};")
+            self._cron_preview.setStyleSheet(f"color: {theme.WARNING}; font-size: {theme.FONT_SIZE_XS};")
         except Exception as e:
             self._cron_preview.setText(f"❌ 无效: {str(e)[:30]}")
-            self._cron_preview.setStyleSheet(f"color: #ef4444; font-size: {get_theme().FONT_SIZE_XS};")
+            self._cron_preview.setStyleSheet(f"color: {theme.DANGER}; font-size: {theme.FONT_SIZE_XS};")
 
     def _populate_fields(self, data: dict):
         """Populate fields from existing schedule data."""
