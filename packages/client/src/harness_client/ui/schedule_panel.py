@@ -161,16 +161,16 @@ class ScheduleItemWidget(QWidget):
         theme = get_theme()
 
         if not enabled:
-            color = "#6b7280"  # gray - paused
+            color = theme.TEXT_MUTED  # gray - paused
             tooltip = "已暂停"
         elif status == "running":
-            color = "#22c55e"  # green - running
+            color = theme.SUCCESS  # green - running
             tooltip = "运行中"
         elif status == "error":
-            color = "#ef4444"  # red - error
+            color = theme.DANGER  # red - error
             tooltip = "错误"
         else:
-            color = "#f59e0b"  # orange - idle
+            color = theme.WARNING  # orange - idle
             tooltip = "空闲"
 
         self._status_label.setText("●")
@@ -511,13 +511,8 @@ class ScheduleSection(CollapsibleSection):
 
         # Placeholder
         self._placeholder = QLabel("暂无排程任务")
-        self._placeholder.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT_SUBTLE};
-                font-size: {theme.FONT_SIZE_XS};
-                padding: 16px;
-            }}
-        """)
+        self._placeholder.setStyleSheet(get_muted_label_stylesheet())
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._list_layout.addWidget(self._placeholder)
 
         self._container_layout.addStretch()
@@ -584,13 +579,7 @@ class ScheduleSection(CollapsibleSection):
             }}
         """)
 
-        self._placeholder.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT_SUBTLE};
-                font-size: {theme.FONT_SIZE_XS};
-                padding: 16px;
-            }}
-        """)
+        self._placeholder.setStyleSheet(get_muted_label_stylesheet())
 
 
 class SchedulePanel(QWidget):
