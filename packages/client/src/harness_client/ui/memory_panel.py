@@ -74,12 +74,13 @@ class ImportanceSlider(QWidget):
 
     def _get_color_for_value(self) -> str:
         """Get color based on importance value."""
+        theme = get_theme()
         if self._value >= 0.8:
-            return "#22c55e"  # green - high
+            return theme.SUCCESS  # green - high
         elif self._value >= 0.5:
-            return "#f59e0b"  # orange - medium
+            return theme.WARNING  # orange - medium
         else:
-            return "#6b7280"  # gray - low
+            return theme.TEXT_MUTED  # gray - low
 
     def _get_handle_rect(self) -> QRectF:
         """Calculate handle rectangle based on value and hover state."""
@@ -301,12 +302,13 @@ class CategorySection(QWidget):
 
     def _get_importance_color(self, importance: float) -> str:
         """Get color for importance level."""
+        theme = get_theme()
         if importance >= 0.8:
-            return "#22c55e"  # green - high importance
+            return theme.SUCCESS  # green - high importance
         elif importance >= 0.5:
-            return "#f59e0b"  # orange - medium importance
+            return theme.WARNING  # orange - medium importance
         else:
-            return "#6b7280"  # gray - low importance
+            return theme.TEXT_MUTED  # gray - low importance
 
     def _get_importance_name(self, importance: float) -> str:
         """Get display name for importance level."""

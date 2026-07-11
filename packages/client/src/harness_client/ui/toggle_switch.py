@@ -70,7 +70,7 @@ class ModeToggleSwitch(ThemeAwareWidget):
         if self._is_goal_mode:
             # 任务模式: 滑块在右边
             slider_x = self.width() // 2 + 2
-            slider_color = QColor("#10B981")  # emerald-500
+            slider_color = QColor(theme.SUCCESS)  # green for goal mode
         else:
             # 聊天模式: 滑块在左边
             slider_x = 2

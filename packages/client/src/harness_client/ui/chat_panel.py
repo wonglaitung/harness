@@ -227,9 +227,9 @@ class MessageBubble(QWidget):
 
             # Set text color via stylesheet
             # Use white for dark theme, but for light theme use dark text
-            # since user bubble in light theme is light blue (#E0F2FE)
+            # since user bubble in light theme is light blue
             if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
-                text_color = "#1E293B"  # slate-800
+                text_color = theme.TEXT  # Dark text for light background
             else:  # Dark theme
                 text_color = "#ffffff"
             self._label.setStyleSheet(f"""
@@ -462,9 +462,9 @@ class MessageBubble(QWidget):
         else:
             # User message - update label stylesheet
             # Use white for dark theme, but for light theme use dark text
-            # since user bubble in light theme is light blue (#E0F2FE)
+            # since user bubble in light theme is light blue
             if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
-                text_color = "#1E293B"  # slate-800
+                text_color = theme.TEXT  # Dark text for light background
             else:  # Dark theme
                 text_color = "#ffffff"
             self._label.setStyleSheet(f"""
@@ -971,7 +971,7 @@ class ChatPanel(QWidget):
 
         # Status indicator dot (green)
         self._browser_status_dot = QLabel("●")
-        self._browser_status_dot.setStyleSheet(f"color: #50c878; font-size: 10px;")
+        self._browser_status_dot.setStyleSheet(f"color: {theme.SUCCESS}; font-size: 10px;")
         browser_status_layout.addWidget(self._browser_status_dot)
 
         # Status text
