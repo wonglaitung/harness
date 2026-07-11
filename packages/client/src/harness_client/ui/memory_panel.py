@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.right_panel import CollapsibleSection
+from harness_client.ui.dialog_styles import get_muted_label_stylesheet
 
 # Maximum content height for memory section when expanded
 # 50% larger than MoreToolsSection (350 * 1.5 ≈ 525)
@@ -783,16 +784,7 @@ class AddEntryDialog(QMessageBox):
 
         # Content input field
         self._input = QLineEdit()
-        self._input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {theme.COMPOSER};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_SM};
-                padding: 10px;
-                color: {theme.TEXT};
-                min-width: 300px;
-            }}
-        """)
+        self._input.setMinimumWidth(300)
         layout = self.layout()
         layout.addWidget(self._input, 1, 0, 1, layout.columnCount())
 
@@ -801,21 +793,10 @@ class AddEntryDialog(QMessageBox):
         self._importance_slider.setMinimum(0)
         self._importance_slider.setMaximum(100)
         self._importance_slider.setValue(50)  # Default: medium importance
-        self._importance_slider.setStyleSheet(f"""
-            QSlider {{
-                background-color: {theme.COMPOSER};
-                border-radius: {theme.RADIUS_SM};
-                padding: 5px;
-            }}
-        """)
+
         # Add importance label
         importance_label = QLabel("重要性:")
-        importance_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.TEXT_SUBTLE};
-                font-size: {theme.FONT_SIZE_XS};
-            }}
-        """)
+        importance_label.setStyleSheet(get_muted_label_stylesheet())
         layout.addWidget(importance_label, 2, 0)
         layout.addWidget(self._importance_slider, 3, 0, 1, layout.columnCount())
 

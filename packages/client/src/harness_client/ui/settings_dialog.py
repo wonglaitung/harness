@@ -24,6 +24,15 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.themes import get_theme
+from harness_client.ui.dialog_styles import (
+    DIALOG_MARGINS,
+    DIALOG_MIN_WIDTH,
+    DIALOG_SPACING,
+    FORM_SPACING,
+    create_standard_form_layout,
+    get_dialog_stylesheet,
+    get_muted_label_stylesheet,
+)
 
 
 class SettingsDialog(QDialog):
@@ -35,20 +44,25 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 
     def _setup_ui(self):
         """Setup UI components."""
         theme = get_theme()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(*DIALOG_MARGINS)
+        layout.setSpacing(DIALOG_SPACING)
 
         # Tabs
         tabs = QTabWidget()
 
         # API tab
         api_tab = QWidget()
-        api_layout = QFormLayout(api_tab)
+        api_layout = create_standard_form_layout()
+        api_layout.setContentsMargins(0, 0, 0, 0)
+        api_tab.setLayout(api_layout)
 
         self.provider_combo = QComboBox()
         self.provider_combo.addItems(["anthropic", "openai"])

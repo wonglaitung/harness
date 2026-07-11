@@ -21,6 +21,14 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.themes import get_theme
+from harness_client.ui.dialog_styles import (
+    DIALOG_MARGINS,
+    DIALOG_MIN_WIDTH,
+    DIALOG_SPACING,
+    create_standard_form_layout,
+    get_dialog_stylesheet,
+    get_muted_label_stylesheet,
+)
 
 
 class TestConnectionThread(QThread):
@@ -135,7 +143,8 @@ class MCPServerDialog(QDialog):
         super().__init__(parent)
         self._tools = tools or []
         self.setWindowTitle("添加 MCP 服务器")
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 
         if server_config:
@@ -145,8 +154,10 @@ class MCPServerDialog(QDialog):
         """Setup UI components."""
         theme = get_theme()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(*DIALOG_MARGINS)
+        layout.setSpacing(DIALOG_SPACING)
 
-        form = QFormLayout()
+        form = create_standard_form_layout()
 
         # Name
         self.name_edit = QLineEdit()

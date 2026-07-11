@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,6 +34,15 @@ from PyQt6.QtWidgets import (
 
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.icons import create_schedule_icon, create_play_icon, create_pause_icon
+from harness_client.ui.dialog_styles import (
+    DIALOG_MARGINS,
+    DIALOG_MIN_WIDTH,
+    DIALOG_SPACING,
+    create_standard_form_layout,
+    get_dialog_stylesheet,
+    get_muted_label_stylesheet,
+    get_groupbox_stylesheet,
+)
 from harness_client.ui.right_panel import CollapsibleSection
 
 
@@ -225,6 +235,8 @@ class ScheduleDialog(QDialog):
         """
         super().__init__(parent)
         self._schedule_data = schedule_data or {}
+        self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 
         if schedule_data:
@@ -234,36 +246,14 @@ class ScheduleDialog(QDialog):
             self.setWindowTitle("新建排程")
 
     def _setup_ui(self):
-        """Setup dialog UI."""
+        """Setup dialog UI with professional form layout."""
         theme = get_theme()
-
-        self.setMinimumWidth(450)
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {theme.CHROME};
-                color: {theme.TEXT};
-            }}
-            QLabel {{
-                color: {theme.TEXT};
-            }}
-            QLineEdit, QSpinBox, QComboBox {{
-                background-color: {theme.COMPOSER};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_SM};
-                padding: 8px;
-                color: {theme.TEXT};
-            }}
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{
-                border-color: {theme.ACCENT};
-            }}
-        """)
-
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
+        layout.setContentsMargins(*DIALOG_MARGINS)
+        layout.setSpacing(DIALOG_SPACING)
 
-        # Form
-        form = QFormLayout()
-        form.setSpacing(12)
+        # Form with proper alignment
+        form = create_standard_form_layout()
 
         # Name
         self._name_edit = QLineEdit()
@@ -281,73 +271,85 @@ class ScheduleDialog(QDialog):
         self._trigger_type_combo.currentIndexChanged.connect(self._on_trigger_type_changed)
         form.addRow("触发类型:", self._trigger_type_combo)
 
+        layout.addLayout(form)
+
+        # Trigger value section (with border)
+        trigger_group = QGroupBox("触发设置")
+        trigger_group.setStyleSheet(get_groupbox_stylesheet())
+        trigger_layout = QVBoxLayout(trigger_group)
+        trigger_layout.setSpacing(6)
+
         # Trigger value (stacked widget for cron/interval)
         self._trigger_stack = QStackedWidget()
 
         # Cron input
         cron_widget = QWidget()
         cron_layout = QVBoxLayout(cron_widget)
-        cron_layout.setContentsMargins(0, 0, 0, 0)
+        cron_layout.setContentsMargins(8, 4, 8, 4)
+        cron_layout.setSpacing(4)
 
         self._cron_edit = QLineEdit()
         self._cron_edit.setPlaceholderText("0 9 * * *")
         self._cron_edit.textChanged.connect(self._validate_cron)
         cron_layout.addWidget(self._cron_edit)
 
-        # Cron preview
-        self._cron_preview = QLabel("下次运行: -")
-        self._cron_preview.setStyleSheet(f"color: {theme.TEXT_SUBTLE}; font-size: {theme.FONT_SIZE_XS};")
-        cron_layout.addWidget(self._cron_preview)
+        # Cron preview and help in one row
+        cron_info = QLabel("格式: 分 时 日 月 周 · 例如 0 9 * * * = 每天 9:00")
+        cron_info.setStyleSheet(get_muted_label_stylesheet())
+        cron_info.setWordWrap(True)
+        cron_layout.addWidget(cron_info)
 
-        # Cron help
-        cron_help = QLabel("格式: 分 时 日 月 周 (如: 0 9 * * * = 每天9:00)")
-        cron_help.setStyleSheet(f"color: {theme.TEXT_SUBTLE}; font-size: {theme.FONT_SIZE_XS};")
-        cron_help.setWordWrap(True)
-        cron_layout.addWidget(cron_help)
+        # Cron validation feedback
+        self._cron_preview = QLabel()
+        self._cron_preview.setStyleSheet(get_muted_label_stylesheet())
+        cron_layout.addWidget(self._cron_preview)
 
         self._trigger_stack.addWidget(cron_widget)
 
         # Interval input
         interval_widget = QWidget()
         interval_layout = QHBoxLayout(interval_widget)
-        interval_layout.setContentsMargins(0, 0, 0, 0)
+        interval_layout.setContentsMargins(8, 4, 8, 4)
+        interval_layout.setSpacing(8)
 
         self._interval_spin = QSpinBox()
         self._interval_spin.setMinimum(1)
         self._interval_spin.setMaximum(86400)
         self._interval_spin.setValue(300)
         self._interval_spin.setSuffix(" 秒")
+        self._interval_spin.setMinimumWidth(120)
         interval_layout.addWidget(self._interval_spin)
 
+        interval_layout.addWidget(QLabel("(1-86400 秒)"))
         interval_layout.addStretch()
 
         self._trigger_stack.addWidget(interval_widget)
 
-        form.addRow("触发值:", self._trigger_stack)
-        layout.addLayout(form)
+        trigger_layout.addWidget(self._trigger_stack)
+        layout.addWidget(trigger_group)
 
-        # Max iterations
-        iter_layout = QHBoxLayout()
+        # Settings row (max iterations + timeout)
+        settings_group = QGroupBox("执行设置")
+        settings_group.setStyleSheet(get_groupbox_stylesheet())
+        settings_layout = create_standard_form_layout()
+        settings_group.setLayout(settings_layout)
+
         self._max_iter_spin = QSpinBox()
         self._max_iter_spin.setMinimum(1)
         self._max_iter_spin.setMaximum(1000)
         self._max_iter_spin.setValue(50)
-        iter_layout.addWidget(self._max_iter_spin)
-        iter_layout.addWidget(QLabel("次迭代"))
-        iter_layout.addStretch()
-        layout.addLayout(iter_layout)
+        settings_layout.addRow("最大迭代:", self._max_iter_spin)
 
-        # Timeout
-        timeout_layout = QHBoxLayout()
         self._timeout_spin = QSpinBox()
         self._timeout_spin.setMinimum(60)
         self._timeout_spin.setMaximum(86400)
         self._timeout_spin.setValue(3600)
         self._timeout_spin.setSuffix(" 秒")
-        timeout_layout.addWidget(self._timeout_spin)
-        timeout_layout.addWidget(QLabel("超时"))
-        timeout_layout.addStretch()
-        layout.addLayout(timeout_layout)
+        settings_layout.addRow("超时:", self._timeout_spin)
+
+        layout.addWidget(settings_group)
+
+        layout.addStretch()
 
         # Buttons
         button_box = QDialogButtonBox(

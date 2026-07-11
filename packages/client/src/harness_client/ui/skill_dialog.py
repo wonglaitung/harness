@@ -17,6 +17,14 @@ from PyQt6.QtWidgets import (
 )
 
 from harness_client.themes import get_theme
+from harness_client.ui.dialog_styles import (
+    DIALOG_MARGINS,
+    DIALOG_MIN_WIDTH,
+    DIALOG_SPACING,
+    create_standard_form_layout,
+    get_dialog_stylesheet,
+    get_muted_label_stylesheet,
+)
 
 
 class SkillEditDialog(QDialog):
@@ -25,7 +33,8 @@ class SkillEditDialog(QDialog):
     def __init__(self, parent=None, skill_path: Path = None):
         super().__init__(parent)
         self.setWindowTitle("编辑技能")
-        self.setMinimumSize(600, 500)
+        self.setMinimumSize(DIALOG_MIN_WIDTH, 500)
+        self.setStyleSheet(get_dialog_stylesheet())
         self.skill_path = skill_path
         self._setup_ui()
 
@@ -36,9 +45,11 @@ class SkillEditDialog(QDialog):
         """Setup UI components."""
         theme = get_theme()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(*DIALOG_MARGINS)
+        layout.setSpacing(DIALOG_SPACING)
 
         # Basic info
-        form = QFormLayout()
+        form = create_standard_form_layout()
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("例如: code-review")
