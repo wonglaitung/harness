@@ -96,7 +96,30 @@
 
 ## 2026-07-12 提取
 
+## 2026-07-13 提取
+
 ## 注意事项
+
+### 港股分析
+- **次新股暴跌后V型反弹-半导体左侧逆向机会与风险警示**
+
+### 港股分析
+- **全球资金再平衡+南向141.9亿净流入-右侧超强确认信号**
+
+### 港股分析
+- **央行外储增配港股-政策驱动型左侧信号升级**
+
+### 新范式/工具
+- **Reame — CPU记忆推理"越跑越快"新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Reame
+
+### 新范式/工具
+- **HyperFrames — HTML→Video Agent原生渲染新范式** - https://github.com/heygen-com/hyperframes
+
+### 新范式/工具
+- **Mindwalk — Agent会话3D可视化回放新范式** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Mesh LLM — 分布式Mesh推理新范式** - https://www.iroh.computer/blog/mesh-llm
 
 ### 港股分析
 - **美债4.57%持续高位+南向19.58%创新高 — 降息预期临界左侧信号延续**
