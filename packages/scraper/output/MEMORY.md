@@ -98,7 +98,27 @@
 
 ## 2026-07-13 提取
 
+## 2026-07-14 提取
+
 ## 注意事项
+
+### 港股分析
+- **智谱AI(02513.HK)涨超7%+30亿成交 — AI政策松绑右侧确认信号**
+
+### 港股分析
+- **港股PCB概念股全线重挫-建滔集团跌16%-左侧逆向机会**
+
+### 港股分析
+- **美债4.61%突破4.6%红线-降息预期左侧窗口关闭风险升级**
+
+### 新范式/工具
+- **Ant Sandbox — 运行时级VM沙箱Agent安全执行新范式** - https://antjs.org/
+
+### 新范式/工具
+- **Background Agents (Open-Inspect) — 后台自主编码Agent新范式** - https://github.com/ColeMurray/background-agents
+
+### 新范式/工具
+- **Clawk — Agent一次性VM安全执行新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Clawk
 
 ### 港股分析
 - **次新股暴跌后V型反弹-半导体左侧逆向机会与风险警示**
