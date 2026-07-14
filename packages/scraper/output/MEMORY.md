@@ -100,7 +100,33 @@
 
 ## 2026-07-14 提取
 
+## 2026-07-15 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股汽车+资源板块右侧共振-政策催化与全球再定价**
+
+### 港股分析
+- **美债459高位运行-降息预期左侧窗口临界延续**
+
+### 港股分析
+- **CRO板块集体暴涨-政策松绑+估值修复左侧信号**
+
+### 港股分析
+- **南向资金1961再创新高-左侧建仓信号持续升级**
+
+### 新范式/工具
+- **Precursor — 会话级行为信号检测Agent流量新范式** - https://blog.cloudflare.com/introducing-precursor/
+
+### 新范式/工具
+- **Jacquard — AI-written, human-reviewed 编程语言新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Jacquard
+
+### 新范式/工具
+- **AI Trains AI — RL自举训练新范式** - https://github.com/Danau5tin/ai-trains-ai
+
+### 新范式/工具
+- **Bonsai 27B — Intelligence Density 1-bit全链路压缩新范式** - https://prismml.com/news/bonsai-27b
 
 ### 港股分析
 - **智谱AI(02513.HK)涨超7%+30亿成交 — AI政策松绑右侧确认信号**
