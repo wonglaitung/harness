@@ -19,11 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 # Default skill search paths (in priority order)
+# User-level has higher priority, project-level as fallback
 DEFAULT_SKILL_PATHS = [
     Path("~/.harness/skills").expanduser(),  # User-level (highest priority)
-    Path("~/.harness/shared-skills").expanduser(),  # Shared
-    Path("./.agent/skills"),  # Project-level
-    Path("./skills"),  # Project-level (alternate)
+    Path("./.harness/skills"),  # Project-level
 ]
 
 

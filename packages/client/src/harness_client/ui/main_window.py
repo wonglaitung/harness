@@ -1089,13 +1089,11 @@ class MainWindow(QMainWindow):
         """Handle add skill button click."""
 
         from harness_client.ui.skill_dialog import SkillEditDialog
-        from harness_client.utils.settings import get_config_dir
 
         dialog = SkillEditDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Save to global skill directory (~/.harness/skills/)
-            skill_dir = get_config_dir() / "skills"
-            skill_dir.mkdir(parents=True, exist_ok=True)
+            # Save to global skill directory (~/.harness/skills)
+            skill_dir = self.skill_controller.ensure_skill_directory()
 
             data = dialog.get_skill_data()
             if data["name"]:
@@ -1106,18 +1104,32 @@ class MainWindow(QMainWindow):
     def _on_edit_skill(self, skill_name: str):
         """Handle double-click on skill item to edit."""
         from harness_client.ui.skill_dialog import SkillEditDialog
+        import logging
+        logger = logging.getLogger(__name__)
 
         skill_info = self.skill_controller.get_skill(skill_name)
-        if skill_info and skill_info.source_path:
-            skill_path = Path(skill_info.source_path)
-            dialog = SkillEditDialog(self, skill_path)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                if dialog.save_to_file(skill_path):
-                    self.skill_controller.load_from_file(skill_path)
+        if not skill_info:
+            logger.warning(f"[MainWindow] Skill '{skill_name}' not found in cache")
+            return
+
+        if not skill_info.source_path:
+            logger.warning(f"[MainWindow] Skill '{skill_name}' has no source_path")
+            return
+
+        skill_path = Path(skill_info.source_path)
+        dialog = SkillEditDialog(self, skill_path)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if dialog.save_to_file(skill_path):
+                # Reload the skill file and refresh UI
+                self.skill_controller.load_from_file(skill_path)
+                self._on_skills_changed()
+                logger.info(f"[MainWindow] Skill '{skill_name}' saved and reloaded")
 
     def _on_edit_mcp_server(self, server_name: str):
         """Handle double-click on MCP server item to edit."""
         from harness_client.ui.mcp_panel import MCPServerDialog
+        import logging
+        logger = logging.getLogger(__name__)
 
         server_info = self.mcp_controller.servers.get(server_name)
         if not server_info:
@@ -1128,10 +1140,17 @@ class MainWindow(QMainWindow):
         if not server_config:
             return
 
-        # Get tools if connected (only available after agent is initialized)
+        # Get tools if connected
         tools = None
         if self.mcp_controller.manager:
+            # Get tools from SDK's MCP manager
             tools = self.mcp_controller.manager.get_server_tools(server_name)
+            logger.info(f"[MainWindow] Tools from manager for '{server_name}': {len(tools) if tools else 0}")
+        elif server_info.tools_count > 0:
+            # Fallback: get tools from controller's get_all_tools() and filter by server
+            all_tools = self.mcp_controller.get_all_tools()
+            tools = [t for t in all_tools if getattr(t, 'server_name', None) == server_name]
+            logger.info(f"[MainWindow] Tools from get_all_tools for '{server_name}': {len(tools) if tools else 0}")
 
         config_dict = {
             "name": server_config.name,

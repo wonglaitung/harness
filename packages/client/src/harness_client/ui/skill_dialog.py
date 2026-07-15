@@ -129,7 +129,6 @@ class SkillEditDialog(QDialog):
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
-            | QDialogButtonBox.StandardButton.SaveAll
             | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)

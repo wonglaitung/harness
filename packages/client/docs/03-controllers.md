@@ -577,16 +577,18 @@ class SkillController:
         self._cached_skills: dict[str, SkillInfo] = {}  # 技能名 -> SkillInfo
 
     def _discover_skills_from_filesystem(self) -> list[SkillInfo]:
-        """从文件系统发现技能（Agent 可用前）"""
+        """从文件系统发现技能（Agent 可用前）- 只扫描 ~/.harness/skills"""
+        from harness_client.controllers.skill_controller import get_skill_directory
+
+        skill_dir = get_skill_directory()
         skills = []
-        for directory in DEFAULT_SKILL_PATHS:
-            for skill_file in directory.rglob("SKILL.md"):
-                skill_info = self._parse_skill_file(skill_file)
-                if skill_info:
-                    # 去重：跳过已缓存的同名技能
-                    if skill_info.name not in self._cached_skills:
-                        skills.append(skill_info)
-                        self._cached_skills[skill_info.name] = skill_info
+        for skill_file in skill_dir.rglob("SKILL.md"):
+            skill_info = self._parse_skill_file(skill_file)
+            if skill_info:
+                # 去重：跳过已缓存的同名技能
+                if skill_info.name not in self._cached_skills:
+                    skills.append(skill_info)
+                    self._cached_skills[skill_info.name] = skill_info
         return skills
 
     def get_skill_list(self) -> list[SkillInfo]:
@@ -598,20 +600,17 @@ class SkillController:
         return list(self._cached_skills.values())
 ```
 
-### 去重逻辑
+### 技能目录
 
-当多个技能目录中存在同名技能时，SkillController 自动去重：
+客户端只扫描用户级技能目录：
 
 ```
-技能目录优先级（从高到低）：
-1. ~/.harness/skills         - 用户级（最高优先级）
-2. ~/.harness/shared-skills  - 共享
-3. ./.agent/skills           - 项目级
-4. ./skills                  - 项目级（备用）
-
-如果 ~/.harness/skills/md-to-word/SKILL.md 和 .agent/skills/md-to-word/SKILL.md 都存在，
-UI 只显示第一个发现的（用户级优先）。
+~/.harness/skills/  - 用户级（所有项目共享）
 ```
+
+**跨平台支持**：
+- Windows: `C:\Users\<用户名>\.harness\skills\`
+- Linux/macOS: `/home/<用户名>/.harness/skills/`
 
 ### 核心方法
 

@@ -16,6 +16,21 @@ from harness import Skill
 logger = logging.getLogger(__name__)
 
 
+def get_skill_directory() -> Path:
+    """
+    Get the skill directory path (~/.harness/skills).
+
+    Works on both Windows and Linux/macOS.
+
+    Returns:
+        Path to the skill directory
+    """
+    # Path.home() works correctly on all platforms
+    # Windows: C:\Users\<user>\.harness\skills
+    # Linux/macOS: /home/<user>/.harness/skills
+    return Path.home() / ".harness" / "skills"
+
+
 @dataclass
 class SkillInfo:
     """Information about a skill."""
@@ -63,53 +78,53 @@ class SkillController:
         """
         Discover skills from filesystem without loading full content.
 
-        Scans default skill directories and reads frontmatter only.
+        Scans ~/.harness/skills directory only (user-level skills).
 
         Returns:
             List of SkillInfo from filesystem
         """
-        from harness.skills.loader import DEFAULT_SKILL_PATHS
+        skill_dir = get_skill_directory()
+        logger.info(f"[SkillController] Scanning skill directory: {skill_dir}, exists: {skill_dir.exists()}")
 
-        logger.info(f"[SkillController] _discover_skills_from_filesystem called, current cache size: {len(self._cached_skills)}")
+        if not skill_dir.exists():
+            logger.info(f"[SkillController] Skill directory does not exist: {skill_dir}")
+            return []
+
         skills = []
-        for directory in DEFAULT_SKILL_PATHS:
-            logger.info(f"[SkillController] Scanning directory: {directory}, exists: {directory.exists()}")
-            if not directory.exists():
+
+        # Recursively find all SKILL.md files (nested directories)
+        for skill_file in skill_dir.rglob("SKILL.md"):
+            try:
+                skill_info = self._parse_skill_file(skill_file)
+                if skill_info:
+                    # Skip if already in cache (avoid duplicates)
+                    if skill_info.name not in self._cached_skills:
+                        logger.info(f"[SkillController] Found SKILL.md: {skill_file} -> {skill_info.name}")
+                        skills.append(skill_info)
+                        self._cached_skills[skill_info.name] = skill_info
+                    else:
+                        logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
+
+            except Exception as e:
+                logger.warning(f"Failed to read skill {skill_file}: {e}")
+
+        # Also check for {name}.md files at top level
+        for skill_file in skill_dir.glob("*.md"):
+            if skill_file.name == "SKILL.md":
                 continue
+            try:
+                skill_info = self._parse_skill_file(skill_file)
+                if skill_info:
+                    # Skip if already in cache (avoid duplicates)
+                    if skill_info.name not in self._cached_skills:
+                        logger.info(f"[SkillController] Found {skill_file.name} -> {skill_info.name}")
+                        skills.append(skill_info)
+                        self._cached_skills[skill_info.name] = skill_info
+                    else:
+                        logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
 
-            # Recursively find all SKILL.md files (nested directories)
-            for skill_file in directory.rglob("SKILL.md"):
-                try:
-                    skill_info = self._parse_skill_file(skill_file)
-                    if skill_info:
-                        # Skip if already in cache (avoid duplicates across directories)
-                        if skill_info.name not in self._cached_skills:
-                            logger.info(f"[SkillController] Found SKILL.md: {skill_file} -> {skill_info.name}")
-                            skills.append(skill_info)
-                            self._cached_skills[skill_info.name] = skill_info
-                        else:
-                            logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to read skill {skill_file}: {e}")
-
-            # Also check for {name}.md files at top level
-            for skill_file in directory.glob("*.md"):
-                if skill_file.name == "SKILL.md":
-                    continue
-                try:
-                    skill_info = self._parse_skill_file(skill_file)
-                    if skill_info:
-                        # Skip if already in cache (avoid duplicates across directories)
-                        if skill_info.name not in self._cached_skills:
-                            logger.info(f"[SkillController] Found {skill_file.name} -> {skill_info.name}")
-                            skills.append(skill_info)
-                            self._cached_skills[skill_info.name] = skill_info
-                        else:
-                            logger.info(f"[SkillController] Skipping duplicate skill: {skill_info.name} from {skill_file}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to read skill {skill_file}: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to read skill {skill_file}: {e}")
 
         logger.info(f"[SkillController] _discover_skills_from_filesystem done, found {len(skills)} skills, cache size now: {len(self._cached_skills)}")
         return skills
@@ -218,7 +233,15 @@ class SkillController:
         return count
 
     def load_defaults(self) -> int:
-        """Load skills from default directories."""
+        """
+        Load skills from default directory (~/.harness/skills).
+
+        This is the only directory the client reads skills from.
+        Works on both Windows and Linux/macOS.
+
+        Returns:
+            Number of skills loaded
+        """
         logger.info(f"[SkillController] load_defaults called, agent: {self._agent is not None}")
         if self._agent:
             # AgentHarness loads skills on init, just trigger callback
@@ -231,6 +254,28 @@ class SkillController:
         if self._on_change:
             self._on_change()
         return len(skills)
+
+    def get_skill_directory(self) -> Path:
+        """
+        Get the default skill directory path.
+
+        Returns:
+            Path to ~/.harness/skills
+        """
+        return get_skill_directory()
+
+    def ensure_skill_directory(self) -> Path:
+        """
+        Ensure the skill directory exists.
+
+        Creates ~/.harness/skills if it doesn't exist.
+
+        Returns:
+            Path to the skill directory
+        """
+        skill_dir = get_skill_directory()
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        return skill_dir
 
     def enable_skill(self, name: str):
         """Enable a skill."""
@@ -287,53 +332,34 @@ class SkillController:
         return self._agent.get_matching_skills(user_input)
 
     def get_skill_list(self) -> list[SkillInfo]:
-        """Get list of all discovered skills (including metadata-only)."""
-        logger.info(f"[SkillController] get_skill_list called, agent: {self._agent is not None}")
-        if self._agent:
-            discovered = self._agent.list_discovered_skills()
-            logger.info(f"[SkillController] SDK list_discovered_skills returned {len(discovered)} skills: {[m.name for m in discovered]}")
-            skills = []
-            # Use list_discovered_skills() to get all skills (Level 1 metadata)
-            for meta in discovered:
-                enabled = self._skill_states.get(meta.name, True)
-                # Get source_path from cached skills if available
-                cached = self._cached_skills.get(meta.name)
-                skills.append(SkillInfo(
-                    name=meta.name,
-                    version=meta.version,
-                    description=meta.description,
-                    enabled=enabled,
-                    source_path=cached.source_path if cached else None,
-                ))
-            logger.info(f"[SkillController] get_skill_list returning {len(skills)} skills")
-            return skills
+        """
+        Get list of all skills from ~/.harness/skills.
 
-        # Return cached skills (populated before agent was available)
-        logger.info(f"[SkillController] Returning cached skills: {len(self._cached_skills)} items")
+        Client only reads skills from ~/.harness/skills directory,
+        not from project-level or other SDK default paths.
+
+        Returns:
+            List of SkillInfo from user-level skill directory
+        """
+        logger.info(f"[SkillController] get_skill_list called, cache size: {len(self._cached_skills)}")
+
+        # Always return cached skills (populated from ~/.harness/skills only)
+        # This ensures client only shows user-level skills, not project-level
         return list(self._cached_skills.values())
 
     def get_skill(self, name: str) -> SkillInfo | None:
-        """Get a skill by name.
-
-        Returns SkillInfo (for UI) instead of SDK Skill object.
         """
-        # First check cached skills
-        if name in self._cached_skills:
-            return self._cached_skills[name]
+        Get a skill by name from ~/.harness/skills.
 
-        # Then check agent
-        if self._agent:
-            meta = self._agent.get_skill(name)
-            if meta:
-                return SkillInfo(
-                    name=meta.name,
-                    version=meta.version,
-                    description=meta.description,
-                    enabled=self._skill_states.get(meta.name, True),
-                    source_path=None,
-                )
+        Client only reads skills from ~/.harness/skills directory.
 
-        return None
+        Args:
+            name: Skill name
+
+        Returns:
+            SkillInfo if found in user-level cache, None otherwise
+        """
+        return self._cached_skills.get(name)
 
     def create_skill(
         self,

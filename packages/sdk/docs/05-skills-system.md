@@ -277,7 +277,7 @@ from harness import AgentHarness
 agent = AgentHarness()
 
 # 初始化时自动发现技能元数据 (Level 1)
-# 从 ~/.harness/skills, .agent/skills 等目录
+# 从 ~/.harness/skills, ./.harness/skills 目录
 
 # 查看已发现的技能（元数据，未加载完整内容）
 for meta in agent.list_discovered_skills():
@@ -307,11 +307,9 @@ for skill in agent.list_skills():
 ```python
 # DEFAULT_SKILL_PATHS 扫描顺序（优先级从高到低）：
 # 1. ~/.harness/skills      - 用户级（最高优先级）
-# 2. ~/.harness/shared-skills - 共享
-# 3. ./.agent/skills         - 项目级
-# 4. ./skills                - 项目级（备用）
+# 2. ./.harness/skills      - 项目级
 
-# 如果 ~/.harness/skills/convert/SKILL.md 和 .agent/skills/convert/SKILL.md 都存在，
+# 如果 ~/.harness/skills/convert/SKILL.md 和 ./.harness/skills/convert/SKILL.md 都存在，
 # 只有第一个被加载（用户级优先），后续同名技能会被跳过
 ```
 
@@ -502,7 +500,7 @@ agent = AgentHarness(api_key="...")
 
 # 加载自定义技能目录
 from pathlib import Path
-agent.load_skills_from_dir(Path(".agent/skills"))
+agent.load_skills_from_dir(Path("./.harness/skills"))
 
 # 查看匹配的技能
 user_input = "将 README.md 转换为 Word 文档"
