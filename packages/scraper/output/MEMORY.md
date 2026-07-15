@@ -102,7 +102,27 @@
 
 ## 2026-07-15 提取
 
+## 2026-07-16 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股光通信+AI算力基建走强-长飞光纤涨1663%-算力需求左侧信号**
+
+### 港股分析
+- **智谱AI(02513.HK)涨超10%+连续大涨 — AI政策松绑右侧确认升级**
+
+### 港股分析
+- **美债4.55%连续回落-4.6%假突破确认-降息预期左侧窗口重新打开**
+
+### 新范式/工具
+- **Apache Ossie — 语义模型交换新协议** - https://github.com/apache/ossie
+
+### 新范式/工具
+- **BrowserOS/BrowserClaw — Agent原生浏览器新范式** - https://github.com/browseros-ai/BrowserOS
+
+### 新范式/工具
+- **GPT-Red 自博弈红队训练新范式** - https://openai.com/index/unlocking-self-improvement-gpt-red
 
 ### 港股分析
 - **港股汽车+资源板块右侧共振-政策催化与全球再定价**
