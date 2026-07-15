@@ -1260,40 +1260,48 @@ class MainWindow(QMainWindow):
 
     def _on_schedule_panel(self):
         """Show schedule management dialog."""
-        from harness_client.ui.schedule_panel import ScheduleSection
+        from harness_client.ui.schedule_panel import ScheduleListWidget
+        from harness_client.ui.dialog_styles import (
+            DIALOG_MARGINS,
+            DIALOG_SPACING,
+            get_dialog_stylesheet,
+        )
 
-        # Create dialog
+        # Create dialog with consistent styling
         dialog = QDialog(self)
         dialog.setWindowTitle("排程管理")
         dialog.setMinimumSize(500, 500)
+        dialog.setStyleSheet(get_dialog_stylesheet())
 
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(*DIALOG_MARGINS)
+        layout.setSpacing(DIALOG_SPACING)
 
-        # Create schedule section
-        self._schedule_section = ScheduleSection()
+        # Create schedule list widget (non-collapsible, designed for dialogs)
+        self._schedule_list = ScheduleListWidget()
         self._refresh_schedule_list()
 
         # Connect signals
-        self._schedule_section.add_requested.connect(lambda: self._on_add_schedule(dialog))
-        self._schedule_section.edit_requested.connect(lambda sid: self._on_edit_schedule(sid, dialog))
-        self._schedule_section.delete_requested.connect(lambda sid: self._on_delete_schedule(sid, dialog))
-        self._schedule_section.toggle_requested.connect(lambda sid: self._on_toggle_schedule(sid, dialog))
+        self._schedule_list.add_requested.connect(lambda: self._on_add_schedule(dialog))
+        self._schedule_list.edit_requested.connect(lambda sid: self._on_edit_schedule(sid, dialog))
+        self._schedule_list.delete_requested.connect(lambda sid: self._on_delete_schedule(sid, dialog))
+        self._schedule_list.toggle_requested.connect(lambda sid: self._on_toggle_schedule(sid, dialog))
 
-        layout.addWidget(self._schedule_section)
+        layout.addWidget(self._schedule_list)
 
-        # Close button
-        from PyQt6.QtWidgets import QPushButton
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(dialog.accept)
-        layout.addWidget(close_btn)
+        # Button box with consistent styling
+        from PyQt6.QtWidgets import QDialogButtonBox
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
 
         dialog.exec()
 
     def _refresh_schedule_list(self):
         """Refresh the schedule list in the dialog."""
-        if hasattr(self, '_schedule_section') and self._schedule_section:
+        if hasattr(self, '_schedule_list') and self._schedule_list:
             schedules = self.schedule_controller.get_schedule_list()
-            self._schedule_section.update_schedules([s.to_dict() for s in schedules])
+            self._schedule_list.update_schedules([s.to_dict() for s in schedules])
 
     def _on_add_schedule(self, parent_dialog):
         """Handle add schedule request."""

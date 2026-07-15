@@ -504,10 +504,10 @@ name: md-to-word
 
 执行命令：
 ```bash
-python .agent/skills/md-to-word/scripts/md_to_word.py <input.md>
+python .harness/skills/md-to-word/scripts/md_to_word.py <input.md>
 ```
 
-技能脚本在项目目录 `.agent/skills/` 下。
+技能脚本在项目目录 `.harness/skills/` 下。
 
 ## 故障排除
 

@@ -437,7 +437,7 @@ agent = AgentHarness(api_key="...")
 
 # 加载自定义技能目录
 from pathlib import Path
-agent.load_skills_from_dir(Path(".agent/skills"))
+agent.load_skills_from_dir(Path(".harness/skills"))
 
 # 查看匹配的技能
 user_input = "将 README.md 转换为 Word 文档"

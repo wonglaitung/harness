@@ -31,12 +31,11 @@ public class SkillLoader {
 
     /**
      * Default skill search paths (in priority order).
+     * User-level has higher priority, project-level as fallback.
      */
     private static final List<Path> DEFAULT_SKILL_PATHS = List.of(
-        Path.of(System.getProperty("user.home"), ".harness", "skills"),        // User-level (highest priority)
-        Path.of(System.getProperty("user.home"), ".harness", "shared-skills"), // Shared
-        Path.of(".agent", "skills"),                                            // Project-level
-        Path.of("skills")                                                       // Project-level (alternate)
+        Path.of(System.getProperty("user.home"), ".harness", "skills"),  // User-level (highest priority)
+        Path.of(".harness", "skills")                                     // Project-level
     );
 
     private final SkillRegistry registry;

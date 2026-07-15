@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QStackedWidget,
@@ -444,6 +445,165 @@ class ScheduleDialog(QDialog):
             data["id"] = self._schedule_data["id"]
 
         return data
+
+
+class ScheduleListWidget(QWidget):
+    """Widget for displaying schedule list in a dialog (non-collapsible).
+
+    Unlike ScheduleSection which inherits CollapsibleSection for the right panel,
+    this widget is designed for use in dialogs with consistent styling.
+    """
+
+    add_requested = pyqtSignal()
+    edit_requested = pyqtSignal(str)  # schedule_id
+    delete_requested = pyqtSignal(str)  # schedule_id
+    toggle_requested = pyqtSignal(str)  # schedule_id
+
+    def __init__(self, parent=None):
+        """Initialize schedule list widget."""
+        super().__init__(parent)
+        self._setup_ui()
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        try:
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
+
+    def _setup_ui(self):
+        """Setup UI components."""
+        theme = get_theme()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Add button - consistent with dialog styling
+        self._add_btn = QPushButton("+ 新建排程")
+        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.ACCENT};
+                color: white;
+                border: none;
+                border-radius: {theme.RADIUS_SM};
+                padding: 10px 16px;
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.ACCENT_HOVER};
+            }}
+        """)
+        self._add_btn.clicked.connect(self.add_requested.emit)
+        layout.addWidget(self._add_btn)
+
+        # Scroll area for schedule list
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: transparent;
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 3px;
+            }}
+        """)
+        layout.addWidget(self._scroll, 1)
+
+        # Container
+        container = QWidget()
+        self._container_layout = QVBoxLayout(container)
+        self._container_layout.setContentsMargins(8, 8, 8, 8)
+        self._container_layout.setSpacing(4)
+        self._scroll.setWidget(container)
+
+        # Placeholder
+        self._placeholder = QLabel("暂无排程任务")
+        self._placeholder.setStyleSheet(get_muted_label_stylesheet())
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._container_layout.addWidget(self._placeholder)
+
+        self._container_layout.addStretch()
+
+        # Store item widgets
+        self._item_widgets: list[ScheduleItemWidget] = []
+
+    def update_schedules(self, schedules: list):
+        """Update the schedule list display.
+
+        Args:
+            schedules: List of ScheduleConfig objects or dicts
+        """
+        # Clear existing items
+        for widget in self._item_widgets:
+            widget.deleteLater()
+        self._item_widgets.clear()
+
+        if not schedules:
+            self._placeholder.setVisible(True)
+            return
+
+        self._placeholder.setVisible(False)
+
+        for schedule in schedules:
+            # Convert to dict if needed
+            if hasattr(schedule, 'to_dict'):
+                data = schedule.to_dict()
+            else:
+                data = schedule
+
+            item_widget = ScheduleItemWidget(data)
+            item_widget.toggle_requested.connect(self.toggle_requested.emit)
+            item_widget.edit_requested.connect(self.edit_requested.emit)
+            item_widget.delete_requested.connect(self.delete_requested.emit)
+            self._container_layout.addWidget(item_widget)
+            self._item_widgets.append(item_widget)
+
+    def _on_theme_changed(self):
+        """Handle theme change."""
+        theme = get_theme()
+
+        self._add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.ACCENT};
+                color: white;
+                border: none;
+                border-radius: {theme.RADIUS_SM};
+                padding: 10px 16px;
+                font-size: {theme.FONT_SIZE_SM};
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.ACCENT_HOVER};
+            }}
+        """)
+
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: transparent;
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_SM};
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {theme.BORDER};
+                border-radius: 3px;
+            }}
+        """)
+
+        self._placeholder.setStyleSheet(get_muted_label_stylesheet())
 
 
 class ScheduleSection(CollapsibleSection):

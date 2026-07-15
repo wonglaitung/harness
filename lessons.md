@@ -1285,7 +1285,7 @@ assert not missing, f"Missing attributes: {missing}"
 
 1. **直接运行转换脚本**，脚本已存在于技能目录中：
    ```
-   python .agent/skills/md-to-word/scripts/md_to_word.py <input.md> [--output <output.docx>]
+   python .harness/skills/md-to-word/scripts/md_to_word.py <input.md> [--output <output.docx>]
    ```
 
 **⚠️ 重要提示**：

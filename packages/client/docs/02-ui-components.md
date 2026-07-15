@@ -1103,12 +1103,15 @@ def closeEvent(self, event):
 
 ```
 SchedulePanel
-├── ScheduleSection (可折叠区块)
+├── ScheduleSection (可折叠区块，用于右侧面板)
 │   ├── AddButton (新建排程)
 │   └── ScheduleItemWidget[] (排程列表)
 │       ├── StatusIndicator (状态指示器)
 │       ├── ScheduleInfo (名称、触发条件)
 │       └── Controls (启动/暂停、编辑、删除)
+├── ScheduleListWidget (非折叠组件，用于对话框)
+│   ├── AddButton (新建排程，统一样式)
+│   └── ScheduleItemWidget[] (排程列表)
 └── ScheduleDialog (新建/编辑对话框)
     ├── NameInput (名称)
     ├── GoalInput (目标)
@@ -1117,6 +1120,63 @@ SchedulePanel
     │   ├── CronInput
     │   └── NextRunPreview (下次运行时间)
     └── IntervalEditor (固定间隔编辑器)
+```
+
+### ScheduleSection vs ScheduleListWidget
+
+两个组件用于不同的场景：
+
+| 组件 | 继承 | 使用场景 | 特点 |
+|------|------|----------|------|
+| `ScheduleSection` | `CollapsibleSection` | 右侧面板 | 可折叠，标题栏可展开/收起 |
+| `ScheduleListWidget` | `QWidget` | 对话框 | 非折叠，统一样式，直接显示内容 |
+
+**ScheduleListWidget 设计要点**：
+
+```python
+class ScheduleListWidget(QWidget):
+    """用于对话框的排程列表组件（非折叠）
+
+    与 ScheduleSection 不同，此组件：
+    - 不继承 CollapsibleSection，无折叠功能
+    - 使用统一对话框样式（DIALOG_MARGINS, DIALOG_SPACING）
+    - 新建按钮使用 ACCENT 颜色，与其他对话框按钮一致
+    - 滚动区域带边框，与对话框整体风格协调
+    """
+
+    add_requested = pyqtSignal()
+    edit_requested = pyqtSignal(str)
+    delete_requested = pyqtSignal(str)
+    toggle_requested = pyqtSignal(str)
+```
+
+### 对话框样式统一
+
+排程管理对话框使用 `dialog_styles.py` 中的统一样式：
+
+```python
+from harness_client.ui.dialog_styles import (
+    DIALOG_MARGINS,
+    DIALOG_SPACING,
+    get_dialog_stylesheet,
+)
+
+def _on_schedule_panel(self):
+    dialog = QDialog(self)
+    dialog.setWindowTitle("排程管理")
+    dialog.setStyleSheet(get_dialog_stylesheet())
+
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(*DIALOG_MARGINS)
+    layout.setSpacing(DIALOG_SPACING)
+
+    # 使用 ScheduleListWidget（非折叠）
+    schedule_list = ScheduleListWidget()
+    layout.addWidget(schedule_list)
+
+    # 使用 QDialogButtonBox（统一样式）
+    button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+    layout.addWidget(button_box)
 ```
 
 ### 状态指示器
