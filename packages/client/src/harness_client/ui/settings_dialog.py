@@ -45,6 +45,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setMaximumWidth(520)  # Prevent dialog from becoming too wide
         self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 

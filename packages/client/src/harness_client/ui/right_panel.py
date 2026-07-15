@@ -1295,7 +1295,7 @@ class MoreToolsSection(CollapsibleSection):
         actions_layout.setContentsMargins(0, 8, 0, 0)
         actions_layout.setSpacing(8)
 
-        # Schedule button - clean, minimal
+        # Schedule button - fixed width, consistent with other buttons
         self.schedule_btn = QPushButton("排程")
         self.schedule_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.schedule_btn.setStyleSheet(f"""
@@ -1306,6 +1306,8 @@ class MoreToolsSection(CollapsibleSection):
                 padding: 10px 14px;
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
+                min-width: 60px;
+                max-width: 80px;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};
@@ -1314,7 +1316,7 @@ class MoreToolsSection(CollapsibleSection):
         self.schedule_btn.clicked.connect(self.schedule_requested)
         actions_layout.addWidget(self.schedule_btn)
 
-        # Browser button - clean, minimal
+        # Browser button - fixed width, consistent with other buttons
         self.browser_btn = QPushButton("浏览器")
         self.browser_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.browser_btn.setStyleSheet(f"""
@@ -1325,6 +1327,8 @@ class MoreToolsSection(CollapsibleSection):
                 padding: 10px 14px;
                 color: {theme.TEXT};
                 font-size: {theme.FONT_SIZE_SM};
+                min-width: 60px;
+                max-width: 80px;
             }}
             QPushButton:hover {{
                 background-color: {theme.HOVER_NEUTRAL};

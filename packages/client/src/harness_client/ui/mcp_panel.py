@@ -144,6 +144,7 @@ class MCPServerDialog(QDialog):
         self._tools = tools or []
         self.setWindowTitle("添加 MCP 服务器")
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setMaximumWidth(520)  # Prevent dialog from becoming too wide
         self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 

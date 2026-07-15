@@ -236,6 +236,7 @@ class ScheduleDialog(QDialog):
         super().__init__(parent)
         self._schedule_data = schedule_data or {}
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setMaximumWidth(520)  # Prevent dialog from becoming too wide
         self.setStyleSheet(get_dialog_stylesheet())
         self._setup_ui()
 

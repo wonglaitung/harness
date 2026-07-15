@@ -34,6 +34,7 @@ class SkillEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("编辑技能")
         self.setMinimumSize(DIALOG_MIN_WIDTH, 500)
+        self.setMaximumWidth(520)  # Prevent dialog from becoming too wide
         self.setStyleSheet(get_dialog_stylesheet())
         self.skill_path = skill_path
         self._setup_ui()
