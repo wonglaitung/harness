@@ -33,17 +33,51 @@ class FileCompleter(QCompleter):
 
 ```python
 class SkillCompleter(QCompleter):
-    """技能自动补全，/ 前缀触发"""
+    """技能自动补全，/ 前缀触发，支持主题和描述显示"""
 
-    def __init__(self, skills: list[str], parent=None):
-        super().__init__(skills, parent)
+    def __init__(self, skills: list[SkillInfo], parent=None):
+        super().__init__(parent)
+        self._skills = skills
+        self._popup: QListView | None = None
+        self._setup_model()
+
+    def _setup_model(self):
+        """设置模型，显示技能名称和描述"""
+        model = QStringListModel()
+        model.setStringList([s.name for s in self._skills])
+        self.setModel(model)
         self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
 ```
 
+**功能特性**：
+- **主题支持**：Popup 样式随深色/浅色主题切换
+- **描述显示**：Tooltip 显示技能详细描述
+- **显式激活**：支持 `/skill-name` 格式直接调用指定技能
+
 **实现要点**：
-- 补全菜单通过 `eventFilter` 处理键盘导航（上/下/Enter/Esc）
+- Popup 使用 `Qt.WindowType.Popup` 确保正确的窗口层级
+- 通过 `eventFilter` 处理键盘导航（上/下/Enter/Esc）
 - `textChanged` 信号触发补全列表更新
-- 选中后通过 `activated` 信号插入文本
+- 选中后通过 `activated` 信号插入技能名称
+
+**显式技能激活**：
+
+```python
+# 用户输入 /skill-name 直接激活技能
+def _on_text_changed(self, text: str):
+    if text.startswith("/"):
+        skill_name = text[1:].strip()
+        if skill_name:
+            # 查找匹配技能
+            for skill in self._skills:
+                if skill.name == skill_name:
+                    self._activate_skill(skill)
+                    return
+```
+
+**相关提交**：
+- `0d05deb`: 改进 UI，添加主题支持和描述显示
+- `7f7f46f`: 添加 `/skill-name` 显式激活支持
 
 ## 消息气泡组件
 

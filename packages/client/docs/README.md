@@ -14,7 +14,8 @@ Harness Client 是 Harness SDK 的 Windows 桌面客户端，提供友好的图�
 | [02-ui-components.md](./02-ui-components.md) | UI 组件详解 |
 | [03-controllers.md](./03-controllers.md) | 控制器详解 |
 | [04-configuration.md](./04-configuration.md) | 配置与部署 |
-| [05-client-lessons.md](./05-client-lessons.md) | **开发经验总结（推荐阅读）** |
+| [development_guide.md](./development_guide.md) | **开发规范与踩坑总结（推荐阅读）** |
+| [ui_spec.md](./ui_spec.md) | UI 设计规范 |
 
 ## 快速开始
 

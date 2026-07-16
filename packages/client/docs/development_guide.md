@@ -837,6 +837,15 @@ print(f"_initializing: {self._initializing}")
 
 ---
 
+## 下一步
+
+- [ui_spec.md](./ui_spec.md) - UI 设计规范（主题、组件、样式）
+- [02-ui-components.md](./02-ui-components.md) - UI 组件详解
+- [03-controllers.md](./03-controllers.md) - 控制器设计
+- [lessons.md](../../../lessons.md) - 全项目经验教训
+
+---
+
 ## 更新日志
 
 | 日期 | 版本 | 变更 |
