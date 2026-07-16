@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -137,6 +138,12 @@ class SkillInjector:
         Returns:
             Formatted skill string
         """
+        # Add skill directory path info
+        skill_dir_info = ""
+        if skill.source_path:
+            skill_dir = Path(skill.source_path).parent
+            skill_dir_info = f"\n\n**Skill Directory**: `{skill_dir}`"
+
         tools_section = ""
         if skill.tools.allowed:
             tools_section = f"\n\n### Available Tools\n{', '.join(skill.tools.allowed)}"
@@ -145,8 +152,7 @@ class SkillInjector:
 
         return f"""## Skill: {skill.name}
 
-{skill.description}
-{tools_section}
+{skill.description}{skill_dir_info}{tools_section}
 
 {skill.content}"""
 

@@ -130,11 +130,19 @@ public class SkillInjector {
 
     /**
      * Format a skill for injection.
+     *
+     * Adds skill directory path info so LLM knows where to find skill scripts.
      */
     private String formatSkill(Skill skill) {
         StringBuilder sb = new StringBuilder();
         sb.append("## Skill: ").append(skill.name()).append("\n\n");
         sb.append(skill.description()).append("\n");
+
+        // Add skill directory path info (industry standard approach)
+        if (skill.filePath() != null) {
+            java.nio.file.Path skillDir = skill.filePath().getParent();
+            sb.append("\n**Skill Directory**: `").append(skillDir).append("`\n");
+        }
 
         if (skill.metadata() != null && skill.metadata().tools() != null && !skill.metadata().tools().isEmpty()) {
             sb.append("\n### Available Tools\n");
