@@ -104,7 +104,33 @@
 
 ## 2026-07-16 提取
 
+## 2026-07-17 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债457回升-假突破确认反复-降息预期左侧窗口临界震荡**
+
+### 港股分析
+- **港股内房股集体上扬-政策松绑+降息预期左侧信号**
+
+### 港股分析
+- **港股AI硬件板块集体暴跌-左侧逆向机会与风险警示**
+
+### 新范式/工具
+- **agent-device：Agent原生设备自动化CLI** - https://github.com/callstack/agent-device
+
+### 新范式/工具
+- **VoiceEQ：语音AI人类质量评估新基准** - https://huggingface.co/blog/real-world-voiceeq
+
+### 新范式/工具
+- **Juggler：GUI编码Agent新范式 — 会话树+全插件化** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Juggler
+
+### 新范式/工具
+- **Inkling + Tinker：可控推理努力 + 开放后训练平台** - https://thinkingmachines.ai/news/introducing-inkling/
+
+### 新范式/工具
+- **Kimi K3 — Delta Attention + Attention Residuals 开放3T级新架构** - https://www.kimi.com/blog/kimi-k3
 
 ### 港股分析
 - **港股光通信+AI算力基建走强-长飞光纤涨1663%-算力需求左侧信号**
