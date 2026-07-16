@@ -46,7 +46,6 @@ class SkillCompleter(QCompleter):
         self._skills = {s["name"]: s.get("description", "") for s in skills}
         # Format: "/skill-name"
         items = [f"/{name}" for name in self._skills.keys()]
-        logger.debug(f"[SkillCompleter] update_skills: {len(items)} items: {items[:5]}...")
         self.setModel(QStringListModel(items))
 
     def get_skill_description(self, name: str) -> str:
@@ -91,8 +90,6 @@ class SkillCompleter(QCompleter):
         """Override to apply theme styling before showing popup."""
         self._apply_popup_style()
         self._ensure_popup_on_top()
-        count = self.completionCount()
-        logger.debug(f"[SkillCompleter] complete() called, completionCount={count}")
         if rect is not None:
             super().complete(rect)
         else:

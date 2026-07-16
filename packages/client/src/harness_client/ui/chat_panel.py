@@ -1514,13 +1514,8 @@ class ChatPanel(QWidget):
         skill_popup_visible = self.skill_completer.popup().isVisible()
         should_show_skill = self.skill_completer.should_complete(text)
 
-        # Debug logging
-        if skill_popup_visible:
-            logger.debug(f"[ChatPanel] _on_text_changed: text='{text[:20]}...', should_show={should_show_skill}")
-
         if skill_popup_visible and not should_show_skill:
             # Text no longer starts with "/" - hide popup immediately
-            logger.debug("[ChatPanel] Hiding skill popup - text no longer starts with '/'")
             self.skill_completer.popup().hide()
         elif skill_popup_visible and should_show_skill:
             prefix = self.skill_completer.get_completion_prefix(text)
