@@ -1517,26 +1517,38 @@ class ChatPanel(QWidget):
         """Handle text changed signal - update completers."""
         text = self.input_field.toPlainText()
 
-        # Only update if one of the completers popup is visible
-        if self.skill_completer.popup().isVisible():
-            if self.skill_completer.should_complete(text):
-                prefix = self.skill_completer.get_completion_prefix(text)
-                self.skill_completer.setCompletionPrefix(prefix)
-                if self.skill_completer.completionCount() > 0:
-                    self.skill_completer.complete()
-                else:
-                    self.skill_completer.popup().hide()
+        # Handle skill completer - always check, not just when visible
+        skill_popup_visible = self.skill_completer.popup().isVisible()
+        should_show_skill = self.skill_completer.should_complete(text)
+
+        # Debug logging
+        if skill_popup_visible:
+            logger.debug(f"[ChatPanel] _on_text_changed: text='{text[:20]}...', should_show={should_show_skill}")
+
+        if skill_popup_visible and not should_show_skill:
+            # Text no longer starts with "/" - hide popup immediately
+            logger.debug("[ChatPanel] Hiding skill popup - text no longer starts with '/'")
+            self.skill_completer.popup().hide()
+        elif skill_popup_visible and should_show_skill:
+            prefix = self.skill_completer.get_completion_prefix(text)
+            self.skill_completer.setCompletionPrefix(prefix)
+            if self.skill_completer.completionCount() > 0:
+                self.skill_completer.complete()
             else:
                 self.skill_completer.popup().hide()
 
-        if self.file_completer.popup().isVisible():
-            if self.file_completer.should_complete(text):
-                prefix = self.file_completer.get_completion_prefix(text)
-                self.file_completer.setCompletionPrefix(prefix)
-                if self.file_completer.completionCount() > 0:
-                    self.file_completer.complete()
-                else:
-                    self.file_completer.popup().hide()
+        # Handle file completer - always check, not just when visible
+        file_popup_visible = self.file_completer.popup().isVisible()
+        should_show_file = self.file_completer.should_complete(text)
+
+        if file_popup_visible and not should_show_file:
+            # Text no longer starts with "@" - hide popup immediately
+            self.file_completer.popup().hide()
+        elif file_popup_visible and should_show_file:
+            prefix = self.file_completer.get_completion_prefix(text)
+            self.file_completer.setCompletionPrefix(prefix)
+            if self.file_completer.completionCount() > 0:
+                self.file_completer.complete()
             else:
                 self.file_completer.popup().hide()
 
