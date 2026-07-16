@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `QTextBrowser` 不支持 flexbox/grid：复杂布局用 `<table>` + `valign`
 - `QLabel.sizeHint()` 比 `QTextBrowser.sizeHint()` 更可靠：静态文本优先用 QLabel
 - `setWidgetResizable(True)` 会覆盖 sizePolicy 和 setAlignment
+- **禁止在 `__init__` 中缓存主题颜色**：paintEvent 必须动态调用 `get_theme()`
 
 ---
 
@@ -43,12 +44,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 快速参考
 
-> **📚 详细文档**：完整指南请查看 `packages/sdk/docs/` 目录
-> **📐 设计文档**：`packages/sdk/design/` - Loop Engineering 等设计文档
-> **⚠️ 经验教训**：关键警告和最佳实践请参阅 `lessons.md`
-> **🔧 编程规范**：开发流程、系统设计决策请遵守 `packages/sdk/docs/programmer_skill.md`
-> **📅 进度跟踪**：`progress.txt` - 项目当前进展
-> **🖥️ Client 开发**：`packages/client/docs/development_guide.md` - 桌面客户端开发规范与踩坑总结
+| 文档 | 用途 |
+|------|------|
+| `packages/sdk/docs/` | SDK 详细设计文档 |
+| `packages/sdk/design/` | Loop Engineering 等设计文档 |
+| `lessons.md` | 关键警告和最佳实践 |
+| `packages/sdk/docs/programmer_skill.md` | 开发流程、系统设计决策 |
+| `progress.txt` | 项目当前进展 |
+| `packages/client/docs/development_guide.md` | 桌面客户端开发规范与踩坑总结 |
 
 ---
 
@@ -65,6 +68,28 @@ Harness 是一个 **Monorepo** 项目，包含：
 | `harness-scraper` | `packages/scraper/` | AI 情报/港股 Alpha 提取系统 |
 
 **核心公式**：`Agent = Model + Harness`
+
+---
+
+## MCP Tools: code-review-graph
+
+本项目集成了 **code-review-graph** MCP 服务器，提供代码知识图谱能力：
+
+| 工具 | 用途 |
+|------|------|
+| `mcp__code-review-graph__get_minimal_context_tool` | 获取超紧凑上下文（~100 tokens），**任何任务前先调用** |
+| `mcp__code-review-graph__detect_changes_tool` | 分析代码变更影响，风险评分 |
+| `mcp__code-review-graph__semantic_search_nodes_tool` | 语义搜索代码实体 |
+| `mcp__code-review-graph__traverse_graph_tool` | 从匹配节点开始遍历依赖 |
+| `mcp__code-review-graph__get_hub_nodes_tool` | 找到架构热点（高连接节点） |
+| `mcp__code-review-graph__get_bridge_nodes_tool` | 找到架构瓶颈（关键桥接节点） |
+| `mcp__code-review-graph__list_communities_tool` | 列出代码社区（模块聚类） |
+
+**使用场景**：
+- **代码审查前**：`get_minimal_context_tool` 获取变更范围和风险评分
+- **理解代码结构**：`list_communities_tool` 查看模块划分
+- **定位关键代码**：`get_hub_nodes_tool` 找到核心组件
+- **评估变更影响**：`detect_changes_tool` 分析影响范围
 
 ---
 
@@ -103,11 +128,6 @@ snap run gradle publishToMavenLocal
 
 **重要**：Java SDK 使用 snap 安装的 gradle，不要使用 `./gradlew`。
 
-**集成测试**：
-- 位置：`packages/sdk-java/harness-sdk-integration/`
-- 运行真实 LLM API 测试：`snap run gradle :harness-sdk-integration:test`
-- 示例代码：`packages/sdk-java/examples/SimpleTest.java`
-
 ### 客户端开发
 
 ```powershell
@@ -119,83 +139,31 @@ uv run python -m harness_client
 uv run python build.py
 ```
 
-**qasync 异步注意事项**：
+**qasync 异步注意事项**：所有异步操作必须在主线程的 `QEventLoop` 中运行，使用 `@asyncSlot()` 装饰器。**禁止**在 `QThread` 中创建新的 event loop（会导致静默崩溃）。
 
-客户端使用 qasync 集成 PyQt6 和 asyncio。所有异步操作必须在主线程的 `QEventLoop` 中运行：
-
-```python
-from qasync import asyncSlot
-
-class MainWindow(QMainWindow):
-    @asyncSlot(str)
-    async def _on_message_sent(self, message: str):
-        """信号连接的异步方法必须使用 @asyncSlot()，参数类型要与信号一致"""
-        async for chunk in self.controller.send_message(message):
-            response = chunk
-```
-
-**禁止**：不要在 `QThread` 中创建新的 event loop，这会导致程序静默崩溃。
-
-**主题感知组件**：
-
-继承 `ThemeAwareWidget` 确保组件响应主题切换：
-
-```python
-from harness_client.ui.theme_aware import ThemeAwareWidget
-
-class MyPanel(ThemeAwareWidget):
-    def _apply_theme_style(self) -> None:
-        """主题切换时自动调用"""
-        theme = self.theme()
-        self.setStyleSheet(f"background-color: {theme.PANEL};")
-```
-
-**paintEvent 必须动态获取主题**：在 `paintEvent` 中调用 `get_theme()` 获取当前颜色，不能在初始化时缓存。
-
-### 安装可选依赖
-
-```bash
-uv sync --all-packages --extra openai --extra observability --extra sqlite
-```
+**主题感知**：继承 `ThemeAwareWidget` 响应主题切换，`paintEvent` 中动态调用 `get_theme()` 获取当前颜色。
 
 ### Cloud 开发
 
 ```bash
-# 构建 + 启动 Docker 服务
 cd packages/cloud
-./scripts/build.sh
-
-# 测试
-python test_auto.py YOUR_API_KEY --provider openai --base-url YOUR_URL --model YOUR_MODEL
+./scripts/build.sh  # 构建 + 启动 Docker 服务
 
 # 本地开发（无 Docker）
 uv run uvicorn harness_cloud.agent.main:app --reload --port 8000
 uv run uvicorn harness_cloud.gateway.main:app --reload --port 8080
 ```
 
-**重要**：修改代码后必须重新运行 `./scripts/build.sh` 重建镜像。
-
 ### Scraper 开发
 
 ```bash
-# 运行 AI 情报抽取
 cd packages/scraper
-uv run harness-scraper --skill ai-intelligence
-
-# 运行港股 Alpha 监控
-uv run harness-scraper --skill hk-stocks-alpha
-
-# 创建配置文件
-uv run harness-scraper config
-
-# 自定义 prompt
-uv run harness-scraper agent "抓取 HN 上关于 MCP 的讨论"
+uv run harness-scraper --skill ai-intelligence  # AI 情报抽取
+uv run harness-scraper --skill hk-stocks-alpha   # 港股 Alpha 监控
+uv run harness-scraper agent "抓取 HN 上关于 MCP 的讨论"  # 自定义 prompt
 ```
 
-**技能驱动设计**：
-- 工具选择、判断标准、输出模板全部由 `skills/*.md` 定义
-- Agent 是通用的，base prompt 不包含具体工作流程
-- 新领域只需创建 skill 文件，无需改代码
+**技能驱动设计**：工具选择、判断标准、输出模板全部由 `skills/*.md` 定义，新领域只需创建 skill 文件。
 
 ---
 
