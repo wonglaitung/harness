@@ -6,12 +6,15 @@ Provides registration, lookup, activation, and matching capabilities.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from harness.skills.base import Skill
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -175,7 +178,11 @@ class SkillRegistry:
         if skill_name in self._skills:
             if skill_name not in self._active_skills:
                 self._active_skills.append(skill_name)
+                logger.info(f"[SkillRegistry] Skill '{skill_name}' activated, active skills: {self._active_skills}")
+            else:
+                logger.info(f"[SkillRegistry] Skill '{skill_name}' already active")
             return True
+        logger.warning(f"[SkillRegistry] Skill '{skill_name}' not found in registry")
         return False
 
     def deactivate(self, skill_name: str) -> bool:

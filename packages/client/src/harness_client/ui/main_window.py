@@ -113,6 +113,7 @@ class MainWindow(QMainWindow):
         self.chat_panel.stop_requested.connect(self._on_stop_requested)
         self.chat_panel.clear_chat_requested.connect(self._on_clear_context)
         self.chat_panel.browser_close_requested.connect(self._on_browser_close)
+        self.chat_panel.skill_activated.connect(self._on_skill_activated)
         self.sidebar.session_new_requested.connect(self._on_new_session)
         self.sidebar.session_switch_requested.connect(self._on_session_switch)
         self.sidebar.session_delete_requested.connect(self._on_session_delete)
@@ -763,6 +764,35 @@ class MainWindow(QMainWindow):
         """Handle browser close request from chat panel status bar."""
         # Trigger the toggle which will close the browser
         self._on_browser_toggle()
+
+    def _on_skill_activated(self, skill_name: str):
+        """Handle skill activation command from chat panel.
+
+        Args:
+            skill_name: Name of the skill to activate (without / prefix)
+        """
+        logger.info(f"[MainWindow] Skill activation requested: {skill_name}")
+
+        # Check if skill exists
+        skill_info = self.skill_controller.get_skill(skill_name)
+        if not skill_info:
+            self.statusbar.showMessage(f"Skill '{skill_name}' 未找到", 5000)
+            logger.warning(f"[MainWindow] Skill '{skill_name}' not found")
+            return
+
+        # Activate the skill (will queue if agent not ready)
+        self.skill_controller.enable_skill(skill_name)
+        logger.info(f"[MainWindow] Skill '{skill_name}' activation requested")
+
+        # Show success message
+        self.statusbar.showMessage(f"✅ Skill '{skill_name}' 已激活", 3000)
+
+        # Add system message to chat
+        self.chat_panel.messages_container.add_message(
+            f"✅ Skill '{skill_name}' 已激活\n\n{skill_info.description}",
+            "assistant"
+        )
+        self.chat_panel._scroll_to_bottom()
 
     def _apply_settings(self, settings: dict):
         """Apply settings to controllers and save to disk."""

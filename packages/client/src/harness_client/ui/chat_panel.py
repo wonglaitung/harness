@@ -817,6 +817,7 @@ class ChatPanel(QWidget):
     stop_requested = pyqtSignal()
     clear_chat_requested = pyqtSignal()
     browser_close_requested = pyqtSignal()  # Request to close browser
+    skill_activated = pyqtSignal(str)  # (skill_name) - emitted when user types /skill-name
 
     def __init__(self):
         super().__init__()
@@ -1268,33 +1269,54 @@ class ChatPanel(QWidget):
         if not text and not attachments:
             return
 
-        # Add user message to display (show text + attachment count)
-        display_text = text
-        if attachments:
-            att_count = len(attachments)
-            att_types = [a.get("type") for a in attachments]
-            image_count = sum(1 for t in att_types if t == "image")
-            doc_count = sum(1 for t in att_types if t == "document")
-            if image_count and doc_count:
-                att_info = f" [{image_count} 图片, {doc_count} 文档]"
-            elif image_count:
-                att_info = f" [{image_count} 图片]"
+        # Check if text is a skill activation command (starts with /)
+        # Format: /skill-name or /skill-name user message
+        skill_name = None
+        user_message = text
+
+        if text.startswith("/") and not attachments:
+            # Parse skill name and optional message
+            parts = text[1:].split(None, 1)  # Split on first whitespace
+            if parts:
+                skill_name = parts[0]
+                user_message = parts[1] if len(parts) > 1 else ""
+
+        # Emit skill activation signal if skill name was found
+        if skill_name:
+            self.skill_activated.emit(skill_name)
+
+        # If there's a user message (either after skill name or without skill), send it
+        if user_message or attachments:
+            # Add user message to display (show text + attachment count)
+            display_text = user_message
+            if attachments:
+                att_count = len(attachments)
+                att_types = [a.get("type") for a in attachments]
+                image_count = sum(1 for t in att_types if t == "image")
+                doc_count = sum(1 for t in att_types if t == "document")
+                if image_count and doc_count:
+                    att_info = f" [{image_count} 图片, {doc_count} 文档]"
+                elif image_count:
+                    att_info = f" [{image_count} 图片]"
+                else:
+                    att_info = f" [{doc_count} 文档]"
+                display_text = user_message + att_info if user_message else f"[{att_count} 附件]"
+
+            self.messages_container.add_message(display_text, "user")
+            self.input_field.clear()
+
+            # Build multimodal content if attachments exist
+            if attachments:
+                content = self._build_multimodal_content(user_message, attachments)
+                self.message_sent.emit(content, self._goal_mode)
+                self._attachment_preview.clear()
             else:
-                att_info = f" [{doc_count} 文档]"
-            display_text = text + att_info if text else f"[{att_count} 附件]"
+                self.message_sent.emit(user_message, self._goal_mode)
 
-        self.messages_container.add_message(display_text, "user")
-        self.input_field.clear()
-
-        # Build multimodal content if attachments exist
-        if attachments:
-            content = self._build_multimodal_content(text, attachments)
-            self.message_sent.emit(content, self._goal_mode)
-            self._attachment_preview.clear()
+            self._scroll_to_bottom()
         else:
-            self.message_sent.emit(text, self._goal_mode)
-
-        self._scroll_to_bottom()
+            # Only skill activation, no message - just clear input
+            self.input_field.clear()
 
     def _build_multimodal_content(self, text: str, attachments: list) -> list:
         """

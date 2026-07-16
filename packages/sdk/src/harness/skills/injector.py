@@ -75,9 +75,11 @@ class SkillInjector:
         """
         # Find matching skills
         matching_skills = self.registry.find_matching_skills(user_input)
+        logger.debug(f"[SkillInjector] Matching skills: {[s.name for s in matching_skills]}")
 
         # Get active skills
         active_skills = self.registry.get_active_skills()
+        logger.info(f"[SkillInjector] Active skills: {[s.name for s in active_skills]}")
 
         # Merge and deduplicate
         all_skills = list({s.name: s for s in matching_skills + active_skills}.values())

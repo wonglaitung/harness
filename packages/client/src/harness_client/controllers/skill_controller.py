@@ -58,6 +58,8 @@ class SkillController:
         self._skill_states: dict[str, bool] = {}
         # Cache skills discovered from filesystem (before agent is available)
         self._cached_skills: dict[str, SkillInfo] = {}
+        # Skills pending activation (activated before agent was ready)
+        self._pending_activations: set[str] = set()
 
     def set_agent(self, agent) -> None:
         """
@@ -67,6 +69,16 @@ class SkillController:
             agent: AgentHarness instance
         """
         self._agent = agent
+        # Activate any pending skills now that agent is available
+        if self._pending_activations and agent:
+            logger.info(f"[SkillController] Activating {len(self._pending_activations)} pending skills")
+            for skill_name in list(self._pending_activations):
+                if agent.activate_skill(skill_name):
+                    self._skill_states[skill_name] = True
+                    logger.info(f"[SkillController] Pending skill '{skill_name}' activated")
+                else:
+                    logger.warning(f"[SkillController] Failed to activate pending skill '{skill_name}'")
+            self._pending_activations.clear()
         if self._on_change:
             self._on_change()
 
@@ -278,12 +290,20 @@ class SkillController:
         return skill_dir
 
     def enable_skill(self, name: str):
-        """Enable a skill."""
+        """Enable a skill.
+
+        If agent is not yet initialized, the skill will be queued
+        and activated when the agent becomes available.
+        """
+        self._skill_states[name] = True
         if self._agent:
             self._agent.activate_skill(name)
-            self._skill_states[name] = True
             if self._on_change:
                 self._on_change()
+        else:
+            # Queue for activation when agent is ready
+            self._pending_activations.add(name)
+            logger.info(f"[SkillController] Skill '{name}' queued for activation (agent not ready)")
 
     def disable_skill(self, name: str):
         """Disable a skill."""
