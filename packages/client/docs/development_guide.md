@@ -475,6 +475,44 @@ def closeEvent(self, event):
     super().closeEvent(event)
 ```
 
+#### 问题：StatusDot 颜色缓存导致主题切换失效
+
+**现象**：`StatusDot` 组件在 `__init__` 中缓存主题颜色，切换主题后颜色不更新。
+
+**关键提交**：`186b8b7`
+
+**错误示例**：
+
+```python
+# ❌ 错误：在 __init__ 中缓存颜色
+def __init__(self, size: int = 12, parent=None):
+    super().__init__(parent)
+    self._theme = get_theme()  # 缓存主题
+    self._colors = {
+        "connected": QColor(self._theme.STATUS_CONNECTED),
+        # ...
+    }
+    self._current_color = self._colors["disconnected"]
+```
+
+**正确做法**：
+
+```python
+# ✅ 正确：动态获取颜色 + 注册监听器
+def __init__(self, size: int = 12, parent=None):
+    super().__init__(parent)
+    register_theme_listener(self._on_theme_changed)
+
+def _get_status_color(self) -> QColor:
+    """动态获取当前状态的颜色"""
+    theme = get_theme()
+    return QColor(getattr(theme, f"STATUS_{self._status.upper()}"))
+
+def paintEvent(self, event):
+    color = self._get_status_color()  # 每次绘制动态获取
+    # ...
+```
+
 ---
 
 ### 布局系统陷阱
@@ -547,6 +585,36 @@ class EventQueue:
             self._notifier = asyncio.Event()
         # ...
 ```
+
+#### 问题 2：QThread + asyncio.new_event_loop() 导致静默崩溃
+
+**现象**：MCP 测试连接使用 `QThread` + `asyncio.new_event_loop()`，可能导致程序静默崩溃。
+
+**关键提交**：`186b8b7`
+
+**原因**：
+- `QThread.run()` 在子线程创建新的 event loop
+- 与 qasync 的 `QEventLoop` 不兼容
+- 可能导致信号槽机制异常
+
+**解决方案**：使用 `@asyncSlot()` 装饰器替代 `QThread`。
+
+```python
+# ❌ 错误：QThread + new_event_loop
+class TestConnectionThread(QThread):
+    def run(self):
+        loop = asyncio.new_event_loop()  # 与 qasync 冲突！
+        result = loop.run_until_complete(self._test_connection())
+
+# ✅ 正确：@asyncSlot() 在主线程执行
+class MCPServerDialog(QDialog):
+    @asyncSlot()
+    async def _test_connection(self):
+        tools = await _test_mcp_connection(config)
+        self._on_test_success(tools)
+```
+
+**注意**：`@asyncSlot()` 在主线程的 qasync event loop 中运行，但不会阻塞 UI（asyncio 是协作式多任务）。
 
 ---
 
