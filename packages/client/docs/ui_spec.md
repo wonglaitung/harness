@@ -2,6 +2,8 @@
 
 本文档定义了 Harness Client 桌面应用的完整视觉标准，确保所有界面元素的一致性和专业性。
 
+> **相关文档**：开发问题与解决方案请参考 [development_guide.md](./development_guide.md)
+
 ---
 
 ## 目录

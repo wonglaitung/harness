@@ -48,6 +48,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **⚠️ 经验教训**：关键警告和最佳实践请参阅 `lessons.md`
 > **🔧 编程规范**：开发流程、系统设计决策请遵守 `packages/sdk/docs/programmer_skill.md`
 > **📅 进度跟踪**：`progress.txt` - 项目当前进展
+> **🖥️ Client 开发**：`packages/client/docs/development_guide.md` - 桌面客户端开发规范与踩坑总结
 
 ---
 
