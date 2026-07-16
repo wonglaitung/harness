@@ -2775,3 +2775,130 @@ async def stop(self) -> None:
 - qasync GitHub：https://github.com/CabbageDevelopment/qasync
 - 关键文件：`packages/sdk/src/harness/triggers/manager.py`
 - 文档：`packages/sdk/docs/06-trigger-system.md`（qasync 集成注意事项章节）
+
+---
+
+## 2026-07-16: 开发规范合规性检查与修复
+
+### 问题
+
+客户端代码存在两处违反 `development_guide.md` 规范的问题：
+
+1. **mcp_panel.py**：使用 `QThread` + `asyncio.new_event_loop()` 运行 MCP 连接测试
+2. **interactive.py StatusDot**：在 `__init__` 中缓存主题颜色，主题切换后不更新
+
+### 根因分析
+
+#### 问题 1：QThread + asyncio.new_event_loop()
+
+```python
+# ❌ 错误：与 qasync 不兼容
+class TestConnectionThread(QThread):
+    def run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(self._test_connection())
+```
+
+**原因**：
+- `QThread.run()` 在子线程创建新的 event loop
+- 与 qasync 的 `QEventLoop` 不兼容
+- 可能导致信号槽机制异常，程序静默崩溃
+
+#### 问题 2：主题颜色缓存
+
+```python
+# ❌ 错误：在 __init__ 中缓存颜色
+def __init__(self):
+    self._theme = get_theme()  # 缓存主题
+    self._colors = {
+        "connected": QColor(self._theme.STATUS_CONNECTED),
+    }
+    self._current_color = self._colors["disconnected"]
+```
+
+**原因**：
+- 颜色在初始化时缓存
+- 主题切换后 `paintEvent` 仍使用旧颜色
+- 没有注册主题监听器
+
+### 解决方案
+
+#### 问题 1：使用 @asyncSlot()
+
+```python
+# ✅ 正确：使用 @asyncSlot() 在主线程运行
+from qasync import asyncSlot
+
+class MCPServerDialog(QDialog):
+    @asyncSlot()
+    async def _test_connection(self):
+        tools = await _test_mcp_connection(config)
+        self._on_test_success(tools)
+```
+
+**注意**：`@asyncSlot()` 在主线程的 qasync event loop 中运行，但不会阻塞 UI（asyncio 是协作式多任务）。
+
+#### 问题 2：动态获取主题颜色 + 监听器
+
+```python
+# ✅ 正确：动态获取颜色 + 注册监听器
+def __init__(self):
+    register_theme_listener(self._on_theme_changed)
+
+def _get_status_color(self) -> QColor:
+    """动态获取当前状态的颜色"""
+    theme = get_theme()
+    return QColor(getattr(theme, f"STATUS_{self._status.upper()}"))
+
+def paintEvent(self, event):
+    color = self._get_status_color()  # 每次绘制动态获取
+
+def __del__(self):
+    unregister_theme_listener(self._on_theme_changed)  # 清理监听器
+```
+
+### 教训
+
+1. **qasync 环境禁止 QThread + new_event_loop**：
+   - 所有异步操作必须在主线程的 `QEventLoop` 中运行
+   - 使用 `@asyncSlot()` 替代 `QThread`
+   - 如果需要阻塞操作，考虑使用 `asyncio.to_thread()` 或线程池
+
+2. **paintEvent 必须动态获取主题**：
+   - 不能在 `__init__` 中缓存颜色值
+   - 每次 `paintEvent` 调用 `get_theme()` 获取当前主题
+   - 注册主题监听器响应切换事件
+   - 组件销毁时注销监听器避免内存泄漏
+
+3. **开发规范需要主动检查**：
+   - 规范文档存在不代表代码合规
+   - 定期进行合规性审计
+   - 使用 grep 等工具搜索违规模式
+
+### 检查方法
+
+```bash
+# 检查 QThread + asyncio.new_event_loop 违规
+grep -rn "new_event_loop\|QThread" packages/client/src/
+
+# 检查主题颜色缓存违规
+grep -rn "self\._theme\|self\._colors\|self\._current_color" packages/client/src/
+
+# 检查是否在 __init__ 中缓存颜色
+grep -B5 "QColor.*theme\." packages/client/src/ | grep "__init__"
+```
+
+### 关键文件
+
+| 文件 | 改动 |
+|------|------|
+| `packages/client/src/harness_client/ui/mcp_panel.py` | 移除 QThread，使用 @asyncSlot() |
+| `packages/client/src/harness_client/ui/interactive.py` | StatusDot 动态获取主题颜色 |
+| `packages/client/docs/development_guide.md` | 添加合规修复示例 |
+
+### 参考
+
+- development_guide.md - qasync 异步规范
+- development_guide.md - 主题切换响应规范
+- 关键提交：`186b8b7`

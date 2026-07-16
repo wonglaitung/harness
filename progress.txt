@@ -1682,3 +1682,83 @@ packages/sdk/tests/
 | - | Spring Cloud 集成 | ✅ |
 
 **Loop Engineering Phase 1-2 + Phase 5 完成！**
+
+## 2026-07-16
+
+### Client 开发规范合规性修复 ✅ 完成
+
+#### 背景
+分析客户端代码是否符合 `development_guide.md` 中定义的开发规范，发现并修复违规问题。
+
+#### 发现的问题
+
+| 文件 | 问题 | 严重程度 |
+|------|------|---------|
+| `ui/mcp_panel.py` | 使用 `QThread` + `asyncio.new_event_loop()` | 🔴 高（可能导致静默崩溃） |
+| `ui/interactive.py` | `StatusDot` 在 `__init__` 中缓存主题颜色 | 🟡 中（主题切换时颜色不更新） |
+
+#### 修复内容
+
+**mcp_panel.py (`186b8b7`)**：
+- 移除 `TestConnectionThread` 类（使用 `QThread` + `new_event_loop()`）
+- 改用 `@asyncSlot()` 装饰器在主线程运行异步测试
+- 重构 `_test_mcp_connection()` 为独立异步函数
+
+**interactive.py StatusDot (`186b8b7`)**：
+- 移除 `__init__` 中的 `_theme` 和 `_colors` 缓存
+- 添加 `_get_status_color()` 方法动态获取主题颜色
+- 添加主题监听器支持主题切换
+- 添加 `__del__` 清理监听器
+
+#### 文档更新
+
+**development_guide.md (`3c7935c`)**：
+- 添加 QThread + asyncio.new_event_loop() 问题示例
+- 添加 StatusDot 颜色缓存问题示例
+- 记录正确的 @asyncSlot() 用法和动态颜色获取模式
+
+#### 提交记录
+
+- `1642ad2` docs(sdk): Add skill directory path injection documentation
+- `186b8b7` fix(client): Fix qasync and theme switching compliance issues
+- `3c7935c` docs(client): Add compliance fix examples to development guide
+
+### 技能系统文档同步 ✅ 完成
+
+#### 背景
+执行 `/sync-design-docs` 技能，将开发中新增的功能同步回设计文档。
+
+#### 更新内容
+
+**packages/sdk/docs/05-skills-system.md**：
+- 添加"注入格式"章节，记录 SkillInjector 包含技能目录路径的新行为
+- 记录设计理念：运行时提供路径而非占位符替换
+- 引用相关提交 `0a9e89f`
+
+---
+
+## 当前状态总结
+
+### Harness Client 功能状态
+
+| 功能 | 状态 |
+|------|------|
+| 3-column UI layout | ✅ |
+| 技能系统 UI | ✅ |
+| MCP 服务器管理 | ✅ |
+| 工作区文件树 | ✅ |
+| 技能自动补全 | ✅ |
+| 统一配置目录 (~/.harness) | ✅ |
+| 会话管理 | ✅ |
+| 消息气泡高度正确 | ✅ |
+| **开发规范合规** | ✅ **NEW** |
+
+### Harness Client 开发规范合规性
+
+| 规范 | 状态 |
+|------|------|
+| SessionManager 作为单一数据源 | ✅ |
+| qasync 异步规范（无 QThread + new_event_loop） | ✅ |
+| 主题切换响应（paintEvent 动态获取主题） | ✅ |
+| 后台组件初始化（fallback 数据源） | ✅ |
+| 布局规范（显式设置 QSizePolicy） | ✅ |
