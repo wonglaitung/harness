@@ -34,7 +34,7 @@ from harness_client.ui.dialog_styles import (
 class TestConnectionThread(QThread):
     """Thread for testing MCP server connection."""
 
-    success = pyqtSignal()
+    success = pyqtSignal(list)  # Changed: now emits list of tools
     failed = pyqtSignal(str)
 
     def __init__(self, config: dict, parent=None):
@@ -56,8 +56,8 @@ class TestConnectionThread(QThread):
                 logger.info(f"[TestConnectionThread] Running _test_connection()...")
                 result = loop.run_until_complete(self._test_connection())
                 logger.info(f"[TestConnectionThread] Test result: {result}")
-                if result:
-                    self.success.emit()
+                if result is not None:
+                    self.success.emit(result)  # Emit tools list
                 else:
                     self.failed.emit("连接失败")
             finally:
@@ -69,8 +69,12 @@ class TestConnectionThread(QThread):
             logger.error(f"[TestConnectionThread] Traceback: {traceback.format_exc()}")
             self.failed.emit(str(e))
 
-    async def _test_connection(self) -> bool:
-        """Test the MCP server connection."""
+    async def _test_connection(self) -> list:
+        """Test the MCP server connection.
+
+        Returns:
+            List of discovered tools, or None on failure
+        """
         import logging
         logger = logging.getLogger(__name__)
 
@@ -125,15 +129,18 @@ class TestConnectionThread(QThread):
         await client.connect()
         logger.info(f"[TestConnection] Connection successful!")
 
-        # Check if we got tools
-        tool_count = len(client.tools) if client.tools else 0
-        logger.info(f"[TestConnection] Discovered {tool_count} tools")
+        # Get discovered tools
+        tools = []
         if client.tools:
-            tool_names = [t.name for t in client.tools]
-            logger.debug(f"[TestConnection] Tool names: {tool_names}")
+            for tool in client.tools:
+                tools.append({
+                    'name': tool.name,
+                    'description': tool.description or "",
+                })
+            logger.info(f"[TestConnection] Discovered {len(tools)} tools: {[t['name'] for t in tools]}")
 
         await client.disconnect()
-        return True  # Still success if no tools, just no tools available
+        return tools  # Return tools list (empty list is also success)
 
 
 class MCPServerDialog(QDialog):
@@ -222,25 +229,30 @@ class MCPServerDialog(QDialog):
 
         # Tools section (only shown if tools exist)
         self.tools_group = QGroupBox("已发现工具")
-        tools_layout = QVBoxLayout(self.tools_group)
+        self.tools_layout = QVBoxLayout(self.tools_group)
 
         if self._tools:
             for tool in self._tools:
-                # tool is MCPToolWrapper object
-                desc = tool.description or ""
+                # tool is MCPToolWrapper object or dict
+                if isinstance(tool, dict):
+                    name = tool.get('name', 'unknown')
+                    desc = tool.get('description', '')
+                else:
+                    name = getattr(tool, 'original_name', tool.name)
+                    desc = tool.description or ""
                 desc_preview = desc[:60] + "..." if len(desc) > 60 else desc
-                tool_label = QLabel(f"• {tool.original_name}")
+                tool_label = QLabel(f"• {name}")
                 tool_label.setStyleSheet(f"font-weight: bold; color: {theme.ACCENT_LIGHT};")
-                tools_layout.addWidget(tool_label)
+                self.tools_layout.addWidget(tool_label)
                 if desc_preview:
                     desc_label = QLabel(f"  {desc_preview}")
                     desc_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
                     desc_label.setWordWrap(True)
-                    tools_layout.addWidget(desc_label)
+                    self.tools_layout.addWidget(desc_label)
         else:
             no_tools_label = QLabel("未连接或无工具")
             no_tools_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
-            tools_layout.addWidget(no_tools_label)
+            self.tools_layout.addWidget(no_tools_label)
 
         layout.addWidget(self.tools_group)
 
@@ -333,9 +345,51 @@ class MCPServerDialog(QDialog):
         self._test_thread.finished.connect(self._on_test_finished)
         self._test_thread.start()
 
-    def _on_test_success(self):
+    def _on_test_success(self, tools: list):
         """Handle successful test connection."""
-        QMessageBox.information(self, "测试连接", "连接成功！")
+        # Update tools display
+        self._update_tools_display(tools)
+
+        # Show success message with tool count
+        tool_count = len(tools)
+        if tool_count > 0:
+            QMessageBox.information(self, "测试连接", f"连接成功！\n发现 {tool_count} 个工具")
+        else:
+            QMessageBox.information(self, "测试连接", "连接成功！\n（未发现工具）")
+
+    def _update_tools_display(self, tools: list):
+        """Update the tools display in the dialog."""
+        theme = get_theme()
+
+        # Clear existing tools
+        while self.tools_layout.count():
+            item = self.tools_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Add new tools
+        if tools:
+            for tool in tools:
+                name = tool.get('name', 'unknown')
+                desc = tool.get('description', '')
+                desc_preview = desc[:60] + "..." if len(desc) > 60 else desc
+
+                tool_label = QLabel(f"• {name}")
+                tool_label.setStyleSheet(f"font-weight: bold; color: {theme.ACCENT_LIGHT};")
+                self.tools_layout.addWidget(tool_label)
+
+                if desc_preview:
+                    desc_label = QLabel(f"  {desc_preview}")
+                    desc_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};")
+                    desc_label.setWordWrap(True)
+                    self.tools_layout.addWidget(desc_label)
+        else:
+            no_tools_label = QLabel("未发现工具")
+            no_tools_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
+            self.tools_layout.addWidget(no_tools_label)
+
+        # Store tools for later use
+        self._tools = tools
 
     def _on_test_failed(self, error: str):
         """Handle failed test connection."""

@@ -1056,6 +1056,10 @@ class MainWindow(QMainWindow):
             return
 
         for name, info in self.mcp_controller.servers.items():
+            # Skip already connected servers
+            if info.status == "已连接":
+                logger.debug(f"MCP server '{name}' already connected, skipping")
+                continue
             config = self.mcp_controller.get_server_config(name)
             if config and config.enabled:
                 logger.info(f"Auto-connecting to MCP server: {name}")
@@ -1140,17 +1144,19 @@ class MainWindow(QMainWindow):
         if not server_config:
             return
 
-        # Get tools if connected
+        # Get tools if connected - try multiple sources
         tools = None
-        if self.mcp_controller.manager:
-            # Get tools from SDK's MCP manager
-            tools = self.mcp_controller.manager.get_server_tools(server_name)
-            logger.info(f"[MainWindow] Tools from manager for '{server_name}': {len(tools) if tools else 0}")
-        elif server_info.tools_count > 0:
-            # Fallback: get tools from controller's get_all_tools() and filter by server
-            all_tools = self.mcp_controller.get_all_tools()
+
+        # First try from standalone clients (used before agent was available)
+        all_tools = self.mcp_controller.get_all_tools()
+        if all_tools:
             tools = [t for t in all_tools if getattr(t, 'server_name', None) == server_name]
             logger.info(f"[MainWindow] Tools from get_all_tools for '{server_name}': {len(tools) if tools else 0}")
+
+        # Also try from SDK's MCP manager as fallback
+        if not tools and self.mcp_controller.manager:
+            tools = self.mcp_controller.manager.get_server_tools(server_name)
+            logger.info(f"[MainWindow] Tools from manager for '{server_name}': {len(tools) if tools else 0}")
 
         config_dict = {
             "name": server_config.name,

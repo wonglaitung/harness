@@ -2,6 +2,7 @@
 Chat controller - manages conversation with AgentHarness.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
@@ -405,6 +406,24 @@ class ChatController:
                 mcp_tools = self._mcp_controller.get_all_tools()
                 if mcp_tools:
                     logger.info(f"Found {len(mcp_tools)} MCP tools from connected servers")
+                else:
+                    # No tools found - check if we need to wait for MCP connections
+                    # MCP servers might be connecting in the background via _auto_connect_mcp_servers
+                    # Check if there are servers that should be connected but aren't yet
+                    servers = self._mcp_controller.servers
+                    for name, info in servers.items():
+                        if info.status in ("未连接", "连接中..."):
+                            config = self._mcp_controller.get_server_config(name)
+                            if config and config.enabled:
+                                logger.info(f"MCP server '{name}' not connected yet, connecting now...")
+                                try:
+                                    await self._mcp_controller.connect_server(name)
+                                except Exception as e:
+                                    logger.warning(f"Failed to connect MCP server '{name}': {e}")
+                    # Re-fetch tools after connections
+                    mcp_tools = self._mcp_controller.get_all_tools()
+                    if mcp_tools:
+                        logger.info(f"Found {len(mcp_tools)} MCP tools after connecting servers")
             await self.initialize(mcp_tools)
 
         self._is_running = True
