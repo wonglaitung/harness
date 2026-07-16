@@ -92,7 +92,10 @@ class SkillCompleter(QCompleter):
         self._apply_popup_style()
         count = self.completionCount()
         logger.debug(f"[SkillCompleter] complete() called, completionCount={count}")
-        super().complete(rect)
+        if rect is not None:
+            super().complete(rect)
+        else:
+            super().complete()
 
     def _apply_popup_style(self) -> None:
         """Apply theme-aware styling to the popup."""
