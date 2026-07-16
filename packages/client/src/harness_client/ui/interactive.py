@@ -168,6 +168,8 @@ class StatusDot(QWidget):
     - Connecting: pulsing yellow (breathing animation)
     - Error: static red
     - Disconnected: static gray
+
+    Note: Colors are fetched dynamically in paintEvent() to support theme switching.
     """
 
     def __init__(self, size: int = 12, parent=None):
@@ -181,16 +183,33 @@ class StatusDot(QWidget):
 
         self.setFixedSize(size + 4, size + 4)  # Small padding
 
-        # Colors from theme (will be set via setStatus)
+        # Register theme listener for responsive updates
+        from harness_client.themes import register_theme_listener
+        register_theme_listener(self._on_theme_changed)
+
+    def __del__(self):
+        """Unregister theme listener on destruction."""
+        try:
+            from harness_client.themes import unregister_theme_listener
+            unregister_theme_listener(self._on_theme_changed)
+        except Exception:
+            pass
+
+    def _on_theme_changed(self):
+        """Repaint when theme changes."""
+        self.update()
+
+    def _get_status_color(self) -> QColor:
+        """Get color for current status from theme (dynamic)."""
         from harness_client.themes import get_theme
-        self._theme = get_theme()
-        self._colors = {
-            "connected": QColor(self._theme.STATUS_CONNECTED),
-            "connecting": QColor(self._theme.STATUS_CONNECTING),
-            "error": QColor(self._theme.STATUS_ERROR),
-            "disconnected": QColor(self._theme.STATUS_DISCONNECTED),
+        theme = get_theme()
+        color_map = {
+            "connected": theme.STATUS_CONNECTED,
+            "connecting": theme.STATUS_CONNECTING,
+            "error": theme.STATUS_ERROR,
+            "disconnected": theme.STATUS_DISCONNECTED,
         }
-        self._current_color = self._colors["disconnected"]
+        return QColor(color_map.get(self._status, theme.STATUS_DISCONNECTED))
 
     def setStatus(self, status: str):
         """
@@ -200,7 +219,6 @@ class StatusDot(QWidget):
             status: "connected", "connecting", "error", "disconnected"
         """
         self._status = status.lower()
-        self._current_color = self._colors.get(self._status, self._colors["disconnected"])
 
         if self._status == "connecting":
             # Start pulse animation
@@ -228,14 +246,14 @@ class StatusDot(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        """Draw the status dot."""
+        """Draw the status dot - dynamically fetches theme colors."""
         from PyQt6.QtGui import QPainter, QBrush, QPen
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Apply opacity
-        color = QColor(self._current_color)
+        # Get color dynamically from theme (supports theme switching)
+        color = self._get_status_color()
         color.setAlphaF(self._pulse_opacity)
 
         painter.setPen(QPen(Qt.PenStyle.NoPen))

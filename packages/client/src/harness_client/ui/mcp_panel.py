@@ -1,10 +1,15 @@
 """
 MCP server configuration dialog.
+
+Note: Uses @asyncSlot() for async operations instead of QThread.
+This is required for qasync compatibility - QThread + asyncio.new_event_loop()
+can cause silent crashes.
 """
 
 import asyncio
+import logging
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,6 +24,7 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
 )
+from qasync import asyncSlot
 
 from harness_client.themes import get_theme
 from harness_client.ui.dialog_styles import (
@@ -31,116 +37,83 @@ from harness_client.ui.dialog_styles import (
 )
 
 
-class TestConnectionThread(QThread):
-    """Thread for testing MCP server connection."""
+logger = logging.getLogger(__name__)
 
-    success = pyqtSignal(list)  # Changed: now emits list of tools
-    failed = pyqtSignal(str)
 
-    def __init__(self, config: dict, parent=None):
-        super().__init__(parent)
-        self.config = config
+async def _test_mcp_connection(config: dict) -> list:
+    """Test the MCP server connection.
 
-    def run(self):
-        """Run the connection test in a separate thread with its own event loop."""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"[TestConnectionThread] Starting connection test in background thread")
+    Args:
+        config: Server configuration dict
 
-        try:
-            # Create new event loop for this thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            logger.debug(f"[TestConnectionThread] Event loop created")
-            try:
-                logger.info(f"[TestConnectionThread] Running _test_connection()...")
-                result = loop.run_until_complete(self._test_connection())
-                logger.info(f"[TestConnectionThread] Test result: {result}")
-                if result is not None:
-                    self.success.emit(result)  # Emit tools list
-                else:
-                    self.failed.emit("连接失败")
-            finally:
-                loop.close()
-                logger.debug(f"[TestConnectionThread] Event loop closed")
-        except Exception as e:
-            logger.error(f"[TestConnectionThread] Exception: {e}")
-            import traceback
-            logger.error(f"[TestConnectionThread] Traceback: {traceback.format_exc()}")
-            self.failed.emit(str(e))
+    Returns:
+        List of discovered tools (empty list if no tools)
 
-    async def _test_connection(self) -> list:
-        """Test the MCP server connection.
+    Raises:
+        Exception: If connection fails
+    """
+    from harness import MCPServerConfig
+    from harness.mcp.client import MCPClient
+    from harness.mcp.transport import HTTPTransport, StdioTransport
 
-        Returns:
-            List of discovered tools, or None on failure
-        """
-        import logging
-        logger = logging.getLogger(__name__)
+    logger.info(f"[TestConnection] Starting test for transport={config['transport']}")
+    logger.debug(f"[TestConnection] Config: {config}")
 
-        from harness import MCPServerConfig
-        from harness.mcp.client import MCPClient
-        from harness.mcp.transport import HTTPTransport, StdioTransport
+    server_config = MCPServerConfig(
+        name="_test_",
+        transport=config["transport"],
+        command=config.get("command"),
+        args=config.get("args", []),
+        url=config.get("url"),
+        env=config.get("env", {}),
+        headers=config.get("headers", {}),
+        timeout=config.get("timeout", 30),
+    )
 
-        config = self.config
-        logger.info(f"[TestConnection] Starting test for transport={config['transport']}")
-        logger.debug(f"[TestConnection] Config: {config}")
-
-        server_config = MCPServerConfig(
-            name="_test_",
-            transport=config["transport"],
-            command=config.get("command"),
-            args=config.get("args", []),
-            url=config.get("url"),
-            env=config.get("env", {}),
-            headers=config.get("headers", {}),
-            timeout=config.get("timeout", 30),
+    # Create transport
+    if server_config.transport == "stdio":
+        if not server_config.command:
+            logger.error(f"[TestConnection] Stdio transport requires command")
+            raise ValueError("Stdio transport requires command")
+        logger.info(f"[TestConnection] Creating StdioTransport: {server_config.command} {server_config.args}")
+        if server_config.env:
+            masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in server_config.env.items()}
+            logger.debug(f"[TestConnection] Environment: {masked_env}")
+        transport = StdioTransport(
+            command=server_config.command,
+            args=server_config.args,
+            env=server_config.env,
+        )
+    else:
+        if not server_config.url:
+            logger.error(f"[TestConnection] HTTP transport requires URL")
+            raise ValueError("HTTP transport requires URL")
+        logger.info(f"[TestConnection] Creating HTTPTransport: {server_config.url}")
+        transport = HTTPTransport(
+            url=server_config.url,
+            headers=server_config.headers,
+            timeout=server_config.timeout,
         )
 
-        # Create transport
-        if server_config.transport == "stdio":
-            if not server_config.command:
-                logger.error(f"[TestConnection] Stdio transport requires command")
-                raise ValueError("Stdio transport requires command")
-            logger.info(f"[TestConnection] Creating StdioTransport: {server_config.command} {server_config.args}")
-            if server_config.env:
-                masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in server_config.env.items()}
-                logger.debug(f"[TestConnection] Environment: {masked_env}")
-            transport = StdioTransport(
-                command=server_config.command,
-                args=server_config.args,
-                env=server_config.env,
-            )
-        else:
-            if not server_config.url:
-                logger.error(f"[TestConnection] HTTP transport requires URL")
-                raise ValueError("HTTP transport requires URL")
-            logger.info(f"[TestConnection] Creating HTTPTransport: {server_config.url}")
-            transport = HTTPTransport(
-                url=server_config.url,
-                headers=server_config.headers,
-                timeout=server_config.timeout,
-            )
+    # Create client and test connection
+    logger.info(f"[TestConnection] Creating MCPClient...")
+    client = MCPClient(transport)
+    logger.info(f"[TestConnection] Calling client.connect()...")
+    await client.connect()
+    logger.info(f"[TestConnection] Connection successful!")
 
-        # Create client and test connection
-        logger.info(f"[TestConnection] Creating MCPClient...")
-        client = MCPClient(transport)
-        logger.info(f"[TestConnection] Calling client.connect()...")
-        await client.connect()
-        logger.info(f"[TestConnection] Connection successful!")
+    # Get discovered tools
+    tools = []
+    if client.tools:
+        for tool in client.tools:
+            tools.append({
+                'name': tool.name,
+                'description': tool.description or "",
+            })
+        logger.info(f"[TestConnection] Discovered {len(tools)} tools: {[t['name'] for t in tools]}")
 
-        # Get discovered tools
-        tools = []
-        if client.tools:
-            for tool in client.tools:
-                tools.append({
-                    'name': tool.name,
-                    'description': tool.description or "",
-                })
-            logger.info(f"[TestConnection] Discovered {len(tools)} tools: {[t['name'] for t in tools]}")
-
-        await client.disconnect()
-        return tools  # Return tools list (empty list is also success)
+    await client.disconnect()
+    return tools  # Return tools list (empty list is also success)
 
 
 class MCPServerDialog(QDialog):
@@ -318,8 +291,9 @@ class MCPServerDialog(QDialog):
         self.stdio_group.setVisible(is_stdio)
         self.http_group.setVisible(not is_stdio)
 
-    def _test_connection(self):
-        """Test MCP server connection."""
+    @asyncSlot()
+    async def _test_connection(self):
+        """Test MCP server connection using async (qasync compatible)."""
         config = self.get_config()
         if not config.get("name"):
             QMessageBox.warning(self, "测试连接", "请先输入服务器名称")
@@ -338,12 +312,15 @@ class MCPServerDialog(QDialog):
         self._test_btn.setEnabled(False)
         self._test_btn.setText("测试中...")
 
-        # Run test in background thread
-        self._test_thread = TestConnectionThread(config, self)
-        self._test_thread.success.connect(self._on_test_success)
-        self._test_thread.failed.connect(self._on_test_failed)
-        self._test_thread.finished.connect(self._on_test_finished)
-        self._test_thread.start()
+        try:
+            # Run test using async (main thread, but non-blocking due to qasync)
+            tools = await _test_mcp_connection(config)
+            self._on_test_success(tools)
+        except Exception as e:
+            logger.error(f"[MCPServerDialog] Test connection failed: {e}")
+            self._on_test_failed(str(e))
+        finally:
+            self._on_test_finished()
 
     def _on_test_success(self, tools: list):
         """Handle successful test connection."""
