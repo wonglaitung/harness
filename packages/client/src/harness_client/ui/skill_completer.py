@@ -90,12 +90,25 @@ class SkillCompleter(QCompleter):
     def complete(self, rect=None):
         """Override to apply theme styling before showing popup."""
         self._apply_popup_style()
+        self._ensure_popup_on_top()
         count = self.completionCount()
         logger.debug(f"[SkillCompleter] complete() called, completionCount={count}")
         if rect is not None:
             super().complete(rect)
         else:
             super().complete()
+
+    def _ensure_popup_on_top(self) -> None:
+        """Ensure popup stays on top of the main window."""
+        popup = self.popup()
+        # Set window flags to ensure popup stays on top
+        # WindowStaysOnTopHint ensures it stays above other windows
+        # Tool tip type prevents it from being minimized with the main window
+        popup.setWindowFlags(
+            Qt.WindowType.Popup |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
 
     def _apply_popup_style(self) -> None:
         """Apply theme-aware styling to the popup."""
