@@ -1241,6 +1241,30 @@ class ChatPanel(QWidget):
         # Position attachment button inside input field
         self._position_attachment_btn()
 
+        # Reposition completer popups if visible
+        self._reposition_completer_popups()
+
+    def moveEvent(self, event):
+        """Handle widget move - reposition completer popups."""
+        super().moveEvent(event)
+        # Reposition completer popups if visible
+        self._reposition_completer_popups()
+
+    def _reposition_completer_popups(self):
+        """Reposition skill and file completer popups if they are visible."""
+        # Reposition skill completer popup
+        if hasattr(self, 'skill_completer') and self.skill_completer.popup().isVisible():
+            # Hide and re-show to reposition
+            self.skill_completer.popup().hide()
+            if self.skill_completer.completionCount() > 0:
+                self.skill_completer.complete()
+
+        # Reposition file completer popup
+        if hasattr(self, 'file_completer') and self.file_completer.popup().isVisible():
+            self.file_completer.popup().hide()
+            if self.file_completer.completionCount() > 0:
+                self.file_completer.complete()
+
     def _position_attachment_btn(self):
         """Position attachment button at bottom-left inside input field."""
         if hasattr(self, 'attach_btn') and hasattr(self, '_input_container'):
