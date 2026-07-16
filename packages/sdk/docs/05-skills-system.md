@@ -415,10 +415,30 @@ class SkillInjector:
 @dataclass
 class InjectionConfig:
     max_skills_per_prompt: int = 5          # 每个提示最大技能数
-    max_skill_length: int = 2000           # 每个技能最大长度
-    inject_method: str = "append"          # append, prepend, section
-    skill_separator: str = "\n\n---\n\n"   # 技能分隔符
+    max_skill_length: int = 2000            # 每个技能最大长度
+    inject_method: str = "append"           # append, prepend, section
+    skill_separator: str = "\n\n---\n\n"    # 技能分隔符
 ```
+
+### 注入格式
+
+注入后的技能格式包含技能目录路径，让 LLM 知道脚本位置：
+
+```markdown
+## Skill: md-to-word
+
+Convert Markdown to Word documents.
+
+**Skill Directory**: `/home/user/.harness/skills/md-to-word`
+
+### Available Tools
+bash
+```
+
+**设计理念**：
+- **运行时提供路径**：遵循业界标准，在运行时提供路径信息而非使用占位符替换
+- **脚本定位**：LLM 可以使用 `bash` 工具执行技能目录中的脚本
+- **相关提交**：`0a9e89f`
 
 ## Skill 基类
 
