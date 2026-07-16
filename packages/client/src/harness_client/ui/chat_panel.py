@@ -1252,18 +1252,11 @@ class ChatPanel(QWidget):
 
     def _reposition_completer_popups(self):
         """Reposition skill and file completer popups if they are visible."""
-        # Reposition skill completer popup
-        if hasattr(self, 'skill_completer') and self.skill_completer.popup().isVisible():
-            # Hide and re-show to reposition
-            self.skill_completer.popup().hide()
-            if self.skill_completer.completionCount() > 0:
-                self.skill_completer.complete()
-
-        # Reposition file completer popup
-        if hasattr(self, 'file_completer') and self.file_completer.popup().isVisible():
-            self.file_completer.popup().hide()
-            if self.file_completer.completionCount() > 0:
-                self.file_completer.complete()
+        # Note: We don't reposition here because:
+        # 1. If popup is visible, it should stay visible (user is still typing "/...")
+        # 2. If user deleted "/", the popup is already hidden by _on_text_changed
+        # 3. Calling complete() here could re-show a popup that was correctly hidden
+        pass
 
     def _position_attachment_btn(self):
         """Position attachment button at bottom-left inside input field."""
