@@ -76,12 +76,13 @@ tools:
    **客户端文档** (`packages/client/docs/`)：
    ```
    docs/
-   ├── 01-overview.md      # 客户端概述
-   ├── 02-ui-components.md # UI 组件
-   ├── 03-controllers.md   # 控制器
-   ├── 04-configuration.md # 配置
-   ├── 05-client-lessons.md # 经验教训
-   └── README.md           # 用户文档
+   ├── 01-overview.md       # 客户端概述
+   ├── 02-ui-components.md  # UI 组件
+   ├── 03-controllers.md    # 控制器
+   ├── 04-configuration.md  # 配置
+   ├── development_guide.md # 开发规范与踩坑总结
+   ├── ui_spec.md           # UI 设计规范
+   └── README.md            # 用户文档
    ```
 
    **Cloud 文档** (`packages/cloud/docs/`)：
@@ -136,7 +137,8 @@ tools:
    | UI 组件 | 02-ui-components.md |
    | 控制器逻辑 | 03-controllers.md |
    | 配置相关 | 04-configuration.md |
-   | 经验教训 | 05-client-lessons.md |
+   | 开发踩坑/问题解决 | development_guide.md |
+   | UI 设计规范 | ui_spec.md |
 
    **Cloud 文档映射**：
    | 功能类型 | 目标文档 |
@@ -174,6 +176,32 @@ tools:
    |-----|---------|-------|
    | 07-sdk-api.md | 添加 OpenAIClient 第三方 API 支持说明 | 高 |
    | README.md | 更新 LLM 配置示例 | 高 |
+   ```
+
+4. **development_guide.md 更新检查**
+
+   对于 Client 相关变更，检查是否需要更新 `packages/client/docs/development_guide.md`：
+
+   | 变更类型 | 更新内容 |
+   |---------|---------|
+   | 新增 UI 组件 | 添加到"问题与解决方案"章节，包含踩坑教训 |
+   | 修复 Bug | 添加到对应章节，记录问题现象和解决方案 |
+   | 架构设计变更 | 添加到"架构设计决策"章节 |
+   | 新增最佳实践 | 添加到"最佳实践"章节 |
+   | 性能优化 | 添加到"性能警示"或对应章节 |
+
+   **development_guide.md 更新模板**：
+   ```markdown
+   ### 问题：XXX
+
+   **现象**：...
+
+   **关键提交**：`abc1234`, `def5678`
+
+   **解决方案**：
+   ...
+
+   **教训**：...
    ```
 
 ### Phase 3: 内容生成
@@ -288,8 +316,9 @@ tools:
 6. **Cloud 相关变更**: 同时更新 `packages/cloud/docs/` 和 `packages/cloud/README.md`
 7. **Scraper 相关变更**: 同时更新 `packages/scraper/docs/` 和 `packages/scraper/README.md`
 8. **跨包经验教训**: 更新 `lessons.md` 和 `packages/sdk/docs/programmer_skill.md`
-9. **双向链接检查清单**:
-   - 新增章节末尾是否有"下一步"链接？
-   - 相关文档是否有反向链接？
-   - 链接路径是否正确（相对路径 `./filename.md`）？
-   - 链接描述是否清晰（如"了解 XXX 功能"）？
+9. **Client 相关变更**: 同时更新 `packages/client/docs/development_guide.md`（开发规范与踩坑总结）
+10. **双向链接检查清单**:
+    - 新增章节末尾是否有"下一步"链接？
+    - 相关文档是否有反向链接？
+    - 链接路径是否正确（相对路径 `./filename.md`）？
+    - 链接描述是否清晰（如"了解 XXX 功能"）？
