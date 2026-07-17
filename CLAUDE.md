@@ -315,6 +315,82 @@ Python SDK 和 Java SDK 定位不同：
 
 ---
 
+## 关键陷阱与规范
+
+### asyncio 同步原语禁止在 `__init__` 中创建
+
+**问题**：qasync 可能切换 event loop，导致 `asyncio.Queue`、`asyncio.Event` 等同步原语绑定到旧 loop 后失效。
+
+```python
+# ❌ 禁止：在 __init__ 中创建
+class MyController:
+    def __init__(self):
+        self._queue = asyncio.Queue()  # RuntimeError: bound to a different event loop
+
+# ✅ 正确：在方法中动态创建
+class MyController:
+    def __init__(self):
+        self._queue: deque = deque()  # 存储层用 deque
+        self._notifier: asyncio.Event | None = None
+    
+    async def get_notifier(self) -> asyncio.Event:
+        if self._notifier is None:
+            self._notifier = asyncio.Event()  # 在当前 event loop 创建
+        return self._notifier
+```
+
+### Tool 包装器必须实现完整接口
+
+新增 Tool 包装器时，必须实现所有接口方法，**包括 `to_definition()`**：
+
+```python
+class MyToolWrapper:
+    @property
+    def name(self) -> str: ...
+    @property
+    def description(self) -> str: ...
+    @property
+    def input_schema(self) -> dict: ...
+    async def execute(self, args, ctx) -> ToolResult: ...
+    def validate_arguments(self, args) -> tuple[bool, str | None]: ...
+    
+    # ⚠️ 容易遗漏！
+    def to_definition(self) -> dict:
+        return {"name": self.name, "description": self.description, "input_schema": self.input_schema}
+```
+
+### 技能文档必须包含 LLM 执行指令
+
+技能文件（SKILL.md）必须告诉 LLM 脚本位置和执行方式：
+
+```markdown
+## ⚡ 执行指令（LLM 必读）
+
+**当用户请求 [功能] 时，你必须：**
+
+1. **直接运行脚本**：
+   ```bash
+   python ~/.harness/skills/[skill-name]/scripts/script.py [args]
+   ```
+
+**⚠️ 重要提示**：
+- 不要尝试创建新脚本，脚本已经存在
+- 直接使用 bash 工具运行上述命令
+```
+
+### 客户端必须注册 BashTool
+
+如果技能涉及运行脚本，客户端必须注册 `BashTool`：
+
+```python
+from harness.tools.builtins import ReadTool, WriteTool, EditTool, GlobTool, GrepTool, BashTool
+
+def _init_tools(self) -> list[Tool]:
+    return [ReadTool(), WriteTool(), EditTool(), GlobTool(), GrepTool(), BashTool()]  # BashTool 必需
+```
+
+---
+
 ## 开发指南
 
 ### 添加 LLM Provider
@@ -423,3 +499,13 @@ uv run python build.py
 **会话开始时**：读取 `progress.txt` 了解项目进展，审查 `lessons.md` 检查错误
 
 **功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
+
+---
+
+## 文档规范
+
+**技术规范先于问题记录**：文档应指导开发，而非只是事后记录问题。参考 `packages/client/docs/development_guide.md` 的格式：
+- 核心原则（强制性语言：禁止、必须）
+- 规范章节（按类别组织）
+- 检查清单（便于合规审计）
+- 问题参考降级为附录

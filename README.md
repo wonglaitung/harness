@@ -545,6 +545,7 @@ snap run gradle publishToMavenLocal
 
 - [Python SDK 详细文档](packages/sdk/docs/)
 - [Java SDK 详细文档](packages/sdk-java/docs/)
+- [客户端技术规范](packages/client/docs/development_guide.md) — PyQt6 开发规范与踩坑总结
 - [客户端用户指南](packages/client/README.md)
 - [编程规范](packages/sdk/docs/programmer_skill.md)
 - [经验教训](lessons.md)
