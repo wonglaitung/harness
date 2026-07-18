@@ -108,7 +108,24 @@
 
 ## 2026-07-18 提取
 
+## 2026-07-19 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股Alpha信号 — 三重左侧共振+右侧确认 — 2026-07-19**
+
+### 新范式/工具
+- **2026-07-19 AI情报提取验证**
+
+### 新范式/工具
+- **LobeHub — Chief Agent Operator 多Agent运营新范式** - https://github.com/lobehub/lobehub
+
+### 新范式/工具
+- **wigolo — 本地优先Agent Web智能层新范式** - https://github.com/KnockOutEZ/wigolo
+
+### 新范式/工具
+- **Agent Skills — Agent能力扩展的开放标准协议** - https://github.com/anthropics/skills
 
 ### 港股分析
 - **美债4.54%延续回落-降息预期左侧窗口持续打开-科网股回调入场机会**
