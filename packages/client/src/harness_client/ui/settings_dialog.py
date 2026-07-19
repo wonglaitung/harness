@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -31,6 +32,7 @@ from harness_client.ui.dialog_styles import (
     FORM_SPACING,
     create_standard_form_layout,
     get_dialog_stylesheet,
+    get_groupbox_stylesheet,
     get_muted_label_stylesheet,
 )
 
@@ -189,6 +191,70 @@ class SettingsDialog(QDialog):
         self.max_iterations_spin.setRange(1, 100)
         self.max_iterations_spin.setValue(10)  # 业界标准默认值（与 SDK 一致）
         general_layout.addRow("最大迭代次数:", self.max_iterations_spin)
+
+        # Cost estimation group
+        cost_group = QGroupBox("成本估算")
+        cost_group.setStyleSheet(get_groupbox_stylesheet())
+        cost_layout = create_standard_form_layout()
+
+        # Input cost
+        self.input_cost_spin = QDoubleSpinBox()
+        self.input_cost_spin.setRange(0.0, 100.0)
+        self.input_cost_spin.setValue(3.0)
+        self.input_cost_spin.setSuffix(" $/1M")
+        self.input_cost_spin.setDecimals(2)
+        self.input_cost_spin.setToolTip(
+            "每 1M input token 的成本（美元）\n"
+            "Claude Sonnet 4: $3\n"
+            "GPT-4o: $2.5\n"
+            "GLM-4: 约 ¥0.1 (≈$0.014)\n"
+            "DeepSeek: $0.14"
+        )
+        cost_layout.addRow("输入价格:", self.input_cost_spin)
+
+        # Output cost
+        self.output_cost_spin = QDoubleSpinBox()
+        self.output_cost_spin.setRange(0.0, 200.0)
+        self.output_cost_spin.setValue(15.0)
+        self.output_cost_spin.setSuffix(" $/1M")
+        self.output_cost_spin.setDecimals(2)
+        self.output_cost_spin.setToolTip(
+            "每 1M output token 的成本（美元）\n"
+            "Claude Sonnet 4: $15\n"
+            "GPT-4o: $10\n"
+            "GLM-4: 约 ¥0.1 (≈$0.014)\n"
+            "DeepSeek: $0.28"
+        )
+        cost_layout.addRow("输出价格:", self.output_cost_spin)
+
+        # Preset buttons for common models
+        preset_layout = QHBoxLayout()
+        preset_layout.setSpacing(4)
+
+        claude_btn = QPushButton("Claude Sonnet")
+        claude_btn.setToolTip("输入: $3/1M, 输出: $15/1M")
+        claude_btn.clicked.connect(lambda: self._set_cost_preset(3.0, 15.0))
+        preset_layout.addWidget(claude_btn)
+
+        gpt4o_btn = QPushButton("GPT-4o")
+        gpt4o_btn.setToolTip("输入: $2.5/1M, 输出: $10/1M")
+        gpt4o_btn.clicked.connect(lambda: self._set_cost_preset(2.5, 10.0))
+        preset_layout.addWidget(gpt4o_btn)
+
+        deepseek_btn = QPushButton("DeepSeek")
+        deepseek_btn.setToolTip("输入: $0.14/1M, 输出: $0.28/1M")
+        deepseek_btn.clicked.connect(lambda: self._set_cost_preset(0.14, 0.28))
+        preset_layout.addWidget(deepseek_btn)
+
+        glm_btn = QPushButton("GLM-4")
+        glm_btn.setToolTip("输入: $0.014/1M, 输出: $0.014/1M (≈¥0.1)")
+        glm_btn.clicked.connect(lambda: self._set_cost_preset(0.014, 0.014))
+        preset_layout.addWidget(glm_btn)
+
+        cost_layout.addRow("预设:", preset_layout)
+
+        cost_group.setLayout(cost_layout)
+        general_layout.addRow(cost_group)
 
         tabs.addTab(general_tab, "常规")
 
@@ -460,6 +526,11 @@ class SettingsDialog(QDialog):
         is_recommended = browser_type == "msedge"
         self.browser_recommended_label.setVisible(is_recommended)
 
+    def _set_cost_preset(self, input_cost: float, output_cost: float):
+        """Set cost values from preset."""
+        self.input_cost_spin.setValue(input_cost)
+        self.output_cost_spin.setValue(output_cost)
+
     def get_settings(self) -> dict:
         """Get current settings."""
         provider = self.provider_combo.currentText()
@@ -497,6 +568,9 @@ class SettingsDialog(QDialog):
             "browser_headless": self.browser_headless_check.isChecked(),
             "browser_screenshot": self.browser_screenshot_check.isChecked(),
             "browser_timeout": self.browser_timeout_spin.value(),
+            # Cost estimation settings
+            "input_cost_per_1m": self.input_cost_spin.value(),
+            "output_cost_per_1m": self.output_cost_spin.value(),
         }
 
     def _get_theme_mode(self) -> str:
@@ -560,6 +634,11 @@ class SettingsDialog(QDialog):
             self.browser_screenshot_check.setChecked(settings["browser_screenshot"])
         if "browser_timeout" in settings:
             self.browser_timeout_spin.setValue(settings["browser_timeout"])
+        # Cost estimation settings
+        if "input_cost_per_1m" in settings:
+            self.input_cost_spin.setValue(settings["input_cost_per_1m"])
+        if "output_cost_per_1m" in settings:
+            self.output_cost_spin.setValue(settings["output_cost_per_1m"])
 
         # Update UI visibility based on provider
         self._on_provider_changed(self.provider_combo.currentText())

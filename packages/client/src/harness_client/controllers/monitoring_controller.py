@@ -167,6 +167,10 @@ class MonitoringController(QObject):
         # 模型信息
         self._current_model: str = ""
 
+        # 成本估算参数（可通过 set_cost_rates 更新）
+        self._input_cost_per_1m: float = 3.0
+        self._output_cost_per_1m: float = 15.0
+
     @property
     def metrics(self) -> SessionMetrics:
         """获取当前指标"""
@@ -185,6 +189,20 @@ class MonitoringController(QObject):
     def set_model(self, model: str):
         """设置当前模型"""
         self._current_model = model
+
+    def set_cost_rates(self, input_cost_per_1m: float, output_cost_per_1m: float):
+        """
+        设置成本估算参数。
+
+        Args:
+            input_cost_per_1m: 每 1M input token 的成本（美元）
+            output_cost_per_1m: 每 1M output token 的成本（美元）
+        """
+        self._input_cost_per_1m = input_cost_per_1m
+        self._output_cost_per_1m = output_cost_per_1m
+        # 立即重新计算成本
+        self._metrics.update_cost(self._input_cost_per_1m, self._output_cost_per_1m)
+        self.metrics_updated.emit()
 
     def handle_progress_event(self, event: ProgressEvent):
         """
@@ -248,7 +266,7 @@ class MonitoringController(QObject):
             self._metrics._current_request_tokens = 0
 
         # 更新成本
-        self._metrics.update_cost()
+        self._metrics.update_cost(self._input_cost_per_1m, self._output_cost_per_1m)
         self.session_ended.emit()
 
     def _on_iteration(self, event: ProgressEvent):
@@ -296,7 +314,7 @@ class MonitoringController(QObject):
         self._metrics._current_request_tokens += input_tokens + output_tokens
 
         # 更新成本
-        self._metrics.update_cost()
+        self._metrics.update_cost(self._input_cost_per_1m, self._output_cost_per_1m)
 
     def _on_tool_call(self, event: ProgressEvent):
         """处理工具调用"""

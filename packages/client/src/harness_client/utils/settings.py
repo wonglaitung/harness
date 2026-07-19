@@ -86,6 +86,9 @@ class AppSettings:
     browser_headless: bool = False
     browser_screenshot: bool = True
     browser_timeout: int = 30000  # milliseconds
+    # Cost estimation settings (USD per 1M tokens)
+    input_cost_per_1m: float = 3.0   # Default: Claude Sonnet 4 pricing
+    output_cost_per_1m: float = 15.0  # Default: Claude Sonnet 4 pricing
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -120,6 +123,9 @@ class AppSettings:
             browser_headless=data.get("browser_headless", False),
             browser_screenshot=data.get("browser_screenshot", True),
             browser_timeout=data.get("browser_timeout", 30000),
+            # Cost estimation settings
+            input_cost_per_1m=data.get("input_cost_per_1m", 3.0),
+            output_cost_per_1m=data.get("output_cost_per_1m", 15.0),
         )
 
 

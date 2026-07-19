@@ -807,6 +807,7 @@ class MainWindow(QMainWindow):
             model=settings.get("model", "claude-sonnet-4-6"),
             context_window=settings.get("context_window", "auto"),
             tool_result_role=settings.get("tool_result_role", "tool"),
+            temperature=settings.get("temperature", 0.3),
             auto_save=settings.get("auto_save", True),
             stream=settings.get("stream", True),
             max_iterations=settings.get("max_iterations", 20),
@@ -814,11 +815,20 @@ class MainWindow(QMainWindow):
             work_dir=settings.get("work_dir", ""),
             remember_dir=settings.get("remember_dir", True),
             theme_mode=settings.get("theme_mode", "auto"),
+            # Routing settings
+            enable_routing=settings.get("enable_routing", False),
+            high_model=settings.get("high_model", ""),
+            low_model=settings.get("low_model", ""),
+            router_model_path=settings.get("router_model_path", ""),
+            router_url=settings.get("router_url", ""),
             # Browser settings
             browser_type=settings.get("browser_type", "msedge"),
             browser_headless=settings.get("browser_headless", False),
             browser_screenshot=settings.get("browser_screenshot", True),
             browser_timeout=settings.get("browser_timeout", 30000),
+            # Cost estimation settings
+            input_cost_per_1m=settings.get("input_cost_per_1m", 3.0),
+            output_cost_per_1m=settings.get("output_cost_per_1m", 15.0),
         )
         self.settings_manager.save(app_settings)
 
@@ -846,6 +856,11 @@ class MainWindow(QMainWindow):
         model = settings.get("model", "claude-sonnet-4-6")
         self.monitoring_controller.set_model(model)
         self._model_label.setText(f"API: {model}")
+
+        # 更新成本估算参数
+        input_cost = settings.get("input_cost_per_1m", 3.0)
+        output_cost = settings.get("output_cost_per_1m", 15.0)
+        self.monitoring_controller.set_cost_rates(input_cost, output_cost)
 
         if settings.get("work_dir"):
             self.work_dir = Path(settings["work_dir"])
@@ -895,6 +910,11 @@ class MainWindow(QMainWindow):
         # 初始化监控控制器模型名称
         self.monitoring_controller.set_model(settings.model)
         self._model_label.setText(f"API: {settings.model}")
+
+        # 初始化成本估算参数
+        input_cost = getattr(settings, "input_cost_per_1m", 3.0)
+        output_cost = getattr(settings, "output_cost_per_1m", 15.0)
+        self.monitoring_controller.set_cost_rates(input_cost, output_cost)
 
         # Load browser settings
         from harness_client.controllers.browser_controller import BrowserConfig
