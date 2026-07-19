@@ -110,7 +110,33 @@
 
 ## 2026-07-19 提取
 
+## 2026-07-20 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股供应链科技企业扎堆上市+恒指连续三周上涨 — 右侧共振确认信号**
+
+### 港股分析
+- **中际旭创港股IPO完成聆讯+募资上调至70亿美元-AI算力基建左侧政策松绑信号升级**
+
+### 港股分析
+- **智谱AI(02513.HK)暴跌25%+大模型概念股崩盘 — 左侧逆向机会与风险警示**
+
+### 港股分析
+- **美债4.54%假突破确认强化-降息预期左侧窗口持续打开-科网股回调入场机会**
+
+### 新范式/工具
+- **GPT-5.6 Programmatic Tool Calling — 模型内嵌程序化工具编排新范式** - https://openai.com/index/gpt-5-6
+
+### 新范式/工具
+- **Voicebox — 本地AI语音工作室+Agent语音I/O新范式** - https://github.com/jamiepine/voicebox
+
+### 新范式/工具
+- **Moonshine Voice — 全栈本地语音I/O统一层新范式** - https://news.ycombinator.com/item?id=Speech Recognition and TTS in less than 500kb
+
+### 新范式/工具
+- **Transcribe.cpp — ggml统一ASR推理引擎新范式** - https://workshop.cjpais.com/projects/transcribe-cpp
 
 ### 港股分析
 - **港股Alpha信号 — 三重左侧共振+右侧确认 — 2026-07-19**
