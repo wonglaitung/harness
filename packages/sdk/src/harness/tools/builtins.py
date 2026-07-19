@@ -635,16 +635,42 @@ class WebSearchTool(Tool):
                     "skip_disambig": 1,
                 }
 
-                async with session.get(url, params=params, timeout=30) as response:
-                    if response.status != 200:
-                        return ToolResult(
-                            tool_call_id="",
-                            success=False,
-                            content="",
-                            error=f"Search failed: HTTP {response.status}",
-                        )
+                # Retry logic for transient errors (like HTTP 202)
+                max_retries = 2
+                last_error = None
 
-                    data = await response.json()
+                for attempt in range(max_retries + 1):
+                    async with session.get(url, params=params, timeout=30) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            break
+                        elif response.status == 202:
+                            # 202 means request accepted but not complete, retry
+                            last_error = f"Search API busy (HTTP 202), retrying..."
+                            if attempt < max_retries:
+                                import asyncio
+                                await asyncio.sleep(1)  # Wait before retry
+                                continue
+                            return ToolResult(
+                                tool_call_id="",
+                                success=False,
+                                content="",
+                                error="Search API temporarily unavailable. Please try again later.",
+                            )
+                        else:
+                            return ToolResult(
+                                tool_call_id="",
+                                success=False,
+                                content="",
+                                error=f"Search failed: HTTP {response.status}",
+                            )
+                else:
+                    return ToolResult(
+                        tool_call_id="",
+                        success=False,
+                        content="",
+                        error=last_error or "Search failed after retries",
+                    )
 
             # Format results
             results = []
@@ -1015,11 +1041,13 @@ class WebToMarkdownTool(Tool):
 
     def _html_to_markdown(
         self,
-        element: "Tag | NavigableString",
+        element,
         include_links: bool = True,
         include_images: bool = False,
     ) -> str:
         """Convert HTML element to Markdown."""
+        from bs4 import NavigableString, Tag
+
         if isinstance(element, NavigableString):
             text = str(element).strip()
             # Escape markdown special characters in plain text
