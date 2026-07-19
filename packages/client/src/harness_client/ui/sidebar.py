@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
 
 from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
 from harness_client.ui.icons import (
-    create_chat_icon,
     create_settings_icon,
     create_add_icon,
     create_delete_icon,
@@ -110,10 +109,6 @@ class SidebarPanel(QWidget):
         nav_layout = QVBoxLayout(nav_widget)
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(2)
-
-        # Chat button (primary action)
-        self.chat_btn = self._create_nav_button(create_chat_icon(18, QColor(theme.TEXT)), "对话")
-        nav_layout.addWidget(self.chat_btn)
 
         # New session button (high-frequency action)
         self.new_session_btn = self._create_nav_button(create_add_icon(18, QColor(theme.TEXT)), "新建会话")
@@ -290,22 +285,6 @@ class SidebarPanel(QWidget):
                 background-color: {theme.CHROME};
             }}
         """)
-
-        # Update chat button
-        self.chat_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border-radius: {theme.RADIUS_MD};
-                padding: 12px 16px;
-                color: {theme.TEXT};
-                font-size: {theme.FONT_SIZE_MD};
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.HOVER_NEUTRAL};
-            }}
-        """)
-        self.chat_btn.setIcon(create_chat_icon(18, QColor(theme.TEXT)))
 
         # Update new session button
         self.new_session_btn.setStyleSheet(f"""
