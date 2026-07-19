@@ -697,6 +697,9 @@ class MainWindow(QMainWindow):
         dialog.model_combo.setCurrentText(current.model)
         dialog.context_window_combo.setCurrentText(current.context_window)
         dialog.tool_role_combo.setCurrentText(current.tool_result_role)
+        # Temperature
+        temp_value = int(getattr(current, "temperature", 0.3) * 100)
+        dialog.temperature_slider.setValue(temp_value)
         dialog.auto_save_check.setChecked(current.auto_save)
         dialog.stream_check.setChecked(current.stream)
         dialog.max_iterations_spin.setValue(current.max_iterations)
@@ -705,11 +708,20 @@ class MainWindow(QMainWindow):
             dialog.work_dir_edit.setText(current.work_dir)
         dialog.remember_dir_check.setChecked(current.remember_dir)
         dialog._set_theme_mode(current.theme_mode)
+        # Routing settings
+        dialog.enable_routing_check.setChecked(getattr(current, "enable_routing", False))
+        dialog.high_model_combo.setCurrentText(getattr(current, "high_model", ""))
+        dialog.low_model_combo.setCurrentText(getattr(current, "low_model", ""))
+        dialog.router_path_edit.setText(getattr(current, "router_model_path", ""))
+        dialog.router_url_edit.setText(getattr(current, "router_url", ""))
         # Browser settings
         dialog.browser_type_combo.setCurrentText(getattr(current, "browser_type", "msedge"))
         dialog.browser_headless_check.setChecked(getattr(current, "browser_headless", False))
         dialog.browser_screenshot_check.setChecked(getattr(current, "browser_screenshot", True))
         dialog.browser_timeout_spin.setValue(getattr(current, "browser_timeout", 30000))
+        # Cost estimation settings
+        dialog.input_cost_spin.setValue(getattr(current, "input_cost_per_1m", 3.0))
+        dialog.output_cost_spin.setValue(getattr(current, "output_cost_per_1m", 15.0))
 
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:

@@ -557,6 +557,7 @@ class SettingsDialog(QDialog):
             "max_iterations": self.max_iterations_spin.value(),
             "auto_update_memory": self.auto_update_memory_check.isChecked(),
             "work_dir": self.work_dir_edit.text(),
+            "remember_dir": self.remember_dir_check.isChecked(),
             "theme_mode": self._get_theme_mode(),
             # Routing settings
             "enable_routing": self.enable_routing_check.isChecked(),
