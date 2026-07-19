@@ -40,6 +40,7 @@ public class WebSearchTool implements Tool {
     private static final String API_URL = "https://api.duckduckgo.com/";
     private static final int DEFAULT_NUM_RESULTS = 5;
     private static final int TIMEOUT_SECONDS = 30;
+    private static final int MAX_RETRIES = 2;
 
     private final HttpClient client;
     private final ObjectMapper objectMapper;
@@ -121,10 +122,30 @@ public class WebSearchTool implements Tool {
                     .GET()
                     .build();
 
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                // Retry logic for transient errors (like HTTP 202)
+                HttpResponse<String> response = null;
+                String lastError = null;
 
-                if (response.statusCode() != 200) {
-                    return ToolResult.failure("", "Search failed: HTTP " + response.statusCode(), NAME);
+                for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                    response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+                    if (response.statusCode() == 200) {
+                        break;
+                    } else if (response.statusCode() == 202) {
+                        // 202 means request accepted but not complete, retry
+                        lastError = "Search API busy (HTTP 202), retrying...";
+                        if (attempt < MAX_RETRIES) {
+                            Thread.sleep(1000); // Wait 1 second before retry
+                            continue;
+                        }
+                        return ToolResult.failure("", "Search API temporarily unavailable. Please try again later.", NAME);
+                    } else {
+                        return ToolResult.failure("", "Search failed: HTTP " + response.statusCode(), NAME);
+                    }
+                }
+
+                if (response == null) {
+                    return ToolResult.failure("", lastError != null ? lastError : "Search failed after retries", NAME);
                 }
 
                 // Parse response
@@ -166,6 +187,10 @@ public class WebSearchTool implements Tool {
             } catch (java.net.http.HttpTimeoutException e) {
                 logger.error("Search request timed out: {}", query);
                 return ToolResult.failure("", "Search request timed out", NAME);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.error("Search interrupted: {}", query);
+                return ToolResult.failure("", "Search interrupted", NAME);
             } catch (Exception e) {
                 logger.error("Search failed: {}", e.getMessage());
                 return ToolResult.failure("", "Search failed: " + e.getMessage(), NAME);
