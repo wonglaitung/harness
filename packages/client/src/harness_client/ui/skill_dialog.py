@@ -160,6 +160,7 @@ class SkillEditDialog(QDialog):
             self.version_edit.setText(skill.version)
             self.description_edit.setText(skill.description)
             self.content_edit.setPlainText(skill.content)
+            self.enabled_check.setChecked(skill.enabled)
 
             if skill.triggers:
                 if skill.triggers.keywords:
@@ -212,6 +213,7 @@ class SkillEditDialog(QDialog):
                 version=data["version"],
                 description=data["description"],
                 content=data["content"],
+                enabled=data["enabled"],
                 triggers=SkillTrigger(
                     keywords=data["keywords"],
                     patterns=data["patterns"],

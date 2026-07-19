@@ -163,12 +163,15 @@ class SkillController:
         name = metadata.get("name", skill_file.stem)
         version = metadata.get("version", "1.0")
         description = metadata.get("description", "")
+        # Parse enabled field (default True if not specified)
+        enabled_str = metadata.get("enabled", "true").lower()
+        enabled = enabled_str not in ("false", "no", "0")
 
         return SkillInfo(
             name=name,
             version=version,
             description=description,
-            enabled=True,
+            enabled=enabled,
             source_path=str(skill_file),
         )
 
@@ -389,6 +392,7 @@ class SkillController:
         content: str,
         keywords: list[str] = None,
         patterns: list[str] = None,
+        enabled: bool = True,
     ) -> bool:
         """
         Create a new skill file.
@@ -400,6 +404,7 @@ class SkillController:
             content: Skill content (markdown)
             keywords: Trigger keywords
             patterns: Trigger patterns (regex)
+            enabled: Whether skill is enabled
 
         Returns:
             True if created successfully
@@ -411,6 +416,7 @@ class SkillController:
                 name=name,
                 description=description,
                 content=content,
+                enabled=enabled,
                 triggers=SkillTrigger(
                     keywords=keywords or [],
                     patterns=patterns or [],

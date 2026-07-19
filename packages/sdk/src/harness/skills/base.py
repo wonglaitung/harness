@@ -126,6 +126,7 @@ class Skill:
     parameters: list[SkillParameter] = field(default_factory=list)
     version: str = "1.0.0"
     author: str = ""
+    enabled: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
     source_path: str | None = None
 
@@ -195,6 +196,7 @@ class Skill:
             parameters=parameters,
             version=frontmatter.get("version", "1.0.0"),
             author=frontmatter.get("author", ""),
+            enabled=frontmatter.get("enabled", True),
             metadata=frontmatter.get("metadata", {}),
             source_path=str(path),
         )
@@ -211,6 +213,7 @@ class Skill:
             "description": self.description,
             "version": self.version,
             "author": self.author,
+            "enabled": self.enabled,
             "triggers": {
                 "keywords": self.triggers.keywords,
                 "patterns": self.triggers.patterns,
