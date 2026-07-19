@@ -77,6 +77,8 @@
 | `stream_enabled` | bool | `true` | 是否启用流式输出 |
 | `auto_update_memory` | bool | `true` | 允许 Agent 自主更新 Core Memory |
 | `theme_mode` | string | `"auto"` | 主题模式：`auto`/`light`/`dark` |
+| `input_cost_per_1m` | float | `3.0` | 每 1M 输入 token 成本（美元） |
+| `output_cost_per_1m` | float | `15.0` | 每 1M 输出 token 成本（美元） |
 
 ### auto_update_memory 设置
 
@@ -95,6 +97,37 @@ config = ChatConfig(
 if self.config.auto_update_memory:
     tools.append(UpdateCoreMemoryTool())
 ```
+
+### 成本估算配置
+
+从 v1.6.0 开始，客户端支持可配置的模型定价，用于估算对话成本：
+
+```json
+{
+  "input_cost_per_1m": 3.0,
+  "output_cost_per_1m": 15.0
+}
+```
+
+**计算公式**：
+```
+成本 = (input_tokens / 1,000,000) * input_cost_per_1m
+     + (output_tokens / 1,000,000) * output_cost_per_1m
+     + (cache_read_tokens / 1,000,000) * (input_cost_per_1m * 0.1)
+```
+
+**常用模型定价参考**：
+
+| 模型 | 输入价格 ($/1M) | 输出价格 ($/1M) |
+|------|----------------|----------------|
+| Claude Sonnet 4 | $3.00 | $15.00 |
+| Claude Opus 4 | $15.00 | $75.00 |
+| GPT-4o | $2.50 | $10.00 |
+| GPT-4o mini | $0.15 | $0.60 |
+| DeepSeek V3 | $0.14 | $0.28 |
+| GLM-4 | $0.014 | $0.014 |
+
+**设置界面预设**：客户端设置对话框提供常用模型的预设按钮，一键配置定价。
 
 
 ### 使用第三方 API

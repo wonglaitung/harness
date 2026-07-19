@@ -553,6 +553,81 @@ def _init_tools(self) -> list[Tool]:
 - 直接使用 bash 工具运行上述命令
 ```
 
+### 5. SDK ProgressEvent 格式兼容
+
+**客户端必须兼容 SDK 的两种事件格式。**
+
+**问题**：SDK 发送的 ProgressEvent 可能是两种格式：
+1. 新格式：`event.data.input_tokens`（顶层字段）
+2. 旧格式：`event.data.token_usage.input_tokens`（嵌套字段）
+
+**解决方案**：检查两种格式，优先使用顶层字段：
+
+```python
+def _on_llm_response(self, event: ProgressEvent):
+    event_data = event.data or {}
+
+    # 优先检查顶层字段（当前 SDK 格式）
+    input_tokens = event_data.get("input_tokens", 0)
+    output_tokens = event_data.get("output_tokens", 0)
+
+    # 如果顶层没有，检查 token_usage 字段（兼容旧格式）
+    if not input_tokens and not output_tokens:
+        token_usage = event_data.get("token_usage", {})
+        if isinstance(token_usage, dict):
+            input_tokens = token_usage.get("input_tokens", 0)
+            output_tokens = token_usage.get("output_tokens", 0)
+```
+
+**关键提交**：`17fee0f`
+
+### 6. 设置对话框配置加载
+
+**打开设置对话框时必须加载所有配置。**
+
+**问题**：如果 `_on_preferences()` 未加载某些配置，保存时会重置这些配置为默认值。
+
+**解决方案**：
+
+```python
+def _on_preferences(self):
+    settings = get_settings()
+    # 必须加载所有配置项，包括：
+    # - API/模型配置
+    # - 成本配置（input_cost_per_1m, output_cost_per_1m）
+    # - 路由配置
+    self._settings_dialog.load_settings(settings)
+```
+
+**关键提交**：`39c17e6`
+
+### 7. 技能 enabled 字段持久化
+
+**技能的 `enabled` 状态必须保存到文件 frontmatter。**
+
+**问题**：`Skill` 类缺少 `enabled` 字段，导致编辑技能时无法保存启用状态。
+
+**解决方案**：
+
+```python
+# SDK: Skill 基类添加 enabled 字段
+@dataclass
+class Skill:
+    name: str
+    description: str
+    content: str
+    enabled: bool = True  # 添加此字段
+    ...
+
+# to_file() 保存 enabled
+frontmatter["enabled"] = self.enabled
+
+# from_file() 读取 enabled
+enabled=frontmatter.get("enabled", True)
+```
+
+**关键提交**：`d63790e`
+
 ---
 
 ## 代码结构
@@ -654,6 +729,9 @@ packages/client/src/harness_client/
 | MCP 工具不工作 | `10073df` | [SDK 集成规范](#tool-包装器必须实现完整接口) |
 | 技能无法执行 | `cd94565` | [SDK 集成规范](#技能执行环境规范) |
 | asyncio.Queue 切换 loop | 见 lessons.md 2026-07-02 | [异步编程规范](#asyncio-同步原语规范) |
+| Token 统计始终为零 | `17fee0f` | [SDK 集成规范](#sdk-progressevent-格式兼容) |
+| 设置对话框配置丢失 | `39c17e6` | [数据管理规范](#设置对话框配置加载) |
+| 技能启用状态无法保存 | `d63790e` | [SDK 集成规范](#技能-enabled-字段持久化) |
 
 ### 详细问题记录
 
@@ -668,6 +746,7 @@ packages/client/src/harness_client/
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-20 | 3.1 | 添加 Token 统计、设置配置、技能 enabled 字段问题 |
 | 2026-07-17 | 3.0 | 重构为技术规范，添加强制性规范章节 |
 | 2026-07-17 | 2.1 | 添加 MCP logger 未定义问题、MCP 工具不工作问题 |
 | 2026-07-16 | 2.0 | 合并架构设计与问题总结 |

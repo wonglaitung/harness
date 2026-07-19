@@ -73,6 +73,7 @@ class SkillMetadata:
 |------|------|------|------|
 | `name` | string | 是 | 技能唯一标识 |
 | `description` | string | 是 | 技能描述（LLM 可见） |
+| `enabled` | bool | 否 | 是否启用（默认 `true`） |
 | `tools` | dict | 否 | 工具配置字典，包含 `allowed`、`restricted`、`default_permission` |
 | `triggers` | dict | 否 | 触发条件字典，包含 `keywords`、`patterns`、`tools` |
 | `parameters` | dict | 否 | 参数字典，定义可配置参数 |
@@ -454,6 +455,7 @@ class Skill:
     parameters: list[SkillParameter]   # 参数列表
     version: str = "1.0.0"             # 版本号
     author: str = ""                   # 作者
+    enabled: bool = True               # 是否启用
     metadata: dict[str, Any]           # 元数据
     source_path: str | None            # 源文件路径
 ```
