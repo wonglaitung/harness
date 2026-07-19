@@ -104,16 +104,20 @@ public class SkillRegistry {
         String frontmatter = content.substring(3, endIdx).trim();
         String description = "";
         String version = "1.0";
+        boolean enabled = true;
 
         for (String line : frontmatter.split("\n")) {
             if (line.startsWith("description:")) {
                 description = line.substring("description:".length()).trim();
             } else if (line.startsWith("version:")) {
                 version = line.substring("version:".length()).trim();
+            } else if (line.startsWith("enabled:")) {
+                String value = line.substring("enabled:".length()).trim().toLowerCase();
+                enabled = !value.equals("false") && !value.equals("no") && !value.equals("0");
             }
         }
 
-        return new SkillMetadata(description, version, List.of());
+        return new SkillMetadata(description, version, List.of(), List.of(), List.of(), enabled);
     }
 
     /**
@@ -188,13 +192,13 @@ public class SkillRegistry {
     /**
      * Register a skill programmatically.
      *
-     * If the skill's metadata has active=true, it will be automatically activated.
+     * If the skill's metadata has enabled=true, it will be automatically activated.
      */
     public void registerSkill(Skill skill) {
         skills.put(skill.name(), skill);
 
-        // Auto-activate if skill metadata indicates it should be active
-        if (skill.metadata() != null && skill.metadata().active()) {
+        // Auto-activate if skill metadata indicates it should be enabled
+        if (skill.metadata() != null && skill.metadata().enabled()) {
             activeSkillNames.add(skill.name());
             logger.debug("Auto-activated skill: {}", skill.name());
         }

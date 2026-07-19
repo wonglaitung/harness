@@ -39,10 +39,24 @@ public record Skill(
     }
 
     /**
+     * Get skill enabled status.
+     */
+    public boolean enabled() {
+        return metadata.enabled();
+    }
+
+    /**
      * Create a skill without file path.
      */
     public static Skill of(String name, String description, String content) {
-        return new Skill(name, new SkillMetadata(description, "1.0", List.of()), content, null);
+        return new Skill(name, new SkillMetadata(description, "1.0", List.of(), List.of(), List.of(), true), content, null);
+    }
+
+    /**
+     * Create a skill with enabled status.
+     */
+    public static Skill of(String name, String description, String content, boolean enabled) {
+        return new Skill(name, new SkillMetadata(description, "1.0", List.of(), List.of(), List.of(), enabled), content, null);
     }
 
     /**
@@ -61,12 +75,64 @@ public record Skill(
             ? fileName.substring(0, fileName.length() - 3)
             : fileName;
 
-        // Parse metadata from content (simple extraction)
-        String description = extractDescription(content, name);
-        List<String> tools = extractTools(content);
+        // Parse metadata from frontmatter
+        SkillMetadata metadata = parseMetadata(content, name);
+        String body = extractBody(content);
 
-        SkillMetadata metadata = new SkillMetadata(description, "1.0", tools);
-        return new Skill(name, metadata, content, path);
+        return new Skill(name, metadata, body, path);
+    }
+
+    /**
+     * Parse skill metadata from frontmatter.
+     */
+    private static SkillMetadata parseMetadata(String content, String skillName) {
+        String description = "";
+        String version = "1.0";
+        boolean enabled = true;
+        List<String> tools = List.of();
+
+        if (content.startsWith("---")) {
+            int endIdx = content.indexOf("---", 3);
+            if (endIdx > 0) {
+                String frontmatter = content.substring(3, endIdx).trim();
+
+                for (String line : frontmatter.split("\n")) {
+                    if (line.startsWith("description:")) {
+                        description = line.substring("description:".length()).trim();
+                    } else if (line.startsWith("version:")) {
+                        version = line.substring("version:".length()).trim();
+                    } else if (line.startsWith("enabled:")) {
+                        String value = line.substring("enabled:".length()).trim().toLowerCase();
+                        enabled = !value.equals("false") && !value.equals("no") && !value.equals("0");
+                    }
+                }
+            }
+        }
+
+        // Fallback to extracting description from content
+        if (description.isEmpty()) {
+            description = extractDescription(content, skillName);
+        }
+
+        tools = extractTools(content);
+
+        return new SkillMetadata(description, version, List.of(), tools, List.of(), enabled);
+    }
+
+    /**
+     * Extract body content after frontmatter.
+     */
+    private static String extractBody(String content) {
+        if (!content.startsWith("---")) {
+            return content;
+        }
+
+        int endIdx = content.indexOf("---", 3);
+        if (endIdx == -1) {
+            return content;
+        }
+
+        return content.substring(endIdx + 3).trim();
     }
 
     /**

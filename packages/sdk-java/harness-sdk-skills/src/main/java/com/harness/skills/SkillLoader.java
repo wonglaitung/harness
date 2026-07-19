@@ -200,16 +200,20 @@ public class SkillLoader {
         String frontmatter = content.substring(3, endIdx).trim();
         String description = "";
         String version = "1.0";
+        boolean enabled = true;  // Default to true
 
         for (String line : frontmatter.split("\n")) {
             if (line.startsWith("description:")) {
                 description = line.substring("description:".length()).trim();
             } else if (line.startsWith("version:")) {
                 version = line.substring("version:".length()).trim();
+            } else if (line.startsWith("enabled:")) {
+                String value = line.substring("enabled:".length()).trim().toLowerCase();
+                enabled = !value.equals("false") && !value.equals("no") && !value.equals("0");
             }
         }
 
-        return new SkillMetadata(description, version, List.of());
+        return new SkillMetadata(description, version, List.of(), List.of(), List.of(), enabled);
     }
 
     /**
