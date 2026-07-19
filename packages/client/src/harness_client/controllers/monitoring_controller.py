@@ -268,22 +268,32 @@ class MonitoringController(QObject):
             self._metrics.llm_call_start = None
 
         # 更新 token 使用
+        # SDK 发送的格式: {input_tokens, output_tokens, ...} 直接在顶层
+        # 也兼容旧格式: {token_usage: {input_tokens, output_tokens}}
         event_data = event.data or {}
-        token_usage = event_data.get("token_usage", {})
 
-        if isinstance(token_usage, dict):
-            input_tokens = token_usage.get("input_tokens", 0)
-            output_tokens = token_usage.get("output_tokens", 0)
-            cache_read = token_usage.get("cache_read_tokens", 0)
-            cache_write = token_usage.get("cache_write_tokens", 0)
+        # 优先检查顶层字段（当前 SDK 格式）
+        input_tokens = event_data.get("input_tokens", 0)
+        output_tokens = event_data.get("output_tokens", 0)
+        cache_read = event_data.get("cache_read_tokens", 0)
+        cache_write = event_data.get("cache_write_tokens", 0)
 
-            self._metrics.input_tokens += input_tokens
-            self._metrics.output_tokens += output_tokens
-            self._metrics.cache_read_tokens += cache_read
-            self._metrics.cache_write_tokens += cache_write
+        # 如果顶层没有，检查 token_usage 字段（兼容旧格式）
+        if not input_tokens and not output_tokens:
+            token_usage = event_data.get("token_usage", {})
+            if isinstance(token_usage, dict):
+                input_tokens = token_usage.get("input_tokens", 0)
+                output_tokens = token_usage.get("output_tokens", 0)
+                cache_read = token_usage.get("cache_read_tokens", 0)
+                cache_write = token_usage.get("cache_write_tokens", 0)
 
-            # 累计当前请求 token
-            self._metrics._current_request_tokens += input_tokens + output_tokens
+        self._metrics.input_tokens += input_tokens
+        self._metrics.output_tokens += output_tokens
+        self._metrics.cache_read_tokens += cache_read
+        self._metrics.cache_write_tokens += cache_write
+
+        # 累计当前请求 token
+        self._metrics._current_request_tokens += input_tokens + output_tokens
 
         # 更新成本
         self._metrics.update_cost()
