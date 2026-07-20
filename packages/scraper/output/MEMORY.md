@@ -112,7 +112,27 @@
 
 ## 2026-07-20 提取
 
+## 2026-07-21 提取
+
 ## 注意事项
+
+### 港股分析
+- **智谱AI(02513.HK)死猫跳确认-再跌13%-AI大模型左侧风险升级**
+
+### 港股分析
+- **港股游戏+煤炭+内银集体走强 — 板块轮动右侧确认信号**
+
+### 港股分析
+- **美债4.60%重新站上红线+巴里唱多港股 — 降息预期窗口关闭风险vs外资态度转折**
+
+### 新范式/工具
+- **deepsec — Agent-Powered Vulnerability Scanner + SKILL.md自举新范式** - https://github.com/vercel-labs/deepsec
+
+### 新范式/工具
+- **Kimi Work — Desktop AI Agent + WebBridge + Cron 新范式** - https://www.kimi.com/products/kimi-work
+
+### 新范式/工具
+- **Xiaomi-Robotics-1 — Embodiment-Free预训练突破机器人数据瓶颈新范式** - https://robotics.xiaomi.com/xiaomi-robotics-1.html
 
 ### 港股分析
 - **港股供应链科技企业扎堆上市+恒指连续三周上涨 — 右侧共振确认信号**
