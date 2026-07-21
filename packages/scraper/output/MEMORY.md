@@ -114,7 +114,27 @@
 
 ## 2026-07-21 提取
 
+## 2026-07-22 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股回购潮900亿+南向创新高+美债高位 — 三重左侧信号持续共振**
+
+### 港股分析
+- **南向资金持股创历史新高+美债4.57%高位 — 降息预期左侧布局窗口延续**
+
+### 港股分析
+- **智谱AI(02513.HK)涨超31%+MINIMAX涨13% — AI政策松绑右侧超强确认信号**
+
+### 新范式/工具
+- **code-review-graph — Blast-Radius代码图谱+MCP精准上下文新范式** - https://github.com/tirth8205/code-review-graph
+
+### 新范式/工具
+- **Grabette — 手持采集→机器人数据开源系统** - https://huggingface.co/blog/grabette
+
+### 新范式/工具
+- **Cursor Agent Swarm — 树形Agent分解+Agent VCS新范式** - https://cursor.com/blog/agent-swarm-model-economics
 
 ### 港股分析
 - **智谱AI(02513.HK)死猫跳确认-再跌13%-AI大模型左侧风险升级**
