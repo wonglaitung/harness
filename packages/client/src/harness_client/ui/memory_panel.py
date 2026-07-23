@@ -25,16 +25,17 @@ from PyQt6.QtWidgets import (
 )
 
 from harness.memory.memory_file import MemoryCategory, MemoryEntry, MemorySource
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.themes import get_theme
 from harness_client.ui.right_panel import CollapsibleSection
 from harness_client.ui.dialog_styles import get_muted_label_stylesheet
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 # Maximum content height for memory section when expanded
 # 50% larger than MoreToolsSection (350 * 1.5 ≈ 525)
 MEMORY_MAX_CONTENT_HEIGHT = 525
 
 
-class ImportanceSlider(QWidget):
+class ImportanceSlider(ThemeAwareWidget):
     """
     Custom painted importance slider with visual feedback.
 
@@ -48,10 +49,10 @@ class ImportanceSlider(QWidget):
     valueChanged = pyqtSignal(float)  # 0.0 to 1.0
 
     def __init__(self, initial_value: float = 0.5, parent=None):
-        super().__init__(parent)
         self._value = initial_value
         self._hover = False
         self._dragging = False
+        super().__init__(parent)
 
         # Fixed size
         self.setFixedHeight(20)
@@ -74,7 +75,7 @@ class ImportanceSlider(QWidget):
 
     def _get_color_for_value(self) -> str:
         """Get color based on importance value."""
-        theme = get_theme()
+        theme = self.theme()
         if self._value >= 0.8:
             return theme.SUCCESS  # green - high
         elif self._value >= 0.5:
@@ -97,7 +98,7 @@ class ImportanceSlider(QWidget):
 
     def paintEvent(self, event):
         """Paint the slider with track, fill, and handle."""
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -125,6 +126,10 @@ class ImportanceSlider(QWidget):
         painter.drawEllipse(handle_rect)
 
         painter.end()
+
+    def _apply_theme_style(self) -> None:
+        """Repaint when theme changes."""
+        self.update()
 
     def enterEvent(self, event):
         """Handle mouse enter - enlarge handle."""
@@ -183,7 +188,7 @@ class ImportanceSlider(QWidget):
         )
 
 
-class CategorySection(QWidget):
+class CategorySection(ThemeAwareWidget):
     """A sub-section for a single memory category."""
 
     add_clicked = pyqtSignal(str)  # category name
@@ -192,24 +197,16 @@ class CategorySection(QWidget):
     importance_changed = pyqtSignal(str, int, float)  # category, index, new_importance
 
     def __init__(self, category: MemoryCategory, display_name: str, parent=None):
-        super().__init__(parent)
         self._category = category
         self._display_name = display_name
         self._entries: list[MemoryEntry] = []
         self._entry_widgets: list[QWidget] = []
+        super().__init__(parent)
         self._setup_ui()
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self):
         """Setup the category section UI."""
-        theme = get_theme()
+        theme = self.theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -302,7 +299,7 @@ class CategorySection(QWidget):
 
     def _get_importance_color(self, importance: float) -> str:
         """Get color for importance level."""
-        theme = get_theme()
+        theme = self.theme()
         if importance >= 0.8:
             return theme.SUCCESS  # green - high importance
         elif importance >= 0.5:
@@ -321,7 +318,7 @@ class CategorySection(QWidget):
 
     def _create_entry_item(self, entry: MemoryEntry, index: int) -> QWidget:
         """Create an entry item widget with importance indicator."""
-        theme = get_theme()
+        theme = self.theme()
         widget = QWidget()
         widget.setStyleSheet(f"""
             QWidget {{
@@ -401,9 +398,9 @@ class CategorySection(QWidget):
         """Handle double-click on entry."""
         self.entry_double_clicked.emit(self._category.value, index)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update all child widgets."""
-        theme = get_theme()
+        theme = self.theme()
         # Update header elements
         self._name_label.setStyleSheet(f"""
             QLabel {{
@@ -607,7 +604,7 @@ class MemorySection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup the memory section content."""
-        theme = get_theme()
+        theme = self.theme()
         # Scroll area for all categories
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -742,10 +739,10 @@ class MemorySection(CollapsibleSection):
         """
         self._category_sections[category].update_entries(entries)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update all category sections."""
-        super()._on_theme_changed()  # Update CollapsibleSection header
-        theme = get_theme()
+        super()._apply_theme_style()  # Update CollapsibleSection header
+        theme = self.theme()
         # Update scroll area
         self._scroll.setStyleSheet(f"""
             QScrollArea {{
@@ -771,7 +768,7 @@ class MemorySection(CollapsibleSection):
         """)
         # Update all category sections
         for section in self._category_sections.values():
-            section._on_theme_changed()
+            section._apply_theme_style()
 
 
 class AddEntryDialog(QMessageBox):

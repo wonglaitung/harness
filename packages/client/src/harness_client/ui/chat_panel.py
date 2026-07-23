@@ -31,8 +31,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 
-from harness_client.ui.interactive import GlowButton
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.ui.interactive import GlowButton, StatusDot
+from harness_client.themes import get_theme
+from harness_client.ui.theme_aware import ThemeAwareWidget
 from harness_client.ui.skill_completer import SkillCompleter
 from harness_client.ui.file_completer import FileCompleter
 from harness_client.ui.toggle_switch import ModeToggleSwitch
@@ -149,7 +150,7 @@ def create_scroll_down_icon(size: int = 24, color: QColor = QColor("#FFFFFF")) -
     return QIcon(pixmap)
 
 
-class MessageBubble(QWidget):
+class MessageBubble(ThemeAwareWidget):
     """
     Message bubble with rounded corners and selectable text.
 
@@ -162,19 +163,47 @@ class MessageBubble(QWidget):
         role: str = "assistant",
         parent: QWidget | None = None,
     ):
-        super().__init__(parent)
         self._content = content
         self._role = role
         self._border_radius = 14.0
         self._padding_h = 16
         self._padding_v = 12  # Balanced padding for text visibility
         self._max_width = 800
+        super().__init__(parent)
 
-        self._setup_ui()
+    def _apply_theme_style(self) -> None:
+        """Apply theme-dependent styles - called by ThemeAwareWidget."""
+        theme = self.theme()
+
+        if self._role == "assistant":
+            # Update content label stylesheet with new theme colors
+            if hasattr(self, '_content_label'):
+                self._content_label.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: transparent;
+                        color: {theme.TEXT};
+                    }}
+                """)
+                # Re-render markdown with new theme colors
+                html = self._render_markdown(self._content)
+                self._content_label.setText(html)
+        else:
+            # User message - update label stylesheet
+            if hasattr(self, '_label'):
+                text_color = theme.USER_BUBBLE_TEXT
+                self._label.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: transparent;
+                        color: {text_color};
+                        border: none;
+                    }}
+                """)
+
+        self.update()
 
     def _setup_ui(self):
         """Setup the UI with appropriate widget based on role."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Main layout with padding
         layout = QVBoxLayout(self)
@@ -226,12 +255,7 @@ class MessageBubble(QWidget):
             self._label.setText(self._content)
 
             # Set text color via stylesheet
-            # Use white for dark theme, but for light theme use dark text
-            # since user bubble in light theme is light blue
-            if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
-                text_color = theme.TEXT  # Dark text for light background
-            else:  # Dark theme
-                text_color = "#ffffff"
+            text_color = theme.USER_BUBBLE_TEXT
             self._label.setStyleSheet(f"""
                 QLabel {{
                     background-color: transparent;
@@ -401,7 +425,7 @@ class MessageBubble(QWidget):
         Strategy: draw a uniform rounded rect, then overlay a same-color
         triangle at the sharp corner to flatten it.
         """
-        theme = get_theme()
+        theme = self.theme()
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -441,54 +465,21 @@ class MessageBubble(QWidget):
 
         painter.end()
 
-    def _on_theme_changed(self):
-        """Update styles when theme changes."""
-        theme = get_theme()
 
-        if self._role == "assistant":
-            # Update content label stylesheet with new theme colors
-            self._content_label.setStyleSheet(f"""
-                QLabel {{
-                    background-color: transparent;
-                    color: {theme.TEXT};
-                }}
-            """)
-
-            # Re-render markdown with new theme colors
-            html = self._render_markdown(self._content)
-            self._content_label.setText(html)
-            # Force the label to update with new text
-            self._content_label.update()
-        else:
-            # User message - update label stylesheet
-            # Use white for dark theme, but for light theme use dark text
-            # since user bubble in light theme is light blue
-            if theme.APP_BACKGROUND == "#FFFFFF":  # Light theme
-                text_color = theme.TEXT  # Dark text for light background
-            else:  # Dark theme
-                text_color = "#ffffff"
-            self._label.setStyleSheet(f"""
-                QLabel {{
-                    background-color: transparent;
-                    color: {text_color};
-                    border: none;
-                }}
-            """)
-
-        # Trigger repaint
-        self.update()
-
-
-class AvatarWidget(QWidget):
+class AvatarWidget(ThemeAwareWidget):
     """Simple avatar widget with rounded corners."""
 
     def __init__(self, size: int = 24, parent: QWidget | None = None):
-        super().__init__(parent)
         self._size = size
+        super().__init__(parent)
         self.setFixedSize(size, size)
 
+    def _apply_theme_style(self) -> None:
+        """Update when theme changes - just trigger repaint."""
+        self.update()
+
     def paintEvent(self, event):
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -508,12 +499,8 @@ class AvatarWidget(QWidget):
 
         painter.end()
 
-    def _on_theme_changed(self):
-        """Update when theme changes - just trigger repaint."""
-        self.update()
 
-
-class MessageRow(QWidget):
+class MessageRow(ThemeAwareWidget):
     """A row containing a message bubble with proper alignment."""
 
     def __init__(
@@ -522,13 +509,12 @@ class MessageRow(QWidget):
         role: str = "assistant",
         parent: QWidget | None = None,
     ):
-        super().__init__(parent)
         self._content = content
         self._role = role
-        self._setup_ui()
+        super().__init__(parent)
 
     def _setup_ui(self):
-        theme = get_theme()
+        theme = self.theme()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(10)
@@ -555,24 +541,19 @@ class MessageRow(QWidget):
 
         self.setStyleSheet(f"background-color: {theme.PANEL};")
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Update styles when theme changes."""
-        theme = get_theme()
+        theme = self.theme()
         self.setStyleSheet(f"background-color: {theme.PANEL};")
-        # Also update the bubble and avatar
-        if hasattr(self, '_bubble') and hasattr(self._bubble, '_on_theme_changed'):
-            self._bubble._on_theme_changed()
-        if hasattr(self, '_avatar') and hasattr(self._avatar, '_on_theme_changed'):
-            self._avatar._on_theme_changed()
         self.update()
 
 
-class ToolIndicator(QWidget):
+class ToolIndicator(ThemeAwareWidget):
     """Visual indicator for tool calls/results with rounded corners."""
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
         self._border_radius = 6.0
+        super().__init__(parent)
 
     def _get_font(self) -> QFont:
         font = QFont()
@@ -614,7 +595,7 @@ class ToolCallIndicator(ToolIndicator):
         return QSize(self._preferred_width, 28)
 
     def paintEvent(self, event):
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -628,11 +609,24 @@ class ToolCallIndicator(ToolIndicator):
         painter.setPen(QPen(QColor(theme.TOOL_THINKING_BORDER), 2))
         painter.drawLine(34, 4, 34, 24)
 
+        # Draw play icon (triangle)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QBrush(QColor(theme.TEXT_SUBTLE)))
+        icon_size = 8
+        icon_x = 46
+        icon_y = self.height() // 2
+        triangle = [
+            QPointF(icon_x, icon_y - icon_size // 2),
+            QPointF(icon_x + icon_size, icon_y),
+            QPointF(icon_x, icon_y + icon_size // 2),
+        ]
+        painter.drawPolygon(QPolygonF(triangle))
+
         # Text
-        text = f"▸ {self._tool_name} {self._args_preview}"
+        text = f"{self._tool_name} {self._args_preview}"
         painter.setPen(QColor(theme.TEXT_SUBTLE))
         painter.setFont(self._get_font())
-        painter.drawText(46, 18, text)
+        painter.drawText(46 + icon_size + 6, 18, text)
 
         painter.end()
 
@@ -658,7 +652,7 @@ class ToolResultIndicator(ToolIndicator):
         return QSize(min(width, 200), 28)
 
     def paintEvent(self, event):
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -675,17 +669,29 @@ class ToolResultIndicator(ToolIndicator):
         painter.setPen(QPen(QColor(border_color), 2))
         painter.drawLine(34, 4, 34, 24)
 
-        # Icon and text
-        icon = "✓" if self._success else "✗"
+        # Draw checkmark or X icon
         text_color = theme.TOOL_SUCCESS_TEXT if self._success else theme.TOOL_FAILURE_TEXT
-        painter.setPen(QColor(text_color))
+        painter.setPen(QPen(QColor(text_color), 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        icon_x = 46
+        icon_y = self.height() // 2
+        if self._success:
+            # Checkmark
+            painter.drawLine(icon_x, icon_y, icon_x + 4, icon_y + 4)
+            painter.drawLine(icon_x + 4, icon_y + 4, icon_x + 10, icon_y - 4)
+        else:
+            # X mark
+            painter.drawLine(icon_x, icon_y - 4, icon_x + 8, icon_y + 4)
+            painter.drawLine(icon_x + 8, icon_y - 4, icon_x, icon_y + 4)
+
+        # Text
         painter.setFont(self._get_font())
-        painter.drawText(46, 18, f"{icon} {self._tool_name}")
+        painter.drawText(icon_x + 16, 18, self._tool_name)
 
         painter.end()
 
 
-class ThinkingIndicator(QWidget):
+class ThinkingIndicator(ThemeAwareWidget):
     """Visual indicator for thinking/progress."""
 
     def __init__(self, message: str, parent: QWidget | None = None):
@@ -704,8 +710,12 @@ class ThinkingIndicator(QWidget):
         font.setItalic(True)
         return font
 
+    def _apply_theme_style(self) -> None:
+        """Update when theme changes."""
+        self.update()
+
     def paintEvent(self, event):
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -722,7 +732,7 @@ class ThinkingIndicator(QWidget):
         painter.end()
 
 
-class MessagesContainer(QWidget):
+class MessagesContainer(ThemeAwareWidget):
     """Container widget for all messages with scroll support."""
 
     def __init__(self, parent: QWidget | None = None):
@@ -731,17 +741,11 @@ class MessagesContainer(QWidget):
         self._layout.setContentsMargins(0, 16, 0, 16)
         self._layout.setSpacing(0)
 
-        theme = get_theme()
+    def _apply_theme_style(self) -> None:
+        """Handle theme change."""
+        theme = self.theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
-
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        self.update()
 
     def _update_height(self):
         """更新容器高度以适应内容。"""
@@ -755,12 +759,6 @@ class MessagesContainer(QWidget):
         # 同时设置最小和最大高度，防止被扩展
         self.setMinimumHeight(total_height)
         self.setMaximumHeight(total_height)
-
-    def _on_theme_changed(self):
-        """Handle theme change."""
-        theme = get_theme()
-        self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")
-        self.update()
 
     def add_message(self, content: str, role: str):
         """Add a message bubble."""
@@ -809,7 +807,7 @@ class MessagesContainer(QWidget):
                 item.widget().deleteLater()
 
 
-class ChatPanel(QWidget):
+class ChatPanel(ThemeAwareWidget):
     """Panel for displaying chat messages and input."""
 
     message_sent = pyqtSignal(object, bool)  # (message: str | list[dict], goal_mode)
@@ -820,21 +818,12 @@ class ChatPanel(QWidget):
     skill_activated = pyqtSignal(str)  # (skill_name) - emitted when user types /skill-name
 
     def __init__(self):
-        super().__init__()
         self._streaming_text = ""
         self._is_streaming = False
         self._goal_mode = False  # False = Chat mode, True = Task mode
         self._work_dir = Path.cwd()  # Working directory for file dialogs
         self._browser_active = False  # Track browser tool state
-        self._setup_ui()
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        super().__init__()
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
@@ -848,7 +837,7 @@ class ChatPanel(QWidget):
 
     def _setup_ui(self):
         """Setup UI components with theme-aware styling."""
-        theme = get_theme()
+        theme = self.theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -971,8 +960,8 @@ class ChatPanel(QWidget):
         browser_status_layout.setSpacing(8)
 
         # Status indicator dot (green)
-        self._browser_status_dot = QLabel("●")
-        self._browser_status_dot.setStyleSheet(f"color: {theme.SUCCESS}; font-size: 10px;")
+        self._browser_status_dot = StatusDot(10)
+        self._browser_status_dot.setStatus("connected")
         browser_status_layout.addWidget(self._browser_status_dot)
 
         # Status text
@@ -1780,9 +1769,9 @@ class ChatPanel(QWidget):
         """Handle browser close button click."""
         self.browser_close_requested.emit()
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update all styles."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Update header bar
         self._header_bar.setStyleSheet(f"""
@@ -2008,15 +1997,15 @@ class ChatPanel(QWidget):
 
     def _update_widget_recursive(self, widget):
         """Recursively update a widget and all its children."""
-        # If widget has _on_theme_changed method, call it
-        if hasattr(widget, '_on_theme_changed'):
-            widget._on_theme_changed()
+        # ThemeAwareWidget subclasses have _apply_theme_style, call it
+        if hasattr(widget, '_apply_theme_style'):
+            widget._apply_theme_style()
         else:
             widget.update()
 
         # Update all child widgets
         for child in widget.findChildren(QWidget):
-            if hasattr(child, '_on_theme_changed'):
-                child._on_theme_changed()
+            if hasattr(child, '_apply_theme_style'):
+                child._apply_theme_style()
             else:
                 child.update()

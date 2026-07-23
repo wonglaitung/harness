@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.themes import get_theme
 from harness_client.ui.icons import create_schedule_icon, create_play_icon, create_pause_icon
 from harness_client.ui.dialog_styles import (
     DIALOG_MARGINS,
@@ -45,9 +45,10 @@ from harness_client.ui.dialog_styles import (
     get_groupbox_stylesheet,
 )
 from harness_client.ui.right_panel import CollapsibleSection
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 
-class ScheduleItemWidget(QWidget):
+class ScheduleItemWidget(ThemeAwareWidget):
     """Widget for a single schedule item with status and controls."""
 
     toggle_requested = pyqtSignal(str)  # schedule_id
@@ -60,20 +61,13 @@ class ScheduleItemWidget(QWidget):
         Args:
             schedule_data: Dict with keys: id, name, status, trigger_type, trigger_value, enabled
         """
-        super().__init__(parent)
         self._schedule_id = schedule_data.get("id", "")
+        super().__init__(parent)
         self._setup_ui(schedule_data)
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self, data: dict):
         """Setup UI components."""
-        theme = get_theme()
+        theme = self.theme()
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -159,7 +153,7 @@ class ScheduleItemWidget(QWidget):
 
     def _update_status_indicator(self, status: str, enabled: bool):
         """Update the status indicator dot."""
-        theme = get_theme()
+        theme = self.theme()
 
         if not enabled:
             color = theme.TEXT_MUTED  # gray - paused
@@ -185,7 +179,7 @@ class ScheduleItemWidget(QWidget):
 
     def _update_toggle_button(self, enabled: bool):
         """Update the toggle button icon."""
-        theme = get_theme()
+        theme = self.theme()
         if enabled:
             icon = create_pause_icon(16, QColor(theme.TEXT_SUBTLE))
             self._toggle_btn.setToolTip("暂停")
@@ -194,9 +188,9 @@ class ScheduleItemWidget(QWidget):
             self._toggle_btn.setToolTip("启动")
         self._toggle_btn.setPixmap(icon.pixmap(16, 16))
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        theme = get_theme()
+        theme = self.theme()
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {theme.APP_BACKGROUND};
@@ -447,7 +441,7 @@ class ScheduleDialog(QDialog):
         return data
 
 
-class ScheduleListWidget(QWidget):
+class ScheduleListWidget(ThemeAwareWidget):
     """Widget for displaying schedule list in a dialog (non-collapsible).
 
     Unlike ScheduleSection which inherits CollapsibleSection for the right panel,
@@ -463,17 +457,10 @@ class ScheduleListWidget(QWidget):
         """Initialize schedule list widget."""
         super().__init__(parent)
         self._setup_ui()
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self):
         """Setup UI components."""
-        theme = get_theme()
+        theme = self.theme()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -568,9 +555,9 @@ class ScheduleListWidget(QWidget):
             self._container_layout.addWidget(item_widget)
             self._item_widgets.append(item_widget)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        theme = get_theme()
+        theme = self.theme()
 
         self._add_btn.setStyleSheet(f"""
             QPushButton {{
@@ -622,7 +609,7 @@ class ScheduleSection(CollapsibleSection):
 
     def _setup_content(self):
         """Setup section content."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Scroll area
         self._scroll = QScrollArea()
@@ -712,10 +699,10 @@ class ScheduleSection(CollapsibleSection):
             self._list_layout.addWidget(item_widget)
             self._item_widgets.append(item_widget)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        super()._on_theme_changed()
-        theme = get_theme()
+        super()._apply_theme_style()
+        theme = self.theme()
 
         self._scroll.setStyleSheet(f"""
             QScrollArea {{
@@ -743,7 +730,7 @@ class ScheduleSection(CollapsibleSection):
         self._placeholder.setStyleSheet(get_muted_label_stylesheet())
 
 
-class SchedulePanel(QWidget):
+class SchedulePanel(ThemeAwareWidget):
     """Full panel for schedule management (alternative to collapsed section)."""
 
     add_requested = pyqtSignal()
@@ -755,17 +742,10 @@ class SchedulePanel(QWidget):
         """Initialize schedule panel."""
         super().__init__(parent)
         self._setup_ui()
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self):
         """Setup UI components."""
-        theme = get_theme()
+        theme = self.theme()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -804,7 +784,7 @@ class SchedulePanel(QWidget):
         """Update the schedule list."""
         self._section.update_schedules(schedules)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        theme = get_theme()
+        theme = self.theme()
         self.setStyleSheet(f"background-color: {theme.APP_BACKGROUND};")

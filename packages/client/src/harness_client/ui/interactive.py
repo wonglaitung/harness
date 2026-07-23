@@ -5,8 +5,10 @@ Provides buttons with tactile press feedback (scale animation) for better UX.
 """
 
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QSize, pyqtProperty
-from PyQt6.QtGui import QColor, QIcon, QCursor
+from PyQt6.QtGui import QColor, QIcon, QCursor, QPainter, QPen, QBrush
 from PyQt6.QtWidgets import QPushButton, QGraphicsDropShadowEffect, QWidget
+
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 
 class TactileButton(QPushButton):
@@ -159,7 +161,7 @@ class IconButton(GlowButton):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
 
-class StatusDot(QWidget):
+class StatusDot(ThemeAwareWidget):
     """
     Animated status indicator dot with pulse effect.
 
@@ -173,7 +175,6 @@ class StatusDot(QWidget):
     """
 
     def __init__(self, size: int = 12, parent=None):
-        super().__init__(parent)
         self._size = size
         self._status = "disconnected"  # connected, connecting, error, disconnected
         self._pulse_opacity = 1.0
@@ -181,28 +182,16 @@ class StatusDot(QWidget):
         self._pulse_timer.timeout.connect(self._pulse_tick)
         self._pulse_direction = -1  # -1 = fade out, 1 = fade in
 
+        super().__init__(parent)
         self.setFixedSize(size + 4, size + 4)  # Small padding
 
-        # Register theme listener for responsive updates
-        from harness_client.themes import register_theme_listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        """Unregister theme listener on destruction."""
-        try:
-            from harness_client.themes import unregister_theme_listener
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
-
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Repaint when theme changes."""
         self.update()
 
     def _get_status_color(self) -> QColor:
         """Get color for current status from theme (dynamic)."""
-        from harness_client.themes import get_theme
-        theme = get_theme()
+        theme = self.theme()
         color_map = {
             "connected": theme.STATUS_CONNECTED,
             "connecting": theme.STATUS_CONNECTING,
@@ -247,8 +236,6 @@ class StatusDot(QWidget):
 
     def paintEvent(self, event):
         """Draw the status dot - dynamically fetches theme colors."""
-        from PyQt6.QtGui import QPainter, QBrush, QPen
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

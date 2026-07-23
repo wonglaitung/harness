@@ -69,6 +69,7 @@ class LightTheme:
     # === Message Bubbles ===
     USER_BUBBLE = "#E0F2FE"  # Trust blue tint (sky-100)
     USER_BUBBLE_OPACITY = 1.0
+    USER_BUBBLE_TEXT = "#1E293B"  # User bubble text color (slate-800)
     ASSISTANT_BUBBLE = "#F1F5F9"  # Neutral gray (slate-100)
 
     # === Avatar Colors ===

@@ -13,7 +13,7 @@ from PyQt6.QtCore import (
     Qt,
     pyqtSignal,
 )
-from PyQt6.QtGui import QFileSystemModel
+from PyQt6.QtGui import QFileSystemModel, QPainter, QColor, QPen, QBrush
 from PyQt6.QtWidgets import (
     QApplication,
     QFileIconProvider,
@@ -30,7 +30,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.themes import get_theme
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 
 class CustomFileIconProvider(QFileIconProvider):
@@ -57,7 +58,7 @@ class CustomFileIconProvider(QFileIconProvider):
         return self._file_icon
 
 
-class CollapsibleSection(QWidget):
+class CollapsibleSection(ThemeAwareWidget):
     """A collapsible section widget with header and content using QPropertyAnimation.
 
     Based on: https://github.com/MichaelVoelkel/qt-collapsible-section
@@ -65,7 +66,6 @@ class CollapsibleSection(QWidget):
     """
 
     def __init__(self, title: str, animation_duration: int = 100, parent=None):
-        super().__init__(parent)
         self._title = title
         self._animation_duration = animation_duration
         self._is_collapsed = True  # Start collapsed
@@ -76,19 +76,11 @@ class CollapsibleSection(QWidget):
         self.content_area.setFrameShape(QFrame.Shape.NoFrame)
         self.content_area.setStyleSheet("background-color: transparent;")
 
-        self._setup_ui()
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        super().__init__(parent)
 
     def _setup_ui(self):
         """Setup the collapsible section UI with animation support."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Content area (QScrollArea for proper sizing) - must create first
         self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -331,12 +323,12 @@ class CollapsibleSection(QWidget):
                 self.setMaximumHeight(collapsed_height + content_height)
                 self.content_area.setMaximumHeight(content_height)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update header styles."""
         self._apply_toggle_style()
 
         # Update header buttons
-        theme = get_theme()
+        theme = self.theme()
         for btn in self._header_buttons:
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -358,27 +350,19 @@ class CollapsibleSection(QWidget):
             """)
 
 
-class SkillsSection(QWidget):
+class SkillsSection(ThemeAwareWidget):
     """Section displaying loaded skills (non-collapsible inside MoreToolsSection)."""
 
     skill_double_clicked = pyqtSignal(str)  # skill name
     add_skill_requested = pyqtSignal()  # request to add new skill
 
     def __init__(self, parent=None):
-        super().__init__(parent)
         self._skill_items: dict[str, dict] = {}
-        self._setup_ui()
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        super().__init__(parent)
 
     def _setup_ui(self):
         """Setup UI with clean banking-app style."""
-        theme = get_theme()
+        theme = self.theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
@@ -562,9 +546,9 @@ class SkillsSection(QWidget):
         """Handle double-click on skill item."""
         self.skill_double_clicked.emit(name)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update content styles."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Update placeholder
         self.placeholder_label.setStyleSheet(f"""
@@ -608,7 +592,7 @@ class SkillsSection(QWidget):
             status_label.setStyleSheet(f"color: {status_color}; font-size: {theme.FONT_SIZE_XS};")
 
 
-class MCPServersSection(QWidget):
+class MCPServersSection(ThemeAwareWidget):
     """Section displaying MCP server status (non-collapsible inside MoreToolsSection)."""
 
     server_double_clicked = pyqtSignal(str)  # server name
@@ -616,20 +600,12 @@ class MCPServersSection(QWidget):
     toggle_server_requested = pyqtSignal(str)  # server name to connect/disconnect
 
     def __init__(self, parent=None):
-        super().__init__(parent)
         self._server_items: dict[str, dict] = {}
-        self._setup_ui()
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        super().__init__(parent)
 
     def _setup_ui(self):
         """Setup UI with clean banking-app style."""
-        theme = get_theme()
+        theme = self.theme()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(2)
@@ -867,9 +843,9 @@ class MCPServersSection(QWidget):
         """Handle double-click on server item."""
         self.server_double_clicked.emit(name)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update content styles."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Update placeholder
         self.placeholder_label.setStyleSheet(f"""
@@ -1052,10 +1028,9 @@ class FileTreeSection(CollapsibleSection):
         self.fs_model.setRootPath(str(self._work_dir))
         self.tree_view.setRootIndex(self.fs_model.index(str(self._work_dir)))
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update content styles."""
-        super()._on_theme_changed()
-        theme = get_theme()
+        theme = self.theme()
 
         # Update work directory label
         self.work_dir_label.setStyleSheet(f"""
@@ -1387,10 +1362,9 @@ class MoreToolsSection(CollapsibleSection):
                 }}
             """)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        super()._on_theme_changed()
-        theme = get_theme()
+        theme = self.theme()
 
         # Update schedule button
         self.schedule_btn.setStyleSheet(f"""
@@ -1414,7 +1388,7 @@ class MoreToolsSection(CollapsibleSection):
         )
 
 
-class RightPanel(QWidget):
+class RightPanel(ThemeAwareWidget):
     """Right panel with collapsible sections for memory, files, and tools.
 
     Layout priorities:
@@ -1439,23 +1413,14 @@ class RightPanel(QWidget):
     browser_toggle_requested = pyqtSignal()
 
     def __init__(self, monitoring_controller=None, parent=None):
-        super().__init__(parent)
         self._monitoring_controller = monitoring_controller
+        super().__init__(parent)
         self.setMinimumWidth(220)
         self.setMaximumWidth(380)
-        self._setup_ui()
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self):
         """Setup the right panel UI - context-driven layout."""
-        theme = get_theme()
+        theme = self.theme()
 
         self.setStyleSheet(f"""
             QWidget {{
@@ -1559,9 +1524,9 @@ class RightPanel(QWidget):
         """Refresh file tree."""
         self.file_section.refresh()
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update all styles."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Update panel background
         self.setStyleSheet(f"""
@@ -1571,8 +1536,8 @@ class RightPanel(QWidget):
         """)
 
         # Notify sections to update their styles
-        if hasattr(self.memory_section, '_on_theme_changed'):
-            self.memory_section._on_theme_changed()
+        if hasattr(self.memory_section, '_apply_theme_style'):
+            self.memory_section._apply_theme_style()
         if hasattr(self.more_tools_section, '_on_theme_changed'):
             self.more_tools_section._on_theme_changed()
         if hasattr(self.file_section, '_on_theme_changed'):

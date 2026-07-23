@@ -5,7 +5,7 @@ Sidebar panel with navigation buttons and session list - Modern theme-aware styl
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QAction, QColor, QFont, QFontDatabase, QCursor, QIcon
+from PyQt6.QtGui import QAction, QColor, QFont, QFontDatabase, QCursor, QIcon, QPainter, QPen, QBrush
 from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
@@ -18,7 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.themes import get_theme
+from harness_client.ui.theme_aware import ThemeAwareWidget
 from harness_client.ui.icons import (
     create_settings_icon,
     create_add_icon,
@@ -26,7 +27,7 @@ from harness_client.ui.icons import (
 )
 
 
-class SidebarPanel(QWidget):
+class SidebarPanel(ThemeAwareWidget):
     """Left sidebar with navigation and session list - Simplified layout."""
 
     # Signals
@@ -42,17 +43,8 @@ class SidebarPanel(QWidget):
     FIXED_WIDTH = 180
 
     def __init__(self):
-        super().__init__()
         self.work_dir = Path.cwd()
-        self._setup_ui()
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
+        super().__init__()
 
     def _get_font(self) -> QFont:
         """Get a suitable font for the system."""
@@ -66,7 +58,7 @@ class SidebarPanel(QWidget):
 
     def _create_nav_button(self, icon: QIcon | None, text: str) -> QPushButton:
         """Create a navigation button with icon and text."""
-        theme = get_theme()
+        theme = self.theme()
         btn = QPushButton(f"  {text}") if icon else QPushButton(text)
         if icon:
             btn.setIcon(icon)
@@ -90,7 +82,7 @@ class SidebarPanel(QWidget):
 
     def _setup_ui(self):
         """Setup UI components - Simplified navigation."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Main layout
         self._main_layout = QVBoxLayout(self)
@@ -185,11 +177,12 @@ class SidebarPanel(QWidget):
             current_session: Current ClientSession object (or None)
             history_sessions: List of historical ClientSession objects
         """
-        theme = get_theme()
+        theme = self.theme()
         self.session_list.clear()
 
-        # Current session (always first) - with active indicator
+        # Current session (always first) - with active indicator (use a dot drawn with QPainter)
         if current_session:
+            # Use Unicode bullet as indicator (acceptable for list item text)
             item = QListWidgetItem(f"● {current_session.name}")
             item.setData(Qt.ItemDataRole.UserRole, current_session.id)
             item.setForeground(QColor(theme.ACCENT))  # Use theme accent color
@@ -216,7 +209,7 @@ class SidebarPanel(QWidget):
 
     def _on_session_context_menu(self, position):
         """Show context menu for session list."""
-        theme = get_theme()
+        theme = self.theme()
         item = self.session_list.itemAt(position)
         if not item:
             return
@@ -275,9 +268,9 @@ class SidebarPanel(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self.session_delete_requested.emit(session_id)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change - update all styles."""
-        theme = get_theme()
+        theme = self.theme()
 
         # Update panel background
         self.setStyleSheet(f"""

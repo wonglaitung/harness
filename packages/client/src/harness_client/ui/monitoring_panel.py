@@ -28,12 +28,12 @@ from harness_client.controllers.monitoring_controller import (
     LogEntry,
     MonitoringController,
 )
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 logger = logging.getLogger(__name__)
 
 
-class TrendChart(QWidget):
+class TrendChart(ThemeAwareWidget):
     """
     Token 使用趋势柱状图 - 主题感知绘制。
 
@@ -41,31 +41,19 @@ class TrendChart(QWidget):
     """
 
     def __init__(self, max_items: int = 10, parent=None):
-        super().__init__(parent)
         self._data: list[int] = []
         self._max_items = max_items
+        super().__init__(parent)
         self.setFixedHeight(60)
         self.setMinimumWidth(180)
-        register_theme_listener(self._on_theme_changed)
 
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
-
-    def set_data(self, data: list[int]):
-        """设置趋势数据"""
-        self._data = data[-self._max_items:] if data else []
-        self.update()
-
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """主题切换时重绘"""
         self.update()
 
     def paintEvent(self, event):
         """绘制柱状图 - 动态获取主题"""
-        theme = get_theme()
+        theme = self.theme()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -115,22 +103,16 @@ class TrendChart(QWidget):
         painter.end()
 
 
-class MetricsRow(QWidget):
+class MetricsRow(ThemeAwareWidget):
     """指标行组件 - 显示标签和数值"""
 
     def __init__(self, label: str, value: str = "0", parent=None):
+        self._label_text = label
+        self._value_text = value
         super().__init__(parent)
-        self._setup_ui(label, value)
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self, label: str, value: str):
-        theme = get_theme()
+        theme = self.theme()
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 2)
@@ -164,9 +146,9 @@ class MetricsRow(QWidget):
             }}
         """)
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """主题切换"""
-        theme = get_theme()
+        theme = self.theme()
         self._label.setStyleSheet(f"color: {theme.TEXT_SUBTLE};")
         self._value.setStyleSheet(f"""
             QLabel {{
@@ -176,28 +158,20 @@ class MetricsRow(QWidget):
         """)
 
 
-class MonitoringSection(QWidget):
+class MonitoringSection(ThemeAwareWidget):
     """监控区块 - 直接显示内容，无独立折叠"""
 
     def __init__(self, controller: MonitoringController, parent=None):
-        super().__init__(parent)
         self._controller = controller
+        super().__init__(parent)
         self._setup_ui()
 
         # 连接信号
         self._controller.metrics_updated.connect(self._on_metrics_updated)
 
-        register_theme_listener(self._theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._theme_changed)
-        except Exception:
-            pass
-
     def _setup_ui(self):
         """设置UI"""
-        theme = get_theme()
+        theme = self.theme()
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -375,9 +349,9 @@ class MonitoringSection(QWidget):
         # 趋势图
         self._trend_chart.set_data(metrics.token_history)
 
-    def _theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """主题切换"""
-        theme = get_theme()
+        theme = self.theme()
 
         # 更新标题样式
         header = self.findChild(QLabel, "")
@@ -422,28 +396,20 @@ class MonitoringSection(QWidget):
         # 趋势图会自动重绘
 
 
-class ExecutionLogSection(QWidget):
+class ExecutionLogSection(ThemeAwareWidget):
     """执行日志区块 - 直接显示内容，无独立折叠"""
 
     def __init__(self, controller: MonitoringController, parent=None):
-        super().__init__(parent)
         self._controller = controller
+        super().__init__(parent)
         self._setup_ui()
 
         # 连接信号
         self._controller.log_entry_added.connect(self._add_log_entry)
 
-        register_theme_listener(self._theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._theme_changed)
-        except Exception:
-            pass
-
     def _setup_ui(self):
         """设置UI"""
-        theme = get_theme()
+        theme = self.theme()
 
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -540,7 +506,7 @@ class ExecutionLogSection(QWidget):
         self._log_widgets.clear()
 
         # 恢复占位符
-        theme = get_theme()
+        theme = self.theme()
         self._placeholder = QLabel("执行过程中将显示日志...")
         self._placeholder.setStyleSheet(f"""
             QLabel {{
@@ -551,33 +517,26 @@ class ExecutionLogSection(QWidget):
         """)
         self._log_layout.insertWidget(0, self._placeholder)
 
-    def _theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """主题切换"""
-        theme = get_theme()
+        theme = self.theme()
 
         # 更新所有日志条目
         for widget in self._log_widgets:
-            widget.apply_theme()
+            widget._apply_theme_style()
 
 
-class LogEntryWidget(QWidget):
+class LogEntryWidget(ThemeAwareWidget):
     """单条日志条目"""
 
     def __init__(self, entry: LogEntry, controller: MonitoringController, parent=None):
-        super().__init__(parent)
         self._entry = entry
         self._controller = controller
+        super().__init__(parent)
         self._setup_ui()
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
 
     def _setup_ui(self):
-        theme = get_theme()
+        theme = self.theme()
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 2, 4, 2)
@@ -608,16 +567,12 @@ class LogEntryWidget(QWidget):
             self._duration_label.setStyleSheet(f"color: {theme.TEXT_SUBTLE}; font-size: 10px;")
             layout.addWidget(self._duration_label)
 
-    def apply_theme(self):
+    def _apply_theme_style(self) -> None:
         """应用当前主题"""
-        theme = get_theme()
+        theme = self.theme()
 
         self._time_label.setStyleSheet(f"color: {theme.TEXT_SUBTLE}; font-size: 10px;")
         self._message_label.setStyleSheet(f"color: {theme.TEXT}; font-size: 11px;")
 
         if hasattr(self, "_duration_label"):
             self._duration_label.setStyleSheet(f"color: {theme.TEXT_SUBTLE}; font-size: 10px;")
-
-    def _on_theme_changed(self):
-        """主题切换"""
-        self.apply_theme()

@@ -68,6 +68,7 @@ class DarkTheme:
     # === Message Bubbles ===
     USER_BUBBLE = "#1C3A5E"  # Trust blue user message
     USER_BUBBLE_OPACITY = 1.0
+    USER_BUBBLE_TEXT = "#FFFFFF"  # User bubble text color (white)
     ASSISTANT_BUBBLE = "#21262D"  # Neutral assistant message
 
     # === Avatar Colors ===

@@ -20,8 +20,9 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-from harness_client.themes import get_theme, register_theme_listener, unregister_theme_listener
+from harness_client.themes import get_theme
 from harness_client.ui.icons import create_image_icon, create_document_icon
+from harness_client.ui.theme_aware import ThemeAwareWidget
 
 logger = logging.getLogger(__name__)
 
@@ -56,21 +57,20 @@ def create_close_icon(size: int = 16, color: QColor = QColor("#FFFFFF")) -> QIco
     return QIcon(pixmap)
 
 
-class AttachmentCard(QWidget):
+class AttachmentCard(ThemeAwareWidget):
     """Single attachment preview card with remove button - compact inline version."""
 
     removed = pyqtSignal(str)  # attachment_id
 
     def __init__(self, attachment: dict, parent: QWidget | None = None):
-        super().__init__(parent)
         self._attachment = attachment
         self._id = attachment.get("id", "")
+        super().__init__(parent)
         self._setup_ui()
-        self._apply_theme()
 
     def _setup_ui(self):
         """Setup the card UI - compact size for inline display."""
-        theme = get_theme()
+        theme = self.theme()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(6)
@@ -115,22 +115,19 @@ class AttachmentCard(QWidget):
 
         layout.addWidget(self._remove_btn)
 
-        # Style the card
-        self._apply_theme()
-
     def _set_image_icon(self):
         """Set image icon."""
-        theme = get_theme()
+        theme = self.theme()
         self._icon_label.setPixmap(create_image_icon(16, QColor(theme.TEXT_SUBTLE)).pixmap(16, 16))
 
     def _set_document_icon(self):
         """Set document icon."""
-        theme = get_theme()
+        theme = self.theme()
         self._icon_label.setPixmap(create_document_icon(16, QColor(theme.TEXT_SUBTLE)).pixmap(16, 16))
 
-    def _apply_theme(self):
+    def _apply_theme_style(self) -> None:
         """Apply theme styling."""
-        theme = get_theme()
+        theme = self.theme()
         self.setStyleSheet(f"""
             AttachmentCard {{
                 background-color: {theme.COMPOSER};
@@ -158,6 +155,13 @@ class AttachmentCard(QWidget):
             }}
         """)
 
+        # Re-render icon
+        att_type = self._attachment.get("type", "document")
+        if att_type == "image":
+            self._set_image_icon()
+        else:
+            self._set_document_icon()
+
     def _on_remove(self):
         """Handle remove button click."""
         self.removed.emit(self._id)
@@ -166,18 +170,8 @@ class AttachmentCard(QWidget):
         """Get the attachment data."""
         return self._attachment
 
-    def _on_theme_changed(self):
-        """Handle theme change."""
-        self._apply_theme()
-        # Re-render icon
-        att_type = self._attachment.get("type", "document")
-        if att_type == "image":
-            self._set_image_icon()
-        else:
-            self._set_document_icon()
 
-
-class AttachmentPreview(QWidget):
+class AttachmentPreview(ThemeAwareWidget):
     """
     Attachment preview area for displaying attached files before sending.
     Compact inline design for integration inside input bar.
@@ -192,24 +186,15 @@ class AttachmentPreview(QWidget):
     attachments_changed = pyqtSignal()  # Emitted when attachments are added/removed
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
         self._attachments: list[dict] = []
         self._cards: dict[str, AttachmentCard] = {}
+        super().__init__(parent)
         self._setup_ui()
         self.setVisible(False)  # Hidden when empty
 
-        # Register theme listener
-        register_theme_listener(self._on_theme_changed)
-
-    def __del__(self):
-        try:
-            unregister_theme_listener(self._on_theme_changed)
-        except Exception:
-            pass
-
     def _setup_ui(self):
         """Setup the UI - compact inline version for input bar."""
-        theme = get_theme()
+        theme = self.theme()
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(24, 6, 24, 6)  # Match input bar margins
@@ -420,9 +405,9 @@ class AttachmentPreview(QWidget):
         else:
             self._title_label.setText(f"附件 ({count})")
 
-    def _on_theme_changed(self):
+    def _apply_theme_style(self) -> None:
         """Handle theme change."""
-        theme = get_theme()
+        theme = self.theme()
 
         self.setStyleSheet(f"""
             AttachmentPreview {{
@@ -453,4 +438,4 @@ class AttachmentPreview(QWidget):
 
         # Update all cards
         for card in self._cards.values():
-            card._on_theme_changed()
+            card._apply_theme_style()
