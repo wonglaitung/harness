@@ -118,7 +118,27 @@
 
 ## 2026-07-23 提取
 
+## 2026-07-24 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股有色金属+电力板块联动爆发 — 资源重估+降息对冲左侧信号**
+
+### 港股分析
+- **南向资金19.66%再创新高-左侧建仓信号持续升级-高股息标的右侧确认**
+
+### 港股分析
+- **美债4.70%突破4.6%红线确认-降息预期窗口关闭-科网股减仓防御升级**
+
+### 新范式/工具
+- **Long-Horizon Safety — 长时序模型安全对齐新范式** - https://openai.com/index/safety-alignment-long-horizon-models
+
+### 新范式/工具
+- **OneCLI — Agent凭证券换网关新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20OneCLI
+
+### 新范式/工具
+- **Cactus Hybrid — Probe-in-Checkpoint置信度自路由新范式** - https://news.ycombinator.com/item?id=Show%20HN%3A%20Cactus%20Hybrid
 
 ### 港股分析
 - **港股解禁高峰8000亿+多方承诺不减持-回购潮900亿对冲-左侧逆向机会与风险**
