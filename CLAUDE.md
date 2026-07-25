@@ -173,34 +173,84 @@ uv run harness-scraper agent "抓取 HN 上关于 MCP 的讨论"  # 自定义 pr
 
 ```
 packages/sdk/src/harness/
-├── sdk/
+├── sdk/                     # 主入口与配置
 │   ├── harness.py          # AgentHarness - 主入口
 │   └── config.py           # HarnessConfig - 配置类
-├── core/
+├── core/                    # 核心执行引擎
 │   ├── agent_loop.py       # ReAct 执行循环
 │   ├── step_budget.py      # 步骤预算控制
 │   ├── cost_controller.py  # 成本控制
 │   └── streaming.py        # 流式背压控制
-├── loop/                    # Loop Engineering (P0)
+├── loop/                    # Loop Engineering (目标驱动执行)
 │   ├── types.py            # GoalConfig, GoalResult, GoalStatus
 │   ├── goal.py             # GoalVerifier (无状态验证)
-│   └── goal_loop.py        # GoalLoop (目标驱动执行)
-├── llm/
+│   ├── goal_loop.py        # GoalLoop (目标驱动执行)
+│   ├── worktree_orchestrator.py  # 并行 worktree 编排
+│   ├── parallel_executor.py      # 并行执行引擎
+│   └── automation.py       # Automation 高级 API
+├── llm/                     # LLM 客户端
 │   ├── base.py             # LLMClient 接口
 │   ├── anthropic.py        # Claude
 │   └── openai.py           # OpenAI/兼容接口
-├── tools/
+├── tools/                   # 工具系统
 │   ├── base.py             # Tool 抽象类
-│   ├── builtins.py         # 内置工具
+│   ├── builtins.py         # 内置工具 (Read/Write/Edit/Bash/Glob/Grep/WebSearch/等)
 │   └── executor.py         # 工具执行器
-├── mcp/
+├── mcp/                     # MCP 协议集成
 │   ├── manager.py          # MCP 服务器管理
 │   ├── client.py           # MCP 客户端
 │   ├── transport.py        # Stdio/HTTP 传输
 │   └── tool_wrapper.py     # MCP 工具包装器
-└── security/
-    ├── sandbox.py          # 沙箱执行
-    └── validation.py       # 输入验证
+├── skills/                  # 技能系统
+│   ├── base.py             # Skill 基类
+│   ├── registry.py         # SkillRegistry
+│   ├── injector.py         # SkillInjector (系统提示注入)
+│   ├── loader.py           # SkillLoader
+│   └── progressive.py      # ProgressiveSkillLoader (渐进式加载)
+├── memory/                  # 记忆系统
+│   ├── session.py          # SessionManager
+│   ├── store.py            # FileSessionStore / SQLiteSessionStore
+│   ├── vector_store.py     # VectorMemoryStore (语义搜索)
+│   ├── context_builder.py  # ContextBuilder
+│   ├── manager.py          # MemoryManager (跨会话持久化)
+│   └── compressor.py       # ContextCompressor
+├── guardrails/              # 安全护栏 (PII 检测)
+│   ├── chinese_guardrail.py     # 中文 PII 过滤核心
+│   ├── chinese_pii_recognizers.py  # 国内手机/身份证/银行卡等识别器
+│   ├── chinese_name_recognizer.py  # 中文姓名识别
+│   ├── judge.py             # LLM Judge (Layer 2 语义检测)
+│   ├── hook.py              # GuardrailHook
+│   ├── stream_interceptor.py # 流式输出拦截
+│   └── config.py            # GuardrailConfig
+├── triggers/                # 触发器系统
+│   ├── base.py             # 触发器基类
+│   ├── cron.py             # CronTrigger
+│   ├── interval.py         # IntervalTrigger
+│   └── manager.py          # TriggerManager
+├── connectors/              # 外部连接器
+│   ├── base.py             # Connector 接口
+│   ├── slack.py            # Slack 集成
+│   ├── github.py           # GitHub 集成
+│   ├── webhook.py          # Webhook
+│   └── manager.py          # ConnectorManager
+├── orchestrator/            # 多 Agent 编排
+│   ├── team_orchestrator.py # TeamOrchestrator (多角色协作)
+│   ├── workflow_engine.py  # WorkflowEngine (多步骤工作流)
+│   ├── dependency_graph.py # 依赖解析
+│   └── monitor.py          # 执行监控
+├── service/                 # 微服务模式
+│   ├── discovery.py        # 服务发现
+│   ├── error_handler.py    # 错误处理
+│   ├── metrics.py          # Prometheus 指标
+│   ├── tracing.py          # OpenTelemetry 跟踪
+│   └── store_redis.py      # Redis 存储
+├── security/                # 安全
+│   ├── sandbox.py          # 沙箱执行
+│   └── validation.py       # 输入验证
+└── testing/                 # 测试工具
+    ├── mock_harness.py     # MockHarness
+    ├── recording.py        # 录制/回放
+    └── pytest_plugin.py    # Pytest 插件
 ```
 
 ### 客户端架构
@@ -298,6 +348,28 @@ Python SDK 和 Java SDK 定位不同：
 | Java | 嵌入式库 | 无 HTTP 端点，应用直接调用 AgentHarness |
 
 **功能同步率 99.5%**，未实现的 0.5% 是框架依赖差异（如 Java 用同步 JDBC，无 AsyncSQLiteSessionStore）。
+
+### Java SDK 模块
+
+```
+packages/sdk-java/
+├── harness-sdk-core          # 核心：AgentLoop, HarnessConfig, CostController
+├── harness-sdk-llm           # LLM 客户端 (Anthropic, OpenAI)
+├── harness-sdk-tools         # 工具系统 (ReadTool, WriteTool, BashTool, WebSearchTool 等)
+├── harness-sdk-mcp           # MCP 协议集成 (McpManager, McpClient)
+├── harness-sdk-memory        # 记忆系统 (SessionManager, VectorStore)
+├── harness-sdk-skills        # 技能系统 (SkillRegistry, SkillInjector, ProgressiveLoader)
+├── harness-sdk-triggers      # 触发器 (CronTrigger, IntervalTrigger)
+├── harness-sdk-connectors    # 连接器 (Slack, GitHub, Webhook)
+├── harness-sdk-orchestrator  # 多 Agent 编排 (TeamOrchestrator, WorkflowEngine)
+├── harness-sdk-loop          # Loop Engineering (GoalLoop, Automation)
+├── harness-sdk-guardrails    # 安全护栏 (Chinese PII, ComplianceJudge)
+├── harness-sdk-security      # 安全 (沙箱, 验证)
+├── harness-sdk-integration   # 集成入口 (AgentHarness, AgentLoop)
+└── harness-sdk-all           # Shadow JAR 聚合模块
+```
+
+**构建方式**：使用 snap 安装的 gradle，不要使用 `./gradlew`。
 
 ---
 
@@ -496,9 +568,16 @@ uv run python build.py
 
 ## 📝 会话工作流
 
-**会话开始时**：读取 `progress.txt` 了解项目进展，审查 `lessons.md` 检查错误
+**会话开始时**：
+- 读取 `progress.txt`（优先关注最后 50 行了解最新进展）
+- 审查 `lessons.md` 检查已记录的错误
+- 检查 `/home/marcowong/.claude/plans/` 目录看是否有未完成的计划
 
-**功能更新后**：更新 `progress.txt` 记录进展，如有新学习心得更新 `lessons.md`
+**功能更新后**：
+- 更新 `progress.txt` 记录进展
+- 如有新学习心得更新 `lessons.md`
+
+**提交规范**：遵循 Conventional Commits（`feat:`、`fix:`、`refactor:`、`docs:`、`chore:` 等）
 
 ---
 

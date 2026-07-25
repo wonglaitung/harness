@@ -20,9 +20,10 @@ Agent = Model + Harness
 - **记忆系统** — 跨会话持久化记忆，支持去重和内容提炼
 - **Loop Engineering** — 目标驱动执行，Agent 自主运行直到目标达成
 - **触发器系统** — Cron/Interval 定时触发，自动化任务调度
-- **工作流编排** — 多步骤工作流，依赖解析，并行执行
+- **多 Agent 编排** — TeamOrchestrator 多角色协作，并行 Worktree 执行
 - **外部集成** — GitHub、Slack、Webhook 连接器
 - **安全沙箱** — 命令验证、注入检测、审计日志
+- **安全护栏** — 中文 PII 检测（手机号、身份证、银行卡等），支持 LLM Judge 语义检测
 - **成本控制** — Token 预算管理、熔断机制
 - **中断恢复** — 保存快照、断点续传
 - **可观测性** — OpenTelemetry 集成
@@ -493,7 +494,7 @@ manager.stop().join();
 | [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK (99.5% 功能同步) |
 | [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
-| [packages/scraper/](packages/scraper/) | harness-scraper — 智能文档爬取工具 |
+| [packages/scraper/](packages/scraper/) | harness-scraper — AI 情报抽取与港股 Alpha 监控 |
 
 ### 代码库统计（Graph 分析）
 
