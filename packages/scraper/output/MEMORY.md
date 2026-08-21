@@ -120,7 +120,54 @@
 
 ## 2026-07-24 提取
 
+## 2026-08-22 提取
+
 ## 注意事项
+
+### 港股分析
+- **港交所政策松绑 — 上市有效期延长+指数扩容左侧信号** - http://finance.eastmoney.com/a/202608213849504789.html
+
+### 港股分析
+- **港股创新药板块 — Moderna催化+政策松绑左侧信号**
+
+### 港股分析
+- **美债10Y 4.74%高位 — 降息预期左侧布局窗口**
+
+### 新范式/工具
+- **Strix — 自主 AI 渗透测试 Agent 新范式** - https://github.com/usestrix/strix
+
+### 新范式/工具
+- **Semantica** - https://github.com/semantica-agi/semantica
+
+### 新范式/工具
+- **Apache Maka：Log is the Runtime — Agent 事件溯源运行时新范式** - https://github.com/apache/maka
+
+### 新范式/工具
+- **Huzzah：Pseudocode-as-Source — 声明式 AI 编程新范式** - https://www.danielvaughn.dev/posts/huzzah/
+
+### 新范式/工具
+- **Apache Maka — Log is the Runtime：Agent 事件溯源运行时** - https://github.com/apache/maka
+
+### 新范式/工具
+- **Huzzah — Pseudocode-as-Source 声明式AI编程新范式** - https://www.danielvaughn.dev/posts/huzzah/
+
+### 新范式/工具
+- **Anthropic Cybersecurity Skills — 领域结构化技能库** - https://github.com/mukul975/Anthropic-Cybersecurity-Skills
+
+### 新范式/工具
+- **AI-Infra-Guard — 全栈AI安全红队统一平台** - https://github.com/Tencent/AI-Infra-Guard
+
+### 新范式/工具
+- **Shoehorn — 硬件预算驱动的混合精度量化新范式** - https://github.com/nicholasgasior/shoehorn
+
+### 新范式/工具
+- **Felony Bench — AI Agent 现实安全事件追踪基准新范式** - https://www.felonybench.com/
+
+### 新范式/工具
+- **Apache Maka: Agent 事件溯源运行时** - https://github.com/apache/maka
+
+### 新范式/工具
+- **Huzzah — Pseudocode-as-Source：声明式 AI 编程新范式** - https://www.danielvaughn.dev/posts/huzzah/
 
 ### 港股分析
 - **港股有色金属+电力板块联动爆发 — 资源重估+降息对冲左侧信号**
