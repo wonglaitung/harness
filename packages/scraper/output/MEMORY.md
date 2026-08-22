@@ -122,7 +122,45 @@
 
 ## 2026-08-22 提取
 
+## 2026-08-23 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债10Y 4.74%高位持续 — 信号演进与科网股左侧布局窗口** - https://finance.yahoo.com/bonds
+
+### 港股分析
+- **恒指重大调整-被动资金建仓左侧机会** - http://finance.eastmoney.com/a/202608213849575855.html
+
+### 港股分析
+- **港股AI大模型概念-智谱MINIMAX异动左侧信号** - http://finance.eastmoney.com/a/202608213849219294.html
+
+### 新范式/工具
+- **Apache Maka — Log is the Runtime：Agent 事件溯源运行时新范式** - https://github.com/apache/maka
+
+### 新范式/工具
+- **Munder Difflin — Agent Hive Mind：个体克隆+端到端加密多Agent协作新范式** - https://munderdiffl.in/
+
+### 新范式/工具
+- **Graphify — Code-as-Knowledge-Graph 知识图谱编译器新范式** - https://github.com/Graphify-Labs/graphify
+
+### 新范式/工具
+- **Huzzah — Pseudocode-as-Source 声明式 AI 编程新范式** - https://www.danielvaughn.dev/posts/huzzah/
+
+### 新范式/工具
+- **Graphify — Code-as-Knowledge-Graph 确定性代码编译新范式** - https://github.com/trending/python
+
+### 新范式/工具
+- **Munder Difflin — Multi-Agent Hive Mind 协作新范式** - https://munderdiffl.in/
+
+### 新范式/工具
+- **Hermes Agent — 自成长 Agent 闭合学习循环新范式** - https://github.com/NousResearch/hermes-agent
+
+### 新范式/工具
+- **OpenViking — Context Database：Agent上下文管理新范式** - https://github.com/volcengine/OpenViking
+
+### 新范式/工具
+- **Huzzah: Pseudocode-as-Source — 声明式 AI 编程新范式** - https://www.danielvaughn.dev/posts/huzzah/
 
 ### 港股分析
 - **港交所政策松绑 — 上市有效期延长+指数扩容左侧信号** - http://finance.eastmoney.com/a/202608213849504789.html
