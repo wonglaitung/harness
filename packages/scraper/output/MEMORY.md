@@ -124,7 +124,27 @@
 
 ## 2026-08-23 提取
 
+## 2026-08-24 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向资金加码+恒生科技含科量提升 - 右侧共振确认信号** - http://finance.eastmoney.com/a/202608243850438328.html
+
+### 港股分析
+- **美债10Y 4.74% T+3连续确认 - 降息预期左侧窗口信号升级** - https://finance.yahoo.com/bonds
+
+### 港股分析
+- **具身智能产业链 - 50+企业扎堆港股IPO政策松绑左侧信号** - http://finance.eastmoney.com/a/202608233850425315.html
+
+### 港股分析
+- **阿里巴巴(09988) - 800亿港元首次配售AI军备竞赛左侧信号** - http://finance.eastmoney.com/a/202608233850317078.html
+
+### 新范式/工具
+- **Apache Maka** - https://github.com/apache/maka
+
+### 新范式/工具
+- **Huzzah — Pseudocode-as-Source** - https://www.danielvaughn.dev/posts/huzzah/
 
 ### 港股分析
 - **美债10Y 4.74%高位持续 — 信号演进与科网股左侧布局窗口** - https://finance.yahoo.com/bonds
