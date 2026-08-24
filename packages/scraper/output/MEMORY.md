@@ -126,7 +126,30 @@
 
 ## 2026-08-24 提取
 
+## 2026-08-25 提取
+
 ## 注意事项
+
+### 港股分析
+- **智谱MINIMAX暴跌超10pct-大模型双雄二次探底左侧逆向机会**
+
+### 港股分析
+- **阿里800亿配售暴跌-股价击穿配售价-左侧逆向机会**
+
+### 港股分析
+- **港股通115亿净买入-南向持股创新高右侧超强确认**
+
+### 港股分析
+- **美债10Y 4.70%首次回落 — T+4降息预期左侧窗口关键拐点确认** - https://finance.yahoo.com/bonds
+
+### 新范式/工具
+- **Semantica — Graph-Native Context Infrastructure：AI Agent决策追溯新范式** - https://github.com/semantica-agi/semantica
+
+### 新范式/工具
+- **OpenViking — Context Database：Agent上下文确定性检索新范式** - https://github.com/volcengine/OpenViking
+
+### 新范式/工具
+- **OpenViking — Context Database：Agent 上下文数据库新范式** - https://github.com/volcengine/OpenViking
 
 ### 港股分析
 - **南向资金加码+恒生科技含科量提升 - 右侧共振确认信号** - http://finance.eastmoney.com/a/202608243850438328.html
