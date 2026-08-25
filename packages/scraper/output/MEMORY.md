@@ -128,7 +128,24 @@
 
 ## 2026-08-25 提取
 
+## 2026-08-26 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向资金连续净买入 — MINIMAX/腾讯/美团三股右侧确认信号**
+
+### 港股分析
+- **港股生物医药 — 首次定位"新兴支柱产业"政策松绑左侧信号**
+
+### 港股分析
+- **美债10Y 4.64% T+5连续回落 — 降息预期左侧窗口全面打开**
+
+### 新范式/工具
+- **ALTK-Evolve：Agent 记忆剂量校准新范式** - https://huggingface.co/blog/ibm-research/altk-evolve-hmm
+
+### 新范式/工具
+- **Quantization-Aware Healing (QAH)** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
 
 ### 港股分析
 - **智谱MINIMAX暴跌超10pct-大模型双雄二次探底左侧逆向机会**
