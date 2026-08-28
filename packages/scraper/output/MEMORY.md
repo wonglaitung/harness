@@ -132,7 +132,27 @@
 
 ## 2026-08-27 提取
 
+## 2026-08-28 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向持股271只超20pct-覆盖扩大至历史新高-右侧超强确认升级**
+
+### 港股分析
+- **港交所(00388) — GEM合并+18D章初创通道—历史性改革左侧政策松绑信号 🔥🔥🔥** - http://finance.eastmoney.com/a/202608283857966397.html
+
+### 港股分析
+- **美债10Y-467-t7反弹承压-天齐锂业49倍净利润-降息窗口与资源周期双左侧**
+
+### 新范式/工具
+- **Browser Harness — 自愈式 Agent-浏览器交互新范式** - https://github.com/trending/python
+
+### 新范式/工具
+- **LatticeDB — 嵌入式三合一数据库（图+向量+全文）新范式** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Quantization-Aware Healing (QAH) — 4-bit 模型超越全精度的量化修复新范式** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
 
 ### 港股分析
 - **南向持股1961高位-267只标的超20pct-右侧超强确认**
