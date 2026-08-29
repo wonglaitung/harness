@@ -134,7 +134,27 @@
 
 ## 2026-08-28 提取
 
+## 2026-08-29 提取
+
 ## 注意事项
+
+### 港股分析
+- **美债10Y 4.72% T+8三日加速反弹 — 降息窗口濒临关闭 ⚠️⚠️⚠️**
+
+### 新范式/工具
+- **ALTK-Evolve — Agent 记忆剂量校准新范式** - https://huggingface.co/blog/ibm-research/altk-evolve-hmm
+
+### 新范式/工具
+- **Strands + LeRobot + Storage Buckets — 机器人 Agent 闭环数据循环** - https://huggingface.co/blog/amazon/strands-lerobot-streaming-data-loop
+
+### 新范式/工具
+- **Browser Harness — 自愈式 Agent-浏览器交互新范式** - https://github.com/browser-use/browser-harness
+
+### 新范式/工具
+- **Experiential — Agent流量驱动模型路由新范式** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **LatticeDB — Embedded Property-Graph + Vector + Full-Text Database** - https://news.ycombinator.com/show
 
 ### 港股分析
 - **南向持股271只超20pct-覆盖扩大至历史新高-右侧超强确认升级**
