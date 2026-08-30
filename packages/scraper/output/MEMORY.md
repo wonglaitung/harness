@@ -136,7 +136,33 @@
 
 ## 2026-08-29 提取
 
+## 2026-08-30 提取
+
 ## 注意事项
+
+### 港股分析
+- **中际旭创(03308)调入港股通 — AI算力基建右侧确认信号** - http://finance.eastmoney.com/a/202608283857516347.html
+
+### 港股分析
+- **港股生物医药IPO扎堆 — 政策松绑+产业资本左侧信号**
+
+### 港股分析
+- **港交所科技100指数AI扩容 - 被动资金建仓左侧信号**
+
+### 港股分析
+- **美债10Y-4.72%-T9反弹暂停-降息窗口临界转折**
+
+### 新范式/工具
+- **QAH — 量化感知修复：4-bit 模型超越全精度新范式** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
+
+### 新范式/工具
+- **Lemmalog — Datalog 结构化 Agent 记忆新范式** - https://pwning.systems/posts/llm-memory-program-analysis/
+
+### 新范式/工具
+- **Experiential — 流量驱动模型路由新范式** - https://news.ycombinator.com/item?id=Show+HN
+
+### 新范式/工具
+- **OpenMontage — Agentic Video Production 新范式** - https://github.com/trending/python
 
 ### 港股分析
 - **美债10Y 4.72% T+8三日加速反弹 — 降息窗口濒临关闭 ⚠️⚠️⚠️**
