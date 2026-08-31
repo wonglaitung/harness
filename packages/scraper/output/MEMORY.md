@@ -138,7 +138,33 @@
 
 ## 2026-08-30 提取
 
+## 2026-08-31 提取
+
 ## 注意事项
+
+### 港股分析
+- **智谱(02513)纳入MSCI中国指数-右侧超强确认-AI港股获国际资本认证**
+
+### 港股分析
+- **港股配售潮2779亿同比+41% — AI军备竞赛产业资本左侧信号**
+
+### 港股分析
+- **美债10Y-472-T10连续持平-降息窗口临界延续**
+
+### 港股分析
+- **基石投资962笔同比+269% — 机构押注港股新经济最强左侧信号**
+
+### 新范式/工具
+- **Agent Civilizations — 自组织Agent社会涌现新范式 🔥🔥🔥** - https://www.dwarkesh.com/p/openai-huggingface
+
+### 新范式/工具
+- **Experiential — Traffic-Driven Model Routing** - https://news.ycombinator.com/show — Show HN 220 points
+
+### 新范式/工具
+- **LatticeDB — 嵌入式三合一数据库（图+向量+全文）新范式** - https://news.ycombinator.com/item?id=Show+HN%3A+LatticeDB
+
+### 新范式/工具
+- **GitNexus：预计算关系智能 — AI Agent 代码上下文新范式** - https://github.com/abhigyanpatwari/GitNexus
 
 ### 港股分析
 - **中际旭创(03308)调入港股通 — AI算力基建右侧确认信号** - http://finance.eastmoney.com/a/202608283857516347.html
