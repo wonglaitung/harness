@@ -140,7 +140,36 @@
 
 ## 2026-08-31 提取
 
+## 2026-09-01 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向持股19.60pct微升-268只覆盖缩减-信号分化**
+
+### 港股分析
+- **港股机器人IPO潮加速-优地18C+迦智递表双信号**
+
+### 港股分析
+- **美债10y-476-t12高位盘整-突破后方向选择**
+
+### 港股分析
+- **希音SHEIN暗盘破发-左侧逆向机会与风险**
+
+### 港股分析
+- **港股内房股全线走强-政策松绑左侧信号**
+
+### 港股分析
+- **美债10Y-476-T11突破前高-降息窗口正式关闭**
+
+### 新范式/工具
+- **Scientific Agent Skills - AI 科学家的 163 技能库** - https://github.com/K-Dense-AI/scientific-agent-skills
+
+### 新范式/工具
+- **OpenMAIC — 多Agent互动课堂：Agent原生教育新范式** - https://github.com/THU-MAIC/OpenMAIC
+
+### 新范式/工具
+- **Memoryfields：Agent记忆即文件格式新范式** - https://calpaterson.com/memoryfields.html
 
 ### 港股分析
 - **智谱(02513)纳入MSCI中国指数-右侧超强确认-AI港股获国际资本认证**
