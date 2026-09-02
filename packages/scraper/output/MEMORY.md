@@ -144,7 +144,30 @@
 
 ## 2026-09-02 提取
 
+## 2026-09-03 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股中资券商股集体暴跌-利率压制恐慌左侧逆向机会**
+
+### 港股分析
+- **微创系四家集体停牌-医疗板块恐慌左侧逆向机会**
+
+### 港股分析
+- **美债10Y-4.80%-T13连续持平-筑顶信号初现** - https://finance.yahoo.com/bonds
+
+### 新范式/工具
+- **QAH — 量化感知修复：4-bit模型超越全精度新范式** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
+
+### 新范式/工具
+- **HyperFrames — HTML→Video Agent原生视频渲染新范式** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **OpenMAIC — Agent原生多智能体互动课堂** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Hermes Agent — 自成长Agent闭环学习循环** - https://github.com/trending/python
 
 ### 港股分析
 - **港股IPO优质资产供给扩容-产业资本与南向双重左侧信号**
