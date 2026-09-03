@@ -146,7 +146,42 @@
 
 ## 2026-09-03 提取
 
+## 2026-09-04 提取
+
 ## 注意事项
+
+### 港股分析
+- **恒指高开低走-美债4.76-T14筑顶确认-宏观共振信号**
+
+### 港股分析
+- **港股芯片股逆势走强-天数智芯涨8pct-台积电扩产右侧确认信号**
+
+### 港股分析
+- **港股汽车板块集体暴跌-利率恐慌左侧逆向机会** - http://finance.eastmoney.com/a/202609023862664910.html
+
+### 港股分析
+- **希音00625-暴跌8pct纳入恒生综指前的恐慌左侧逆向机会**
+
+### 港股分析
+- **港股创新药板块持续走强 — 商业化兑现右侧共振 🔥🔥🔥** - http://finance.eastmoney.com/a/202609033863983275.html
+
+### 港股分析
+- **智谱02513-摩根大通目标价2000港元-AI赛道右侧超强确认**
+
+### 港股分析
+- **美债10Y 4.76% T+14 — 从4.80%首次回落，筑顶信号强化** - https://finance.yahoo.com/bonds
+
+### 新范式/工具
+- **Agent Skills 标准 — Agent能力扩展开放协议** - https://agentskills.io/home
+
+### 新范式/工具
+- **Hermes Agent — 自成长Agent闭合学习循环** - https://github.com/NousResearch/hermes-agent
+
+### 新范式/工具
+- **K2 Horizon — 全开放Agent模型舰队 + MoVA架构** - https://ifm.ai/blog/k2/
+
+### 新范式/工具
+- **Funes — Agent记忆即数据集：跨Agent持久化记忆新范式** - https://huggingface.co/blog/funes
 
 ### 港股分析
 - **港股中资券商股集体暴跌-利率压制恐慌左侧逆向机会**
