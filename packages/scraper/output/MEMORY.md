@@ -148,7 +148,33 @@
 
 ## 2026-09-04 提取
 
+## 2026-09-05 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股通54股调入-百度南向通道打开-智能驾驶双左侧信号**
+
+### 港股分析
+- **希音暴跌9pct-累计跌幅25pct-纳入综指前左侧逆向机会升级**
+
+### 港股分析
+- **美债10Y-478-T15反弹回测-回购潮南向扩容对冲**
+
+### 港股分析
+- **腾讯连续14日回购-港股年内回购逾千亿-最强左侧信号**
+
+### 新范式/工具
+- **BenchMIRT** - https://huggingface.co/blog/allenai/benchmirt
+
+### 新范式/工具
+- **Slotstream — MoE Expert Slot Streaming** - https://news.ycombinator.com/item?id=49524447
+
+### 新范式/工具
+- **LoopX — Agent Loop Engineering Control Plane** - https://github.com/trending/python (2026-09-05 daily)
+
+### 新范式/工具
+- **NeoMME** - https://huggingface.co/blog/Hcompany/neomme
 
 ### 港股分析
 - **恒指高开低走-美债4.76-T14筑顶确认-宏观共振信号**
