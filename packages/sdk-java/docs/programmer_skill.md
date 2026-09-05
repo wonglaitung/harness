@@ -174,14 +174,13 @@ Rich Sutton 指出，AI 历史上最大的突破都来自于"利用大规模计�
 - 文档可能过时或不完整，代码是真实状态
 - 使用类型检查工具（mypy）在编译期发现问题
 
-```python
-# ❌ 按文档写（文档可能过时）
-return ToolResult.ok(content)
+```java
+// ❌ 按文档写（文档可能过时）
+return ToolResult.ok(content);
 
-# ✅ 先检查实际实现
-# python -c "from harness.types import ToolResult; print(hasattr(ToolResult, 'ok'))"
-# 如果返回 False，按实际实现写
-return ToolResult(success=True, content=content)
+// ✅ 先检查实际实现
+// 如果 ToolResult 没有 ok() 方法，按实际实现写
+return new ToolResult(true, content);
 ```
 
 **检验标准**：每一行修改都应该能直接追溯到用户的请求
@@ -210,21 +209,24 @@ return ToolResult(success=True, content=content)
 **常见错误案例**：
 
 **案例 1：API 消息格式假设错误**
-```python
-# ❌ 错误：凭经验假设 API 有 role: "tool"（OpenAI 有，但 Anthropic 没有）
-{"role": "tool", "content": "file contents"}
+```java
+// ❌ 错误：凭经验假设 API 有 role: "tool"（OpenAI 有，但 Anthropic 没有）
+Map<String, Object> wrongMessage = Map.of(
+    "role", "tool",
+    "content", "file contents"
+);
 
-# ✅ 正确：查阅 Anthropic 文档发现工具结果是 user 角色 + tool_result block
-{
-    "role": "user",
-    "content": [
-        {
-            "type": "tool_result",
-            "tool_use_id": "toolu_123",
-            "content": "file contents"
-        }
-    ]
-}
+// ✅ 正确：查阅 Anthropic 文档发现工具结果是 user 角色 + tool_result block
+Map<String, Object> correctMessage = Map.of(
+    "role", "user",
+    "content", List.of(
+        Map.of(
+            "type", "tool_result",
+            "tool_use_id", "toolu_123",
+            "content", "file contents"
+        )
+    )
+);
 ```
 
 **案例 2：框架 CSS 能力假设错误**
@@ -339,16 +341,16 @@ return ToolResult(success=True, content=content)
 - 避免过于具体的断言（如精确字符串匹配）
 - 使用包含检查、前缀检查等适度断言
 
-```python
-# ❌ 过于具体，容易因格式变化而失败
-assert result == "exact string"
-assert result == "[REDACTED] email [REDACTED] phone"
+```java
+// ❌ 过于具体，容易因格式变化而失败
+assert result.equals("exact string");
+assert result.equals("[REDACTED] email [REDACTED] phone");
 
-# ✅ 检查核心行为
-assert "[REDACTED]" in result
-assert result.startswith("expected_prefix")
-assert len(result) > 0
-assert "error" not in result.lower()
+// ✅ 检查核心行为
+assert result.contains("[REDACTED]");
+assert result.startsWith("expected_prefix");
+assert !result.isEmpty();
+assert !result.toLowerCase().contains("error");
 ```
 
 **类型一致性**：
@@ -361,11 +363,11 @@ assert "error" not in result.lower()
 当遇到 UI 组件行为异常时，遵循以下调试流程：
 
 1. **添加调试日志定位问题层级**
-   ```python
-   # 打印各层组件的尺寸，定位问题在哪一层
-   logger.debug(f"Content label size: {content_width}x{content_height}")
-   logger.debug(f"Scroll area size: {scroll_area.width()}x{scroll_area.height()}")
-   logger.debug(f"Parent widget size: {self.width()}x{self.height()}")
+   ```java
+   // 打印各层组件的尺寸，定位问题在哪一层
+   logger.debug("Content label size: {}x{}", contentWidth, contentHeight);
+   logger.debug("Scroll area size: {}x{}", scrollArea.getWidth(), scrollArea.getHeight());
+   logger.debug("Parent widget size: {}x{}", this.getWidth(), this.getHeight());
    ```
 
 2. **验证方案而非假设**
@@ -540,29 +542,34 @@ assert "error" not in result.lower()
 - 同步复杂：需要手动协调多个存储点
 
 **正确做法**：
-```python
-# ❌ 错误：状态分散在多处
-class Controller:
-    _session_id: str
-    _session_cache: dict
+```java
+// ❌ 错误：状态分散在多处
+public class Controller {
+    private String sessionId;
+    private Map<String, Session> sessionCache;
+}
 
-class Panel:
-    _current_session_id: str  # 重复存储！
+public class Panel {
+    private String currentSessionId;  // 重复存储！
+}
 
-# ✅ 正确：单一数据源
-class SessionManager:
-    _sessions: dict
-    _current_id: str | None
+// ✅ 正确：单一数据源
+public class SessionManager {
+    private Map<String, Session> sessions;
+    private String currentId;
 
-    def get_current() -> Session | None
-    def switch_to(session_id) -> bool
+    public Session getCurrent() { ... }
+    public boolean switchTo(String sessionId) { ... }
+}
 
-class Controller:
-    session_manager: SessionManager  # 唯一数据源
+public class Controller {
+    private SessionManager sessionManager;  // 唯一数据源
+}
 
-class Panel:
-    # 不存储状态，只负责渲染
-    def update_sessions(self, current, history): ...
+public class Panel {
+    // 不存储状态，只负责渲染
+    public void updateSessions(Session current, List<Session> history) { ... }
+}
 ```
 
 **验证方法**：
@@ -580,32 +587,39 @@ class Panel:
 - 数据逻辑散落在 UI 代码中
 
 **正确做法**：
-```python
-# ❌ 错误：UI 组件做数据操作
-class SidebarPanel:
-    _current_session_id: str
+```java
+// ❌ 错误：UI 组件做数据操作
+public class SidebarPanel {
+    private String currentSessionId;
 
-    def switch_to_session(self, session_id):
-        # 交换列表项的 ID...数据操作！
-        current_item.setData(session_id)
-        target_item.setData(self._current_session_id)
+    public void switchToSession(String sessionId) {
+        // 交换列表项的 ID...数据操作！
+        currentItem.setData(sessionId);
+        targetItem.setData(this.currentSessionId);
+    }
+}
 
-# ✅ 正确：UI 只负责渲染
-class SidebarPanel:
-    # 不存储 _current_session_id
+// ✅ 正确：UI 只负责渲染
+public class SidebarPanel {
+    // 不存储 currentSessionId
 
-    def update_sessions(self, current, history):
-        """被动接收数据，只负责渲染"""
-        self.session_list.clear()
-        self.session_list.addItem(f"🔵 {current.name}")
-        for s in history:
-            self.session_list.addItem(f"📄 {s.name}")
+    public void updateSessions(Session current, List<Session> history) {
+        // 被动接收数据，只负责渲染
+        sessionList.clear();
+        sessionList.addItem("🔵 " + current.getName());
+        for (Session s : history) {
+            sessionList.addItem("📄 " + s.getName());
+        }
+    }
+}
 
-# 数据操作在数据层
-class MainWindow:
-    def _on_session_switch(self, session_id):
-        self.session_manager.switch_to(session_id)
-        self._refresh_session_list()  # 通知 UI 更新
+// 数据操作在数据层
+public class MainWindow {
+    public void onSessionSwitch(String sessionId) {
+        sessionManager.switchTo(sessionId);
+        refreshSessionList();  // 通知 UI 更新
+    }
+}
 ```
 
 **验证方法**：
@@ -618,35 +632,45 @@ class MainWindow:
 **核心原则**：如果组件初始化但未使用，要么完成实现，要么删除。
 
 **常见错误**：
-```python
-class AgentLoop:
-    def __init__(self):
-        self._error_handler = ErrorHandler()  # 初始化了
+```java
+public class AgentLoop {
+    private ErrorHandler errorHandler;
 
-    async def run(self):
-        try:
-            ...
-        except Exception as e:
-            # 没用 _error_handler，硬编码处理
-            if "rate limit" in str(e):
-                retry()
+    public AgentLoop() {
+        this.errorHandler = new ErrorHandler();  // 初始化了
+    }
+
+    public void run() {
+        try {
+            // ...
+        } catch (Exception e) {
+            // 没用 errorHandler，硬编码处理
+            if (e.getMessage().contains("rate limit")) {
+                retry();
+            }
+        }
+    }
+}
 ```
 
 **正确做法**：
-```python
-# 选项1：完成实现
-async def run(self):
-    try:
-        ...
-    except Exception as e:
-        decision = self._error_handler.handle(e)
-        if decision.action == ErrorAction.RETRY:
-            ...
+```java
+// 选项1：完成实现
+public void run() {
+    try {
+        // ...
+    } catch (Exception e) {
+        ErrorDecision decision = errorHandler.handle(e);
+        if (decision.action() == ErrorAction.RETRY) {
+            // ...
+        }
+    }
+}
 
-# 选项2：删除未使用的组件
-def __init__(self):
-    # 删除 self._error_handler = ErrorHandler()
-    pass
+// 选项2：删除未使用的组件
+public class AgentLoop {
+    // 删除 private ErrorHandler errorHandler = new ErrorHandler();
+}
 ```
 
 **检查方法**：
@@ -675,15 +699,15 @@ system (可选，仅第一位)
 → ...
 ```
 
-```python
-# ✅ 正确的 OpenAI 消息序列
-messages = [
-    {"role": "system", "content": "You are helpful."},
-    {"role": "user", "content": "List files"},
-    {"role": "assistant", "content": "", "tool_calls": [...]},
-    {"role": "tool", "tool_call_id": "call_123", "content": "file1.py"},
-    {"role": "assistant", "content": "Found 1 file."},
-]
+```java
+// ✅ 正确的 OpenAI 消息序列
+List<Map<String, Object>> messages = List.of(
+    Map.of("role", "system", "content", "You are helpful."),
+    Map.of("role", "user", "content", "List files"),
+    Map.of("role", "assistant", "content", "", "tool_calls", List.of(...)),
+    Map.of("role", "tool", "tool_call_id", "call_123", "content", "file1.py"),
+    Map.of("role", "assistant", "content", "Found 1 file.")
+);
 ```
 
 #### Anthropic API 消息结构
@@ -699,35 +723,37 @@ system (单独参数，不在 messages 中)
 → ...
 ```
 
-```python
-# ✅ 正确的 Anthropic 消息序列
-messages = [
-    {"role": "user", "content": "List files"},
-    {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_123", ...}]},
-    {"role": "user", "content": [
-        {"type": "tool_result", "tool_use_id": "toolu_123", "content": "file1.py"}
-    ]},
-    {"role": "assistant", "content": "Found 1 file."},
-]
+```java
+// ✅ 正确的 Anthropic 消息序列
+List<Map<String, Object>> messages = List.of(
+    Map.of("role", "user", "content", "List files"),
+    Map.of("role", "assistant", "content", List.of(
+        Map.of("type", "tool_use", "id", "toolu_123")
+    )),
+    Map.of("role", "user", "content", List.of(
+        Map.of("type", "tool_result", "tool_use_id", "toolu_123", "content", "file1.py")
+    )),
+    Map.of("role", "assistant", "content", "Found 1 file.")
+);
 ```
 
 #### 常见错误
 
-```python
-# ❌ 错误：凭假设认为 Anthropic 有 role: "tool"
-messages = [
-    {"role": "user", "content": "List files"},
-    {"role": "assistant", ...},
-    {"role": "tool", "content": "file1.py"},  # Anthropic 不支持！
-]
+```java
+// ❌ 错误：凭假设认为 Anthropic 有 role: "tool"
+List<Map<String, Object>> wrongMessages = List.of(
+    Map.of("role", "user", "content", "List files"),
+    Map.of("role", "assistant", ...),
+    Map.of("role", "tool", "content", "file1.py")  // Anthropic 不支持！
+);
 
-# ❌ 错误：消息未持久化，第二次迭代丢失
-# 第一次：临时添加 user message 到 context
-# 第二次：session.messages 中没有 user message → 丢失！
+// ❌ 错误：消息未持久化，第二次迭代丢失
+// 第一次：临时添加 user message 到 context
+// 第二次：session.messages 中没有 user message → 丢失！
 
-# ✅ 正确：消息持久化到 session
-session.add_message(Message(role="user", content=prompt))
-context = context_builder.build(session)  # 从 session 读取
+// ✅ 正确：消息持久化到 session
+session.addMessage(new Message("user", prompt));
+Context context = contextBuilder.build(session);  // 从 session 读取
 ```
 
 #### Session 作为单一数据源
@@ -758,34 +784,36 @@ LLM 调用 → 响应 → session.add_message() → 持久化
 - **容错设计**：提供备用方案，当主要路径失败时尝试替代方案
 
 **常见错误：**
-```python
-# ❌ 错误：硬编码绝对路径
-base_path = '/data/fortune/data/'
-csv_file = f"{base_path}data.csv"
+```java
+// ❌ 错误：硬编码绝对路径
+String basePath = "/data/fortune/data/";
+String csvFile = basePath + "data.csv";
 
-# ❌ 错误：硬编码相对路径
-csv_file = 'data/data.csv'
+// ❌ 错误：硬编码相对路径
+String csvFile = "data/data.csv";
 ```
 
 **正确做法：**
-```python
-# ✅ 正确：基于脚本目录构建相对路径
-import os
-script_dir = os.path.dirname(os.path.abspath(__file__))
-data_dir = os.path.join(script_dir, 'data')
-csv_file = os.path.join(data_dir, 'data.csv')
+```java
+// ✅ 正确：基于脚本目录构建相对路径
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-# ✅ 正确：使用配置文件
-import configparser
-config = configparser.ConfigParser()
-config.read('config.ini')
-data_dir = config.get('paths', 'data_dir', fallback='data')
-csv_file = os.path.join(data_dir, 'data.csv')
+Path scriptDir = Paths.get(MyClass.class.getProtectionDomain()
+    .getCodeSource().getLocation().toURI()).getParent();
+Path dataDir = scriptDir.resolve("data");
+Path csvFile = dataDir.resolve("data.csv");
 
-# ✅ 正确：使用环境变量
-import os
-data_dir = os.getenv('DATA_DIR', 'data')
-csv_file = os.path.join(data_dir, 'data.csv')
+// ✅ 正确：使用配置文件
+import java.util.Properties;
+Properties config = new Properties();
+config.load(new FileInputStream("config.ini"));
+String dataDir = config.getProperty("paths.data_dir", "data");
+Path csvFile = Paths.get(dataDir, "data.csv");
+
+// ✅ 正确：使用环境变量
+String dataDir = System.getenv().getOrDefault("DATA_DIR", "data");
+Path csvFile = Paths.get(dataDir, "data.csv");
 ```
 
 **Shell脚本示例：**
@@ -808,43 +836,56 @@ cd "$SCRIPT_DIR"
 **核心原则**：使用 qasync 时，所有异步操作必须在主线程的 `QEventLoop` 中运行，不能在 QThread 中创建新的 event loop。
 
 **常见错误**：
-```python
-# ❌ 错误：QThread + 新 event loop 与 qasync 不兼容
-class AsyncWorker(QThread):
-    finished = pyqtSignal(str)
-    
-    def __init__(self, coro):
-        super().__init__()
-        self.coro = coro
-    
-    def run(self):
-        loop = asyncio.new_event_loop()  # 与 qasync 冲突！
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(self.coro)
-        self.finished.emit(result)
+```java
+// ❌ 错误：QThread + 新 event loop 与 Swing/FX 不兼容
+public class AsyncWorker extends SwingWorker<String, Void> {
+    private final Callable<String> coro;
 
-# 使用
-self._worker = AsyncWorker(some_coro())
-self._worker.start()
+    public AsyncWorker(Callable<String> coro) {
+        this.coro = coro;
+    }
+
+    @Override
+    protected String doInBackground() throws Exception {
+        // 不要在 SwingWorker 中创建新的 event loop！
+        return coro.call();
+    }
+}
+
+// 使用
+AsyncWorker worker = new AsyncWorker(someCoroutine);
+worker.execute();
 ```
 
 **正确做法**：
-```python
-# ✅ 正确：使用 @asyncSlot() 装饰器，声明信号参数类型
-from qasync import asyncSlot
+```java
+// ✅ 正确：使用 SwingWorker 或 CompletableFuture 处理异步操作
+import java.util.concurrent.CompletableFuture;
+import javax.swing.SwingUtilities;
 
-class MainWindow(QMainWindow):
-    @asyncSlot(str)  # 信号发送字符串参数，必须声明类型
-    async def _on_message_sent(self, message: str):
-        """信号连接的异步方法使用 @asyncSlot(参数类型)"""
-        async for chunk in self.controller.send_message(message):
-            response = chunk
-        self._on_response_received(response)
-    
-    @asyncSlot()  # 无参数的信号使用 @asyncSlot()
-    async def _on_button_clicked(self):
-        """按钮点击的异步处理（无参数）"""
-        await some_async_operation()
+public class MainWindow {
+    public void onMessageSent(String message) {
+        CompletableFuture.supplyAsync(() -> {
+            // 异步处理
+            StringBuilder response = new StringBuilder();
+            for (String chunk : controller.sendMessage(message)) {
+                response.append(chunk);
+            }
+            return response.toString();
+        }).thenAccept(response -> {
+            // 在 EDT 线程更新 UI
+            SwingUtilities.invokeLater(() -> {
+                onResponseReceived(response);
+            });
+        });
+    }
+
+    public void onButtonClicked() {
+        CompletableFuture.runAsync(() -> {
+            someAsyncOperation();
+        });
+    }
+}
 ```
 
 **症状**：
@@ -873,62 +914,36 @@ grep -r "asyncio.new_event_loop" src/
 - 考虑跨平台兼容性，确保超时机制在不同操作系统上都能正常工作
 
 **实现示例：**
-```python
-import signal
-from functools import wraps
+```java
+import java.util.concurrent.*;
 
-def timeout_handler(signum, frame):
-    raise TimeoutError("Function call timed out")
+public class TimeoutUtil {
+    /**
+     * 在指定时间内执行任务，超时则抛出 TimeoutException
+     */
+    public static <T> T withTimeout(Callable<T> task, int seconds)
+            throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<T> future = executor.submit(task);
+        try {
+            return future.get(seconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new TimeoutException(
+                "Function call timed out after " + seconds + " seconds");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+}
 
-def timeout(seconds):
-    """装饰器：为函数添加超时控制"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # 仅在 Unix 系统上使用信号
-            if hasattr(signal, 'SIGALRM'):
-                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(seconds)
-                try:
-                    result = func(*args, **kwargs)
-                    signal.alarm(0)  # 取消闹钟
-                    return result
-                finally:
-                    signal.signal(signal.SIGALRM, old_handler)
-            else:
-                # Windows 系统或其他不支持 SIGALRM 的系统使用线程方法
-                import threading
-                from queue import Queue
-                
-                def target(queue):
-                    try:
-                        result = func(*args, **kwargs)
-                        queue.put((True, result))
-                    except Exception as e:
-                        queue.put((False, e))
-                
-                queue = Queue()
-                thread = threading.Thread(target=target, args=(queue,))
-                thread.daemon = True
-                thread.start()
-                thread.join(timeout=seconds)
-                
-                if thread.is_alive():
-                    # 线程仍在运行，视为超时
-                    raise TimeoutError(f"Function call timed out after {seconds} seconds")
-                
-                success, result = queue.get()
-                if not success:
-                    raise result
-                return result
-        return wrapper
-    return decorator
-
-# 使用示例
-@timeout(30)  # 30秒超时
-def fetch_data_from_api():
-    # API调用代码
-    pass
+// 使用示例
+public void fetchDataFromApi() throws Exception {
+    TimeoutUtil.withTimeout(() -> {
+        // API调用代码
+        return null;
+    }, 30);  // 30秒超时
+}
 ```
 
 **验证方法：**

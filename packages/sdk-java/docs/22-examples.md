@@ -8,286 +8,411 @@
 
 ### 最简 Agent
 
-```python
-import asyncio
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
 
-async def main():
-    agent = AgentHarness()
-    result = await agent.run("你好，请介绍一下你自己")
-    print(result.content)
-
-asyncio.run(main())
+public class BasicAgentExample {
+    public static void main(String[] args) throws Exception {
+        AgentHarness agent = AgentHarness.builder().build();
+        LoopResult result = agent.run("你好，请介绍一下你自己").join();
+        System.out.println(result.content());
+    }
+}
 ```
 
 ### 使用 OpenAI 模型
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness(
-    api_key="sk-...",
-    model="gpt-4o",
-    provider="openai",
-)
+HarnessConfig config = HarnessConfig.builder()
+    .apiKey("sk-...")
+    .model("gpt-4o")
+    .provider("openai")
+    .build();
 
-result = await agent.run("分析这段代码的性能问题")
+AgentHarness agent = AgentHarness.builder().config(config).build();
+LoopResult result = agent.run("分析这段代码的性能问题").join();
 ```
 
 ### 使用第三方 OpenAI 兼容 API
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness(
-    base_url="https://api.your-provider.com/v1",
-    api_key="your-api-key",
-    model="your-model-name",
-    # provider 自动检测为 openai（因为不是 claude-* 前缀）
-)
+HarnessConfig config = HarnessConfig.builder()
+    .baseUrl("https://api.your-provider.com/v1")
+    .apiKey("your-api-key")
+    .model("your-model-name")
+    // provider auto-detected as openai (since not claude-* prefix)
+    .build();
 
-result = await agent.run("翻译以下文本为英文")
+AgentHarness agent = AgentHarness.builder().config(config).build();
+LoopResult result = agent.run("翻译以下文本为英文").join();
 ```
 
 ### 流式输出
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-async for chunk in agent.stream("写一篇关于 AI 的短文"):
-    print(chunk, end="", flush=True)
+LoopResult result = agent.run("写一篇关于 AI 的短文").join();
+System.out.println(result.content());
 ```
 
 ### 从配置文件创建
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness.from_config("harness.yaml")
-result = await agent.run("检查项目状态")
+HarnessConfig config = HarnessConfig.fromEnv();
+AgentHarness agent = AgentHarness.builder().config(config).build();
+LoopResult result = agent.run("检查项目状态").join();
 ```
 
 ## 自定义工具
 
 ### 装饰器注册
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.types.ToolResult;
+import com.harness.types.LoopResult;
+import java.util.Map;
 
-agent = AgentHarness()
+public class WeatherTool implements Tool {
+    private final String city;
 
-@agent.tool(description="获取天气信息")
-def get_weather(city: str) -> str:
-    """获取指定城市的天气"""
-    # 实际实现调用天气 API
-    return f"{city}: 晴天, 25°C"
+    public WeatherTool(String city) { this.city = city; }
 
-@agent.tool(
-    description="发送邮件",
-    permission_level="network",
-)
-async def send_email(to: str, subject: str, body: str) -> str:
-    """发送邮件"""
-    # 实际实现调用邮件 API
-    return f"邮件已发送至 {to}"
+    @Override public String getName() { return "get_weather"; }
+    @Override public String getDescription() { return "获取指定城市的天气"; }
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of("type", "object", "properties",
+            Map.of("city", Map.of("type", "string", "description", "城市名")));
+    }
 
-result = await agent.run("查一下北京天气，然后发邮件给 team@example.com 通知他们")
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+        String city = (String) args.getOrDefault("city", "default");
+        return CompletableFuture.completedFuture(
+            ToolResult.success(ctx.sessionId(), city + ": 晴天, 25°C", getName()));
+    }
+}
+
+AgentHarness agent = AgentHarness.builder()
+    .addTool(new WeatherTool("北京"))
+    .build();
+
+LoopResult result = agent.run("查一下北京天气").join();
 ```
 
 ### 继承 Tool 类
 
-```python
-from harness import AgentHarness
-from harness.tools.base import Tool, ToolResult, ToolContext, PermissionLevel
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.types.ToolResult;
+import com.harness.types.LoopResult;
+import java.util.Map;
 
-class DatabaseTool(Tool):
-    @property
-    def name(self) -> str:
-        return "db_query"
+public class DatabaseTool implements Tool {
 
-    @property
-    def description(self) -> str:
-        return "执行数据库查询"
+    @Override public String getName() { return "db_query"; }
 
-    @property
-    def input_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "SQL 查询"},
-                "database": {"type": "string", "description": "数据库名"},
-            },
-            "required": ["query"],
+    @Override public String getDescription() { return "执行数据库查询"; }
+
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of(
+                "query", Map.of("type", "string", "description", "SQL 查询"),
+                "database", Map.of("type", "string", "description", "数据库名")),
+            "required", java.util.List.of("query"));
+    }
+
+    @Override public boolean isDangerous() { return true; }
+
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+        try {
+            String database = (String) args.getOrDefault("database", "default");
+            String query = (String) args.get("query");
+            String result = executeSql(database, query);
+            return CompletableFuture.completedFuture(
+                ToolResult.success(ctx.sessionId(), String.valueOf(result), getName()));
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(
+                ToolResult.failure(ctx.sessionId(), e.getMessage(), getName()));
         }
+    }
 
-    @property
-    def permission_level(self) -> PermissionLevel:
-        return PermissionLevel.DANGEROUS
+    private String executeSql(String database, String query) {
+        // 实际实现调用数据库
+        return "query result";
+    }
+}
 
-    async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
-        try:
-            result = await execute_sql(args.get("database", "default"), args["query"])
-            return ToolResult(output=str(result))
-        except Exception as e:
-            return ToolResult(output="", error=str(e))
-
-agent = AgentHarness()
-agent.register_tool(DatabaseTool())
+AgentHarness agent = AgentHarness.builder().build();
+agent.registerTool(new DatabaseTool());
 ```
 
 ## Lifecycle Hooks
 
 ### 请求审批
 
-```python
-from harness import AgentHarness
-from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import java.util.List;
+import java.util.Scanner;
 
-agent = AgentHarness()
+public class ApprovalHook implements LifecycleHook {
 
-class ApprovalHook(LifecycleHook):
-    @property
-    def hook_points(self):
-        return [HookPoint.BEFORE_TOOL_EXECUTE]
-    
-    async def execute(self, ctx: HookContext) -> HookResult:
-        """危险操作需要用户确认"""
-        if ctx.tool_name in ("bash", "write"):
-            command = ctx.tool_args.get("command", "") if ctx.tool_name == "bash" else str(ctx.tool_args)
-            print(f"⚠️ Agent 想要执行 {ctx.tool_name}: {command}")
-            confirm = input("允许？(y/n): ")
-            if confirm.lower() != "y":
-                return HookResult.abort("用户拒绝了操作")
-        return HookResult.continue_()
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.BEFORE_TOOL_EXECUTE);
+    }
 
-agent.add_hook(ApprovalHook())
-result = await agent.run("删除临时文件")
+    @Override
+    public HookResult execute(HookContext ctx) {
+        // 危险操作需要用户确认
+        if ("bash".equals(ctx.toolName()) || "write".equals(ctx.toolName())) {
+            String command = "bash".equals(ctx.toolName())
+                ? (String) ctx.toolArgs().getOrDefault("command", "")
+                : String.valueOf(ctx.toolArgs());
+            System.out.println("Agent 想要执行 " + ctx.toolName() + ": " + command);
+            Scanner scanner = new Scanner(System.in);
+            System.out.print("允许？(y/n): ");
+            String confirm = scanner.nextLine();
+            if (!"y".equalsIgnoreCase(confirm)) {
+                return HookResult.abort("用户拒绝了操作");
+            }
+        }
+        return HookResult.continue_();
+    }
+}
+
+AgentHarness agent = AgentHarness.builder().build();
+agent.addHook(new ApprovalHook());
+LoopResult result = agent.run("删除临时文件").join();
 ```
 
 ### 日志记录
 
-```python
-import logging
-from harness import AgentHarness
-from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.List;
 
-logger = logging.getLogger("harness")
-agent = AgentHarness()
+public class LoggingHook implements LifecycleHook {
+    private static final Logger logger = LoggerFactory.getLogger(LoggingHook.class);
 
-class LoggingHook(LifecycleHook):
-    @property
-    def hook_points(self):
-        return [HookPoint.AFTER_LLM_CALL, HookPoint.AFTER_TOOL_EXECUTE]
-    
-    async def execute(self, ctx: HookContext) -> HookResult:
-        if ctx.hook_point == HookPoint.AFTER_LLM_CALL and ctx.llm_response:
-            logger.info(f"LLM 调用: {ctx.llm_response.usage.input_tokens} 输入 tokens, {ctx.llm_response.usage.output_tokens} 输出 tokens")
-        elif ctx.hook_point == HookPoint.AFTER_TOOL_EXECUTE and ctx.tool_result:
-            logger.info(f"工具 {ctx.tool_name}: {len(ctx.tool_result.output)} 字符")
-        return HookResult.continue_()
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.AFTER_LLM_CALL, HookPoint.AFTER_TOOL_EXECUTE);
+    }
 
-agent.add_hook(LoggingHook())
+    @Override
+    public HookResult execute(HookContext ctx) {
+        if (ctx.hookPoint() == HookPoint.AFTER_LLM_CALL && ctx.llmResponse() != null) {
+            logger.info("LLM 调用: {} 输入 tokens, {} 输出 tokens",
+                ctx.llmResponse().usage().inputTokens(),
+                ctx.llmResponse().usage().outputTokens());
+        } else if (ctx.hookPoint() == HookPoint.AFTER_TOOL_EXECUTE && ctx.toolResult() != null) {
+            logger.info("工具 {}: {} 字符", ctx.toolName(),
+                ctx.toolResult().content() != null ? ctx.toolResult().content().length() : 0);
+        }
+        return HookResult.continue_();
+    }
+}
+
+AgentHarness agent = AgentHarness.builder().build();
+agent.addHook(new LoggingHook());
 ```
 
 ### 阻止过早退出
 
-```python
-from harness import AgentHarness
-from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import com.harness.types.Message;
+import java.util.List;
 
-agent = AgentHarness()
+public class PreventEarlyExitHook implements LifecycleHook {
 
-class PreventEarlyExitHook(LifecycleHook):
-    @property
-    def hook_points(self):
-        return [HookPoint.ON_EXIT_ATTEMPT]
-    
-    async def execute(self, ctx: HookContext) -> HookResult:
-        """如果任务未完成，阻止 Agent 草率退出"""
-        if ctx.messages and "完成" not in ctx.messages[-1].get("content", ""):
-            # 注入消息让 Agent 继续工作
-            return HookResult.inject_message({
-                "role": "user",
-                "content": "请继续完成任务，不要提前结束。"
-            })
-        return HookResult.continue_()
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.ON_EXIT_ATTEMPT);
+    }
 
-agent.add_hook(PreventEarlyExitHook())
+    @Override
+    public HookResult execute(HookContext ctx) {
+        // 如果任务未完成，阻止 Agent 草率退出
+        if (ctx.messages() != null && !ctx.messages().isEmpty()) {
+            Message lastMsg = ctx.messages().get(ctx.messages().size() - 1);
+            if (lastMsg.contentAsString() != null && !lastMsg.contentAsString().contains("完成")) {
+                // 注入消息让 Agent 继续工作
+                return HookResult.injectMessage(
+                    Message.user("请继续完成任务，不要提前结束。"));
+            }
+        }
+        return HookResult.continue_();
+    }
+}
+
+AgentHarness agent = AgentHarness.builder().build();
+agent.addHook(new PreventEarlyExitHook());
 ```
 
 ## 自验证
 
-```python
-from harness import AgentHarness
-from harness.core.hooks import HookPoint
-from harness.core.self_verification import SelfVerificationHook
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HookPoint;
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import com.harness.types.LoopResult;
+import java.util.List;
 
-agent = AgentHarness()
-verification = SelfVerificationHook(
-    agent,
-    verify_command="pytest -x",
-    max_retries=3,
-)
+public class AutoVerifyHook implements LifecycleHook {
+    private final AgentHarness agent;
+    private final String verifyCommand;
+    private final int maxRetries;
 
-@agent.hook(HookPoint.AFTER_TOOL_EXECUTE)
-async def auto_verify(ctx: HookContext):
-    """写文件后自动运行测试"""
-    if ctx.tool_call and ctx.tool_call.get("name") == "write":
-        result = await verification.verify(ctx)
-        if not result.passed:
-            ctx.messages.append({
-                "role": "user",
-                "content": f"测试失败，请修复：\n{result.output}"
-            })
-    return ctx
+    public AutoVerifyHook(AgentHarness agent, String verifyCommand, int maxRetries) {
+        this.agent = agent;
+        this.verifyCommand = verifyCommand;
+        this.maxRetries = maxRetries;
+    }
 
-result = await agent.run("实现一个计算器类并确保测试通过")
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.AFTER_TOOL_EXECUTE);
+    }
+
+    @Override
+    public HookResult execute(HookContext ctx) {
+        // 写文件后自动运行测试
+        if ("write".equals(ctx.toolName())) {
+            // 执行验证命令
+            for (int i = 0; i < maxRetries; i++) {
+                try {
+                    Process process = Runtime.getRuntime().exec(verifyCommand);
+                    int exitCode = process.waitFor();
+                    if (exitCode == 0) {
+                        return HookResult.continue_();
+                    }
+                } catch (Exception e) {
+                    // 继续重试
+                }
+            }
+            return HookResult.injectMessage(
+                Message.user("测试失败，请修复并重试。"));
+        }
+        return HookResult.continue_();
+    }
+}
+
+AgentHarness agent = AgentHarness.builder().build();
+agent.addHook(new AutoVerifyHook(agent, "pytest -x", 3));
+LoopResult result = agent.run("实现一个计算器类并确保测试通过").join();
 ```
 
 ## Ralph Loop（长任务）
 
-```python
-from harness import AgentHarness
-from harness.core.ralph_loop import RalphLoop
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import java.util.concurrent.CompletableFuture;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-# 使用 Ralph Loop 执行长任务
-ralph = RalphLoop(
-    agent,
-    max_iterations=100,
-    summary_interval=10,
-    compression_threshold=80000,
-)
+// 使用 GoalConfig 执行长任务
+GoalConfig config = GoalConfig.builder()
+    .description("重构整个认证模块，添加 OAuth2 支持，确保所有测试通过")
+    .maxIterations(100)
+    .timeoutSeconds(3600)
+    .build();
 
-result = await ralph.run("重构整个认证模块，添加 OAuth2 支持，确保所有测试通过")
-print(f"完成步数: {result.iterations}")
-print(f"总成本: ${result.total_cost:.4f}")
+GoalResult result = agent.runGoal(config, null).join();
+System.out.println("完成步数: " + result.totalIterations());
+System.out.println("总成本: $" + String.format("%.4f",
+    result.totalTokens().getOrDefault("input", 0) * 0.00001));
 ```
 
 ## Sub-Agent
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.core.subagent import SubAgentManager
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.SubAgentManager;
+import com.harness.core.SubAgentConfig;
+import com.harness.loop.types.GoalResult;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-agent = AgentHarness()
-sub_agent = SubAgentManager(agent)
+AgentHarness agent = AgentHarness.builder().build();
+SubAgentManager subAgentManager = new SubAgentManager();
 
-# 并行执行多个子任务
-results = await asyncio.gather(
-    sub_agent.create("分析代码质量", tools=["read", "grep"]),
-    sub_agent.create("检查安全漏洞", tools=["read", "grep"]),
-    sub_agent.create("生成 API 文档", tools=["read", "write"]),
-)
+// 并行执行多个子任务
+CompletableFuture<Map<String, GoalResult>> future1 = CompletableFuture.supplyAsync(() -> {
+    GoalConfig config = GoalConfig.builder()
+        .description("分析代码质量")
+        .maxIterations(5)
+        .build();
+    GoalResult result = agent.runGoal(config, null).join();
+    return Map.of("analysis", result);
+});
 
-for r in results:
-    print(f"任务: {r.task}")
-    print(f"成功: {r.success}")
-    print(f"结果: {r.content[:100]}...")
+CompletableFuture<Map<String, GoalResult>> future2 = CompletableFuture.supplyAsync(() -> {
+    GoalConfig config = GoalConfig.builder()
+        .description("检查安全漏洞")
+        .maxIterations(5)
+        .build();
+    GoalResult result = agent.runGoal(config, null).join();
+    return Map.of("security", result);
+});
+
+CompletableFuture.allOf(future1, future2).join();
+
+Map<String, GoalResult> results1 = future1.join();
+Map<String, GoalResult> results2 = future2.join();
+
+for (Map.Entry<String, GoalResult> entry : results1.entrySet()) {
+    System.out.println("任务: " + entry.getKey());
+    System.out.println("成功: " + entry.getValue().achieved());
+    System.out.println("结果: " + entry.getValue().finalResponse());
+}
 ```
 
 ## 技能系统
@@ -338,116 +463,157 @@ You are an expert code reviewer. Your task is to:
 
 ### 使用 MCP 服务器
 
-```python
-from harness import AgentHarness, MCPManager, MCPServerConfig
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.mcp.McpServerConfig;
+import com.harness.types.LoopResult;
+import java.util.Map;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-# 创建 MCP 管理器
-mcp_manager = MCPManager(tool_registry=agent._tool_registry)
+// 创建 MCP 服务器配置
+McpServerConfig githubConfig = McpServerConfig.builder()
+    .name("github")
+    .transport("stdio")
+    .command("mcp-github")
+    .env(Map.of("GITHUB_TOKEN", "your-token-here"))
+    .build();
+agent.addMcpServer(githubConfig);
 
-# 添加 MCP 服务器
-github_config = MCPServerConfig(
-    name="github",
-    transport="stdio",
-    command="mcp-github",
-    env={"GITHUB_TOKEN": "your-token-here"},
-)
-mcp_manager.add_server(github_config)
+McpServerConfig slackConfig = McpServerConfig.builder()
+    .name("slack")
+    .transport("stdio")
+    .command("mcp-slack")
+    .args(java.util.List.of("--token", "$SLACK_TOKEN"))
+    .env(Map.of("SLACK_TOKEN", "your-slack-token"))
+    .build();
+agent.addMcpServer(slackConfig);
 
-slack_config = MCPServerConfig(
-    name="slack",
-    transport="stdio",
-    command="mcp-slack",
-    args=["--token", "$SLACK_TOKEN"],
-    env={"SLACK_TOKEN": "your-slack-token"},
-)
-mcp_manager.add_server(slack_config)
+// 连接所有服务器
+agent.connectAllMcpServers();
 
-# 连接所有服务器
-await mcp_manager.connect_all()
-
-result = await agent.run("查看最近的 GitHub issue 并在 Slack 通知团队")
+LoopResult result = agent.run("查看最近的 GitHub issue 并在 Slack 通知团队").join();
 ```
 
 ### 自定义 LLM 客户端
 
-```python
-from harness import AgentHarness
-from harness.llm.base import LLMClient, LLMResponse, TokenUsage
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.LLMClient;
+import com.harness.types.LLMResponse;
+import com.harness.types.TokenUsage;
+import com.harness.types.LoopResult;
+import java.util.List;
+import java.util.Map;
 
-class MyCustomLLM(LLMClient):
-    @property
-    def model_name(self) -> str:
-        return "my-custom-model"
+public class MyCustomLLM implements LLMClient {
 
-    async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
-        # 实现自定义 LLM 调用
-        response_text = await my_api_call(messages, tools, system)
-        return LLMResponse(
-            content=response_text,
-            tool_calls=None,
-            usage=TokenUsage(input_tokens=0, output_tokens=0),
-            stop_reason="end_turn",
-        )
+    @Override public String modelName() { return "my-custom-model"; }
 
-agent = AgentHarness(llm_client=MyCustomLLM())
-result = await agent.run("你好")
+    @Override
+    public CompletableFuture<LLMResponse> call(
+            List<Map<String, Object>> messages,
+            List<Map<String, Object>> tools,
+            String system) {
+        // 实现自定义 LLM 调用逻辑
+        String responseText = callMyApi(messages, tools, system);
+        return CompletableFuture.completedFuture(
+            new LLMResponse(responseText, null,
+                new TokenUsage(0, 0), "end_turn"));
+    }
+
+    private String callMyApi(List<Map<String, Object>> messages,
+                             List<Map<String, Object>> tools,
+                             String system) {
+        // 自定义 API 调用实现
+        return "custom response";
+    }
+}
+
+AgentHarness agent = AgentHarness.builder()
+    .llmClient(new MyCustomLLM())
+    .build();
+LoopResult result = agent.run("你好").join();
 ```
 
 ## 触发器
 
 ### Cron 触发
 
-```python
-from harness import AgentHarness
-from harness.triggers.cron import CronTrigger
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.automation.Automation;
+import com.harness.loop.automation.AutomationConfig;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-# 每天 9:00 生成日报
-cron = CronTrigger(
-    name="daily-report",
-    schedule="0 9 * * *",
-    task="生成昨日工作日报，包括完成的任务和待处理的事项",
-)
+// 每天 9:00 生成日报
+Automation dailyReport = Automation.builder()
+    .name("daily-report")
+    .schedule("0 9 * * *")
+    .goal("生成昨日工作日报，包括完成的任务和待处理的事项")
+    .build();
 
-agent.triggers.register(cron)
-await agent.triggers.start_all()
+dailyReport.start(new com.harness.loop.GoalLoop.AgentRunner() {
+    @Override
+    public CompletableFuture<com.harness.types.LoopResult> run(String prompt, String sessionId) {
+        return agent.run(prompt, sessionId);
+    }
+    @Override
+    public CompletableFuture<com.harness.types.LoopResult> run(String prompt, String sessionId,
+            java.util.function.Consumer<Object> progress) {
+        return agent.run(prompt, sessionId, progress);
+    }
+    @Override
+    public com.harness.types.Session getSession(String sessionId) {
+        return agent.getOrCreateSession(sessionId);
+    }
+    @Override
+    public int getContextWindow() {
+        return agent.getConfig().getContextWindow();
+    }
+}).join();
 ```
 
 ### Webhook 触发
 
-```python
-from harness import AgentHarness
-from harness.triggers.webhook import WebhookTrigger
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.triggers.TriggerAction;
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerManager;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
+TriggerManager triggerManager = new TriggerManager();
 
-github = WebhookTrigger(
-    name="github-pr",
-    path="/webhook/github",
-    task="审查 PR #{event.pull_request.number}",
-    skills=["code-review"],
-)
+// Webhook 触发器配置（通过 HTTP 端点接收事件）
+TriggerAction action = TriggerAction.builder()
+    .goal("审查 PR #{event.pull_request.number}")
+    .skills(java.util.List.of("code-review"))
+    .build();
 
-agent.triggers.register(github)
+CronTrigger githubTrigger = CronTrigger.builder()
+    .name("github-pr")
+    .action(action)
+    .build();
+
+triggerManager.register(githubTrigger, true);
 ```
 
 ## 安全配置
 
 ### 最小权限
 
-```python
-from harness import AgentHarness
-from harness.security.sandbox import PermissionSet, PermissionLevel
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-agent = AgentHarness(
-    permissions=PermissionSet(
-        max_permission=PermissionLevel.READ,
-        denied_tools={"bash"},
-    ),
-)
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(10)
+    .enableNetwork(false)
+    .build();
+
+AgentHarness agent = AgentHarness.builder().config(config).build();
 ```
 
 ### 成本控制
@@ -472,24 +638,30 @@ AgentHarness agent = AgentHarness.builder()
 
 ## FastAPI 集成
 
-```python
-from fastapi import FastAPI
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import java.util.Map;
 
-app = FastAPI()
-agent = AgentHarness()
+@RestController
+public class AiController {
 
-@app.post("/ai")
-async def ai_endpoint(message: str):
-    result = await agent.run(message)
-    return {"response": result.content}
+    private final AgentHarness agent = AgentHarness.builder().build();
 
-@app.post("/ai/stream")
-async def ai_stream_endpoint(message: str):
-    chunks = []
-    async for chunk in agent.stream(message):
-        chunks.append(chunk)
-    return {"response": "".join(chunks)}
+    @PostMapping("/ai")
+    public ResponseEntity<Map<String, String>> aiEndpoint(@RequestParam String message) {
+        LoopResult result = agent.run(message).join();
+        return ResponseEntity.ok(Map.of("response", result.content()));
+    }
+
+    @PostMapping("/ai/stream")
+    public ResponseEntity<Map<String, String>> aiStreamEndpoint(@RequestParam String message) {
+        LoopResult result = agent.run(message).join();
+        return ResponseEntity.ok(Map.of("response", result.content()));
+    }
+}
 ```
 
 ## 测试
@@ -517,20 +689,22 @@ assert result.finalResponse().equals("代码质量良好");
 
 ### 配置全局记忆文件
 
-```python
-from harness import AgentHarness, HarnessConfig
-from pathlib import Path
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import java.nio.file.Path;
 
-# 配置全局 MEMORY.md 文件路径
-config = HarnessConfig(
-    model="claude-sonnet-4-6",
-    memory_md_path=Path.home() / ".harness" / "MEMORY.md",
-)
+// 配置全局 MEMORY.md 文件路径
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .memoryMdPath(Path.of(System.getProperty("user.home"), ".harness", "MEMORY.md").toString())
+    .build();
 
-agent = AgentHarness(config=config)
+AgentHarness agent = AgentHarness.builder().config(config).build();
 
-# Agent 会自动加载全局记忆到 system prompt
-result = await agent.run("帮我重构这段代码")
+// Agent 会自动加载全局记忆到 system prompt
+LoopResult result = agent.run("帮我重构这段代码").join();
 ```
 
 ### 全局记忆文件格式
@@ -559,28 +733,30 @@ result = await agent.run("帮我重构这段代码")
 
 全局记忆文件在每次 `run()` 调用时重新读取，修改后立即生效：
 
-```python
-from harness import AgentHarness
-from harness.memory.memory_file import MemoryFileManager, MemoryCategory, MemoryEntry, MemorySource
-from pathlib import Path
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.memory.MemoryFileManager;
+import com.harness.memory.MemoryEntry;
+import com.harness.memory.MemoryCategory;
+import com.harness.memory.MemorySource;
+import com.harness.types.LoopResult;
+import java.nio.file.Path;
 
-agent = AgentHarness(
-    memory_md_path=Path.home() / ".harness" / "MEMORY.md",
-)
+AgentHarness agent = AgentHarness.builder().build();
 
-# 第一次调用 - 加载当前记忆
-result1 = await agent.run("分析项目结构")
+// 第一次调用 - 加载当前记忆
+LoopResult result1 = agent.run("分析项目结构").join();
 
-# 更新记忆文件
-manager = MemoryFileManager(Path.home() / ".harness")
-manager.add_entry(MemoryEntry(
-    category=MemoryCategory.USER_PROFILE,
-    content="偏好简洁的代码注释",
-    source=MemorySource.USER_INPUT,
-))
+// 更新记忆文件
+MemoryFileManager manager = new MemoryFileManager(
+    Path.of(System.getProperty("user.home"), ".harness"));
+manager.addEntry(new MemoryEntry(
+    MemoryCategory.USER_PROFILE,
+    "偏好简洁的代码注释",
+    MemorySource.USER_INPUT));
 
-# 第二次调用 - 自动加载更新后的记忆
-result2 = await agent.run("添加函数注释")
+// 第二次调用 - 自动加载更新后的记忆
+LoopResult result2 = agent.run("添加函数注释").join();
 ```
 
 ## Loop Engineering
@@ -589,277 +765,316 @@ Loop Engineering 是目标驱动执行范式：用户描述目标，Agent 自主
 
 ### 基础用法：目标驱动执行
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
 
-async def main():
-    agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-    # 用户描述目标，Agent 自主运行直到完成
-    result = await agent.run_goal(
-        goal="修复 src/ 目录下所有类型错误",
-        max_iterations=50,
-    )
+// 用户描述目标，Agent 自主运行直到完成
+GoalResult result = agent.runGoal(
+    "修复 src/ 目录下所有类型错误",
+    null).join();
 
-    if result.status == GoalStatus.ACHIEVED:
-        print(f"目标达成！共 {result.total_iterations} 轮迭代")
-    elif result.status == GoalStatus.MAX_ITERATIONS:
-        print(f"达到最大迭代次数 {result.total_iterations}")
-    else:
-        print(f"目标未达成: {result.status.value}")
-
-asyncio.run(main())
+if (result.status() == GoalStatus.ACHIEVED) {
+    System.out.println("目标达成！共 " + result.totalIterations() + " 轮迭代");
+} else if (result.status() == GoalStatus.MAX_ITERATIONS) {
+    System.out.println("达到最大迭代次数 " + result.totalIterations());
+} else {
+    System.out.println("目标未达成: " + result.status().getValue());
+}
 ```
 
 ### 自定义验证器
 
 使用自定义函数验证目标是否达成：
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import java.util.function.Function;
 
-async def check_coverage(result) -> bool:
-    """检查测试覆盖率是否达到 80%"""
-    proc = await asyncio.create_subprocess_exec(
-        "pytest", "--cov", "--cov-report=term",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    # 解析覆盖率报告
-    return "TOTAL" in stdout.decode() and "80%" in stdout.decode()
+// 自定义验证器：检查测试覆盖率是否达到 80%
+Function<GoalResult, Boolean> checkCoverage = result -> {
+    try {
+        Process process = Runtime.getRuntime().exec(
+            new String[]{"pytest", "--cov", "--cov-report=term"});
+        int exitCode = process.waitFor();
+        // 解析覆盖率报告
+        return exitCode == 0;
+    } catch (Exception e) {
+        return false;
+    }
+};
 
-async def main():
-    agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-    result = await agent.run_goal(
-        goal="将测试覆盖率提升到 80%",
-        custom_verifier=check_coverage,
-        max_iterations=50,
-    )
+GoalResult result = agent.runGoal(
+    goal -> "将测试覆盖率提升到 80%",
+    null).join();
 
-    print(f"状态: {result.status.value}")
-    print(f"迭代次数: {result.total_iterations}")
+// 使用 GoalConfig 的完整配置
+GoalConfig config = GoalConfig.builder()
+    .description("将测试覆盖率提升到 80%")
+    .customVerifier(checkCoverage)
+    .maxIterations(50)
+    .build();
 
-asyncio.run(main())
+GoalResult result2 = agent.runGoal(config, null).join();
+System.out.println("状态: " + result2.status().getValue());
+System.out.println("迭代次数: " + result2.totalIterations());
 ```
 
 ### GoalConfig 完整配置
 
-```python
-from harness import AgentHarness
-from harness.loop import GoalConfig, GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-config = GoalConfig(
-    description="实现用户认证模块",
-    success_criteria="所有测试通过，覆盖率 >= 80%",
-    workspace_dir="./src/auth",
+GoalConfig config = GoalConfig.builder()
+    .description("实现用户认证模块")
+    .successCriteria("所有测试通过，覆盖率 >= 80%")
+    .workspaceDir("./src/auth")
 
-    # 迭代控制
-    max_iterations=50,
-    max_context_resets=5,      # 上下文重置次数
-    timeout_seconds=3600,      # 1小时超时
+    // 迭代控制
+    .maxIterations(50)
+    .maxContextResets(5)
+    .timeoutSeconds(3600)
 
-    # 成本控制
-    max_tokens=500000,
-    max_cost_usd=10.0,
-)
+    // 成本控制
+    .maxTokens(500000)
+    .maxCostUsd(10.0)
+    .build();
 
-result = await agent.run_goal(config)
+GoalResult result = agent.runGoal(config, null).join();
 ```
 
 ### 定时自动化 (Phase 2)
 
 使用 Automation 创建定时任务：
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import Automation
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.automation.Automation;
+import com.harness.loop.types.GoalResult;
+import java.util.concurrent.CompletableFuture;
 
-async def main():
-    agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-    # Cron 定时任务：每天 9:00 生成日报
-    daily_report = Automation(
-        name="daily-report",
-        schedule="0 9 * * *",
-        goal="分析昨日 Git 提交，生成工作日报",
-    )
+// Cron 定时任务：每天 9:00 生成日报
+Automation dailyReport = Automation.builder()
+    .name("daily-report")
+    .schedule("0 9 * * *")
+    .goal("分析昨日 Git 提交，生成工作日报")
+    .build();
 
-    # 间隔任务：每 5 分钟健康检查
-    health_check = Automation(
-        name="health-check",
-        interval_seconds=300,
-        goal="检查系统健康状态，如有异常发送告警",
-    )
+// 间隔任务：每 5 分钟健康检查
+Automation healthCheck = Automation.builder()
+    .name("health-check")
+    .intervalSeconds(300)
+    .goal("检查系统健康状态，如有异常发送告警")
+    .build();
 
-    # 启动自动化
-    await daily_report.start(agent)
-    await health_check.start(agent)
+// 启动自动化
+dailyReport.start(null).join();
+healthCheck.start(null).join();
 
-    print("自动化任务已启动，按 Ctrl+C 停止")
-    try:
-        await asyncio.sleep(3600)  # 运行 1 小时
-    finally:
-        await daily_report.stop()
-        await health_check.stop()
-
-asyncio.run(main())
+System.out.println("自动化任务已启动，按 Ctrl+C 停止");
+try {
+    Thread.sleep(3600000); // 运行 1 小时
+} finally {
+    dailyReport.stop().join();
+    healthCheck.stop().join();
+}
 ```
 
 ### 并行 Worktree 执行 (Phase 3)
 
 在隔离的 worktree 中并行执行多个目标：
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import WorktreeOrchestrator, WorktreeConfig
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.worktree.WorktreeOrchestrator;
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeResult;
+import com.harness.loop.types.GoalResult;
+import java.util.Map;
+import java.util.List;
 
-async def main():
-    agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-    orchestrator = WorktreeOrchestrator(agent, workspace_dir=".")
+// 创建 AgentRunner 适配器
+GoalLoop.AgentRunner agentRunner = new GoalLoop.AgentRunner() {
+    @Override
+    public CompletableFuture<LoopResult> run(String prompt, String sessionId) {
+        return agent.run(prompt, sessionId);
+    }
+    @Override
+    public CompletableFuture<LoopResult> run(String prompt, String sessionId,
+            Consumer<Object> progress) {
+        return agent.run(prompt, sessionId, progress);
+    }
+    @Override
+    public Session getSession(String sessionId) {
+        return agent.getOrCreateSession(sessionId);
+    }
+    @Override
+    public int getContextWindow() {
+        return agent.getConfig().getContextWindow();
+    }
+};
 
-    # 定义并行任务
-    tasks = [
-        WorktreeConfig(
-            name="feature-auth",
-            goal="实现用户认证功能",
-            base_branch="main",
-        ),
-        WorktreeConfig(
-            name="feature-api",
-            goal="实现 REST API 端点",
-            base_branch="main",
-        ),
-        WorktreeConfig(
-            name="feature-tests",
-            goal="编写集成测试",
-            base_branch="main",
-        ),
-    ]
+WorktreeOrchestrator orchestrator = new WorktreeOrchestrator(agentRunner, ".");
 
-    # 并行执行
-    results = await orchestrator.run_parallel(tasks)
+// 定义并行任务
+List<WorktreeConfig> tasks = List.of(
+    WorktreeConfig.builder()
+        .name("feature-auth")
+        .goal("实现用户认证功能")
+        .baseBranch("main")
+        .build(),
+    WorktreeConfig.builder()
+        .name("feature-api")
+        .goal("实现 REST API 端点")
+        .baseBranch("main")
+        .build(),
+    WorktreeConfig.builder()
+        .name("feature-tests")
+        .goal("编写集成测试")
+        .baseBranch("main")
+        .build());
 
-    # 查看结果
-    for name, result in results.items():
-        print(f"{name}: {result.status}")
+// 并行执行
+Map<String, WorktreeResult> results = orchestrator.runParallel(tasks).join();
 
-    # 合并成功的分支
-    for name, result in results.items():
-        if result.status == "completed":
-            await orchestrator.merge(name)
-            print(f"已合并: {name}")
+// 查看结果
+for (Map.Entry<String, WorktreeResult> entry : results.entrySet()) {
+    System.out.println(entry.getKey() + ": " + entry.getValue().getStatus());
+}
 
-asyncio.run(main())
+// 合并成功的分支
+for (Map.Entry<String, WorktreeResult> entry : results.entrySet()) {
+    if ("completed".equals(entry.getValue().getStatus())) {
+        orchestrator.merge(entry.getKey());
+        System.out.println("已合并: " + entry.getKey());
+    }
+}
 ```
 
 ### 指标监控
 
 监控 Goal 执行的详细指标：
 
-```python
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
 
-agent = AgentHarness()
+AgentHarness agent = AgentHarness.builder().build();
 
-result = await agent.run_goal(
-    goal="重构数据库访问层",
-    max_iterations=30,
-)
+GoalResult result = agent.runGoal(
+    "重构数据库访问层",
+    null).join();
 
-# 详细指标
-print(f"状态: {result.status.value}")
-print(f"迭代次数: {result.total_iterations}")
-print(f"上下文重置: {result.context_resets}")
-print(f"Token 使用: {result.total_tokens}")
-print(f"执行时长: {result.duration_seconds:.1f}秒")
+// 详细指标
+System.out.println("状态: " + result.status().getValue());
+System.out.println("迭代次数: " + result.totalIterations());
+System.out.println("上下文重置: " + result.contextResets());
+System.out.println("Token 使用: " + result.totalTokens());
+System.out.println("执行时长: " + String.format("%.1f", result.durationSeconds()) + "秒");
 
-# 验证日志
-for record in result.verification_log:
-    print(f"  第{record.iteration}轮: {record.result.value}")
-    if record.reason:
-        print(f"    原因: {record.reason}")
+// 验证日志
+for (com.harness.loop.types.VerificationRecord record : result.verificationLog()) {
+    System.out.println("  第" + record.iteration() + "轮: " + record.result().getValue());
+    if (record.reason() != null) {
+        System.out.println("    原因: " + record.reason());
+    }
+}
 ```
 
 ### 错误处理
 
 处理各种执行状态：
 
-```python
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
 
-agent = AgentHarness()
-result = await agent.run_goal("复杂任务", max_iterations=10)
+AgentHarness agent = AgentHarness.builder().build();
+GoalResult result = agent.runGoal("复杂任务", null).join();
 
-match result.status:
-    case GoalStatus.ACHIEVED:
-        print("目标达成")
-    case GoalStatus.TIMEOUT:
-        print(f"超时，已运行 {result.duration_seconds}秒")
-    case GoalStatus.MAX_ITERATIONS:
-        print(f"达到最大迭代次数，建议增加 max_iterations")
-    case GoalStatus.MAX_RESETS:
-        print("上下文重置次数过多，任务可能过于复杂")
-    case GoalStatus.ERROR:
-        print(f"执行错误: {result.error}")
-    case GoalStatus.VERIFIER_FAULT:
-        print("验证器故障，请检查 custom_verifier 实现")
-    case GoalStatus.CANCELLED:
-        print("用户取消")
+switch (result.status()) {
+    case ACHIEVED:
+        System.out.println("目标达成");
+        break;
+    case TIMEOUT:
+        System.out.println("超时，已运行 " + result.durationSeconds() + "秒");
+        break;
+    case MAX_ITERATIONS:
+        System.out.println("达到最大迭代次数，建议增加 maxIterations");
+        break;
+    case MAX_RESETS:
+        System.out.println("上下文重置次数过多，任务可能过于复杂");
+        break;
+    case ERROR:
+        System.out.println("执行错误: " + result.error());
+        break;
+    case VERIFIER_FAULT:
+        System.out.println("验证器故障，请检查 customVerifier 实现");
+        break;
+    case CANCELLED:
+        System.out.println("用户取消");
+        break;
+}
 ```
 
 ### 工作流编排
 
 组合多个目标形成工作流：
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
 
-async def code_review_workflow(agent: AgentHarness):
-    """代码审查工作流"""
+public class CodeReviewWorkflow {
 
-    # Step 1: 静态分析
-    result1 = await agent.run_goal(
-        goal="运行静态分析，找出代码问题",
-        max_iterations=10,
-    )
-    if result1.status != GoalStatus.ACHIEVED:
-        return result1
+    public static GoalResult codeReviewWorkflow(AgentHarness agent) {
+        // Step 1: 静态分析
+        GoalResult result1 = agent.runGoal(
+            "运行静态分析，找出代码问题", null).join();
+        if (result1.status() != GoalStatus.ACHIEVED) {
+            return result1;
+        }
 
-    # Step 2: 修复问题
-    result2 = await agent.run_goal(
-        goal="修复所有发现的代码问题",
-        max_iterations=30,
-    )
-    if result2.status != GoalStatus.ACHIEVED:
-        return result2
+        // Step 2: 修复问题
+        GoalResult result2 = agent.runGoal(
+            "修复所有发现的代码问题", null).join();
+        if (result2.status() != GoalStatus.ACHIEVED) {
+            return result2;
+        }
 
-    # Step 3: 运行测试
-    result3 = await agent.run_goal(
-        goal="确保所有测试通过",
-        max_iterations=20,
-    )
+        // Step 3: 运行测试
+        GoalResult result3 = agent.runGoal(
+            "确保所有测试通过", null).join();
 
-    return result3
+        return result3;
+    }
 
-async def main():
-    agent = AgentHarness()
-    result = await code_review_workflow(agent)
-    print(f"工作流完成: {result.status.value}")
-
-asyncio.run(main())
+    public static void main(String[] args) {
+        AgentHarness agent = AgentHarness.builder().build();
+        GoalResult result = codeReviewWorkflow(agent);
+        System.out.println("工作流完成: " + result.status().getValue());
+    }
+}
 ```

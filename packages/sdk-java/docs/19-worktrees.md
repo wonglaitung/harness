@@ -17,31 +17,40 @@ Worktrees 模块支持**并行执行多个 Goal**，每个在独立的 git workt
 
 ### WorktreeOrchestrator
 
-```python
-from harness import AgentHarness
-from harness.loop import WorktreeOrchestrator, WorktreeConfig
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.loop.worktree.WorktreeOrchestrator;
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeResult;
+import java.util.List;
+import java.util.Map;
 
-agent = AgentHarness(model="claude-sonnet-4-6")
-orchestrator = WorktreeOrchestrator(agent, ".")
+GoalLoop.AgentRunner agent = ...;
+WorktreeOrchestrator orchestrator = new WorktreeOrchestrator(agent, ".");
 
-# 并行执行多个 Goal
-results = await orchestrator.run_parallel([
-    WorktreeConfig(name="feature-a", goal="实现功能 A"),
-    WorktreeConfig(name="feature-b", goal="实现功能 B"),
-    WorktreeConfig(name="bugfix-c", goal="修复 Bug C"),
-])
+// 并行执行多个 Goal
+Map<String, WorktreeResult> results = orchestrator.runParallel(List.of(
+    WorktreeConfig.builder().name("feature-a").goal("实现功能 A").build(),
+    WorktreeConfig.builder().name("feature-b").goal("实现功能 B").build(),
+    WorktreeConfig.builder().name("bugfix-c").goal("修复 Bug C").build()
+)).join();
 
-# 检查结果
-for name, result in results.items():
-    print(f"{name}: {result.goal_result.status.value}")
-    if result.goal_result.achieved:
-        print(f"  Branch: {result.branch_name}")
-        print(f"  Iterations: {result.goal_result.total_iterations}")
+// 检查结果
+for (Map.Entry<String, WorktreeResult> entry : results.entrySet()) {
+    WorktreeResult result = entry.getValue();
+    System.out.println(entry.getKey() + ": " + result.getGoalResult().status().getValue());
+    if (result.isAchieved()) {
+        System.out.println("  Branch: " + result.getBranchName());
+        System.out.println("  Iterations: " + result.getGoalResult().totalIterations());
+    }
+}
 
-# 合并成功的分支
-for name, result in results.items():
-    if result.achieved:
-        print(f"{name}: merged successfully")
+// 合并成功的分支
+for (Map.Entry<String, WorktreeResult> entry : results.entrySet()) {
+    if (entry.getValue().isAchieved()) {
+        System.out.println(entry.getKey() + ": merged successfully");
+    }
+}
 ```
 
 ## 配置选项
@@ -84,72 +93,88 @@ for name, result in results.items():
 
 ### 并行开发多个功能
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.loop import WorktreeOrchestrator, WorktreeConfig
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.loop.worktree.WorktreeOrchestrator;
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeResult;
+import com.harness.loop.worktree.MergeResult;
+import java.util.List;
+import java.util.Map;
 
-async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
-    orchestrator = WorktreeOrchestrator(agent, ".")
+public class WorktreeExample {
+    public static void main(String[] args) throws Exception {
+        GoalLoop.AgentRunner agent = ...;
+        WorktreeOrchestrator orchestrator = new WorktreeOrchestrator(agent, ".");
 
-    # 定义并行任务
-    tasks = [
-        WorktreeConfig(
-            name="add-auth",
-            goal="实现用户认证功能，包括登录、注册、登出",
-            base_branch="main",
-        ),
-        WorktreeConfig(
-            name="add-api",
-            goal="实现 REST API 端点，包括 CRUD 操作",
-            base_branch="main",
-        ),
-        WorktreeConfig(
-            name="fix-tests",
-            goal="修复所有失败的测试用例",
-            base_branch="main",
-        ),
-    ]
+        // 定义并行任务
+        List<WorktreeConfig> tasks = List.of(
+            WorktreeConfig.builder()
+                .name("add-auth")
+                .goal("实现用户认证功能，包括登录、注册、登出")
+                .baseBranch("main")
+                .build(),
+            WorktreeConfig.builder()
+                .name("add-api")
+                .goal("实现 REST API 端点，包括 CRUD 操作")
+                .baseBranch("main")
+                .build(),
+            WorktreeConfig.builder()
+                .name("fix-tests")
+                .goal("修复所有失败的测试用例")
+                .baseBranch("main")
+                .build()
+        );
 
-    # 并行执行
-    print("开始并行执行 3 个任务...")
-    results = await orchestrator.run_parallel(tasks)
+        // 并行执行
+        System.out.println("开始并行执行 3 个任务...");
+        Map<String, WorktreeResult> results = orchestrator.runParallel(tasks).join();
 
-    # 汇总结果
-    achieved = sum(1 for r in results.values() if r.achieved)
-    print(f"\n完成: {achieved}/{len(tasks)} 个任务达成目标")
+        // 汇总结果
+        long achieved = results.values().stream().filter(WorktreeResult::isAchieved).count();
+        System.out.println("\n完成: " + achieved + "/" + tasks.size() + " 个任务达成目标");
 
-    # 合并所有成功的分支
-    merge_result = await orchestrator.merge_successful(results)
-    print(f"合并成功: {merge_result.merged}")
-    print(f"有冲突: {merge_result.conflicts}")
-    print(f"跳过: {merge_result.skipped}")
-
-asyncio.run(main())
+        // 合并所有成功的分支
+        MergeResult mergeResult = orchestrator.mergeSuccessful(results, "main").join();
+        System.out.println("合并成功: " + mergeResult.getMerged());
+        System.out.println("有冲突: " + mergeResult.getConflicts());
+        System.out.println("跳过: " + mergeResult.getSkipped());
+    }
+}
 ```
 
 ### 使用自定义验证器
 
-```python
-async def verify_tests_pass(result):
-    """验证测试通过"""
-    proc = await asyncio.create_subprocess_exec(
-        "pytest", "tests/",
-        stdout=asyncio.subprocess.PIPE,
-    )
-    await proc.communicate()
-    return proc.returncode == 0
+```java
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeOrchestrator;
+import com.harness.loop.types.GoalResult;
+import java.util.List;
+import java.util.function.Function;
+import java.util.concurrent.CompletableFuture;
 
-tasks = [
-    WorktreeConfig(
-        name="refactor-auth",
-        goal="重构认证模块",
-        custom_verifier=verify_tests_pass,
-    ),
-]
+// 自定义验证器：验证测试通过
+Function<GoalResult, Boolean> verifyTestsPass = result -> {
+    try {
+        ProcessBuilder pb = new ProcessBuilder("pytest", "tests/");
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        int exitCode = process.waitFor();
+        return exitCode == 0;
+    } catch (Exception e) {
+        return false;
+    }
+};
 
-results = await orchestrator.run_parallel(tasks)
+List<WorktreeConfig> tasks = List.of(
+    WorktreeConfig.builder()
+        .name("refactor-auth")
+        .goal("重构认证模块")
+        .customVerifier(verifyTestsPass)
+        .build()
+);
+
+Map<String, WorktreeResult> results = orchestrator.runParallel(tasks).join();
 ```
 
 ## 工作原理

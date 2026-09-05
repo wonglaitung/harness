@@ -17,56 +17,56 @@ Connectors 模块让 Agent 能够与外部系统**双向交互**：接收外部�
 
 ### ConnectorManager
 
-```python
-from harness import AgentHarness
-from harness.connectors import (
-    ConnectorManager,
-    SlackConnector,
-    GitHubConnector,
-    WebhookConnector,
-    OutputChannel,
-    SlackConfig,
-    GitHubConfig,
-    WebhookConfig,
-)
-from harness.triggers import TriggerManager
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.connectors.ConnectorManager;
+import com.harness.connectors.SlackConnector;
+import com.harness.connectors.SlackConfig;
+import com.harness.connectors.GitHubConnector;
+import com.harness.connectors.GitHubConfig;
+import com.harness.connectors.WebhookConnector;
+import com.harness.connectors.OutputChannel;
+import com.harness.triggers.TriggerManager;
 
-agent = AgentHarness(model="claude-sonnet-4-6")
-trigger_manager = TriggerManager(agent)
+GoalLoop.AgentRunner agent = ...;
+TriggerManager triggerManager = new TriggerManager(agent);
 
-# 创建 ConnectorManager
-manager = ConnectorManager(trigger_manager)
+// 创建 ConnectorManager
+ConnectorManager manager = new ConnectorManager();
 
-# 注册 Slack 连接器
-slack = SlackConnector(config=SlackConfig(
-    bot_token="xoxb-...",
-    app_token="xapp-...",
-))
-manager.register_connector(slack)
+// 注册 Slack 连接器
+SlackConnector slack = new SlackConnector(
+    new SlackConfig.Builder()
+        .botToken("xoxb-...")
+        .appToken("xapp-...")
+        .build()
+);
+manager.registerConnector(slack);
 
-# 注册 GitHub 连接器
-github = GitHubConnector(config=GitHubConfig(
-    app_id="123456",
-    private_key="-----BEGIN RSA PRIVATE KEY-----\n...",
-))
-manager.register_connector(github)
+// 注册 GitHub 连接器
+GitHubConnector github = new GitHubConnector(
+    new GitHubConfig.Builder()
+        .appId("123456")
+        .privateKey("-----BEGIN RSA PRIVATE KEY-----\n...")
+        .build()
+);
+manager.registerConnector(github);
 
-# 注册 Webhook 连接器
-webhook = WebhookConnector(config=WebhookConfig(
-    endpoint="/webhook/github",
-    secret="whsec_...",
-))
-manager.register_connector(webhook)
+// 注册 Webhook 连接器
+WebhookConnector webhook = new WebhookConnector()
+    .withEndpoint("/webhook/github")
+    .withSecret("whsec_...");
+manager.registerConnector(webhook);
 
-# 注册输出通道
-manager.register_output_channel(OutputChannel(
-    type="slack",
-    name="alerts",
-    config={"channel": "#alerts"},
-))
+// 注册输出通道
+manager.registerOutputChannel(OutputChannel.builder()
+    .type("slack")
+    .name("alerts")
+    .addConfig("channel", "#alerts")
+    .build());
 
-# 启动所有连接器
-await manager.start()
+// 启动所有连接器
+manager.start().join();
 ```
 
 ## 连接器类型
@@ -75,80 +75,86 @@ await manager.start()
 
 接收 HTTP POST 请求作为触发源。
 
-```python
-from harness.connectors import WebhookConnector, WebhookConfig
+```java
+import com.harness.connectors.WebhookConnector;
 
-webhook = WebhookConnector(config=WebhookConfig(
-    endpoint="/webhook/github",     # URL 路径
-    secret="whsec_xxx",              # HMAC 签名验证（可选）
-    rate_limit=100,                  # 每分钟请求限制
-))
+WebhookConnector webhook = new WebhookConnector()
+    .withEndpoint("/webhook/github")     // URL 路径
+    .withSecret("whsec_xxx")             // HMAC 签名验证（可选）
+    .withRateLimit(100);                 // 每分钟请求限制
 
-# 注册到 FastAPI（可选）
-webhook.set_app(fastapi_app)
+// 注册到 ConnectorManager
+ConnectorManager manager = new ConnectorManager();
+manager.registerConnector(webhook);
 ```
 
 ### 2. SlackConnector
 
 通过 Slack Socket Mode 接收消息和命令。
 
-```python
-from harness.connectors import SlackConnector, SlackConfig
+```java
+import com.harness.connectors.SlackConnector;
+import com.harness.connectors.SlackConfig;
 
-slack = SlackConnector(config=SlackConfig(
-    bot_token="xoxb-...",            # Bot User OAuth Token
-    app_token="xapp-...",            # App-Level Token
-    command_prefix="/harness",       # 命令前缀
-))
+SlackConnector slack = new SlackConnector(
+    new SlackConfig.Builder()
+        .botToken("xoxb-...")            // Bot User OAuth Token
+        .appToken("xapp-...")            // App-Level Token
+        .build()
+);
 
-# 用户在 Slack 发送 "/harness analyze this code"
-# Agent 自动执行并回复到原线程
+// 用户在 Slack 发送 "/harness analyze this code"
+// Agent 自动执行并回复到原线程
 ```
 
 ### 3. GitHubConnector
 
 接收 GitHub Webhook 事件（PR, Issue, Push 等）。
 
-```python
-from harness.connectors import GitHubConnector, GitHubConfig
+```java
+import com.harness.connectors.GitHubConnector;
+import com.harness.connectors.GitHubConfig;
 
-github = GitHubConnector(config=GitHubConfig(
-    app_id="123456",                           # GitHub App ID
-    private_key="-----BEGIN RSA PRIVATE KEY...",  # 私钥
-    webhook_secret="whsec_...",                # Webhook 密钥
-    events=["push", "pull_request"],           # 订阅的事件
-))
+GitHubConnector github = new GitHubConnector(
+    new GitHubConfig.Builder()
+        .appId("123456")                           // GitHub App ID
+        .privateKey("-----BEGIN RSA PRIVATE KEY...") // 私钥
+        .webhookSecret("whsec_...")                 // Webhook 密钥
+        .build()
+);
 
-# PR opened → Agent 自动 review 并评论
-# Issue created → Agent 自动分析和回复
+// PR opened → Agent 自动 review 并评论
+// Issue created → Agent 自动分析和回复
 ```
 
 ## 路由元数据（RoutingKeys）
 
 用于实现结果的"原路返回"功能。
 
-```python
-from harness.connectors import RoutingKeys
+```java
+import com.harness.connectors.RoutingKeys;
+import com.harness.connectors.ConnectorEvent;
+import java.util.Map;
 
-# Slack: 回复到原线程
-event = ConnectorEvent(
+// Slack: 回复到原线程
+ConnectorEvent slackEvent = new ConnectorEvent(
     ...,
-    routing_metadata={
-        RoutingKeys.SLACK_THREAD_TS: "17123456.0001",
-        RoutingKeys.SLACK_CHANNEL_ID: "C123456",
-    }
-)
-# 结果会回复到该线程
+    Map.of(
+        RoutingKeys.SLACK_THREAD_TS, "17123456.0001",
+        RoutingKeys.SLACK_CHANNEL_ID, "C123456"
+    )
+);
+// 结果会回复到该线程
 
-# GitHub: 评论到原 PR
-event = ConnectorEvent(
+// GitHub: 评论到原 PR
+ConnectorEvent githubEvent = new ConnectorEvent(
     ...,
-    routing_metadata={
-        RoutingKeys.GITHUB_PR_NUMBER: 42,
-        RoutingKeys.GITHUB_REPO: "owner/repo",
-    }
-)
-# 结果会评论到该 PR
+    Map.of(
+        RoutingKeys.GITHUB_PR_NUMBER, 42,
+        RoutingKeys.GITHUB_REPO, "owner/repo"
+    )
+);
+// 结果会评论到该 PR
 ```
 
 ### RoutingKeys 常量
@@ -166,112 +172,115 @@ event = ConnectorEvent(
 
 ### 注册输出通道
 
-```python
-# Slack 输出
-manager.register_output_channel(OutputChannel(
-    type="slack",
-    name="alerts",
-    config={"channel": "#alerts"},
-))
+```java
+import com.harness.connectors.OutputChannel;
+import java.util.Map;
 
-# Webhook 输出
-manager.register_output_channel(OutputChannel(
-    type="webhook",
-    name="external_api",
-    config={
-        "url": "https://example.com/webhook",
-        "headers": {"Authorization": "Bearer token"},
-    },
-))
+// Slack 输出
+manager.registerOutputChannel(OutputChannel.builder()
+    .type("slack")
+    .name("alerts")
+    .addConfig("channel", "#alerts")
+    .build());
 
-# 文件输出
-manager.register_output_channel(OutputChannel(
-    type="file",
-    name="logs",
-    config={"path": "/var/log/harness/output.txt"},
-))
+// Webhook 输出
+manager.registerOutputChannel(OutputChannel.builder()
+    .type("webhook")
+    .name("external_api")
+    .addConfig("url", "https://example.com/webhook")
+    .addConfig("headers", Map.of("Authorization", "Bearer token"))
+    .build());
+
+// 文件输出
+manager.registerOutputChannel(OutputChannel.builder()
+    .type("file")
+    .name("logs")
+    .addConfig("path", "/var/log/harness/output.txt")
+    .build());
 ```
 
 ### 路由输出
 
-```python
-# 将结果发送到指定通道
-results = await manager.route_output(
-    result=goal_result,
-    channels=["alerts", "logs"],
-    routing_metadata={
-        RoutingKeys.SLACK_THREAD_TS: "17123456.0001",
-    },
-)
+```java
+import com.harness.connectors.RoutingKeys;
+import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+// 将结果发送到指定通道
+CompletableFuture<List<OutputResult>> results = manager.routeOutput(
+    goalResult,
+    List.of("alerts", "logs"),
+    Map.of(RoutingKeys.SLACK_THREAD_TS, "17123456.0001")
+);
 ```
 
 ## 完整示例
 
 ### Slack Bot 集成
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.connectors import (
-    ConnectorManager,
-    SlackConnector,
-    OutputChannel,
-    SlackConfig,
-)
-from harness.triggers import TriggerManager
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.connectors.ConnectorManager;
+import com.harness.connectors.SlackConnector;
+import com.harness.connectors.SlackConfig;
+import com.harness.connectors.OutputChannel;
+import java.util.concurrent.CompletableFuture;
 
-async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
-    trigger_manager = TriggerManager(agent)
-    manager = ConnectorManager(trigger_manager)
+public class SlackBotExample {
+    public static void main(String[] args) throws Exception {
+        GoalLoop.AgentRunner agent = ...;
+        ConnectorManager manager = new ConnectorManager();
 
-    # 配置 Slack
-    slack = SlackConnector(config=SlackConfig(
-        bot_token="xoxb-your-bot-token",
-        app_token="xapp-your-app-token",
-        command_prefix="/agent",
-    ))
-    manager.register_connector(slack)
+        // 配置 Slack
+        SlackConnector slack = new SlackConnector(
+            new SlackConfig.Builder()
+                .botToken("xoxb-your-bot-token")
+                .appToken("xapp-your-app-token")
+                .build()
+        );
+        manager.registerConnector(slack);
 
-    # 配置输出通道
-    manager.register_output_channel(OutputChannel(
-        type="slack",
-        name="default",
-        config={"channel": "#general"},
-    ))
+        // 配置输出通道
+        manager.registerOutputChannel(OutputChannel.builder()
+            .type("slack")
+            .name("default")
+            .addConfig("channel", "#general")
+            .build());
 
-    # 启动
-    await manager.start()
-    print("Slack connector started. Send '/agent help' in Slack.")
+        // 启动
+        manager.start().join();
+        System.out.println("Slack connector started. Send '/agent help' in Slack.");
 
-    # 保持运行
-    try:
-        await asyncio.sleep(3600)  # 运行 1 小时
-    finally:
-        await manager.stop()
-
-asyncio.run(main())
+        // 保持运行
+        try {
+            Thread.sleep(3600_000);  // 运行 1 小时
+        } finally {
+            manager.stop().join();
+        }
+    }
+}
 ```
 
 ### GitHub PR 自动审查
 
-```python
-from harness.connectors import (
-    GitHubConnector,
-    GitHubConfig,
-)
+```java
+import com.harness.connectors.GitHubConnector;
+import com.harness.connectors.GitHubConfig;
+import java.nio.file.Files;
 
-github = GitHubConnector(config=GitHubConfig(
-    app_id="123456",
-    private_key=open("private-key.pem").read(),
-    webhook_secret="your-webhook-secret",
-    events=["pull_request.opened", "pull_request.synchronize"],
-))
+GitHubConnector github = new GitHubConnector(
+    new GitHubConfig.Builder()
+        .appId("123456")
+        .privateKey(Files.readString(Path.of("private-key.pem")))
+        .webhookSecret("your-webhook-secret")
+        .build()
+);
 
-# 当 PR 被打开时，Agent 会自动：
-# 1. 获取 PR diff
-# 2. 分析代码变更
-# 3. 在 PR 中添加审查评论
+// 当 PR 被打开时，Agent 会自动：
+// 1. 获取 PR diff
+// 2. 分析代码变更
+// 3. 在 PR 中添加审查评论
 ```
 
 ## 数据流

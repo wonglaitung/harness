@@ -78,194 +78,54 @@ GoalConfig goalConfig = GoalConfig.builder()
 
 ## 公共 API 导出
 
-```python
-from harness import (
-    # 核心 SDK
-    AgentHarness,
-    HarnessConfig,
-    SecurityConfig,
-    CostControlConfig,
-    ObservabilityConfig,
-    StorageConfig,
-    RoutingConfig,  # CPU Router 配置
-
-    # 模型预设
-    ModelPreset,
-    MODEL_PRESETS,
-    CONTEXT_LEVELS,
-    DEFAULT_PRESET,
-    get_model_preset,
-    parse_context_window,
-    get_default_output_tokens,
-
-    # LLM
-    LLMClient,
-    LLMConfig,
-    AnthropicClient,
-    OpenAIClient,
-    MockLLMClient,
-    EmbeddedLlamaClient,  # 嵌入式 Llama 客户端
-    RoutingLLMClient,     # 路由 LLM 客户端
-
-    # 内置工具
-    ReadTool,
-    WriteTool,
-    EditTool,
-    GlobTool,
-    GrepTool,
-    BashTool,
-    WebSearchTool,
-    WebFetchTool,
-
-    # 核心类型
-    Message,
-    Session,
-    ToolCall,
-    ToolResult,
-    TokenUsage,
-    LoopResult,
-    LoopSnapshot,
-    LoopState,
-
-    # 成本控制
-    CostConfig,
-    CostController,
-    CostStorage,
-    InMemoryCostStorage,
-    BudgetStatus,
-    UserBudgetStatus,
-    GlobalBudgetStatus,
-    UserUsage,
-    BudgetExceededError,
-    UserBudgetExceededError,
-    GlobalBudgetExceededError,
-
-    # 进度事件
-    ProgressEvent,
-    ProgressEventType,
-    ProgressCallback,
-    ProgressFormatter,
-    create_progress_handler,
-
-    # 技能
-    Skill,
-    SkillTrigger,
-    SkillTools,
-    SkillRegistry,
-    SkillInjector,
-    SkillLoader,
-    InjectionConfig,
-    ProgressiveSkillLoader,
-    SkillMetadata,
-    LoadingLevel,
-
-    # 安全
-    SandboxExecutor,
-    LightweightSandbox,
-    InputValidator,
-    PromptInjectionDetector,
-    AuditLogger,
-    AuditLogEntry,
-    ResultSanitizer,
-    SanitizationRule,
-
-    # MCP
-    MCPTransport,
-    StdioTransport,
-    HTTPTransport,
-    MCPClient,
-    MCPTool,
-    MCPServerInfo,
-    MCPManager,
-    MCPServerConfig,
-    MCPToolWrapper,
-
-    # 会话存储
-    SessionStore,
-    FileSessionStore,
-    SQLiteSessionStore,
-    AsyncSQLiteSessionStore,
-
-    # 可观测性
-    ObservabilityManager,
-    ObservabilityConfig,
-    setup_observability,
-
-    # 生命周期钩子 (P0)
-    HookPoint,
-    HookAction,
-    HookContext,
-    HookResult,
-    LifecycleHook,
-    HookManager,
-    LoggingHook,
-    AbortOnDangerousToolHook,
-    MaxToolCallsHook,
-    ConfirmationHook,
-    ConfirmationResult,
-    get_trust_key,
-
-    # 动态系统提示 (P0)
-    SystemPromptSource,
-    SystemPromptConfig,
-    SystemPromptBuilder,
-    discover_project_context,
-
-    # Ralph Loop (P1)
-    RalphLoopConfig,
-    RalphLoopHook,
-
-    # Sub-Agent 管理 (P1)
-    SubAgentConfig,
-    SubAgentStatus,
-    SubAgentResult,
-    SubAgentManager,
-
-    # 自验证 (P2)
-    SelfVerificationConfig,
-    SelfVerificationHook,
-
-    # MEMORY.md 标准 (P2)
-    MemoryFileManager,
-    MemoryEntry,
-    MemoryCategory,
-    MemorySource,
-    MemorySections,
-    create_default_memory,
-
-    # 向量存储 (P2)
-    VectorMemoryStore,
-    VectorMemoryConfig,
-    VectorSearchResult,
-    SimpleInMemoryVectorStore,
-    MockEmbeddingModel,
-
-    # Loop Engineering (P0)
-    GoalConfig,
-    GoalResult,
-    GoalStatus,
-    GoalVerifier,
-    GoalLoop,
-    VerificationMethod,
-    VerificationRecord,
-    VerificationResult,
-
-    # Automation (P0 - Phase 2)
-    Automation,
-    AutomationConfig,
-    AutomationResult,
-    AutomationStatus,
-
-    # Trigger System (P0 - Phase 2)
-    Trigger,
-    CronTrigger,
-    IntervalTrigger,
-    TriggerManager,
-    TriggerType,
-    TriggerState,
-    TriggerEvent,
-    TriggerAction,
-)
+```java
+// Java SDK 公共 API 导出
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.core.LLMClient;
+import com.harness.core.Tool;
+import com.harness.core.LifecycleHook;
+import com.harness.types.LoopResult;
+import com.harness.types.LoopState;
+import com.harness.types.Session;
+import com.harness.types.ToolCall;
+import com.harness.types.ToolResult;
+import com.harness.types.TokenUsage;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import com.harness.loop.automation.Automation;
+import com.harness.loop.automation.AutomationConfig;
+import com.harness.memory.MemoryFileManager;
+import com.harness.memory.MemoryEntry;
+import com.harness.memory.MemoryCategory;
+import com.harness.memory.MemorySource;
+import com.harness.memory.VectorMemoryStore;
+import com.harness.memory.VectorMemoryConfig;
+import com.harness.memory.VectorSearchResult;
+import com.harness.memory.SystemPromptBuilder;
+import com.harness.memory.SystemPromptConfig;
+import com.harness.memory.SystemPromptSource;
+import com.harness.memory.ContextConfig;
+import com.harness.memory.ContextBudget;
+import com.harness.memory.ContextCompressor;
+import com.harness.memory.CompressionConfig;
+import com.harness.memory.BuiltContext;
+import com.harness.memory.SessionStore;
+import com.harness.memory.FileSessionStore;
+import com.harness.memory.SQLiteSessionStore;
+import com.harness.skills.Skill;
+import com.harness.skills.SkillLoader;
+import com.harness.skills.SkillRegistry;
+import com.harness.skills.SkillInjector;
+import com.harness.security.InputValidator;
+import com.harness.security.PromptInjectionDetector;
+import com.harness.security.AuditLogger;
+import com.harness.security.ResultSanitizer;
+import com.harness.mcp.McpManager;
+import com.harness.mcp.McpServerConfig;
+import com.harness.mcp.McpToolInfo;
+import com.harness.core.MockHarness;
 ```
 
 ## AgentHarness
@@ -274,19 +134,24 @@ AgentHarness 是 SDK 的主入口，提供完整的 Agent 运行时。
 
 ### 构造函数
 
-```python
-class AgentHarness:
-    def __init__(
-        self,
-        model: str = "claude-sonnet-4-6",    # 模型名称
-        api_key: str | None = None,           # API 密钥（或设置环境变量）
-        provider: str = "anthropic",          # LLM 提供商 - "anthropic", "openai", 或 "custom"
-        base_url: str | None = None,          # 自定义 API 端点（用于本地 LLM、Azure 等）
-        tools: list[Tool] | None = None,      # 可用的工具列表
-        config: HarnessConfig | None = None,  # 完整配置对象
-        llm_client: LLMClient | None = None,  # 自定义 LLM 客户端实例（覆盖提供商检测）
-        **kwargs,                             # 其他配置选项
-    )
+```java
+// AgentHarness 构造 - 使用 Builder 模式
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.core.Tool;
+import com.harness.core.LLMClient;
+import java.util.List;
+
+AgentHarness agent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")           // 模型名称
+    .apiKey("sk-ant-...")                 // API 密钥（或设置环境变量）
+    .config(HarnessConfig.builder()
+        .provider("anthropic")             // LLM 提供商 - "anthropic", "openai", 或 "auto"
+        .baseUrl(null)                     // 自定义 API 端点
+        .build())
+    .llmClient(null)                       // 自定义 LLM 客户端实例
+    .addTool(new ReadTool())               // 可用的工具
+    .build();
 ```
 
 ### Provider 自动检测
@@ -303,334 +168,280 @@ class AgentHarness:
 
 #### run() - 执行任务
 
-```python
-async def run(
-    self,
-    prompt: str,                     # 用户输入
-    session_id: str | None = None,   # 会话 ID（用于对话连续性）
-    on_progress: ProgressCallback | None = None, # 进度事件回调
-    verbose: bool = False,           # 如果为 True，在控制台打印进度
-    **kwargs,                        # 其他选项
-) -> LoopResult:
-    """执行 Agent 任务，返回 LoopResult"""
+```java
+// run() - 执行任务
+import com.harness.types.LoopResult;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+CompletableFuture<LoopResult> run(String prompt);
+CompletableFuture<LoopResult> run(String prompt, String sessionId);
+CompletableFuture<LoopResult> run(String prompt, String sessionId, Consumer<Object> onProgress);
 ```
 
 #### run_sync() - 同步执行
 
-```python
-def run_sync(
-    self,
-    prompt: str,
-    session_id: str | None = None,
-    **kwargs,
-) -> LoopResult:
-    """同步版本的 run()
-
-    注意：不能在 async 上下文中调用。如果需要异步执行，使用 await agent.run()
-    """
+```java
+// run() 在 Java 中天然同步（通过 .join() 阻塞）
+LoopResult result = agent.run("prompt").join();          // 同步执行
+// 或异步
+agent.run("prompt").thenAccept(result -> { ... });       // 异步回调
 ```
 
 **事件循环检测**：使用语义化 API 检测运行中的事件循环：
 
-```python
-# 内部实现
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    # 无运行中的循环 → 安全执行
-    return asyncio.run(self.run(...))
-else:
-    # 有运行中的循环 → 禁止同步调用
-    raise RuntimeError("run_sync() cannot be called from async context")
+```java
+// Java 中不需要事件循环检测 - 使用 CompletableFuture 自然支持同步/异步
+// 同步调用（阻塞当前线程）
+LoopResult result = agent.run("prompt").join();
+
+// 异步调用（非阻塞）
+agent.run("prompt").thenAccept(result -> {
+    // 处理结果
+});
 ```
 
 **注意**：不要依赖字符串匹配检测事件循环（如检查异常消息），这在不同 Python 版本中可能不稳定。
 
 #### stream() - 流式执行
 
-```python
-async def stream(
-    self,
-    prompt: str,                     # 用户输入
-    session_id: str | None = None,   # 会话 ID（用于对话连续性）
-    on_chunk: Callable[[str], None] | None = None, # 每个文本块的回调
-    on_progress: ProgressCallback | None = None, # 进度事件回调
-    verbose: bool = False,           # 如果为 True，在控制台打印进度
-) -> AsyncIterator[str]:
-    """流式执行 Agent 任务，逐步返回内容
-    
-    注意：工具调用在内部处理，不会流式传输。
-    """
+```java
+// stream() - 流式执行（Java 中通过 run() + result 获取完整响应）
+// Java SDK 的 run() 返回 CompletableFuture<LoopResult>
+// 工具调用在内部处理，最终结果包含完整响应
+CompletableFuture<LoopResult> future = agent.run("prompt");
+LoopResult result = future.join();
+System.out.println(result.content()); // 获取完整响应
 ```
 
 #### run_goal() - 目标驱动执行
 
-```python
-async def run_goal(
-    self,
-    goal: str | GoalConfig,          # 目标描述或配置
-    custom_verifier: Callable | None = None,  # 自定义验证函数
-    max_iterations: int = 50,        # 最大迭代次数
-    max_context_resets: int = 5,     # 最大上下文重置次数
-    timeout_seconds: int = 3600,     # 超时时间（秒）
-    workspace_dir: str = ".",        # 工作目录
-    **kwargs,                        # 其他 GoalConfig 选项
-) -> GoalResult:
-    """目标驱动执行：Agent 自主运行直到目标达成
-    
-    示例：
-        result = await agent.run_goal("修复所有类型错误")
-        if result.status == GoalStatus.ACHIEVED:
-            print(f"目标达成，共 {result.total_iterations} 轮迭代")
-    """
+```java
+// run_goal() - 目标驱动执行
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import java.util.function.Function;
+import java.util.concurrent.CompletableFuture;
+
+CompletableFuture<GoalResult> runGoal(String goal);
+CompletableFuture<GoalResult> runGoal(String goal, String sessionId);
+CompletableFuture<GoalResult> runGoal(String goal, String sessionId,
+    Consumer<Object> onProgress, Function<GoalResult, Boolean> customVerifier);
+CompletableFuture<GoalResult> runGoal(GoalConfig goalConfig, Consumer<Object> onProgress);
+
+// 示例：
+GoalResult result = agent.runGoal("修复所有类型错误", null).join();
+if (result.status() == GoalStatus.ACHIEVED) {
+    System.out.println("目标达成，共 " + result.totalIterations() + " 轮迭代");
+}
 ```
 
 详见 [18-loop-engineering.md](./18-loop-engineering.md)。
 
 #### tool() - 注册工具装饰器
 
-```python
-def tool(
-    self,
-    name: str | None = None,          # 工具名称（默认使用函数名）
-    description: str | None = None,   # 工具描述（默认使用函数文档字符串）
-) -> Callable:
-    """装饰器：将函数注册为工具
-    
-    示例：
-        @agent.tool(description="Say hello")
-        def hello(name: str) -> str:
-            return f"Hello, {name}!"
-    """
+```java
+// Java 中没有装饰器语法 - 使用实现 Tool 接口注册工具
+import com.harness.core.Tool;
+import com.harness.core.ToolContext;
+import com.harness.types.ToolResult;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+public class HelloTool implements Tool {
+    @Override public String getName() { return "hello"; }
+    @Override public String getDescription() { return "Say hello"; }
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of("type", "object", "properties",
+            Map.of("name", Map.of("type", "string")));
+    }
+
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+        String name = (String) args.getOrDefault("name", "world");
+        return CompletableFuture.completedFuture(
+            ToolResult.success(ctx.sessionId(), "Hello, " + name + "!", getName()));
+    }
+}
+
+agent.registerTool(new HelloTool());
 ```
 
 #### 钩子注册说明
 
 钩子通过继承 `LifecycleHook` 类并使用 `add_hook()` 方法注册：
 
-```python
-from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
+```java
+// 钩子通过实现 LifecycleHook 接口并使用 addHook() 方法注册：
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import java.util.List;
 
-class MyHook(LifecycleHook):
-    @property
-    def hook_points(self):
-        return [HookPoint.BEFORE_TOOL_EXECUTE]
-    
-    async def execute(self, ctx: HookContext) -> HookResult:
-        # 钩子逻辑
-        return HookResult.continue_()
+public class MyHook implements LifecycleHook {
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.BEFORE_TOOL_EXECUTE);
+    }
 
-# 注册钩子（使用公开 API）
-agent.add_hook(MyHook())
+    @Override
+    public HookResult execute(HookContext ctx) {
+        // 钩子逻辑
+        return HookResult.continue_();
+    }
+}
+
+// 注册钩子
+agent.addHook(new MyHook());
 ```
 
 #### add_hook() - 注册生命周期钩子
 
-```python
-def add_hook(
-    self,
-    hook: LifecycleHook,
-    points: list[HookPoint] | None = None,
-) -> None:
-    """注册生命周期钩子
+```java
+// addHook() - 注册生命周期钩子
+import com.harness.core.LifecycleHook;
+import java.util.List;
 
-    钩子允许在关键执行点注入自定义逻辑：
-    - LLM 调用前后
-    - 工具执行前后
-    - 错误发生时
-    - 循环开始/结束时
+void addHook(LifecycleHook hook);
+void addHook(LifecycleHook hook, List<HookPoint> points);
 
-    Args:
-        hook: 钩子实例（LifecycleHook 子类）
-        points: 指定钩子点（默认使用 hook.hook_points）
-    """
+// 注册钩子允许在关键执行点注入自定义逻辑：
+// - LLM 调用前后
+// - 工具执行前后
+// - 错误发生时
+// - 循环开始/结束时
 ```
 
 #### remove_hook() - 移除生命周期钩子
 
-```python
-def remove_hook(self, hook: LifecycleHook) -> None:
-    """移除已注册的生命周期钩子"""
+```java
+// removeHook() - 移除生命周期钩子
+void removeHook(LifecycleHook hook);
 ```
 
 #### create_snapshot() - 创建执行快照
 
-```python
-def create_snapshot(
-    self,
-    session_id: str | None = None,
-    iteration: int = 0,
-) -> LoopSnapshot:
-    """创建当前循环状态的快照
+```java
+// createSnapshot() - 创建执行快照
+import com.harness.types.LoopSnapshot;
 
-    快照可用于保存进度并稍后恢复执行。
+LoopSnapshot createSnapshot(String sessionId, int iteration);
 
-    Args:
-        session_id: 会话 ID（None 则使用当前会话）
-        iteration: 当前迭代次数
-
-    Returns:
-        LoopSnapshot 捕获当前状态
-
-    Example:
-        snapshot = agent.create_snapshot(session_id="my-session")
-        snapshot_dict = snapshot.to_dict()  # 可序列化保存
-    """
+// 快照可用于保存进度并稍后恢复执行。
+LoopSnapshot snapshot = agent.createSnapshot("my-session", 0);
+// LoopSnapshot 可序列化保存
 ```
 
 #### restore_from_snapshot() - 从快照恢复执行
 
-```python
-async def restore_from_snapshot(
-    self,
-    snapshot: LoopSnapshot,
-    on_progress: ProgressCallback | None = None,
-) -> LoopResult:
-    """从快照恢复执行
+```java
+// restoreFromSnapshot() - 从快照恢复执行
+import com.harness.types.LoopSnapshot;
+import com.harness.types.LoopResult;
+import java.util.concurrent.CompletableFuture;
 
-    允许继续之前中断的执行。
+CompletableFuture<LoopResult> restoreFromSnapshot(LoopSnapshot snapshot);
 
-    Args:
-        snapshot: 要恢复的快照
-        on_progress: 进度回调
-
-    Returns:
-        LoopResult 恢复执行的结果
-
-    Example:
-        # 从保存的快照恢复
-        snapshot = LoopSnapshot.from_dict(saved_data)
-        result = await agent.restore_from_snapshot(snapshot)
-    """
+// 从保存的快照恢复
+LoopResult result = agent.restoreFromSnapshot(snapshot).join();
 ```
 
-#### register_tool() - 注册工具
+#### registerTool() - 注册工具
 
-```python
-def register_tool(
-    self,
-    tool: Tool,
-) -> None:
-    """注册 Tool 实例"""
+```java
+public void registerTool(Tool tool)
 ```
 
 ### MCP 方法
 
-```python
-def add_mcp_server(
-    self,
-    name: str,
-    command: str | None = None,  # Stdio 传输
-    url: str | None = None,       # HTTP 传输
-    config: dict | None = None,   # 服务器配置
-) -> None:
-    """添加 MCP 服务器"""
+```java
+// MCP 方法
+import com.harness.mcp.McpServerConfig;
 
-def remove_mcp_server(self, name: str) -> None:
-    """移除 MCP 服务器"""
+boolean addMcpServer(McpServerConfig config);
+void registerMcpServer(McpServerConfig config);
+boolean connectMcpServer(String serverName);
+Map<String, Boolean> connectAllMcpServers();
+void disconnectMcpServer(String serverName);
 ```
 
 ### 技能方法
 
-```python
-def load_skills_from_dir(self, directory: Path) -> int:
-    """从指定目录加载技能
+```java
+// 技能方法
+import com.harness.skills.Skill;
+import java.nio.file.Path;
+import java.util.List;
 
-    Args:
-        directory: 包含技能文件的目录路径
-
-    Returns:
-        加载的技能数量
-    """
-
-def activate_skill(self, skill_name: str) -> bool:
-    """激活指定技能
-
-    激活的技能会在后续的 run() 调用中被注入到 system prompt。
-
-    Args:
-        skill_name: 技能名称
-
-    Returns:
-        True 如果激活成功，False 如果技能不存在
-    """
-
-def deactivate_skill(self, skill_name: str) -> bool:
-    """停用指定技能
-
-    Args:
-        skill_name: 技能名称
-
-    Returns:
-        True 如果停用成功，False 如果技能未激活
-    """
-
-def get_matching_skills(self, user_input: str) -> list:
-    """获取匹配用户输入的技能
-
-    根据技能定义的 triggers（keywords/patterns）匹配用户输入。
-
-    Args:
-        user_input: 用户输入文本
-
-    Returns:
-        匹配的技能列表
-    """
+int loadSkillsFromDir(Path directory);
+boolean activateSkill(String skillName);
+boolean deactivateSkill(String skillName);
+List<Skill> getMatchingSkills(String userInput);
 ```
 
 #### 技能自动注入
 
 `AgentHarness.run()` 会自动将匹配的技能注入到 system prompt：
 
-```python
-from harness import AgentHarness
+```java
+// 技能自动匹配和注入
+// 如果用户输入匹配某个技能的 triggers，该技能内容会被注入到 system prompt
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness(api_key="...")
+AgentHarness agent = AgentHarness.builder().build();
 
-# 技能自动匹配和注入
-# 如果用户输入匹配某个技能的 triggers，该技能内容会被注入到 system prompt
-result = await agent.run("将 README.md 转换为 Word 文档")
+LoopResult result = agent.run("将 README.md 转换为 Word 文档").join();
 
-# 手动激活技能（即使不匹配 triggers 也会注入）
-agent.activate_skill("code-review")
-result = await agent.run("检查这段代码")
+// 手动激活技能（即使不匹配 triggers 也会注入）
+agent.activateSkill("code-review");
+result = agent.run("检查这段代码").join();
 ```
 
 #### 完整示例
 
-```python
-from pathlib import Path
-from harness import AgentHarness
+```java
+// 完整示例
+import com.harness.integration.AgentHarness;
+import com.harness.skills.Skill;
+import com.harness.types.LoopResult;
+import java.nio.file.Path;
+import java.util.List;
 
-agent = AgentHarness(api_key="...")
+AgentHarness agent = AgentHarness.builder().build();
 
-# 加载自定义技能目录
-agent.load_skills_from_dir(Path(".harness/skills"))
+// 加载自定义技能目录
+agent.loadSkillsFromDir(Path.of(".harness/skills"));
 
-# 查看匹配的技能
-matching = agent.get_matching_skills("review this code")
-print(f"匹配的技能: {[s.name for s in matching]}")
+// 查看匹配的技能
+List<Skill> matching = agent.getMatchingSkills("review this code");
+System.out.println("匹配的技能: " + matching);
 
-# 手动激活技能
-agent.activate_skill("security-audit")
+// 手动激活技能
+agent.activateSkill("security-audit");
 
-# 运行（技能会自动注入）
-result = await agent.run("检查安全问题")
+// 运行（技能会自动注入）
+LoopResult result = agent.run("检查安全问题").join();
 
-# 停用技能
-agent.deactivate_skill("security-audit")
+// 停用技能
+agent.deactivateSkill("security-audit");
 ```
 
 ### 配置方法
 
-```python
-@classmethod
-def from_config(cls, path: str) -> AgentHarness:
-    """从 YAML 配置文件创建"""
+```java
+// 配置方法
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-@classmethod
-def from_env(cls) -> AgentHarness:
-    """从环境变量创建（HARNESS_* 前缀）"""
+// 从环境变量创建
+AgentHarness agent = AgentHarness.fromEnv();
+// 或
+HarnessConfig config = HarnessConfig.fromEnv();
+AgentHarness agent2 = AgentHarness.builder().config(config).build();
 ```
 
 ## HarnessConfig
@@ -706,20 +517,16 @@ HarnessConfig config = HarnessConfig.builder()
 
 使用 `StepBudgetConfig` 限制单次任务的迭代次数和工具调用次数，防止模型过度探索。
 
-```python
-from harness.sdk.config import HarnessConfig, StepBudgetConfig
+```java
+// 使用 StepBudgetConfig 限制单次任务的迭代次数和工具调用次数
+import com.harness.core.HarnessConfig;
 
-config = HarnessConfig(
-    max_iterations=3,  # 最大迭代次数
-    step_budget=StepBudgetConfig(
-        max_iterations_per_task=3,     # 任务最大迭代次数
-        max_tool_calls_per_step=5,     # 单次 LLM 响应最大工具调用数
-        max_tool_calls_per_task=10,    # 任务最大工具调用总数
-        action_on_exceed="stop",        # 超限时的动作："stop" | "warn" | "throttle"
-    ),
-)
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(3)
+    // step_budget 在 Java SDK 中通过 HarnessConfig 配置
+    .build();
 
-agent = AgentHarness(config=config, tools=[...])
+AgentHarness agent = AgentHarness.builder().config(config).build();
 ```
 
 #### 参数说明
@@ -749,23 +556,27 @@ Anthropic API 要求工具结果以特定格式发送：`role: "user"` + `tool_r
 
 #### 配置示例
 
-```python
-# 原生 Anthropic API（默认）- 使用 tool_result blocks
-config = HarnessConfig(tool_result_role="tool")
+```java
+// 原生 Anthropic API（默认）- 使用 tool_result blocks
+import com.harness.core.HarnessConfig;
 
-# 兼容模式 - 适用于不支持 tool_result blocks 的 proxy API
-config = HarnessConfig(
-    tool_result_role="user",
-    base_url="https://your-proxy-api.com/v1",
-)
+HarnessConfig config = HarnessConfig.builder()
+    .toolResultRole("tool")
+    .build();
 
-agent = AgentHarness(config=config)
+// 兼容模式 - 适用于不支持 tool_result blocks 的 proxy API
+HarnessConfig configCompat = HarnessConfig.builder()
+    .toolResultRole("user")
+    .baseUrl("https://your-proxy-api.com/v1")
+    .build();
+
+AgentHarness agent = AgentHarness.builder().config(config).build();
 ```
 
 #### 消息格式对比
 
 **原生模式 (`tool_result_role="tool"`)**：
-```python
+```json
 {
     "role": "user",
     "content": [
@@ -779,7 +590,7 @@ agent = AgentHarness(config=config)
 ```
 
 **兼容模式 (`tool_result_role="user"`)**：
-```python
+```json
 {
     "role": "user",
     "content": "[TOOL RESULT - read_file]\nTool call ID: toolu_123...\nStatus: SUCCESS\n\n文件内容..."
@@ -1142,73 +953,81 @@ Map<String, SubAgentResult> results = manager.runAll().join();
 
 ### LLMClient 接口
 
-```python
-from harness.llm.base import LLMClient, LLMResponse
+```java
+// LLMClient 接口
+import com.harness.types.LLMResponse;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-class LLMClient(ABC):
-    @property
-    @abstractmethod
-    def model_name(self) -> str:
-        """模型名称"""
-
-    @abstractmethod
-    async def call(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        system: str | None = None,
-        max_tokens: int | None = None,
-        temperature: float | None = None,
-    ) -> LLMResponse:
-        """调用 LLM"""
+public interface LLMClient {
+    String modelName();
+    CompletableFuture<LLMResponse> call(
+        List<Map<String, Object>> messages,
+        List<Map<String, Object>> tools,
+        String system);
+}
 ```
 
 ### LLMResponse
 
-```python
-@dataclass
-class LLMResponse:
-    content: str | None             # 文本内容
-    tool_calls: list[dict] | None   # 工具调用列表
-    usage: TokenUsage               # token 使用统计
-    stop_reason: str                # 停止原因
-    raw: dict | None = None         # 原始响应
+```java
+// LLMResponse record
+import com.harness.types.LLMResponse;
+import com.harness.types.TokenUsage;
+import java.util.List;
+import java.util.Map;
+
+// Java LLMResponse record fields:
+// - String content              // 文本内容
+// - List<ToolCall> toolCalls    // 工具调用列表
+// - TokenUsage usage            // token 使用统计
+// - String stopReason           // 停止原因
+// - Map<String, Object> raw     // 原始响应
 ```
 
 ### TokenUsage
 
-```python
-@dataclass
-class TokenUsage:
-    input_tokens: int
-    output_tokens: int
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
+```java
+// TokenUsage record
+import com.harness.types.TokenUsage;
+
+// Java TokenUsage record fields:
+// - int inputTokens
+// - int outputTokens
+// - int cacheCreationInputTokens
+// - int cacheReadInputTokens
+TokenUsage usage = new TokenUsage(100, 50);
 ```
 
 ### AnthropicClient
 
-```python
-from harness.llm.anthropic import AnthropicClient
+```java
+// AnthropicClient（通过 HarnessConfig 自动选择）
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-client = AnthropicClient(
-    api_key="sk-ant-...",
-    model="claude-sonnet-4-6",
-)
+AgentHarness agent = AgentHarness.builder()
+    .config(HarnessConfig.builder()
+        .apiKey("sk-ant-...")
+        .model("claude-sonnet-4-6")
+        .build())
+    .build();
 ```
 
 ### OpenAIClient
 
 支持所有 OpenAI 兼容 API（DeepSeek、硅基流动、本地 vLLM 等）。
 
-```python
-from harness.llm.openai import OpenAIClient
+```java
+// OpenAIClient（Java SDK 原生支持）
+import com.harness.llm.OpenAIClient;
 
-client = OpenAIClient(
-    api_key="sk-...",
-    model="gpt-4o",
-    base_url="https://api.openai.com/v1",  # 可自定义
-)
+// 创建客户端
+OpenAIClient client = new OpenAIClient("sk-...", "gpt-4o");
+
+// 自定义 base URL（用于第三方 API）
+OpenAIClient client = new OpenAIClient("sk-...", "https://api.deepseek.com/v1", "deepseek-chat");
 ```
 
 #### Java SDK OpenAIClient
@@ -1283,11 +1102,13 @@ Java SDK 采用兼容性优先策略，将多模态内容转换为文本表示�
 
 OpenAIClient 已处理部分第三方 API 的非标准响应：
 
-```python
-# 自动处理非标准错误响应
-# 某些 API 在错误时返回字符串而非标准响应对象
-if isinstance(response, str):
-    raise ValueError(f"API returned non-standard response: {response[:200]}")
+```java
+// 自动处理非标准错误响应
+// 某些 API 在错误时返回字符串而非标准响应对象
+if (response instanceof String) {
+    throw new IllegalArgumentException("API returned non-standard response: "
+        + ((String) response).substring(0, Math.min(200, ((String) response).length())));
+}
 ```
 
 **常见第三方 API**：
@@ -1312,21 +1133,35 @@ if isinstance(response, str):
 
 ### 自定义 LLM 客户端
 
-```python
-from harness.llm.base import LLMClient, LLMResponse
-from harness import AgentHarness
+```java
+// 自定义 LLM 客户端
+import com.harness.core.LLMClient;
+import com.harness.integration.AgentHarness;
+import com.harness.types.LLMResponse;
+import com.harness.types.TokenUsage;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-class MyLLM(LLMClient):
-    @property
-    def model_name(self) -> str:
-        return "my-model"
+public class MyLLM implements LLMClient {
+    @Override public String modelName() { return "my-model"; }
 
-    async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
-        # 实现自定义 LLM 调用逻辑
-        ...
+    @Override
+    public CompletableFuture<LLMResponse> call(
+            List<Map<String, Object>> messages,
+            List<Map<String, Object>> tools,
+            String system) {
+        // 实现自定义 LLM 调用逻辑
+        return CompletableFuture.completedFuture(
+            new LLMResponse("response", null,
+                new TokenUsage(0, 0), "end_turn"));
+    }
+}
 
-# 直接传入
-agent = AgentHarness(llm_client=MyLLM())
+// 直接传入
+AgentHarness agent = AgentHarness.builder()
+    .llmClient(new MyLLM())
+    .build();
 ```
 
 ## CPU Router（成本优化的 LLM 路由）
@@ -1341,92 +1176,90 @@ User Request → Router (CPU) → high/low label → Downstream LLM
 
 ### RoutingConfig
 
-```python
-from harness.sdk.config import RoutingConfig
+```java
+// RoutingConfig - 使用 HarnessConfig.RoutingConfig
+import com.harness.core.HarnessConfig;
 
-class RoutingConfig:
-    # 下游模型配置（高性能模型）
-    high_model: str = ""              # 模型名称
-    high_provider: str = "auto"       # "auto" 自动检测
-    high_api_key: str | None = None   # 可选，覆盖全局 api_key
-    high_base_url: str | None = None  # 可选，覆盖全局 base_url
-    high_description: str = "高级模型，适合复杂任务"
-
-    # 下游模型配置（低成本模型）
-    low_model: str = ""
-    low_provider: str = "auto"
-    low_api_key: str | None = None
-    low_base_url: str | None = None
-    low_description: str = "基础模型，适合简单任务"
-
-    # 路由器配置（二选一）
-    router_model_path: str | None = None  # 嵌入式：GGUF 文件路径
-    router_url: str | None = None         # HTTP：llama-server URL
-    router_context_window: int | str = "auto"  # 上下文大小
-
-    # 路由行为
-    default_route: Literal["high", "low"] = "high"  # 路由失败时的默认路由
-    router_timeout: float = 0.2                     # 路由超时（秒）
-    history_window: int = 5                         # 考虑的历史消息数
-
-    # 自定义路由 prompt
-    route_prompt_template: str | None = None
+HarnessConfig config = HarnessConfig.builder()
+    .routing(HarnessConfig.RoutingConfig.builder()
+        .highModel("gpt-4o")
+        .highProvider("auto")
+        .lowModel("gpt-4o-mini")
+        .lowProvider("auto")
+        .routerModelPath("models/qwen2.5-1.5b.gguf")
+        .defaultRoute("high")
+        .routerTimeout(0.2)
+        .historyWindow(5)
+        .build())
+    .build();
 ```
 
 ### 使用示例
 
 #### 基础配置
 
-```python
-from harness import AgentHarness
-from harness.sdk.config import RoutingConfig
+```java
+// 基础配置
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-agent = AgentHarness(
-    routing=RoutingConfig(
-        high_model="gpt-4o",
-        low_model="gpt-4o-mini",
-        router_model_path="models/qwen2.5-1.5b.gguf",
-    ),
-    tools=[ReadTool()],
-)
+HarnessConfig config = HarnessConfig.builder()
+    .routing(HarnessConfig.RoutingConfig.builder()
+        .highModel("gpt-4o")
+        .lowModel("gpt-4o-mini")
+        .routerModelPath("models/qwen2.5-1.5b.gguf")
+        .build())
+    .build();
+
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .addTool(new ReadTool())
+    .build();
 ```
 
 #### 自动检测 provider
 
-```python
-# provider 自动检测（复用 model_presets.py）
-routing = RoutingConfig(
-    high_model="claude-sonnet-4-6",  # 自动检测 → anthropic
-    low_model="qwen-plus",           # 自动检测 → openai
-    router_model_path="models/qwen3.5-0.8b.gguf",
-)
+```java
+// provider 自动检测
+import com.harness.core.HarnessConfig;
+
+HarnessConfig.RoutingConfig routing = HarnessConfig.RoutingConfig.builder()
+    .highModel("claude-sonnet-4-6")   // 自动检测 → anthropic
+    .lowModel("qwen-plus")            // 自动检测 → openai
+    .routerModelPath("models/qwen3.5-0.8b.gguf")
+    .build();
 ```
 
 #### 不同服务商
 
-```python
-routing = RoutingConfig(
-    high_model="gpt-4o",
-    high_api_key="sk-openai-xxx",
-    low_model="deepseek-chat",
-    low_api_key="sk-deepseek-xxx",
-    low_base_url="https://api.deepseek.com/v1",
-    router_model_path="models/qwen3.5-0.8b.gguf",
-)
+```java
+// 不同服务商
+import com.harness.core.HarnessConfig;
+
+HarnessConfig.RoutingConfig routing = HarnessConfig.RoutingConfig.builder()
+    .highModel("gpt-4o")
+    .highApiKey("sk-openai-xxx")
+    .lowModel("deepseek-chat")
+    .lowApiKey("sk-deepseek-xxx")
+    .lowBaseUrl("https://api.deepseek.com/v1")
+    .routerModelPath("models/qwen3.5-0.8b.gguf")
+    .build();
 ```
 
 ### EmbeddedLlamaClient
 
 嵌入式 Llama 客户端，使用 llama-cpp-python 加载 GGUF 模型。
 
-```python
-from harness.llm.llama_cpp import EmbeddedLlamaClient
+```java
+// EmbeddedLlamaClient（Java SDK 中通过 RoutingConfig.routerModelPath 配置）
+// 嵌入式 Llama 客户端在 Java SDK 中通过 GGUF 模型路径配置
+import com.harness.core.HarnessConfig;
 
-client = EmbeddedLlamaClient(
-    model_path="models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-    context_window="auto",  # 从文件名推断
-    n_gpu_layers=0,         # 0 = CPU only
-)
+HarnessConfig config = HarnessConfig.builder()
+    .routing(HarnessConfig.RoutingConfig.builder()
+        .routerModelPath("models/qwen2.5-1.5b-instruct-q4_k_m.gguf")
+        .build())
+    .build();
 ```
 
 #### context_window 自动推断
@@ -1444,23 +1277,20 @@ client = EmbeddedLlamaClient(
 
 路由 LLM 客户端，实现请求路由逻辑。
 
-```python
-from harness.llm.routing import RoutingLLMClient
-from harness.sdk.config import RoutingConfig
+```java
+// RoutingLLMClient（Java SDK 中通过 HarnessConfig.RoutingConfig 自动配置）
+import com.harness.core.HarnessConfig;
 
-config = RoutingConfig(
-    high_model="gpt-4o",
-    low_model="gpt-4o-mini",
-    router_model_path="models/qwen2.5-1.5b.gguf",
-)
+HarnessConfig config = HarnessConfig.builder()
+    .routing(HarnessConfig.RoutingConfig.builder()
+        .highModel("gpt-4o")
+        .lowModel("gpt-4o-mini")
+        .routerModelPath("models/qwen2.5-1.5b.gguf")
+        .build())
+    .build();
 
-client = RoutingLLMClient(
-    config=config,
-    high_client=OpenAIClient(model="gpt-4o"),
-    low_client=OpenAIClient(model="gpt-4o-mini"),
-)
-
-response = await client.call(messages)
+// RoutingLLMClient 会在 AgentHarness 内部自动创建
+AgentHarness agent = AgentHarness.builder().config(config).build();
 ```
 
 ### 路由判断逻辑
@@ -1481,17 +1311,25 @@ response = await client.call(messages)
 
 路由决策会触发 `ProgressEventType.ROUTER_DECISION` 事件：
 
-```python
-from harness import AgentHarness, ProgressEvent, ProgressEventType
+```java
+// 进度事件
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
+import java.util.function.Consumer;
 
-def on_progress(event: ProgressEvent):
-    if event.type == ProgressEventType.ROUTER_DECISION:
-        print(f"路由到: {event.data['route']}")
-        print(f"目标模型: {event.data['target_model']}")
-        print(f"路由延迟: {event.data['router_latency_ms']:.1f}ms")
+AgentHarness agent = AgentHarness.builder().build();
 
-agent = AgentHarness(routing=routing)
-result = await agent.run("帮我分析这段代码", on_progress=on_progress)
+Consumer<Object> onProgress = event -> {
+    // 路由决策会触发路由决策事件
+    if (event instanceof Map) {
+        Map<?, ?> data = (Map<?, ?>) event;
+        System.out.println("路由到: " + data.get("route"));
+        System.out.println("目标模型: " + data.get("target_model"));
+        System.out.println("路由延迟: " + data.get("router_latency_ms") + "ms");
+    }
+};
+
+LoopResult result = agent.run("帮我分析这段代码", null, onProgress).join();
 ```
 
 ### 依赖安装
@@ -1512,12 +1350,15 @@ CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
 
 ### MessageRole
 
-```python
-class MessageRole(Enum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL = "tool"
+```java
+// MessageRole（Java SDK 中通过 Message 类的方法表示）
+import com.harness.types.Message;
+
+// Java 中没有 MessageRole 枚举，而是使用 Message 工厂方法：
+Message user = Message.user("Hello");
+Message assistant = Message.assistant("Hi there");
+Message tool = Message.tool("result", "call_123", "tool_name");
+Message system = Message.system("You are helpful");
 ```
 
 ### LoopState
@@ -1578,54 +1419,62 @@ ToolCall call = new ToolCall("call_123", "read", Map.of("path", "test.txt"));
 
 ### GoalStatus
 
-```python
-from harness.loop import GoalStatus
+```java
+// GoalStatus（Java SDK 已在 GoalStatus.java 中定义）
+import com.harness.loop.types.GoalStatus;
 
-class GoalStatus(Enum):
-    ACHIEVED = "achieved"               # 目标达成
-    TIMEOUT = "timeout"                 # 超时
-    MAX_ITERATIONS = "max_iterations"   # 达到最大迭代
-    MAX_RESETS = "max_resets"           # 达到最大重置次数
-    ERROR = "error"                     # Agent 执行错误
-    VERIFIER_FAULT = "verifier_fault"   # 验证器故障
-    CANCELLED = "cancelled"             # 用户取消
+// Java GoalStatus 枚举值：
+// ACHIEVED("achieved")          - 目标达成
+// TIMEOUT("timeout")            - 超时
+// MAX_ITERATIONS("max_iterations") - 达到最大迭代
+// MAX_RESETS("max_resets")      - 达到最大重置次数
+// ERROR("error")                - Agent 执行错误
+// VERIFIER_FAULT("verifier_fault") - 验证器故障
+// CANCELLED("cancelled")        - 用户取消
 ```
 
 ### GoalConfig
 
-```python
-from harness.loop import GoalConfig
+```java
+// GoalConfig（Java SDK 已在 GoalConfig.java 中定义）
+import com.harness.loop.types.GoalConfig;
+import java.util.function.Function;
 
-@dataclass
-class GoalConfig:
-    description: str                    # 目标描述
-    session_id: str | None = None       # 会话 ID（用于对话连续性）
-    success_criteria: str | None = None # 成功标准
-    workspace_dir: str = "."            # 工作目录
-    max_iterations: int = 50            # 最大迭代次数
-    max_context_resets: int = 5         # 最大上下文重置次数
-    timeout_seconds: int = 3600         # 超时时间（秒）
-    custom_verifier: Callable | None = None  # 自定义验证函数
-    max_tokens: int | None = None       # 最大 token 数
-    max_cost_usd: float | None = None   # 最大成本（美元）
+// Java GoalConfig 使用 Builder 模式：
+GoalConfig config = GoalConfig.builder()
+    .description("目标描述")                    // 目标描述
+    .sessionId(null)                           // 会话 ID
+    .successCriteria("成功标准")                // 成功标准
+    .workspaceDir(".")                         // 工作目录
+    .maxIterations(50)                         // 最大迭代次数
+    .maxContextResets(5)                       // 最大上下文重置次数
+    .timeoutSeconds(3600)                      // 超时时间（秒）
+    .customVerifier(null)                      // 自定义验证函数
+    .maxTokens(null)                           // 最大 token 数
+    .maxCostUsd(null)                          // 最大成本（美元）
+    .build();
 ```
 
 ### GoalResult
 
-```python
-from harness.loop import GoalResult
+```java
+// GoalResult（Java SDK 已在 GoalResult.java 中定义）
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import com.harness.loop.types.VerificationRecord;
+import java.util.Map;
+import java.util.List;
 
-@dataclass
-class GoalResult:
-    goal: str                           # 目标描述
-    status: GoalStatus                  # 执行状态
-    total_iterations: int               # 总迭代次数
-    context_resets: int                 # 上下文重置次数
-    total_tokens: TokenUsage            # Token 使用量
-    duration_seconds: float             # 执行时长
-    final_response: str                 # 最终响应
-    verification_log: list[VerificationRecord]  # 验证日志
-    error: str | None = None            # 错误详情
+// Java GoalResult record fields：
+// - String goal                      // 目标描述
+// - GoalStatus status                // 执行状态
+// - int totalIterations              // 总迭代次数
+// - int contextResets                // 上下文重置次数
+// - Map<String, Integer> totalTokens // Token 使用量
+// - double durationSeconds           // 执行时长
+// - String finalResponse             // 最终响应
+// - List<VerificationRecord> verificationLog // 验证日志
+// - String error                     // 错误详情
 ```
 
 详见 [18-loop-engineering.md](./18-loop-engineering.md)。
@@ -1636,82 +1485,85 @@ Automation 是 Loop Engineering Phase 2 的核心 API，整合 Trigger + GoalCon
 
 ### Automation
 
-```python
-from harness.loop import Automation, AutomationStatus
+```java
+// Automation
+import com.harness.loop.automation.Automation;
 
-# 创建定时任务
-automation = Automation(
-    name="daily-report",
-    schedule="0 9 * * *",           # cron 表达式：每天 9:00
-    goal="生成每日报告并发送到 Slack",
-    skills=["report-generation"],
-)
+// 创建定时任务
+Automation automation = Automation.builder()
+    .name("daily-report")
+    .schedule("0 9 * * *")           // cron 表达式：每天 9:00
+    .goal("生成每日报告并发送到 Slack")
+    .addSkill("report-generation")
+    .build();
 
-# 创建间隔任务
-health_check = Automation(
-    name="health-check",
-    interval_seconds=300,           # 每 5 分钟
-    goal="检查系统健康状态",
-)
+// 创建间隔任务
+Automation healthCheck = Automation.builder()
+    .name("health-check")
+    .intervalSeconds(300)           // 每 5 分钟
+    .goal("检查系统健康状态")
+    .build();
 
-# 启动
-await automation.start(agent)
+// 启动
+automation.start(null).join();
 
-# 查看状态
-print(f"状态: {automation.status}")  # RUNNING
+// 查看状态
+System.out.println("状态: " + automation.getStatus());  // RUNNING
 
-# 停止
-await automation.stop()
+// 停止
+automation.stop().join();
 ```
 
 ### AutomationConfig
 
-```python
-from harness.loop import AutomationConfig
+```java
+// AutomationConfig（Java SDK 已在 AutomationConfig.java 中定义）
+import com.harness.loop.automation.AutomationConfig;
+import java.util.function.Function;
 
-@dataclass
-class AutomationConfig:
-    name: str                              # 自动化名称
-    goal: str                              # 目标描述
-
-    # 触发方式（三选一）
-    schedule: str | None = None            # cron 表达式
-    interval_seconds: int | None = None    # 间隔秒数
-    trigger: Trigger | None = None         # 自定义 Trigger
-
-    # Goal 配置
-    workspace_dir: str = "."
-    max_iterations: int = 50
-    timeout_seconds: int = 3600
-    custom_verifier: Callable | None = None
-
-    # 输出配置
-    skills: list[str] = field(default_factory=list)
+// Java AutomationConfig 使用 Builder 模式：
+AutomationConfig config = AutomationConfig.builder()
+    .name("daily-report")                         // 自动化名称
+    .goal("生成每日报告")                          // 目标描述
+    .schedule("0 9 * * *")                       // cron 表达式（三选一）
+    // .intervalSeconds(300)                      // 间隔秒数
+    // .trigger(null)                             // 自定义 Trigger
+    .workspaceDir(".")                           // 工作目录
+    .maxIterations(50)                           // 最大迭代
+    .timeoutSeconds(3600)                        // 超时时间
+    .addSkill("report-generation")               // 技能
+    .build();
 ```
 
 ### AutomationStatus
 
-```python
-class AutomationStatus(Enum):
-    PENDING = "pending"     # 等待启动
-    RUNNING = "running"     # 运行中
-    PAUSED = "paused"       # 已暂停
-    STOPPED = "stopped"     # 已停止
-    ERROR = "error"         # 错误状态
+```java
+// AutomationStatus（Java SDK 已在 AutomationStatus.java 中定义）
+import com.harness.loop.automation.AutomationStatus;
+
+// Java AutomationStatus 枚举值：
+// PENDING    - 等待启动
+// RUNNING    - 运行中
+// PAUSED     - 已暂停
+// STOPPED    - 已停止
+// ERROR      - 错误状态
 ```
 
 ### AutomationResult
 
-```python
-@dataclass
-class AutomationResult:
-    automation_name: str
-    status: AutomationStatus
-    goal_result: GoalResult | None = None
-    last_run: datetime | None = None
-    run_count: int = 0
-    error_count: int = 0
-    error_message: str | None = None
+```java
+// AutomationResult（Java SDK 已在 AutomationResult.java 中定义）
+import com.harness.loop.automation.AutomationResult;
+import com.harness.loop.automation.AutomationStatus;
+import com.harness.loop.types.GoalResult;
+
+// Java AutomationResult 包含字段：
+// - String automationName
+// - AutomationStatus status
+// - GoalResult goalResult
+// - int runCount
+// - int errorCount
+// - String errorMessage
 ```
 
 详见 [17-trigger-system.md](./17-trigger-system.md)。
@@ -1722,116 +1574,133 @@ Trigger System 提供触发器基础设施，支持时间、事件驱动的自�
 
 ### CronTrigger
 
-```python
-from harness.triggers import CronTrigger, TriggerAction
+```java
+// CronTrigger
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerAction;
+import com.harness.triggers.TriggerManager;
 
-trigger = CronTrigger(
-    schedule="0 9 * * *",  # 每天 9:00
-    action=TriggerAction(
-        goal="生成每日报告",
-        skills=["report-generation"],
-    ),
-    timezone="Asia/Shanghai",
-    jitter_seconds=60,     # 添加随机延迟避免同时触发
-)
+TriggerAction action = TriggerAction.builder()
+    .goal("生成每日报告")
+    .addSkill("report-generation")
+    .build();
 
-# 查看下次运行时间
-next_runs = trigger.get_next_runs(5)
-for run_time in next_runs:
-    print(f"下次运行: {run_time}")
+CronTrigger trigger = CronTrigger.builder()
+    .schedule("0 9 * * *")          // 每天 9:00
+    .action(action)
+    .build();
 
-# 启动
-await trigger.start(callback=my_callback)
+// 查看下次运行时间
+var nextRuns = trigger.getNextRuns(5);
+for (var runTime : nextRuns) {
+    System.out.println("下次运行: " + runTime);
+}
 
-# 停止
-await trigger.stop()
+// 启动
+trigger.start(callback).join();
+
+// 停止
+trigger.stop().join();
 ```
 
 ### IntervalTrigger
 
-```python
-from harness.triggers import IntervalTrigger
+```java
+// IntervalTrigger
+import com.harness.triggers.IntervalTrigger;
+import com.harness.triggers.TriggerAction;
 
-trigger = IntervalTrigger(
-    interval_seconds=300,  # 每 5 分钟
-    action=TriggerAction(
-        goal="检查系统健康状态",
-    ),
-    start_immediately=False,  # 是否立即触发第一次
-)
+TriggerAction action = TriggerAction.builder()
+    .goal("检查系统健康状态")
+    .build();
 
-# 最小间隔为 1 秒
-# trigger = IntervalTrigger(interval_seconds=0.1)  # ValueError!
+IntervalTrigger trigger = IntervalTrigger.builder()
+    .intervalSeconds(300)          // 每 5 分钟
+    .action(action)
+    .build();
 ```
 
 ### TriggerAction
 
-```python
-from harness.triggers import TriggerAction, TriggerEvent
+```java
+// TriggerAction
+import com.harness.triggers.TriggerAction;
+import com.harness.triggers.TriggerEvent;
 
-action = TriggerAction(
-    goal="修复所有类型错误",           # 目标描述
-    workspace_dir=".",                # 工作目录
-    max_iterations=50,                # 最大迭代
-    timeout_seconds=3600,             # 超时时间
-    custom_verifier=None,             # 自定义验证器
-    skills=["typescript"],            # 激活的技能
-)
+TriggerAction action = TriggerAction.builder()
+    .goal("修复所有类型错误")               // 目标描述
+    .workspaceDir(".")                     // 工作目录
+    .maxIterations(50)                     // 最大迭代
+    .timeoutSeconds(3600)                  // 超时时间
+    .customVerifier(null)                  // 自定义验证器
+    .addSkill("typescript")                // 激活的技能
+    .build();
 
-# 转换为 GoalConfig
-event = TriggerEvent(trigger_type=TriggerType.CRON, trigger_id="trigger-1")
-goal_config = action.to_goal_config(event)
+// 转换为 GoalConfig
+TriggerEvent event = TriggerEvent.builder()
+    .triggerType("CRON")
+    .triggerId("trigger-1")
+    .build();
+var goalConfig = action.toGoalConfig(event);
 ```
 
 ### TriggerManager
 
-```python
-from harness.triggers import TriggerManager, TriggerType
-from harness import AgentHarness
+```java
+// TriggerManager
+import com.harness.triggers.TriggerManager;
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerAction;
+import com.harness.integration.AgentHarness;
 
-agent = AgentHarness()
-manager = TriggerManager(agent)
+AgentHarness agent = AgentHarness.builder().build();
+TriggerManager manager = new TriggerManager();
 
-# 注册触发器
-trigger_id = manager.register(
-    trigger=CronTrigger(schedule="0 9 * * *", action=action),
-    enabled=True,
-)
+// 注册触发器
+TriggerAction action = TriggerAction.builder()
+    .goal("生成每日报告")
+    .build();
+String triggerId = manager.register(
+    CronTrigger.builder().schedule("0 9 * * *").action(action).build(),
+    true);
 
-# 列出所有触发器
-triggers = manager.list_triggers()
-for t in triggers:
-    print(f"ID: {t['id']}, Type: {t['type']}, Enabled: {t['enabled']}")
+// 列出所有触发器
+var triggers = manager.listTriggers();
+for (var t : triggers) {
+    System.out.println("ID: " + t.id() + ", Type: " + t.type() + ", Enabled: " + t.enabled());
+}
 
-# 启动所有触发器
-await manager.start()
+// 启动所有触发器
+manager.start().join();
 
-# 停止所有触发器
-await manager.stop()
+// 停止所有触发器
+manager.stop().join();
 
-# 注销触发器
-manager.unregister(trigger_id)
+// 注销触发器
+manager.unregister(triggerId);
 ```
 
 ### TriggerType & TriggerState
 
-```python
-from harness.triggers import TriggerType, TriggerState
+```java
+// TriggerType（Java SDK 已在 TriggerType.java 中定义）
+import com.harness.triggers.TriggerType;
+import com.harness.triggers.TriggerState;
 
-class TriggerType(Enum):
-    CRON = "cron"           # 定时触发
-    INTERVAL = "interval"   # 间隔触发
-    WEBHOOK = "webhook"     # HTTP webhook
-    HEARTBEAT = "heartbeat" # 心跳
-    FILE_WATCH = "file_watch"  # 文件变化
-    EVENT = "event"         # 事件总线
+// Java TriggerType 枚举值：
+// CRON        - 定时触发
+// INTERVAL    - 间隔触发
+// WEBHOOK     - HTTP webhook
+// HEARTBEAT   - 心跳
+// FILE_WATCH  - 文件变化
+// EVENT       - 事件总线
 
-class TriggerState(Enum):
-    IDLE = "idle"           # 空闲
-    RUNNING = "running"     # 运行中
-    PAUSED = "paused"       # 已暂停
-    STOPPED = "stopped"     # 已停止
-    ERROR = "error"         # 错误
+// Java TriggerState 枚举值：
+// IDLE        - 空闲
+// RUNNING     - 运行中
+// PAUSED      - 已暂停
+// STOPPED     - 已停止
+// ERROR       - 错误
 ```
 
 详见 [17-trigger-system.md](./17-trigger-system.md)。
@@ -1858,37 +1727,78 @@ pip install harness-sdk[nacos]
 
 ### 快速启动
 
-```python
-from harness.service import app
+```java
+// 使用 Spring Boot 启动服务
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-# 使用 uvicorn 运行
-# uvicorn harness.service:app --port 8000
+@SpringBootApplication
+public class HarnessServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(HarnessServiceApplication.class, args);
+    }
+}
+// 端点：
+// GET  /health              - 健康检查
+// POST /api/run             - 同步执行 Agent
+// WebSocket /ws/run         - 流式执行
 ```
 
 ### FastAPI 应用
 
-```python
-from harness.service import app
+```java
+// Spring Boot 端点
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import java.util.Map;
 
-# 可用端点：
-# GET  /health              - 健康检查
-# GET  /metrics             - Prometheus 指标
-# POST /api/run             - 同步执行 Agent
-# GET  /api/sessions/{id}   - 获取会话
-# DELETE /api/sessions/{id} - 清除会话
-# WebSocket /ws/run         - 流式执行
+@RestController
+public class HarnessController {
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> health() {
+        return ResponseEntity.ok(Map.of("status", "healthy"));
+    }
+
+    @PostMapping("/api/run")
+    public ResponseEntity<Map<String, Object>> run(@RequestBody Map<String, String> body) {
+        // 同步执行 Agent
+        return ResponseEntity.ok(Map.of("status", "completed", "content", "..."));
+    }
+}
 ```
 
 ### TracingMiddleware
 
 从 Spring Cloud Gateway 提取 W3C TraceContext：
 
-```python
-from harness.service import TracingMiddleware
-from fastapi import FastAPI
+```java
+// TracingMiddleware（Java Spring Boot 中使用 Filter）
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
-app = FastAPI()
-app.add_middleware(TracingMiddleware)
+@Component
+public class TracingFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+            HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        String traceId = request.getHeader("traceparent");
+        if (traceId == null) {
+            traceId = request.getHeader("X-B3-TraceId");
+        }
+        if (traceId == null) {
+            traceId = request.getHeader("X-Trace-Id");
+        }
+        // 将 traceId 传递给下游处理
+        chain.doFilter(request, response);
+    }
+}
 ```
 
 **支持的 Header 格式**：
@@ -1900,20 +1810,36 @@ app.add_middleware(TracingMiddleware)
 
 Prometheus 指标收集器：
 
-```python
-from harness.service import MetricsCollector, MetricsConfig, get_metrics_collector
+```java
+// MetricsCollector（Java 中使用 Micrometer）
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.stereotype.Component;
 
-# 使用全局收集器
-collector = get_metrics_collector()
-collector.setup()
+@Component
+public class MetricsCollector {
+    private final Counter iterationCounter;
+    private final Counter toolCallCounter;
+    private final Counter tokenCounter;
+    private final Timer llmCallTimer;
 
-# 记录指标
-collector.record_iteration()
-collector.record_tool_call("bash", success=True, duration_seconds=0.5)
-collector.record_token_usage(usage)
+    public MetricsCollector(MeterRegistry registry) {
+        this.iterationCounter = Counter.builder("harness_loop_iterations_total")
+            .description("总循环迭代次数").register(registry);
+        this.toolCallCounter = Counter.builder("harness_tool_calls_total")
+            .description("工具调用次数").register(registry);
+        this.tokenCounter = Counter.builder("harness_llm_tokens_total")
+            .description("Token 使用量").register(registry);
+        this.llmCallTimer = Timer.builder("harness_llm_call_duration_seconds")
+            .description("LLM 调用耗时").register(registry);
+    }
 
-# 导出 Prometheus 格式
-metrics_data = collector.export()
+    public void recordIteration() { iterationCounter.increment(); }
+    public void recordToolCall(String tool, boolean success, double duration) {
+        toolCallCounter.increment();
+    }
+}
 ```
 
 **导出的指标**：
@@ -1930,24 +1856,18 @@ metrics_data = collector.export()
 
 分布式会话存储：
 
-```python
-from harness.service import RedisSessionStore, RedisSessionConfig
+```java
+// RedisSessionStore（Java 中使用 Spring Session）
+import org.springframework.session.MapSession;
+import org.springframework.session.SessionRepository;
+import org.springframework.data.redis.core.RedisTemplate;
 
-# 创建存储
-store = RedisSessionStore("redis://localhost:6379")
-
-# 或使用配置对象
-config = RedisSessionConfig(
-    redis_url="redis://localhost:6379",
-    key_prefix="harness:session",
-    ttl_seconds=3600,
-)
-store = RedisSessionStore(config=config)
-
-# 操作
-await store.save(session)
-session = await store.load("session-123")
-await store.delete("session-123")
+// 使用 Spring Session Redis 配置
+// Spring Boot 自动配置 Redis Session Store
+// application.yml:
+// spring.session.store-type: redis
+// spring.redis.host: localhost
+// spring.redis.port: 6379
 ```
 
 **特点**：
@@ -1959,66 +1879,81 @@ await store.delete("session-123")
 
 分布式锁：
 
-```python
-from harness.service import RedisDistributedLock
+```java
+// RedisDistributedLock（Java 中使用 Redisson）
+import org.redisson.Redisson;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
 
-lock = RedisDistributedLock("redis://localhost:6379")
+Config config = new Config();
+config.useSingleServer().setAddress("redis://localhost:6379");
+RedissonClient redisson = Redisson.create(config);
 
-# 获取锁
-token = await lock.acquire("my-resource", timeout=30)
-if token:
-    try:
-        # 执行需要锁保护的操作
-        pass
-    finally:
-        await lock.release("my-resource", token)
+RLock lock = redisson.getLock("my-resource");
+try {
+    lock.lock(30, TimeUnit.SECONDS);
+    // 执行需要锁保护的操作
+} finally {
+    if (lock.isHeldByCurrentThread()) {
+        lock.unlock();
+    }
+}
 ```
 
 ### 服务发现
 
-```python
-from harness.service import (
-    NacosServiceRegistry,
-    EurekaServiceRegistry,
-    ServiceInstance,
-    get_service_instance,
-    get_pod_ip,
-)
+```java
+// 服务发现（Java 中使用 Spring Cloud Discovery）
+import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.cloud.client.ServiceInstance;
 
-# 创建服务实例（自动检测 IP）
-instance = get_service_instance("harness-agent", 8000)
+// Spring Cloud 自动配置服务发现
+// application.yml:
+// spring.cloud.nacos.discovery.server-addr: nacos:8848
+// 或
+// eureka.client.service-url.defaultZone: http://eureka:8761/eureka/
 
-# Nacos 注册
-registry = NacosServiceRegistry("nacos:8848")
-await registry.register(instance)
-await registry.deregister(instance)
-
-# Eureka 注册
-registry = EurekaServiceRegistry("http://eureka:8761")
-await registry.register(instance)
+// 注册服务实例（Spring Cloud 自动处理）
+// 获取服务实例
+DiscoveryClient discoveryClient = ...;
+List<ServiceInstance> instances = discoveryClient.getInstances("harness-agent");
 ```
 
 ### 错误处理
 
 统一错误响应格式：
 
-```python
-from harness.service import ErrorCode, create_error_response
+```java
+// 错误处理（Java 中使用 Spring ControllerAdvice）
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import java.time.Instant;
+import java.util.Map;
 
-# 创建错误响应
-error = create_error_response(
-    ErrorCode.INVALID_INPUT,
-    "Invalid parameter value",
-    trace_id="abc123",
-)
+@RestControllerAdvice
+public class ErrorHandler {
 
-# 返回 JSON
-# {
-#     "errorCode": "AGENT_400_001",
-#     "errorMessage": "Invalid parameter value",
-#     "traceId": "abc123",
-#     "timestamp": "2026-06-16T10:00:00Z"
-# }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidInput(IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "errorCode", "AGENT_400_001",
+            "errorMessage", e.getMessage(),
+            "timestamp", Instant.now().toString()
+        ));
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, Object>> handleInternalError(RuntimeException e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+            "errorCode", "AGENT_500_001",
+            "errorMessage", "Internal error",
+            "timestamp", Instant.now().toString()
+        ));
+    }
+}
 ```
 
 **错误码定义**：
@@ -2040,13 +1975,25 @@ error = create_error_response(
 
 运行时检测可选依赖是否可用：
 
-```python
-from harness.service import (
-    PROMETHEUS_AVAILABLE,  # prometheus-client
-    REDIS_AVAILABLE,       # redis
-    NACOS_AVAILABLE,       # nacos-sdk-python
-    EUREKA_AVAILABLE,      # 始终 True (HTTP API)
-)
+```java
+// 可选依赖状态（Java 中通过 Maven/Gradle 依赖检查）
+// Java SDK 的可选依赖通过 Maven scope: provided 或 optional 管理
+// 运行时检查依赖是否可用：
+boolean prometheusAvailable = false;
+try {
+    Class.forName("io.micrometer.core.instrument.Metrics");
+    prometheusAvailable = true;
+} catch (ClassNotFoundException e) {
+    // prometheus-client 未添加
+}
+
+boolean redisAvailable = false;
+try {
+    Class.forName("org.springframework.data.redis.core.RedisTemplate");
+    redisAvailable = true;
+} catch (ClassNotFoundException e) {
+    // spring-data-redis 未添加
+}
 ```
 
 ## 下一步

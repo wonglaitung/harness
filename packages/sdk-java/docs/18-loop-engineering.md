@@ -29,45 +29,51 @@
 
 ### 核心 API
 
-```python
-from harness import AgentHarness
-from harness.loop import GoalStatus
+```java
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import com.harness.loop.GoalLoop;
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.VerificationMethod;
+import com.harness.loop.types.ToolVerificationConfig;
 
-agent = AgentHarness()
+AgentHarness agent = new AgentHarness(llmClient, config);
 
-# 基础用法
-result = await agent.run_goal("修复所有类型错误")
+// 基础用法
+GoalResult result = agent.runGoal("修复所有类型错误").join();
 
-# 检查结果
-if result.status == GoalStatus.ACHIEVED:
-    print(f"目标达成，共 {result.total_iterations} 轮迭代")
+// 检查结果
+if (result.status() == GoalStatus.ACHIEVED) {
+    System.out.println("目标达成，共 " + result.totalIterations() + " 轮迭代");
+}
 ```
 
 ### GoalConfig 配置
 
-```python
-from harness.loop import GoalConfig
+```java
+import com.harness.loop.types.GoalConfig;
+import com.harness.loop.types.VerificationMethod;
 
-config = GoalConfig(
-    description="将测试覆盖率提升到 80%",  # 目标描述
-    session_id="my-session-123",            # 会话 ID（用于对话连续性，可选）
-    success_criteria="测试覆盖率报告显示 >= 80%",  # 成功标准（可选）
-    workspace_dir=".",                       # 工作目录
+GoalConfig config = GoalConfig.builder()
+    .description("将测试覆盖率提升到 80%")
+    .sessionId("my-session-123")
+    .successCriteria("测试覆盖率报告显示 >= 80%")
+    .workspaceDir(".")
 
-    # 迭代控制
-    max_iterations=50,                       # 最大迭代次数
-    max_context_resets=5,                    # 最大上下文重置次数
-    timeout_seconds=3600,                    # 超时时间（秒）
+    // 迭代控制
+    .maxIterations(50)
+    .maxContextResets(5)
+    .timeoutSeconds(3600)
 
-    # 验证配置
-    custom_verifier=None,                    # 自定义验证函数
+    // 验证配置
+    .verificationMethod(VerificationMethod.LLM)
 
-    # 成本控制
-    max_tokens=None,                         # 最大 token 数
-    max_cost_usd=None,                       # 最大成本（美元）
-)
+    // 成本控制
+    .maxTokens(null)
+    .maxCostUsd(null)
+    .build();
 
-result = await agent.run_goal(config)
+GoalResult result = agent.runGoal(config, null).join();
 ```
 
 ### 会话连续性
@@ -219,33 +225,56 @@ ToolVerificationConfig config = ToolVerificationConfig.builder()
 
 ### GoalStatus 状态
 
-```python
-from harness.loop import GoalStatus
+```java
+import com.harness.loop.types.GoalStatus;
 
-class GoalStatus(Enum):
-    ACHIEVED = "achieved"               # 目标达成
-    TIMEOUT = "timeout"                 # 超时
-    MAX_ITERATIONS = "max_iterations"   # 达到最大迭代
-    MAX_RESETS = "max_resets"           # 达到最大重置次数
-    ERROR = "error"                     # Agent 执行错误
-    VERIFIER_FAULT = "verifier_fault"   # 验证器故障
-    CANCELLED = "cancelled"             # 用户取消
+public enum GoalStatus {
+    ACHIEVED("achieved"),               // 目标达成
+    TIMEOUT("timeout"),                 // 超时
+    MAX_ITERATIONS("max_iterations"),   // 达到最大迭代
+    MAX_RESETS("max_resets"),           // 达到最大重置次数
+    ERROR("error"),                     // Agent 执行错误
+    VERIFIER_FAULT("verifier_fault"),   // 验证器故障
+    CANCELLED("cancelled");             // 用户取消
+
+    private final String value;
+    GoalStatus(String value) { this.value = value; }
+    public String getValue() { return value; }
+}
 ```
 
 ### GoalResult 结果
 
-```python
-@dataclass
-class GoalResult:
-    goal: str                           # 目标描述
-    status: GoalStatus                  # 执行状态
-    total_iterations: int               # 总迭代次数
-    context_resets: int                 # 上下文重置次数
-    total_tokens: TokenUsage            # Token 使用量
-    duration_seconds: float             # 执行时长
-    final_response: str                 # 最终响应
-    verification_log: list[VerificationRecord]  # 验证日志
-    error: str | None = None            # 错误详情
+```java
+import com.harness.loop.types.GoalResult;
+import com.harness.loop.types.GoalStatus;
+import com.harness.loop.types.VerificationRecord;
+import java.util.List;
+import java.util.Map;
+
+public class GoalResult {
+    private final String goal;                    // 目标描述
+    private final GoalStatus status;              // 执行状态
+    private final int totalIterations;            // 总迭代次数
+    private final int contextResets;              // 上下文重置次数
+    private final Map<String, Integer> totalTokens; // Token 使用量
+    private final double durationSeconds;         // 执行时长
+    private final String finalResponse;           // 最终响应
+    private final List<VerificationRecord> verificationLog; // 验证日志
+    private final String error;                   // 错误详情
+
+    // Getters
+    public String goal() { return goal; }
+    public GoalStatus status() { return status; }
+    public int totalIterations() { return totalIterations; }
+    public int contextResets() { return contextResets; }
+    public Map<String, Integer> totalTokens() { return totalTokens; }
+    public double durationSeconds() { return durationSeconds; }
+    public String finalResponse() { return finalResponse; }
+    public List<VerificationRecord> verificationLog() { return verificationLog; }
+    public String error() { return error; }
+    public boolean achieved() { return status == GoalStatus.ACHIEVED; }
+}
 ```
 
 ---
@@ -256,16 +285,29 @@ class GoalResult:
 
 `GoalVerifier` 是无状态的，所有上下文通过参数传递：
 
-```python
-# ✅ 正确：无状态验证
-async def verify(result: LoopResult, context: dict | None = None) -> VerificationResult:
-    workspace = context.get("workspace_dir", ".")
-    # 通过 context 获取信息，不内部存储
+```java
+// ✅ 正确：无状态验证
+import com.harness.loop.types.VerificationResult;
+import com.harness.types.LoopResult;
+import java.util.Map;
 
-# ❌ 错误：有状态验证
-class MyVerifier:
-    def __init__(self):
-        self._workspace = None  # 不要存储状态
+public class MyVerifier {
+    public VerificationResult verify(LoopResult result, Map<String, Object> context) {
+        String workspace = (String) context.getOrDefault("workspace_dir", ".");
+        // 通过 context 获取信息，不内部存储
+        return new VerificationResult(/* achieved */, /* details */);
+    }
+}
+
+// ❌ 错误：有状态验证
+public class MyVerifier {
+    private String workspace; // 不要存储状态
+
+    public VerificationResult verify(LoopResult result) {
+        // 使用内部状态而非参数
+        return new VerificationResult(/* ... */);
+    }
+}
 ```
 
 **原因**：
@@ -277,13 +319,18 @@ class MyVerifier:
 
 `GoalLoop` 可能运行数分钟甚至数小时，需避免阻塞事件循环：
 
-```python
-async def run(self) -> GoalResult:
-    while True:
-        # ... 执行迭代 ...
-        
-        # 让出控制权，防止阻塞事件循环
-        await asyncio.sleep(0)
+```java
+import com.harness.loop.types.GoalResult;
+import java.util.concurrent.CompletableFuture;
+
+public CompletableFuture<GoalResult> run() {
+    while (true) {
+        // ... 执行迭代 ...
+
+        // 让出控制权，防止阻塞事件循环
+        Thread.yield();
+    }
+}
 ```
 
 ### 验证器容错
@@ -366,41 +413,42 @@ packages/sdk-java/harness-sdk-loop/src/main/java/com/harness/loop/
 
 让 Agent 根据时间、事件自动触发执行。
 
-```python
-from harness.loop import Automation
-import asyncio
+```java
+import com.harness.loop.automation.Automation;
+import com.harness.loop.GoalLoop;
+import java.util.concurrent.CompletableFuture;
 
-async def main():
-    # 定时任务（cron 表达式）
-    automation = Automation(
-        name="daily-report",
-        schedule="0 9 * * *",  # 每天 9:00
-        goal="生成每日报告并发送到 Slack",
-        skills=["report-generation"],
-    )
+public class AutomationExample {
+    public static void main(String[] args) throws Exception {
+        GoalLoop.AgentRunner agent = ...;
 
-    # 间隔任务
-    health_check = Automation(
-        name="health-check",
-        interval_seconds=300,  # 每 5 分钟
-        goal="检查系统健康状态",
-    )
+        // 定时任务（cron 表达式）
+        Automation automation = Automation.builder()
+            .name("daily-report")
+            .schedule("0 9 * * *")  // 每天 9:00
+            .goal("生成每日报告并发送到 Slack")
+            .addSkill("report-generation")
+            .build();
 
-    # 启动
-    from harness import AgentHarness
-    agent = AgentHarness()
+        // 间隔任务
+        Automation healthCheck = Automation.builder()
+            .name("health-check")
+            .intervalSeconds(300)  // 每 5 分钟
+            .goal("检查系统健康状态")
+            .build();
 
-    await automation.start(agent)
-    await health_check.start(agent)
+        // 启动
+        automation.start(agent).join();
+        healthCheck.start(agent).join();
 
-    # 运行一段时间
-    await asyncio.sleep(3600)
+        // 运行一段时间
+        Thread.sleep(3600_000);
 
-    # 停止
-    await automation.stop()
-    await health_check.stop()
-
-asyncio.run(main())
+        // 停止
+        automation.stop().join();
+        healthCheck.stop().join();
+    }
+}
 ```
 
 **核心组件**：
@@ -415,20 +463,28 @@ asyncio.run(main())
 
 支持并行执行多个 Goal，每个在独立工作目录。
 
-```python
-from harness.loop import WorktreeOrchestrator, WorktreeConfig
+```java
+import com.harness.loop.worktree.WorktreeOrchestrator;
+import com.harness.loop.worktree.WorktreeConfig;
+import com.harness.loop.worktree.WorktreeResult;
+import com.harness.loop.GoalLoop;
+import java.util.List;
+import java.util.Map;
 
-orchestrator = WorktreeOrchestrator(agent, ".")
+GoalLoop.AgentRunner agent = ...;
+WorktreeOrchestrator orchestrator = new WorktreeOrchestrator(agent, ".");
 
-results = await orchestrator.run_parallel([
-    WorktreeConfig(name="feature-a", goal="实现功能 A"),
-    WorktreeConfig(name="feature-b", goal="实现功能 B"),
-])
+Map<String, WorktreeResult> results = orchestrator.runParallel(List.of(
+    WorktreeConfig.builder().name("feature-a").goal("实现功能 A").build(),
+    WorktreeConfig.builder().name("feature-b").goal("实现功能 B").build()
+)).join();
 
-# 合并成功的分支
-for name, result in results.items():
-    if result.status == "completed":
-        await orchestrator.merge(name)
+// 合并成功的分支
+for (Map.Entry<String, WorktreeResult> entry : results.entrySet()) {
+    if (entry.getValue().isAchieved()) {
+        orchestrator.mergeSuccessful(results, "main").join();
+    }
+}
 ```
 
 详见 [11-worktrees.md](./19-worktrees.md)。
@@ -437,24 +493,33 @@ for name, result in results.items():
 
 让 Agent 与外部系统集成。
 
-```python
-from harness.connectors import (
-    ConnectorManager,
-    SlackConnector,
-    GitHubConnector,
-)
+```java
+import com.harness.connectors.ConnectorManager;
+import com.harness.connectors.SlackConnector;
+import com.harness.connectors.SlackConfig;
+import com.harness.connectors.GitHubConnector;
+import com.harness.connectors.GitHubConfig;
 
-manager = ConnectorManager(trigger_manager)
+ConnectorManager manager = new ConnectorManager();
 
-# Slack 集成
-slack = SlackConnector(config=SlackConfig(bot_token="xoxb-..."))
-manager.register_connector(slack)
+// Slack 集成
+SlackConnector slack = new SlackConnector(
+    new SlackConfig.Builder()
+        .botToken("xoxb-...")
+        .build()
+);
+manager.registerConnector(slack);
 
-# GitHub 集成
-github = GitHubConnector(config=GitHubConfig(app_id="123", private_key="..."))
-manager.register_connector(github)
+// GitHub 集成
+GitHubConnector github = new GitHubConnector(
+    new GitHubConfig.Builder()
+        .appId("123")
+        .privateKey("...")
+        .build()
+);
+manager.registerConnector(github);
 
-await manager.start()
+manager.start().join();
 ```
 
 详见 [12-connectors.md](./20-connectors.md)。
@@ -463,25 +528,31 @@ await manager.start()
 
 整合所有组件的统一 API。
 
-```python
-from harness.orchestrator import (
-    LoopOrchestrator,
-    WorkflowConfig,
-    WorkflowStep,
-)
+```java
+import com.harness.orchestrator.WorkflowEngine;
+import com.harness.orchestrator.WorkflowConfig;
+import com.harness.orchestrator.WorkflowStep;
+import com.harness.orchestrator.WorkflowResult;
+import com.harness.loop.GoalLoop;
 
-orchestrator = LoopOrchestrator(agent)
+GoalLoop.AgentRunner agent = ...;
+WorkflowEngine engine = new WorkflowEngine();
 
-# 创建工作流
-workflow = WorkflowConfig(
-    name="code-review",
-    steps=[
-        WorkflowStep(name="analyze", goal="分析代码"),
-        WorkflowStep(name="review", goal="代码审查", depends_on=["analyze"]),
-    ],
-)
+// 创建工作流
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("code-review")
+    .addStep(WorkflowStep.builder()
+        .name("analyze")
+        .goal("分析代码")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("review")
+        .goal("代码审查")
+        .addDependsOn("analyze")
+        .build())
+    .build();
 
-result = await orchestrator.run_workflow("code-review")
+WorkflowResult result = engine.runWorkflow(workflow, agent).join();
 ```
 
 详见 [13-orchestrator.md](./21-orchestrator.md)。

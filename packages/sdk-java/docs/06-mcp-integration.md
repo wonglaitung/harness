@@ -134,18 +134,21 @@ harness/
 
 ### MVP 示例代码
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
 
-# 最简使用
-agent = AgentHarness(
-    model="claude-sonnet-4-6",
-    api_key="your-key"
-)
+// 最简使用
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .apiKey("your-key")
+    .build();
+AgentHarness agent = new AgentHarness(config);
 
-# 运行
-result = await agent.run("读取 main.py 并分析其结构")
-print(result.content)
+// 运行
+LoopResult result = agent.run("读取 main.py 并分析其结构").join();
+System.out.println(result.content());
 ```
 
 ## Phase 2: 增强功能 (Week 4-6)
@@ -187,13 +190,15 @@ print(result.content)
 
 ### Phase 2 示例
 
-```python
-# 技能激活
-agent = AgentHarness()
-agent.load_skill("skills/code-review.md")
-agent.activate_skill("code-review")
+```java
+import com.harness.integration.AgentHarness;
 
-result = await agent.run("review this code")
+// 技能激活
+AgentHarness agent = new AgentHarness();
+agent.loadSkillsFromDir(Path.of("skills/code-review"));
+agent.activateSkill("code-review");
+
+LoopResult result = agent.run("review this code").join();
 ```
 
 ## Phase 3: 高级特性 (Week 7-10)
@@ -235,15 +240,15 @@ result = await agent.run("review this code")
 
 ### Phase 3 示例
 
-```python
-# 定时任务
-agent.on_schedule("0 9 * * *", "生成每日报告")
+```java
+// 定时任务
+agent.onSchedule("0 9 * * *", "生成每日报告");
 
-# Webhook
-agent.on_webhook("/github/pr", "Review PR changes")
+// Webhook
+agent.onWebhook("/github/pr", "Review PR changes");
 
-# 启动后台服务
-await agent.start()
+// 启动后台服务
+agent.start();
 ```
 
 ## Phase 4: 生产就绪 (Week 11-12)

@@ -10,12 +10,15 @@
 
 ### 拓扑 A：单进程脚本 ✅ 支持
 
-```python
-# script.py
-from harness import AgentHarness
+```java
+// Script.java
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
 
-agent = AgentHarness(model="claude-sonnet-4-6")
-result = await agent.run("分析代码")
+AgentHarness agent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")
+    .build();
+LoopResult result = agent.run("分析代码").join();
 ```
 
 **特点**：
@@ -24,34 +27,43 @@ result = await agent.run("分析代码")
 - 无并发问题
 
 **推荐配置**：
-```python
-from harness import HarnessConfig
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.integration.AgentHarness;
 
-config = HarnessConfig(
-    model="claude-sonnet-4-6",
-    memory_dir="./sessions",
-)
-agent = AgentHarness(config=config)
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .memoryDir("./sessions")
+    .build();
+AgentHarness agent = new AgentHarness(config);
 ```
 
 ---
 
 ### 拓扑 B：FastAPI + 单 Worker ✅ 支持
 
-```python
-# app.py
-from fastapi import FastAPI
-from harness import AgentHarness
+```java
+// AgentService.java — 使用内置 harness.service 模块
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
 
-app = FastAPI()
-agent = AgentHarness(model="claude-sonnet-4-6")
+// Spring Boot Web Controller
+@RestController
+public class AgentService {
 
-@app.post("/chat")
-async def chat(message: str, session_id: str = None):
-    result = await agent.run(message, session_id=session_id)
-    return {"response": result.content}
+    private final AgentHarness agent = AgentHarness.builder()
+        .model("claude-sonnet-4-6")
+        .build();
 
-# 启动：uvicorn app:app --workers 1
+    @PostMapping("/chat")
+    public Map<String, String> chat(@RequestParam String message,
+                                    @RequestParam(required = false) String sessionId) {
+        LoopResult result = agent.run(message, sessionId).join();
+        return Map.of("response", result.content());
+    }
+}
+
+// 启动：gunicorn -w 1 -k uvicorn.workers.UvicornWorker agent_service:app
 ```
 
 **特点**：
@@ -65,16 +77,23 @@ async def chat(message: str, session_id: str = None):
 
 多 Worker 模式需要使用 Redis 作为共享存储：
 
-```python
-from harness import AgentHarness, HarnessConfig
-from harness.service.store_redis import RedisSessionStore
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.memory.SessionManager;
 
-# 配置 Redis 存储
-store = RedisSessionStore("redis://localhost:6379")
-agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
+// 配置 Redis 存储
+SessionManager sessionManager = new SessionManager("redis://localhost:6379");
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .storage(HarnessConfig.StorageConfig.builder()
+        .type("redis")
+        .build())
+    .build();
+AgentHarness agent = new AgentHarness(config);
 
-# 或使用 harness.service 完整服务
-# 见 14-spring-cloud-integration.md
+// 或使用 harness.service 完整服务
+// 见 15-spring-cloud-integration.md
 ```
 
 **关键问题及解决方案**：
@@ -87,35 +106,28 @@ agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
 
 **推荐方案**：
 
-```python
-# 方案 1：使用 harness.service（推荐）
-# 完整的 FastAPI 服务，支持多 Worker
-from harness.service import app
+```java
+// 方案 1：使用 harness.service（推荐）
+// 完整的 Spring Boot 服务，支持多 Worker
+// 启动：java -jar harness-service.jar
 
-# 启动：gunicorn -w 4 -k uvicorn.workers.UvicornWorker harness.service:app
+// 方案 2：独立 Trigger Worker
+// TriggerWorker.java
+AgentHarness agent = AgentHarness.builder().build();
+agent.startTriggerWorker();  // 独立进程
 
-# 方案 2：独立 Trigger Worker
-# trigger_worker.py
-agent = AgentHarness(...)
-agent.start_trigger_worker()  # 独立进程
+// 方案 3：Spring Task 调度
+import org.springframework.scheduling.annotation.Scheduled;
 
-# 方案 3：Celery Beat 集成
-from celery import Celery
-from celery.schedules import crontab
+@Component
+public class AgentScheduler {
 
-app = Celery()
-agent = AgentHarness(...)
+    private final AgentHarness agent = AgentHarness.builder().build();
 
-@app.task
-def run_agent_task(prompt):
-    asyncio.run(agent.run(prompt))
-
-app.conf.beat_schedule = {
-    'daily-report': {
-        'task': 'run_agent_task',
-        'schedule': crontab(hour=9, minute=0),
-        'args': ('生成每日报告',),
-    },
+    @Scheduled(cron = "0 9 * * *")
+    public void runDailyReport() {
+        agent.run("生成每日报告").join();
+    }
 }
 ```
 
@@ -181,35 +193,38 @@ spec:
 
 ### 陷阱 1：在 Jupyter 中使用 run_sync()
 
-```python
-# ❌ 错误
-result = agent.run_sync("hello")
-# RuntimeError: Event loop is already running
+```java
+// ❌ 错误：同步调用阻塞主线程
+LoopResult result = agent.run("hello").join();  // 阻塞调用
 
-# ✅ 正确
-result = await agent.run("hello")
+// ✅ 正确：使用 CompletableFuture 异步处理
+agent.run("hello").thenAccept(result -> {
+    System.out.println(result.content());
+});
 
-# 或安装 nest_asyncio
-import nest_asyncio
-nest_asyncio.apply()
-result = agent.run_sync("hello")  # 现在可以工作
+// 或在 Spring 中使用 @Async
+@Async
+public CompletableFuture<LoopResult> runAsync(String prompt) {
+    return agent.run(prompt);
+}
 ```
 
 ### 陷阱 2：热重载丢失状态
 
-```python
-# 开发环境热重载会重置内存状态
-# 解决：使用持久化存储
-agent = AgentHarness(
-    memory_dir="./persistent_memory"  # 持久化到磁盘
-)
+```java
+// 开发环境热重载会重置内存状态
+// 解决：使用持久化存储
+HarnessConfig config = HarnessConfig.builder()
+    .memoryDir("./persistent_memory")  // 持久化到磁盘
+    .build();
+AgentHarness agent = new AgentHarness(config);
 ```
 
 ### 陷阱 3：Gunicorn Worker 数量 > 1 导致 Trigger 重复
 
-```python
-# ❌ 错误：每个 Worker 都会执行定时任务
-# 解决：使用独立 Trigger Worker 或 Celery Beat
+```java
+// ❌ 错误：每个 Worker 都会执行定时任务
+// 解决：使用独立 Trigger Worker 或 Spring Task 调度
 ```
 
 ### 陷阱 4：MCP 子进程孤儿问题
@@ -338,4 +353,4 @@ SDK 已有 `ProgressEvent` 机制，天然支持 WebSocket 推送。
 
 完整的实施指南（含 Java 客户端示例、K8s 配置、安全设计等）见：
 
-**👉 [14-spring-cloud-integration.md](./15-spring-cloud-integration.md)**
+**👉 [15-spring-cloud-integration.md](./15-spring-cloud-integration.md)**

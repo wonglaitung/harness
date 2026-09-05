@@ -41,30 +41,29 @@ You are a code reviewer. Your task is to:
 
 SkillMetadata 是渐进式技能加载中使用的轻量级元数据类，仅包含基本信息和触发条件，用于技能匹配和选择。
 
-```python
-from harness.skills.progressive import SkillMetadata
-from pathlib import Path
+```java
+import com.harness.skills.ProgressiveSkillLoader;
 
-@dataclass
-class SkillMetadata:
-    name: str                    # 技能名称（必需）
-    description: str             # 技能描述（必需）
-    path: Path                   # 技能文件路径
-    triggers: dict[str, list[str]] = field(default_factory=dict)  # 触发条件
-    version: str = "1.0.0"       # 版本号
-    
-    # 内部缓存字段
-    _skill: Skill | None = field(default=None, repr=False)  # 缓存的完整技能对象
-    _loaded: bool = field(default=False, repr=False)        # 是否已加载完整内容
-    
-    def to_list_item(self) -> str:
-        """格式化为技能列表项"""
-        return f"- {self.name}: {self.description}"
-    
-    def matches(self, text: str) -> bool:
-        """检查文本是否匹配此技能的触发条件"""
-        # 实现细节：检查关键词和正则表达式匹配
-        ...
+public class SkillMetadata {
+    private String name;                    // 技能名称（必需）
+    private String description;             // 技能描述（必需）
+    private Path path;                      // 技能文件路径
+    private Map<String, List<String>> triggers;  // 触发条件
+    private String version = "1.0.0";       // 版本号
+
+    // 内部缓存字段
+    private Skill cachedSkill;              // 缓存的完整技能对象
+    private boolean loaded = false;         // 是否已加载完整内容
+
+    public String toListItem() {
+        return "- " + name + ": " + description;
+    }
+
+    public boolean matches(String text) {
+        // 实现细节：检查关键词和正则表达式匹配
+        // ...
+    }
+}
 ```
 
 ### Frontmatter 字段说明
@@ -85,58 +84,75 @@ class SkillMetadata:
 
 SkillRegistry 管理技能的注册、发现和查询。
 
-```python
-from harness.skills.registry import SkillRegistry
-from pathlib import Path
+```java
+import com.harness.skills.SkillRegistry;
+import java.nio.file.Path;
 
-class SkillRegistry:
-    def __init__(self):
-        """初始化技能注册表"""
+public class SkillRegistry {
+    public SkillRegistry() {
+        // 初始化技能注册表
+    }
 
-    def add_skill_dir(self, directory: Path) -> None:
-        """添加技能目录并自动加载所有技能"""
+    public void addSkillDir(Path directory) {
+        // 添加技能目录并自动加载所有技能
+    }
 
-    def register(self, skill: Skill) -> None:
-        """注册技能（同名技能按版本号覆盖）"""
+    public void register(Skill skill) {
+        // 注册技能（同名技能按版本号覆盖）
+    }
 
-    def unregister(self, name: str) -> bool:
-        """注销技能，返回是否成功"""
+    public boolean unregister(String name) {
+        // 注销技能，返回是否成功
+    }
 
-    def get(self, name: str) -> Skill | None:
-        """获取技能"""
+    public Skill get(String name) {
+        // 获取技能
+    }
 
-    def list_skills(self) -> list[Skill]:
-        """列出所有注册技能"""
+    public List<Skill> listSkills() {
+        // 列出所有注册技能
+    }
 
-    def find_matching_skills(self, user_input: str) -> list[Skill]:
-        """根据用户输入查找匹配的技能"""
+    public List<Skill> findMatchingSkills(String userInput) {
+        // 根据用户输入查找匹配的技能
+    }
 
-    def activate(self, skill_name: str) -> bool:
-        """激活技能，返回是否成功"""
+    public boolean activate(String skillName) {
+        // 激活技能，返回是否成功
+    }
 
-    def deactivate(self, skill_name: str) -> bool:
-        """停用技能，返回是否成功"""
+    public boolean deactivate(String skillName) {
+        // 停用技能，返回是否成功
+    }
 
-    def get_active_skills(self) -> list[Skill]:
-        """获取所有激活的技能"""
+    public List<Skill> getActiveSkills() {
+        // 获取所有激活的技能
+    }
 
-    def clear_active(self) -> None:
-        """清除所有激活的技能"""
+    public void clearActive() {
+        // 清除所有激活的技能
+    }
 
-    def is_tool_allowed(self, tool_name: str) -> bool:
-        """检查工具是否被所有激活技能允许"""
+    public boolean isToolAllowed(String toolName) {
+        // 检查工具是否被所有激活技能允许
+    }
 
-    def reload(self) -> None:
-        """重新加载所有技能目录"""
+    public void reload() {
+        // 重新加载所有技能目录
+    }
 
-    def __len__(self) -> int:
-        """返回注册技能数量"""
+    public int size() {
+        // 返回注册技能数量
+    }
 
-    def __contains__(self, name: str) -> bool:
-        """检查技能是否已注册"""
+    public boolean contains(String name) {
+        // 检查技能是否已注册
+    }
 
-    def __iter__(self):
-        """迭代所有技能"""
+    public Iterator<Skill> iterator() {
+        // 迭代所有技能
+    }
+}
 ```
 
 ### 技能发现
@@ -158,14 +174,17 @@ skill_dirs/
 
 ### LoadingLevel（加载级别）
 
-```python
-from harness.skills.progressive import LoadingLevel
+```java
+import com.harness.skills.ProgressiveSkillLoader;
 
-class LoadingLevel:
-    """Skill loading levels."""
-    FRONTMATTER = 1  # Level 1: 仅加载元数据
-    FULL_CONTENT = 2  # Level 2: 加载完整内容
-    REFERENCES = 3    # Level 3: 加载引用文件
+public class LoadingLevel {
+    /** Level 1: 仅加载元数据 */
+    public static final int FRONTMATTER = 1;
+    /** Level 2: 加载完整内容 */
+    public static final int FULL_CONTENT = 2;
+    /** Level 3: 加载引用文件 */
+    public static final int REFERENCES = 3;
+}
 ```
 
 ### 加载策略
@@ -182,89 +201,105 @@ class LoadingLevel:
 
 ### ProgressiveSkillLoader
 
-```python
-from harness.skills.progressive import ProgressiveSkillLoader, SkillMetadata
-from pathlib import Path
+```java
+import com.harness.skills.ProgressiveSkillLoader;
+import com.harness.skills.SkillMetadata;
+import java.nio.file.Path;
 
-class ProgressiveSkillLoader:
-    def __init__(self, cache_size: int = 50):
-        """
-        Args:
-            cache_size: 内存中缓存的技能最大数量
-        """
+public class ProgressiveSkillLoader {
+    public ProgressiveSkillLoader() {
+        this(50);
+    }
 
-    def discover_skills(self, directory: Path) -> list[SkillMetadata]:
-        """发现目录中的所有技能（Level 1 加载，仅读取 frontmatter）"""
+    /**
+     * @param cacheSize 内存中缓存的技能最大数量
+     */
+    public ProgressiveSkillLoader(int cacheSize) {
+        // ...
+    }
 
-    def load_full_content(self, metadata: SkillMetadata) -> Skill:
-        """加载完整的技能内容（Level 2 加载）"""
+    public List<SkillMetadata> discoverSkills(Path directory) {
+        // 发现目录中的所有技能（Level 1 加载，仅读取 frontmatter）
+    }
 
-    def match_skills(
-        self,
-        text: str,
-        skills: list[SkillMetadata],
-        max_matches: int = 3,
-    ) -> list[SkillMetadata]:
-        """根据用户输入文本匹配技能"""
+    public Skill loadFullContent(SkillMetadata metadata) {
+        // 加载完整的技能内容（Level 2 加载）
+    }
 
-    def load_with_references(
-        self,
-        metadata: SkillMetadata,
-        reference_loader: callable | None = None,
-    ) -> tuple[Skill, list[str]]:
-        """加载技能及其所有引用文件（Level 3 加载）"""
+    public List<SkillMetadata> matchSkills(
+        String text,
+        List<SkillMetadata> skills,
+        int maxMatches
+    ) {
+        // 根据用户输入文本匹配技能
+    }
 
-    def build_skill_selection_prompt(
-        self,
-        skills: list[SkillMetadata],
-        format_style: str = "list",
-    ) -> str:
-        """构建技能选择提示"""
+    public SkillWithReferences loadWithReferences(
+        SkillMetadata metadata,
+        // 可选的引用加载器
+    ) {
+        // 加载技能及其所有引用文件（Level 3 加载）
+    }
 
-    def estimate_tokens(self, skills: list[SkillMetadata | Skill], level: int = 1) -> int:
-        """估算技能列表的 token 数量"""
+    public String buildSkillSelectionPrompt(
+        List<SkillMetadata> skills,
+        String formatStyle
+    ) {
+        // 构建技能选择提示
+    }
 
-    def clear_cache(self) -> None:
-        """清除所有缓存技能"""
+    public int estimateTokens(List<?> skills, int level) {
+        // 估算技能列表的 token 数量
+    }
+
+    public void clearCache() {
+        // 清除所有缓存技能
+    }
+}
 ```
 
 ### 使用示例
 
-```python
-from pathlib import Path
-from harness.skills.progressive import ProgressiveSkillLoader, SkillMetadata, LoadingLevel
+```java
+import java.nio.file.Path;
+import com.harness.skills.ProgressiveSkillLoader;
+import com.harness.skills.ProgressiveSkillLoader.SkillMetadata;
+import com.harness.skills.ProgressiveSkillLoader.LoadingLevel;
+import com.harness.skills.Skill;
 
-# 创建加载器
-loader = ProgressiveSkillLoader(cache_size=50)
+// 创建加载器
+ProgressiveSkillLoader loader = new ProgressiveSkillLoader(50);
 
-# Level 1: 发现所有技能的元数据
-skills_dir = Path(".harness/skills")
-all_skills = loader.discover_skills(skills_dir)
+// Level 1: 发现所有技能的元数据
+Path skillsDir = Path.of(".harness", "skills");
+List<SkillMetadata> allSkills = loader.discoverSkills(skillsDir);
 
-# 构建技能选择提示
-skill_list = loader.build_skill_selection_prompt(all_skills, format_style="list")
-print(f"可用技能:\n{skill_list}")
+// 构建技能选择提示
+String skillList = loader.buildSkillSelectionPrompt(allSkills, "list");
+System.out.println("可用技能:\n" + skillList);
 
-# 根据用户输入匹配技能
-user_input = "审查代码中的安全漏洞"
-matched = loader.match_skills(user_input, all_skills, max_matches=3)
+// 根据用户输入匹配技能
+String userInput = "审查代码中的安全漏洞";
+List<SkillMetadata> matched = loader.matchSkills(userInput, allSkills, 3);
 
-# Level 2: 加载完整内容
-for skill_meta in matched:
-    skill = loader.load_full_content(skill_meta)
-    print(f"[{LoadingLevel.FULL_CONTENT}] {skill.name}: {skill.content[:100]}...")
+// Level 2: 加载完整内容
+for (SkillMetadata skillMeta : matched) {
+    Skill skill = loader.loadFullContent(skillMeta);
+    System.out.println("[" + LoadingLevel.FULL_CONTENT + "] " + skill.name() + ": " + skill.content().substring(0, Math.min(100, skill.content().length())) + "...");
+}
 
-# Level 3: 加载技能及其引用文件
-for skill_meta in matched:
-    skill, references = loader.load_with_references(skill_meta)
-    print(f"[{LoadingLevel.REFERENCES}] {skill.name} 有 {len(references)} 个引用文件")
+// Level 3: 加载技能及其引用文件
+for (SkillMetadata skillMeta : matched) {
+    var result = loader.loadWithReferences(skillMeta);
+    System.out.println("[" + LoadingLevel.REFERENCES + "] " + result.skill().name() + " 有 " + result.references().size() + " 个引用文件");
+}
 
-# 估算 token 使用
-tokens = loader.estimate_tokens(matched, level=LoadingLevel.FULL_CONTENT)
-print(f"估计 token 使用: {tokens}")
+// 估算 token 使用
+int tokens = loader.estimateTokens(matched, LoadingLevel.FULL_CONTENT);
+System.out.println("估计 token 使用: " + tokens);
 
-# 清除缓存
-loader.clear_cache()
+// 清除缓存
+loader.clearCache();
 ```
 
 ### 各级别的内容格式
@@ -309,70 +344,75 @@ file2.md:
 
 SkillInjector 将技能指令注入系统提示，让 LLM 感知可用技能。
 
-```python
-from harness.skills.injector import SkillInjector, InjectionConfig
-from harness.skills.registry import SkillRegistry
+```java
+import com.harness.skills.SkillInjector;
+import com.harness.skills.InjectionConfig;
+import com.harness.skills.SkillRegistry;
 
-class SkillInjector:
-    def __init__(self, registry: SkillRegistry, config: InjectionConfig | None = None):
-        """
-        Args:
-            registry: 技能注册表
-            config: 注入配置（可选）
-        """
+public class SkillInjector {
+    /**
+     * @param registry 技能注册表
+     * @param config   注入配置（可选）
+     */
+    public SkillInjector(SkillRegistry registry, InjectionConfig config) {
+        // ...
+    }
 
-    def inject_skills(
-        self,
-        system_prompt: str,
-        user_input: str,
-        context: dict | None = None,
-    ) -> str:
-        """
-        将技能注入系统提示
+    public String injectSkills(
+        String systemPrompt,
+        String userInput,
+        Map<String, Object> context
+    ) {
+        // 将技能注入系统提示
+        // 返回注入技能后的系统提示
+    }
 
-        Args:
-            system_prompt: 原始系统提示
-            user_input: 用户输入文本
-            context: 可选上下文字典
+    public Predicate<String> getToolFilter() {
+        // 获取工具过滤函数，返回 true 表示工具被允许
+    }
 
-        Returns:
-            注入技能后的系统提示
-        """
+    public InjectionPreview getInjectionPreview(
+        String systemPrompt,
+        String userInput
+    ) {
+        // 获取注入预览信息
+    }
+}
 
-    def get_tool_filter(self) -> Callable[[str], bool]:
-        """获取工具过滤函数，返回 True 表示工具被允许"""
-
-    def get_injection_preview(
-        self,
-        system_prompt: str,
-        user_input: str,
-    ) -> dict:
-        """获取注入预览信息"""
-
-@dataclass
-class InjectionConfig:
-    max_skills_per_prompt: int = 5          # 每个提示最大技能数
-    max_skill_length: int = 2000           # 每个技能最大长度
-    inject_method: str = "append"          # append, prepend, section
-    skill_separator: str = "\n\n---\n\n"   # 技能分隔符
+public record InjectionConfig(
+    int maxSkillsPerPrompt,          // 每个提示最大技能数（默认 5）
+    int maxSkillLength,              // 每个技能最大长度（默认 2000）
+    String injectMethod,             // append, prepend, section
+    String skillSeparator            // 技能分隔符
+) {
+    public static InjectionConfig defaults() {
+        return new InjectionConfig(5, 2000, "append", "\n\n---\n\n");
+    }
+}
 ```
 
 ## Skill 基类
 
-```python
-from harness.skills.base import Skill, SkillTrigger, SkillTools, SkillParameter
+```java
+import com.harness.skills.SkillMetadata;
 
-class Skill:
-    name: str                          # 技能名称
-    description: str                   # 技能描述
-    content: str                       # 技能完整内容（Markdown）
-    triggers: SkillTrigger             # 触发条件
-    tools: SkillTools                  # 工具配置
-    parameters: list[SkillParameter]   # 参数列表
-    version: str = "1.0.0"             # 版本号
-    author: str = ""                   # 作者
-    metadata: dict[str, Any]           # 元数据
-    source_path: str | None            # 源文件路径
+public record Skill(
+    String name,                        // 技能名称
+    SkillMetadata metadata,             // 技能描述
+    String content,                     // 技能完整内容（Markdown）
+    SkillTrigger triggers,              // 触发条件
+    SkillTools tools,                   // 工具配置
+    List<SkillParameter> parameters,    // 参数列表
+    String version,                     // 版本号
+    String author,                      // 作者
+    Map<String, Object> metadata,       // 元数据
+    Path sourcePath                     // 源文件路径
+) {
+    public Skill {
+        this.version = version != null ? version : "1.0.0";
+        this.author = author != null ? author : "";
+    }
+}
 ```
 
 ## 技能与工具的关系
@@ -429,23 +469,25 @@ You are a developer. You can read, write, and execute code.
 
 AgentHarness 内置了技能系统，在运行时自动注入匹配的技能：
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import java.nio.file.Path;
 
-# AgentHarness 自动初始化技能系统
-agent = AgentHarness(api_key="...")
+// AgentHarness 自动初始化技能系统
+AgentHarness agent = AgentHarness.builder()
+    .apiKey("...")
+    .build();
 
-# 加载自定义技能目录
-from pathlib import Path
-agent.load_skills_from_dir(Path(".harness/skills"))
+// 加载自定义技能目录
+agent.loadSkillsFromDir(Path.of(".harness", "skills"));
 
-# 查看匹配的技能
-user_input = "将 README.md 转换为 Word 文档"
-matching = agent.get_matching_skills(user_input)
-print(f"匹配的技能: {[s.name for s in matching]}")
+// 查看匹配的技能
+String userInput = "将 README.md 转换为 Word 文档";
+List<Skill> matching = agent.getMatchingSkills(userInput);
+System.out.println("匹配的技能: " + matching.stream().map(Skill::name).toList());
 
-# 运行时自动注入匹配的技能
-result = await agent.run(user_input)
+// 运行时自动注入匹配的技能
+LoopResult result = agent.run(userInput).join();
 ```
 
 #### 技能注入流程
@@ -460,12 +502,12 @@ LLM 调用（包含技能指令）
 
 #### 手动控制技能激活
 
-```python
-# 强制激活特定技能（即使不匹配 triggers）
-agent.activate_skill("code-review")
+```java
+// 强制激活特定技能（即使不匹配 triggers）
+agent.activateSkill("code-review");
 
-# 停用技能
-agent.deactivate_skill("code-review")
+// 停用技能
+agent.deactivateSkill("code-review");
 ```
 
 ### 与记忆系统集成
@@ -484,11 +526,11 @@ agent.deactivate_skill("code-review")
 - MCP 工具可作为技能的可用工具
 - 技能的 `tools` 字段可包含 MCP 工具名
 
-```python
-# 使用 MCP 工具的技能
-agent.add_mcp_server("github", command="mcp-github")
+```java
+// 使用 MCP 工具的技能
+agent.addMcpServer("github", "mcp-github");
 
-# 技能文件中引用 MCP 工具
+// 技能文件中引用 MCP 工具
 """
 ---
 name: github-ops

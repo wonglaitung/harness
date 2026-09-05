@@ -212,44 +212,88 @@ assert config.getToolTimeout() == 60.0;
 
 ### 使用真实 LLM 的集成测试
 
-```python
-import pytest
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-@pytest.fixture
-def agent():
-    return AgentHarness(
-        api_key="test-key",
-        model="claude-haiku-4-5",  # 使用便宜模型
-    )
+// 使用真实 LLM 的集成测试
+public class IntegrationTest {
 
-@pytest.mark.asyncio
-async def test_basic_conversation(agent):
-    result = await agent.run("Hello")
-    assert result.content
-    assert result.iterations >= 1
+    private AgentHarness createAgent() {
+        HarnessConfig config = HarnessConfig.builder()
+            .apiKey("test-key")
+            .model("claude-haiku-4-5")  // 使用便宜模型
+            .build();
+        return new AgentHarness(config);
+    }
 
-@pytest.mark.asyncio
-async def test_tool_usage(agent):
-    result = await agent.run("读取 README.md 的内容")
-    assert len(result.tool_calls) > 0
-    assert any(tc.name == "read" for tc in result.tool_calls)
+    @Test
+    public void testBasicConversation() {
+        AgentHarness agent = createAgent();
+        LoopResult result = agent.run("Hello").join();
+        assertNotNull(result.content());
+        assertTrue(result.iterations() >= 1);
+    }
+
+    @Test
+    public void testToolUsage() {
+        AgentHarness agent = createAgent();
+        LoopResult result = agent.run("读取 README.md 的内容").join();
+        assertNotNull(result.messages());
+        assertTrue(result.messages().size() > 1);
+    }
+}
 ```
 
 ### 端到端测试
 
-```python
-@pytest.mark.asyncio
-async def test_full_workflow():
-    agent = AgentHarness()
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.Tool;
+import com.harness.types.ToolResult;
+import com.harness.core.ToolContext;
+import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-    # 添加自定义工具
-    @agent.tool(description="获取天气")
-    def get_weather(city: str) -> str:
-        return f"{city}: 晴天, 25°C"
+// 端到端测试
+public class EndToEndTest {
 
-    result = await agent.run("北京今天天气怎么样？")
-    assert "25" in result.content or "晴" in result.content
+    // 自定义天气工具
+    public static class WeatherTool implements Tool {
+        @Override public String name() { return "get_weather"; }
+        @Override public String description() { return "获取天气"; }
+        @Override public Map<String, Object> inputSchema() {
+            return Map.of(
+                "type", "object",
+                "properties", Map.of("city", Map.of("type", "string")),
+                "required", List.of("city")
+            );
+        }
+        @Override
+        public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+            String city = (String) args.get("city");
+            String weather = city + ": 晴天, 25°C";
+            return CompletableFuture.completedFuture(
+                ToolResult.success(ctx.sessionId(), weather, name())
+            );
+        }
+    }
+
+    @Test
+    public void testFullWorkflow() {
+        AgentHarness agent = AgentHarness.builder().build();
+        agent.registerTool(new WeatherTool());
+
+        LoopResult result = agent.run("北京今天天气怎么样？").join();
+        assertTrue(result.content().contains("25") || result.content().contains("晴"));
+    }
+}
 ```
 
 ## 测试最佳实践

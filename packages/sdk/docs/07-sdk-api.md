@@ -1561,7 +1561,7 @@ class AutomationResult:
     error_message: str | None = None
 ```
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [06-trigger-system.md](./06-trigger-system.md)。
 
 ## Trigger System API
 
@@ -1681,7 +1681,7 @@ class TriggerState(Enum):
     ERROR = "error"         # 错误
 ```
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [06-trigger-system.md](./06-trigger-system.md)。
 
 ## Service 模块 (Spring Cloud 集成)
 
@@ -1901,7 +1901,7 @@ from harness.service.discovery import (
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
-- [06-triggers.md](./06-triggers.md) - 了解 Trigger System
+- [06-trigger-system.md](./06-trigger-system.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 完整指南

@@ -17,34 +17,47 @@ Orchestrator 模块提供**统一的工作流编排 API**，整合 Phase 1-4 的
 
 ### LoopOrchestrator
 
-```python
-from harness import AgentHarness
-from harness.orchestrator import (
-    LoopOrchestrator,
-    WorkflowConfig,
-    WorkflowStep,
-    TeamConfig,
-    AgentRole,
-    CoordinationMode,
-)
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.orchestrator.WorkflowEngine;
+import com.harness.orchestrator.WorkflowConfig;
+import com.harness.orchestrator.WorkflowStep;
+import com.harness.orchestrator.TeamConfig;
+import com.harness.orchestrator.AgentRole;
+import com.harness.orchestrator.CoordinationMode;
+import com.harness.orchestrator.WorkflowResult;
 
-agent = AgentHarness(model="claude-sonnet-4-6")
-orchestrator = LoopOrchestrator(agent)
+GoalLoop.AgentRunner agent = ...;
+WorkflowEngine engine = new WorkflowEngine();
 
-# 创建工作流
-workflow = WorkflowConfig(
-    name="code-review",
-    steps=[
-        WorkflowStep(name="analyze", goal="分析代码结构"),
-        WorkflowStep(name="lint", goal="运行 lint 检查"),
-        WorkflowStep(name="review", goal="代码审查", depends_on=["analyze", "lint"]),
-        WorkflowStep(name="report", goal="生成审查报告", depends_on=["review"]),
-    ],
-)
-orchestrator.create_workflow(workflow)
+// 创建工作流
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("code-review")
+    .addStep(WorkflowStep.builder()
+        .name("analyze")
+        .goal("分析代码结构")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("lint")
+        .goal("运行 lint 检查")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("review")
+        .goal("代码审查")
+        .addDependsOn("analyze")
+        .addDependsOn("lint")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("report")
+        .goal("生成审查报告")
+        .addDependsOn("review")
+        .build())
+    .build();
 
-# 执行工作流
-result = await orchestrator.run_workflow("code-review")
+engine.registerWorkflow(workflow);
+
+// 执行工作流
+WorkflowResult result = engine.runWorkflow(workflow, agent).join();
 ```
 
 ## 工作流配置
@@ -89,106 +102,132 @@ result = await orchestrator.run_workflow("code-review")
 
 ### 顺序执行
 
-```python
-workflow = WorkflowConfig(
-    name="deploy",
-    steps=[
-        WorkflowStep(name="test", goal="运行所有测试"),
-        WorkflowStep(name="build", goal="构建应用", depends_on=["test"]),
-        WorkflowStep(name="deploy", goal="部署到生产环境", depends_on=["build"]),
-    ],
-)
+```java
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("deploy")
+    .addStep(WorkflowStep.builder()
+        .name("test")
+        .goal("运行所有测试")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("build")
+        .goal("构建应用")
+        .addDependsOn("test")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("deploy")
+        .goal("部署到生产环境")
+        .addDependsOn("build")
+        .build())
+    .build();
 
-result = await orchestrator.run_workflow("deploy")
-# test → build → deploy（顺序执行）
+WorkflowResult result = engine.runWorkflow(workflow, agent).join();
+// test → build → deploy（顺序执行）
 ```
 
 ### 并行执行
 
-```python
-workflow = WorkflowConfig(
-    name="parallel-analysis",
-    steps=[
-        WorkflowStep(name="security", goal="安全扫描"),
-        WorkflowStep(name="performance", goal="性能分析"),
-        WorkflowStep(name="coverage", goal="覆盖率检查"),
-        WorkflowStep(name="report", goal="生成报告", depends_on=["security", "performance", "coverage"]),
-    ],
-    default_mode=ExecutionMode.PARALLEL,
-)
+```java
+import com.harness.orchestrator.ExecutionMode;
 
-result = await orchestrator.run_workflow("parallel-analysis")
-# security, performance, coverage 并行执行
-# 全部完成后执行 report
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("parallel-analysis")
+    .addStep(WorkflowStep.builder()
+        .name("security")
+        .goal("安全扫描")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("performance")
+        .goal("性能分析")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("coverage")
+        .goal("覆盖率检查")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("report")
+        .goal("生成报告")
+        .addDependsOn("security")
+        .addDependsOn("performance")
+        .addDependsOn("coverage")
+        .build())
+    .defaultMode(ExecutionMode.PARALLEL)
+    .build();
+
+WorkflowResult result = engine.runWorkflow(workflow, agent).join();
+// security, performance, coverage 并行执行
+// 全部完成后执行 report
 ```
 
 ### 条件执行
 
-```python
-workflow = WorkflowConfig(
-    name="conditional-deploy",
-    steps=[
-        WorkflowStep(name="check", goal="检查代码质量"),
-        WorkflowStep(
-            name="deploy",
-            goal="部署到生产环境",
-            depends_on=["check"],
-            condition="steps['check'].status == StepStatus.SUCCESS",
-        ),
-    ],
-)
+```java
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("conditional-deploy")
+    .addStep(WorkflowStep.builder()
+        .name("check")
+        .goal("检查代码质量")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("deploy")
+        .goal("部署到生产环境")
+        .addDependsOn("check")
+        .condition("steps['check'].status == StepStatus.SUCCESS")
+        .build())
+    .build();
 ```
 
 ### 模板变量
 
-```python
-workflow = WorkflowConfig(
-    name="template-example",
-    steps=[
-        WorkflowStep(
-            name="analyze",
-            goal="分析代码并生成报告",
-            exports={"report_path": "$.artifacts.report_file"},
-        ),
-        WorkflowStep(
-            name="notify",
-            goal="发送报告到 Slack: {{steps.analyze.exports.report_path}}",
-            depends_on=["analyze"],
-        ),
-    ],
-)
+```java
+WorkflowConfig workflow = WorkflowConfig.builder()
+    .name("template-example")
+    .addStep(WorkflowStep.builder()
+        .name("analyze")
+        .goal("分析代码并生成报告")
+        .addExport("report_path", "$.artifacts.report_file")
+        .build())
+    .addStep(WorkflowStep.builder()
+        .name("notify")
+        .goal("发送报告到 Slack: {{steps.analyze.exports.report_path}}")
+        .addDependsOn("analyze")
+        .build())
+    .build();
 ```
 
 ## 多 Agent 协调
 
 ### TeamConfig
 
-```python
-team = TeamConfig(
-    name="dev-team",
-    description="开发团队",
-    roles=[
-        AgentRole(
-            name="analyzer",
-            description="代码分析专家",
-            skills=["code-analysis"],
-            max_iterations=10,
-        ),
-        AgentRole(
-            name="developer",
-            description="开发工程师",
-            skills=["coding", "testing"],
-            max_iterations=20,
-        ),
-        AgentRole(
-            name="reviewer",
-            description="代码审查员",
-            skills=["code-review"],
-            max_iterations=5,
-        ),
-    ],
-    coordination_mode=CoordinationMode.SEQUENTIAL,
-)
+```java
+import com.harness.orchestrator.TeamConfig;
+import com.harness.orchestrator.AgentRole;
+import com.harness.orchestrator.CoordinationMode;
+
+TeamConfig team = TeamConfig.builder()
+    .name("dev-team")
+    .description("开发团队")
+    .addRole(AgentRole.builder()
+        .name("analyzer")
+        .description("代码分析专家")
+        .addSkill("code-analysis")
+        .maxIterations(10)
+        .build())
+    .addRole(AgentRole.builder()
+        .name("developer")
+        .description("开发工程师")
+        .addSkill("coding")
+        .addSkill("testing")
+        .maxIterations(20)
+        .build())
+    .addRole(AgentRole.builder()
+        .name("reviewer")
+        .description("代码审查员")
+        .addSkill("code-review")
+        .maxIterations(5)
+        .build())
+    .coordinationMode(CoordinationMode.SEQUENTIAL)
+    .build();
 ```
 
 ### 协调模式
@@ -201,16 +240,21 @@ team = TeamConfig(
 
 ### 团队执行示例
 
-```python
-# 创建团队
-orchestrator.create_team(team)
+```java
+import com.harness.orchestrator.TeamResult;
+import java.util.Map;
 
-# 执行团队任务
-result = await orchestrator.run_team("dev-team", "实现用户登录功能")
+// 创建团队
+TeamOrchestrator teamOrchestrator = new TeamOrchestrator();
+teamOrchestrator.registerTeam(team);
 
-# 查看各 Agent 结果
-for role_name, agent_result in result.agent_results.items():
-    print(f"{role_name}: {agent_result.status.value}")
+// 执行团队任务
+TeamResult result = teamOrchestrator.runTeam("dev-team", "实现用户登录功能", agent).join();
+
+// 查看各 Agent 结果
+for (Map.Entry<String, GoalResult> entry : result.getAgentResults().entrySet()) {
+    System.out.println(entry.getKey() + ": " + entry.getValue().status().getValue());
+}
 ```
 
 ## 执行状态
@@ -237,93 +281,107 @@ for role_name, agent_result in result.agent_results.items():
 
 ## 监控
 
-```python
-# 获取执行指标
-metrics = orchestrator.get_metrics("code-review")
-print(f"Total steps: {metrics.total_steps}")
-print(f"Completed: {metrics.completed_steps}")
-print(f"Failed: {metrics.failed_steps}")
-print(f"Duration: {metrics.duration_seconds}s")
+```java
+import com.harness.orchestrator.ExecutionMetric;
+import com.harness.orchestrator.WorkflowEngine;
+import java.util.List;
 
-# 获取执行日志
-logs = orchestrator.get_execution_log("code-review")
-for log in logs:
-    print(f"[{log.timestamp}] {log.step_name}: {log.event}")
+// 获取执行指标
+ExecutionMetric metrics = engine.getMetrics("code-review");
+System.out.println("Total steps: " + metrics.getTotalSteps());
+System.out.println("Completed: " + metrics.getCompletedSteps());
+System.out.println("Failed: " + metrics.getFailedSteps());
+System.out.println("Duration: " + metrics.getDurationSeconds() + "s");
+
+// 获取执行日志
+List<ExecutionLog> logs = engine.getExecutionLog("code-review");
+for (ExecutionLog log : logs) {
+    System.out.println("[" + log.getTimestamp() + "] " +
+        log.getStepName() + ": " + log.getEvent());
+}
 ```
 
 ## 完整示例
 
 ### CI/CD 工作流
 
-```python
-import asyncio
-from harness import AgentHarness
-from harness.orchestrator import (
-    LoopOrchestrator,
-    WorkflowConfig,
-    WorkflowStep,
-)
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.orchestrator.WorkflowEngine;
+import com.harness.orchestrator.WorkflowConfig;
+import com.harness.orchestrator.WorkflowStep;
+import com.harness.orchestrator.WorkflowResult;
+import com.harness.orchestrator.StepResult;
+import com.harness.orchestrator.StepStatus;
+import java.util.Map;
 
-async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
-    orchestrator = LoopOrchestrator(agent)
+public class CicdExample {
+    public static void main(String[] args) throws Exception {
+        GoalLoop.AgentRunner agent = ...;
+        WorkflowEngine engine = new WorkflowEngine();
 
-    # 定义 CI/CD 工作流
-    workflow = WorkflowConfig(
-        name="cicd",
-        description="持续集成和部署流程",
-        steps=[
-            # 并行检查
-            WorkflowStep(name="lint", goal="运行 ruff check 检查代码风格"),
-            WorkflowStep(name="typecheck", goal="运行 mypy 类型检查"),
-            WorkflowStep(name="test", goal="运行 pytest 测试"),
+        // 定义 CI/CD 工作流
+        WorkflowConfig workflow = WorkflowConfig.builder()
+            .name("cicd")
+            .description("持续集成和部署流程")
+            // 并行检查
+            .addStep(WorkflowStep.builder()
+                .name("lint")
+                .goal("运行 ruff check 检查代码风格")
+                .build())
+            .addStep(WorkflowStep.builder()
+                .name("typecheck")
+                .goal("运行 mypy 类型检查")
+                .build())
+            .addStep(WorkflowStep.builder()
+                .name("test")
+                .goal("运行 pytest 测试")
+                .build())
+            // 分析（等待检查完成）
+            .addStep(WorkflowStep.builder()
+                .name("analyze")
+                .goal("分析代码质量并生成报告")
+                .addDependsOn("lint")
+                .addDependsOn("typecheck")
+                .addDependsOn("test")
+                .build())
+            // 决策
+            .addStep(WorkflowStep.builder()
+                .name("decision")
+                .goal("根据分析结果决定是否可以部署")
+                .addDependsOn("analyze")
+                .condition("steps['test'].status == StepStatus.SUCCESS")
+                .build())
+            // 部署
+            .addStep(WorkflowStep.builder()
+                .name("deploy")
+                .goal("部署到 staging 环境")
+                .addDependsOn("decision")
+                .build())
+            // 通知
+            .addStep(WorkflowStep.builder()
+                .name("notify")
+                .goal("发送部署通知到 Slack")
+                .addDependsOn("deploy")
+                .build())
+            .maxParallelSteps(3)
+            .build();
 
-            # 分析（等待检查完成）
-            WorkflowStep(
-                name="analyze",
-                goal="分析代码质量并生成报告",
-                depends_on=["lint", "typecheck", "test"],
-            ),
+        engine.registerWorkflow(workflow);
 
-            # 决策
-            WorkflowStep(
-                name="decision",
-                goal="根据分析结果决定是否可以部署",
-                depends_on=["analyze"],
-                condition="steps['test'].status == StepStatus.SUCCESS",
-            ),
+        // 执行
+        WorkflowResult result = engine.runWorkflow(workflow, agent).join();
 
-            # 部署
-            WorkflowStep(
-                name="deploy",
-                goal="部署到 staging 环境",
-                depends_on=["decision"],
-            ),
+        System.out.println("工作流状态: " + result.getStatus().getValue());
+        System.out.printf("总耗时: %.1fs%n", result.getDurationSeconds());
 
-            # 通知
-            WorkflowStep(
-                name="notify",
-                goal="发送部署通知到 Slack",
-                depends_on=["deploy"],
-            ),
-        ],
-        max_parallel_steps=3,
-    )
-
-    orchestrator.create_workflow(workflow)
-
-    # 执行
-    result = await orchestrator.run_workflow("cicd")
-
-    print(f"工作流状态: {result.status.value}")
-    print(f"总耗时: {result.duration_seconds:.1f}s")
-
-    # 打印各步骤结果
-    for step_name, step_result in result.steps.items():
-        status = "✅" if step_result.status.value == "success" else "❌"
-        print(f"  {status} {step_name}")
-
-asyncio.run(main())
+        // 打印各步骤结果
+        for (Map.Entry<String, StepResult> entry : result.getSteps().entrySet()) {
+            String status = entry.getValue().getStatus() == StepStatus.SUCCESS ? "✓" : "✗";
+            System.out.println("  " + status + " " + entry.getKey());
+        }
+    }
+}
 ```
 
 ## 架构

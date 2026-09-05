@@ -43,17 +43,23 @@
 
 ### 1. API 密钥管理
 
-```python
-import os
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-# 从环境变量读取
-agent = AgentHarness(
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
-    # 或 OpenAI
-    # api_key=os.environ.get("OPENAI_API_KEY"),
-    # model="gpt-4o",
-)
+// 从环境变量读取
+String apiKey = System.getenv("ANTHROPIC_API_KEY");
+// 或 OpenAI
+// String apiKey = System.getenv("OPENAI_API_KEY");
+
+HarnessConfig config = HarnessConfig.builder()
+    .apiKey(apiKey)
+    // .model("gpt-4o")  // OpenAI
+    .build();
+AgentHarness agent = new AgentHarness(config);
+
+// 或使用 fromEnv() 自动读取环境变量
+AgentHarness agentFromEnv = new AgentHarness(HarnessConfig.fromEnv());
 ```
 
 ### 2. 成本控制
@@ -99,17 +105,42 @@ HarnessConfig config = HarnessConfig.builder()
 
 ### 5. 集成到 Web 服务
 
-```python
-from fastapi import FastAPI
-from harness import AgentHarness
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
+import com.harness.types.LoopResult;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
+import java.io.*;
+import java.net.InetSocketAddress;
 
-app = FastAPI()
-agent = AgentHarness.from_config("harness.yaml")
+// 集成到 Web 服务
+public class AiService {
+    private final AgentHarness agent;
 
-@app.post("/ai")
-async def ai_endpoint(message: str):
-    result = await agent.run(message)
-    return {"response": result.content}
+    public AiService() {
+        // 从配置文件加载
+        this.agent = new AgentHarness(HarnessConfig.fromEnv());
+    }
+
+    public String handleRequest(String message) {
+        LoopResult result = agent.run(message).join();
+        return result.content();
+    }
+
+    public static void main(String[] args) throws IOException {
+        AiService service = new AiService();
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        server.createContext("/ai", exchange -> {
+            String message = new String(exchange.getRequestBody().readAllBytes());
+            String response = service.handleRequest(message);
+            exchange.sendResponseHeaders(200, response.length());
+            exchange.getResponseBody().write(response.getBytes());
+            exchange.close();
+        });
+        server.start();
+    }
+}
 ```
 
 ## 监控与可观测性
@@ -147,9 +178,15 @@ public class CostTrackingHook implements LifecycleHook {
 
 ### 审计日志
 
-```python
-# 审计日志自动记录到 .harness/audit/
-# 包含所有工具调用、权限检查、错误事件
+```java
+// 审计日志自动记录到 .harness/audit/
+// 包含所有工具调用、权限检查、错误事件
+// 在 HarnessConfig.SecurityConfig 中配置：
+SecurityConfig security = SecurityConfig.builder()
+    .enableAuditLog(true)              // 启用审计日志
+    .auditLogDir("~/.harness/audit")   // 日志目录
+    .auditRetentionDays(30)            // 保留天数
+    .build();
 ```
 
 ## 可靠性
@@ -165,54 +202,111 @@ public class CostTrackingHook implements LifecycleHook {
 
 ### 熔断器
 
-```python
-# 连续 5 次失败触发熔断
-# 可通过 HarnessConfig 配置
+```java
+// 连续 5 次失败触发熔断
+// 可通过 HarnessConfig 配置
+LoopConfig config = LoopConfig.builder()
+    .enableCircuitBreaker(true)        // 启用熔断器
+    .build();
 ```
 
 ### 卡住检测
 
-```python
-# 检测重复输出和循环工具调用
-# 自动注入提醒或中断
+```java
+// 检测重复输出和循环工具调用
+// 自动注入提醒或中断
+LoopConfig config = LoopConfig.builder()
+    .maxStuckFeedbacks(2)              // 最大反馈注入次数
+    .stuckMinIterations(3)             // 最小迭代次数后开始检测
+    .stuckConsecutiveFailures(3)       // 连续失败次数阈值
+    .build();
 ```
 
 ## 扩展性
 
 ### 自定义 LLM 客户端
 
-```python
-from harness.llm.base import LLMClient, LLMResponse
-from harness import AgentHarness
+```java
+import com.harness.core.LLMClient;
+import com.harness.types.LLMResponse;
+import com.harness.integration.AgentHarness;
+import java.util.List;
+import java.util.Map;
 
-class CustomLLM(LLMClient):
-    @property
-    def model_name(self) -> str:
-        return "custom-model"
+// 自定义 LLM 客户端
+public class CustomLLMClient implements LLMClient {
+    @Override
+    public String modelName() {
+        return "custom-model";
+    }
 
-    async def call(self, messages, tools=None, system=None, **kwargs) -> LLMResponse:
-        # 自定义实现
-        ...
+    @Override
+    public LLMResponse call(List<Map<String, Object>> messages,
+                            List<Map<String, Object>> tools,
+                            String system) {
+        // 自定义实现
+        return new LLMResponse("Custom response", null, null, new TokenUsage());
+    }
+}
 
-agent = AgentHarness(llm_client=CustomLLM())
+// 使用自定义 LLM 客户端
+AgentHarness agent = AgentHarness.builder()
+    .llmClient(new CustomLLMClient())
+    .build();
 ```
 
 ### 自定义记忆后端
 
-```python
-# 使用向量检索
-agent = AgentHarness(vector_store=True)
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.HarnessConfig;
 
-# 自定义记忆目录
-agent = AgentHarness(memory_dir="/data/harness/memory")
+// 使用向量检索
+HarnessConfig configWithVector = HarnessConfig.builder()
+    .memoryDir("/data/harness/memory")
+    .build();
+AgentHarness agentWithVector = new AgentHarness(configWithVector);
+
+// 自定义记忆目录
+HarnessConfig config = HarnessConfig.builder()
+    .memoryDir("/data/harness/memory")
+    .build();
+AgentHarness agent = new AgentHarness(config);
 ```
 
 ### 自定义工具
 
-```python
-@agent.tool(description="自定义功能")
-def my_tool(param: str) -> str:
-    return f"处理: {param}"
+```java
+import com.harness.core.Tool;
+import com.harness.types.ToolResult;
+import com.harness.core.ToolContext;
+import com.harness.integration.AgentHarness;
+import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+// 自定义工具
+public class MyTool implements Tool {
+    @Override public String name() { return "my_tool"; }
+    @Override public String description() { return "自定义功能"; }
+    @Override public Map<String, Object> inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of("param", Map.of("type", "string")),
+            "required", List.of("param")
+        );
+    }
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+        String param = (String) args.get("param");
+        return CompletableFuture.completedFuture(
+            ToolResult.success(ctx.sessionId(), "处理: " + param, name())
+        );
+    }
+}
+
+AgentHarness agent = AgentHarness.builder().build();
+agent.registerTool(new MyTool());
 ```
 
 ## 待实现功能

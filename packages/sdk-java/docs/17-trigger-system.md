@@ -34,110 +34,137 @@
 
 ## Trigger 基类
 
-```python
-from harness.triggers.base import Trigger, TriggerEvent
+```java
+import com.harness.triggers.TriggerEvent;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
-class Trigger(ABC):
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """触发器名称"""
+public abstract class Trigger {
+    private final TriggerType triggerType;
+    private TriggerAction action;
+    private TriggerState state = TriggerState.CREATED;
+    private String id;
 
-    @abstractmethod
-    async def start(self, callback: Callable[[TriggerEvent], Awaitable[None]]) -> None:
-        """启动触发器，事件触发时调用 callback"""
+    protected Trigger(TriggerType triggerType) {
+        this.triggerType = triggerType;
+    }
 
-    @abstractmethod
-    async def stop(self) -> None:
-        """停止触发器"""
+    public abstract CompletableFuture<Void> start(Consumer<TriggerEvent> callback);
 
-    @property
-    def is_running(self) -> bool:
-        """触发器是否在运行"""
+    public abstract CompletableFuture<Void> stop();
+
+    public abstract TriggerEvent createEvent(Map<String, Object> payload);
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public TriggerType getTriggerType() { return triggerType; }
+    public TriggerAction getAction() { return action; }
+    public void setAction(TriggerAction action) { this.action = action; }
+    public TriggerState getState() { return state; }
+    public boolean isRunning() { return state == TriggerState.RUNNING; }
+    protected void setRunning() { this.state = TriggerState.RUNNING; }
+    protected void setStopped() { this.state = TriggerState.STOPPED; }
+    protected void setError(String message) { this.state = TriggerState.ERROR; }
+}
 ```
 
 ### TriggerEvent
 
-```python
-@dataclass
-class TriggerEvent:
-    trigger_name: str          # 触发器名称
-    trigger_type: str          # 触发器类型
-    data: dict                 # 事件数据
-    timestamp: datetime        # 事件时间
-    metadata: dict | None = None  # 附加元数据
+```java
+import java.time.Instant;
+import java.util.Map;
+
+public class TriggerEvent {
+    private final String triggerId;
+    private final TriggerType triggerType;
+    private final Map<String, Object> payload;
+    private final Instant timestamp;
+
+    public TriggerEvent(String triggerId, TriggerType triggerType,
+                        Map<String, Object> payload, Instant timestamp) {
+        this.triggerId = triggerId;
+        this.triggerType = triggerType;
+        this.payload = payload;
+        this.timestamp = timestamp;
+    }
+
+    public String getTriggerId() { return triggerId; }
+    public TriggerType getTriggerType() { return triggerType; }
+    public Map<String, Object> getPayload() { return payload; }
+    public Instant getTimestamp() { return timestamp; }
+}
 ```
 
 ## TriggerManager
 
-```python
-from harness.triggers.manager import TriggerManager
+```java
+import com.harness.triggers.TriggerManager;
+import com.harness.triggers.Trigger;
+import java.util.List;
+import java.util.Map;
 
-class TriggerManager:
-    def __init__(self, harness: AgentHarness)
+public class TriggerManager {
+    private final GoalLoop.AgentRunner agentRunner;
+    private final int maxConcurrentGoals;
 
-    def register(self, trigger: Trigger) -> None:
-        """注册触发器"""
+    public TriggerManager(GoalLoop.AgentRunner agentRunner) { ... }
+    public TriggerManager(GoalLoop.AgentRunner agentRunner, int maxConcurrentGoals) { ... }
 
-    def unregister(self, name: str) -> None:
-        """注销触发器"""
-
-    async def start_all(self) -> None:
-        """启动所有注册的触发器"""
-
-    async def stop_all(self) -> None:
-        """停止所有触发器"""
-
-    def get_trigger(self, name: str) -> Trigger | None:
-        """获取触发器"""
-
-    def list_triggers(self) -> list[Trigger]:
-        """列出所有触发器"""
+    public String register(Trigger trigger) { ... }
+    public String register(Trigger trigger, TriggerAction action) { ... }
+    public boolean unregister(String triggerId) { ... }
+    public CompletableFuture<Void> start() { ... }
+    public CompletableFuture<Void> stop() { ... }
+    public TriggerRegistration getTrigger(String triggerId) { ... }
+    public List<Map<String, Object>> listTriggers() { ... }
+}
 ```
 
 ## CronTrigger（定时触发）
 
-```python
-from harness.triggers.cron import CronTrigger
+```java
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerAction;
 
-class CronTrigger(Trigger):
-    def __init__(
-        self,
-        name: str,
-        schedule: str,           # Cron 表达式
-        task: str | None = None, # 要执行的任务
-        skills: list[str] | None = None, # 使用的技能
-        timezone: str = "UTC",   # 时区
-    )
+public class CronTrigger extends Trigger {
+    public CronTrigger(String schedule, TriggerAction action) { ... }
+    public CronTrigger(String schedule, TriggerAction action,
+                       String timezone, int jitterSeconds) { ... }
+}
 ```
 
 ### 使用示例
 
-```python
-from harness import AgentHarness
-from harness.triggers.cron import CronTrigger
+```java
+import com.harness.triggers.CronTrigger;
+import com.harness.triggers.TriggerAction;
+import com.harness.triggers.TriggerManager;
+import com.harness.loop.GoalLoop;
 
-agent = AgentHarness()
+GoalLoop.AgentRunner agent = ...;
+TriggerManager triggerManager = new TriggerManager(agent);
 
-# 每天 9:00 生成日报
-cron = CronTrigger(
-    name="daily-report",
-    schedule="0 9 * * *",
-    task="生成昨日工作日报",
-    skills=["report"],
-)
-agent.triggers.register(cron)
+// 每天 9:00 生成日报
+CronTrigger cron = new CronTrigger(
+    "0 9 * * *",
+    new TriggerAction.Builder()
+        .goal("生成昨日工作日报")
+        .addSkill("report")
+        .build()
+);
+triggerManager.register(cron);
 
-# 每小时检查系统状态
-health_check = CronTrigger(
-    name="health-check",
-    schedule="0 * * * *",
-    task="检查系统健康状态并报告异常",
-)
-agent.triggers.register(health_check)
+// 每小时检查系统状态
+CronTrigger healthCheck = new CronTrigger(
+    "0 * * * *",
+    new TriggerAction.Builder()
+        .goal("检查系统健康状态并报告异常")
+        .build()
+);
+triggerManager.register(healthCheck);
 
-# 启动所有触发器
-await agent.triggers.start_all()
+// 启动所有触发器
+triggerManager.start().join();
 ```
 
 ### Cron 表达式格式
@@ -164,97 +191,103 @@ await agent.triggers.start_all()
 
 ## WebhookTrigger（Webhook 触发）
 
-```python
-from harness.triggers.webhook import WebhookTrigger
+```java
+import com.harness.triggers.WebhookTrigger;
+import com.harness.triggers.TriggerAction;
 
-class WebhookTrigger(Trigger):
-    def __init__(
-        self,
-        name: str,
-        path: str,                    # Webhook 路径
-        task: str | None = None,      # 要执行的任务模板
-        skills: list[str] | None = None,
-        secret: str | None = None,    # 验证密钥
-        allowed_ips: list[str] | None = None, # IP 白名单
-    )
+// WebhookTrigger is typically configured via ConnectorManager
+// See 20-connectors.md for full WebhookConnector usage
 ```
 
 ### 使用示例
 
-```python
-from harness import AgentHarness
-from harness.triggers.webhook import WebhookTrigger
+```java
+import com.harness.connectors.WebhookConnector;
+import com.harness.connectors.ConnectorManager;
+import com.harness.connectors.ConnectorEvent;
+import com.harness.triggers.TriggerManager;
+import com.harness.loop.GoalLoop;
 
-agent = AgentHarness()
+GoalLoop.AgentRunner agent = ...;
+TriggerManager triggerManager = new TriggerManager(agent);
+ConnectorManager manager = new ConnectorManager();
 
-# GitHub PR 事件触发代码审查
-github_pr = WebhookTrigger(
-    name="github-pr",
-    path="/webhook/github",
-    task="审查 PR #{event.pull_request.number}: {event.pull_request.title}",
-    skills=["code-review"],
-    secret="whsec_...",
-)
-agent.triggers.register(github_pr)
+// GitHub PR 事件触发代码审查
+WebhookConnector githubPr = new WebhookConnector()
+    .withEndpoint("/webhook/github")
+    .withSecret("whsec_...");
+manager.registerConnector(githubPr);
 
-# Slack 消息触发
-slack_msg = WebhookTrigger(
-    name="slack-message",
-    path="/webhook/slack",
-    task="处理来自 {event.user} 的消息: {event.text}",
-)
-agent.triggers.register(slack_msg)
+// Handle events via ConnectorManager
+manager.setEventHandler(event -> {
+    if ("github.pull_request".equals(event.getEventType())) {
+        String task = "审查 PR: " + event.getPayload().get("action");
+        // Execute goal via triggerManager
+    }
+});
 ```
 
 ### Webhook 事件数据
 
 Webhook 事件的数据结构取决于外部服务。触发器会将请求体解析为 `TriggerEvent.data`：
 
-```python
-# GitHub PR Webhook
-event.data = {
-    "action": "opened",
-    "pull_request": {
-        "number": 42,
-        "title": "Fix auth bug",
-        "url": "https://github.com/...",
-    },
-}
-
-# 模板变量使用 {event.field.subfield} 格式
+```java
+// GitHub PR Webhook event data
+Map<String, Object> data = Map.of(
+    "action", "opened",
+    "pull_request", Map.of(
+        "number", 42,
+        "title", "Fix auth bug",
+        "url", "https://github.com/..."
+    )
+);
+// Template variables use {event.field.subfield} format
 ```
 
 ## 自定义触发器
 
-```python
-from harness.triggers.base import Trigger, TriggerEvent
+```java
+import com.harness.triggers.Trigger;
+import com.harness.triggers.TriggerEvent;
+import com.harness.triggers.TriggerType;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.time.Instant;
 
-class FileWatchTrigger(Trigger):
-    """文件变化触发器"""
+public class FileWatchTrigger extends Trigger {
+    private final String watchPath;
+    private final String task;
+    private Consumer<TriggerEvent> callback;
 
-    def __init__(self, name: str, watch_path: str, task: str | None = None):
-        self._name = name
-        self._watch_path = watch_path
-        self._task = task
-        self._running = False
+    public FileWatchTrigger(String name, String watchPath, String task) {
+        super(TriggerType.CUSTOM);
+        this.setId(name);
+        this.watchPath = watchPath;
+        this.task = task;
+    }
 
-    @property
-    def name(self) -> str:
-        return self._name
+    @Override
+    public CompletableFuture<Void> start(Consumer<TriggerEvent> callback) {
+        this.callback = callback;
+        setRunning();
+        // Implement file watching logic
+        // When file changes, call:
+        // callback.accept(createEvent(Map.of("path", changedFile, "event", "modified")));
+        return CompletableFuture.completedFuture(null);
+    }
 
-    async def start(self, callback):
-        self._running = True
-        # 实现文件监控逻辑
-        # 文件变化时调用:
-        # await callback(TriggerEvent(
-        #     trigger_name=self._name,
-        #     trigger_type="file_watch",
-        #     data={"path": changed_file, "event": "modified"},
-        #     timestamp=datetime.now(),
-        # ))
+    @Override
+    public CompletableFuture<Void> stop() {
+        setStopped();
+        return CompletableFuture.completedFuture(null);
+    }
 
-    async def stop(self):
-        self._running = False
+    @Override
+    public TriggerEvent createEvent(Map<String, Object> payload) {
+        return new TriggerEvent(getId(), getTriggerType(), payload, Instant.now());
+    }
+}
 ```
 
 ## 触发器与 Agent 的集成
@@ -279,88 +312,106 @@ TriggerManager 接收 TriggerEvent
 
 ## 触发器管理
 
-```python
-from harness.triggers import TriggerManager, IntervalTrigger, TriggerAction
+```java
+import com.harness.triggers.TriggerManager;
+import com.harness.triggers.IntervalTrigger;
+import com.harness.triggers.TriggerAction;
+import com.harness.loop.GoalLoop;
+import java.util.List;
+import java.util.Map;
 
-# 创建 TriggerManager（支持并发控制）
-manager = TriggerManager(agent, max_concurrent_goals=5)
+GoalLoop.AgentRunner agent = ...;
 
-# 注册触发器
-trigger = IntervalTrigger(
-    interval_seconds=300,
-    action=TriggerAction(goal="健康检查"),
-)
-trigger_id = manager.register(trigger)
+// 创建 TriggerManager（支持并发控制）
+TriggerManager manager = new TriggerManager(agent, 5);
 
-# 启动所有触发器
-await manager.start()
+// 注册触发器
+IntervalTrigger trigger = new IntervalTrigger(
+    300,
+    new TriggerAction.Builder()
+        .goal("健康检查")
+        .build()
+);
+String triggerId = manager.register(trigger);
 
-# 查看状态
-for info in manager.list_triggers():
-    print(f"{info['id']}: fires={info['fire_count']}")
+// 启动所有触发器
+manager.start().join();
 
-# 停止所有触发器
-await manager.stop()
+// 查看状态
+for (Map<String, Object> info : manager.listTriggers()) {
+    System.out.println(info.get("id") + ": fires=" + info.get("fire_count"));
+}
+
+// 停止所有触发器
+manager.stop().join();
 ```
 
 ### 并发执行
 
 TriggerManager 支持并发执行多个 Goal：
 
-```python
-# 最多同时执行 3 个 Goal
-manager = TriggerManager(agent, max_concurrent_goals=3)
+```java
+// 最多同时执行 3 个 Goal
+TriggerManager manager = new TriggerManager(agent, 3);
 
-# 当多个触发器同时触发时，并发执行
-# 超过限制的任务会等待 semaphore
+// 当多个触发器同时触发时，并发执行
+// 超过限制的任务会等待 semaphore
 ```
 
 ## Automation 简化 API
 
 Automation 是触发器系统的推荐入口，整合了 Trigger + Goal：
 
-```python
-from harness.loop import Automation
+```java
+import com.harness.loop.automation.Automation;
+import com.harness.loop.GoalLoop;
 
-# 定时任务（Cron）
-daily_report = Automation(
-    name="daily-report",
-    schedule="0 9 * * *",  # 每天 9:00
-    goal="生成每日报告并发送到 Slack",
-)
+GoalLoop.AgentRunner agent = ...;
 
-# 间隔任务
-health_check = Automation(
-    name="health-check",
-    interval_seconds=300,  # 每 5 分钟
-    goal="检查系统健康状态",
-)
+// 定时任务（Cron）
+Automation dailyReport = Automation.builder()
+    .name("daily-report")
+    .schedule("0 9 * * *")  // 每天 9:00
+    .goal("生成每日报告并发送到 Slack")
+    .build();
 
-# 启动
-await daily_report.start(agent)
-await health_check.start(agent)
+// 间隔任务
+Automation healthCheck = Automation.builder()
+    .name("health-check")
+    .intervalSeconds(300)  // 每 5 分钟
+    .goal("检查系统健康状态")
+    .build();
 
-# 查看状态
-print(daily_report.status)  # AutomationStatus.RUNNING
+// 启动
+dailyReport.start(agent).join();
+healthCheck.start(agent).join();
 
-# 停止
-await daily_report.stop()
+// 查看状态
+System.out.println(dailyReport.getStatus());  // AutomationStatus.RUNNING
+
+// 停止
+dailyReport.stop().join();
 ```
 
 ### 全局管理
 
 Automation 使用全局 TriggerManager 单例：
 
-```python
-from harness.loop.automation import get_global_manager
+```java
+import com.harness.loop.automation.Automation;
 
-# 所有 Automation 自动注册到全局 manager
-await automation1.start(agent)
-await automation2.start(agent)
+// Automations can be managed individually or via TriggerManager
+Automation automation1 = Automation.builder()
+    .name("task-1").goal("...").schedule("0 9 * * *").build();
+Automation automation2 = Automation.builder()
+    .name("task-2").goal("...").intervalSeconds(300).build();
 
-# 获取全局 manager 查看所有触发器
-manager = get_global_manager()
-print(f"Total triggers: {manager.trigger_count}")
+automation1.start(agent).join();
+automation2.start(agent).join();
+
+// Check status
+System.out.println("Automation 1: " + automation1.getStatus());
+System.out.println("Automation 2: " + automation2.getStatus());
 ```
 
 ## 下一步

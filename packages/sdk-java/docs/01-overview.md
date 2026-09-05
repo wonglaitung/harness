@@ -168,16 +168,15 @@ while not finished:
 
 工具系统让 LLM 能够"动手操作"：
 
-```python
-class Tool:
-    name: str                    # 工具名称
-    description: str             # 工具描述（LLM 可见）
-    parameters: JSONSchema       # 参数 Schema
-    permission_level: Permission # 权限级别
+```java
+public interface Tool {
+    String getName();                    // 工具名称
+    String getDescription();             // 工具描述（LLM 可见）
+    JSONSchema getParameters();          // 参数 Schema
+    PermissionLevel getPermissionLevel(); // 权限级别
 
-    def execute(self, params: dict) -> ToolResult:
-        """执行工具并返回结果"""
-        pass
+    ToolResult execute(Map<String, Object> params) throws Exception;
+}
 ```
 
 ### 工具类型

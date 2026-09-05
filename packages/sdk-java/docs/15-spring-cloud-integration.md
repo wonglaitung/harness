@@ -128,14 +128,40 @@ curl -X POST http://localhost:8000/api/run \
 
 从 Spring Cloud Gateway 提取 W3C TraceContext 并传播到 SDK：
 
-```python
-from harness.service.tracing import TracingMiddleware, get_trace_id
+```java
+// TracingMiddleware（Java Spring Boot 中使用 Filter）
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
-# FastAPI 应用自动添加中间件
-app.add_middleware(TracingMiddleware)
-
-# 在请求处理中获取 TraceID
-trace_id = get_trace_id()
+@Component
+public class TracingFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+            HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        String traceId = request.getHeader("traceparent");
+        if (traceId == null) {
+            traceId = request.getHeader("X-B3-TraceId");
+        }
+        if (traceId == null) {
+            traceId = request.getHeader("X-Trace-Id");
+        }
+        // 将 traceId 存入 MDC 以便日志跟踪
+        if (traceId != null) {
+            org.slf4j.MDC.put("traceId", traceId);
+        }
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            org.slf4j.MDC.clear();
+        }
+    }
+}
 ```
 
 **支持的 Header 格式**：
@@ -159,41 +185,91 @@ trace_id = get_trace_id()
 
 **使用方式**：
 
-```python
-from harness.service.metrics import MetricsCollector, get_metrics_collector
+```java
+// MetricsCollector（Java Spring Boot 中使用 Micrometer）
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
+import org.springframework.stereotype.Component;
 
-# 初始化
-collector = get_metrics_collector()
-collector.setup()
+@Component
+public class MetricsCollector {
+    private final Counter loopIterationCounter;
+    private final Counter toolCallCounter;
+    private final Counter tokenCounter;
+    private final Timer llmCallTimer;
+    private final Timer toolCallTimer;
 
-# 创建进度处理器（自动记录指标）
-result = await agent.run(
-    prompt="...",
-    on_progress=collector.create_progress_handler()
-)
+    public MetricsCollector(MeterRegistry registry) {
+        // 初始化指标
+        this.loopIterationCounter = Counter.builder("harness_loop_iterations_total")
+            .description("总循环迭代次数")
+            .register(registry);
+        this.toolCallCounter = Counter.builder("harness_tool_calls_total")
+            .description("工具调用次数")
+            .register(registry);
+        this.tokenCounter = Counter.builder("harness_llm_tokens_total")
+            .description("Token 使用量")
+            .register(registry);
+        this.llmCallTimer = Timer.builder("harness_llm_call_duration_seconds")
+            .description("LLM 调用耗时")
+            .register(registry);
+        this.toolCallTimer = Timer.builder("harness_tool_call_duration_seconds")
+            .description("工具调用耗时")
+            .register(registry);
+
+        // 注册 JVM 指标
+        new ClassLoaderMetrics().bindTo(registry);
+        new JvmGcMetrics().bindTo(registry);
+        new JvmMemoryMetrics().bindTo(registry);
+    }
+
+    public void recordIteration() { loopIterationCounter.increment(); }
+    public void recordToolCall(String tool, boolean success, double duration) {
+        toolCallCounter.increment();
+        toolCallTimer.record(java.time.Duration.ofMillis((long)(duration * 1000)));
+    }
+    public void recordTokenUsage(int inputTokens, int outputTokens) {
+        tokenCounter.increment(inputTokens + outputTokens);
+    }
+}
 ```
 
 ### 4.3 Redis 分布式会话
 
 用于多实例部署的会话存储：
 
-```python
-from harness.service.store_redis import RedisSessionStore, RedisDistributedLock
+```java
+// Redis 分布式会话（Java 中使用 Spring Session + Redis）
+import org.springframework.session.data.redis.RedisIndexedSessionRepository;
+import org.springframework.data.redis.core.RedisTemplate;
 
-# 创建会话存储
-store = RedisSessionStore("redis://localhost:6379")
+// Spring Boot 自动配置 Redis Session Store
+// application.yml:
+// spring.session.store-type: redis
+// spring.data.redis.host: localhost
+// spring.data.redis.port: 6379
 
-# 保存会话
-await store.save(session)
+// 操作会话（Spring Session 自动管理）
+// Session 自动保存到 Redis，支持分布式环境
 
-# 加载会话
-session = await store.load("session-123")
+// 分布式锁（使用 Redisson）
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 
-# 分布式锁
-lock = RedisDistributedLock("redis://localhost:6379")
-token = await lock.acquire("my-resource", timeout=30)
-# ... 执行需要锁保护的操作 ...
-await lock.release("my-resource", token)
+RLock lock = redisson.getLock("my-resource");
+try {
+    if (lock.tryLock(30, TimeUnit.SECONDS)) {
+        // 执行需要锁保护的操作
+    }
+} finally {
+    if (lock.isHeldByCurrentThread()) {
+        lock.unlock();
+    }
+}
 ```
 
 **特点**：
@@ -206,28 +282,47 @@ await lock.release("my-resource", token)
 
 支持 Nacos 和 Eureka：
 
-```python
-from harness.service.discovery import (
-    NacosServiceRegistry,
-    EurekaServiceRegistry,
-    get_service_instance,
-    get_pod_ip,
-)
+```java
+// 服务发现（Java 中使用 Spring Cloud Discovery）
+import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.stereotype.Component;
 
-# Nacos 注册
-registry = NacosServiceRegistry("nacos:8848")
-instance = get_service_instance("harness-agent", 8000)
-await registry.register(instance)
+// Spring Cloud 自动配置服务发现
+// application.yml:
+// spring.cloud.nacos.discovery.server-addr: nacos:8848
+// 或
+// eureka.client.service-url.defaultZone: http://eureka:8761/eureka/
 
-# 服务关闭时注销
-await registry.deregister(instance)
+@Component
+public class ServiceDiscoveryExample {
+    private final DiscoveryClient discoveryClient;
+
+    public ServiceDiscoveryExample(DiscoveryClient discoveryClient) {
+        this.discoveryClient = discoveryClient;
+    }
+
+    public void discoverServices() {
+        // 获取服务实例
+        java.util.List<ServiceInstance> instances =
+            discoveryClient.getInstances("harness-agent");
+        for (ServiceInstance instance : instances) {
+            System.out.println("Instance: " + instance.getHost() + ":" + instance.getPort());
+        }
+    }
+}
 ```
 
 **Kubernetes 环境**：
 
-```python
-# 自动使用 POD_IP 环境变量
-ip = get_pod_ip()  # 返回正确的 Pod IP
+```java
+// Kubernetes 环境中获取 Pod IP
+// 使用环境变量 POD_IP（Kubernetes 自动注入）
+String podIp = System.getenv("POD_IP");
+if (podIp == null) {
+    // 回退：尝试获取本机 IP
+    podIp = java.net.InetAddress.getLocalHost().getHostAddress();
+}
 ```
 
 ### 4.5 统一错误响应
@@ -535,28 +630,59 @@ Python 服务只需验证请求来自 Gateway IP 白名单。
 
 在 Kubernetes 中，`socket.gethostbyname()` 可能返回错误 IP。使用 `POD_IP` 环境变量：
 
-```python
-from harness.service.discovery import get_pod_ip
-ip = get_pod_ip()  # 正确返回 Pod IP
+```java
+// 获取正确的 Pod IP（使用环境变量）
+String podIp = System.getenv("POD_IP");
+if (podIp == null) {
+    podIp = java.net.InetAddress.getLocalHost().getHostAddress();
+}
 ```
 
 ### 健康检查深度
 
 `/health` 端点应检查依赖服务：
 
-```python
-@app.get("/health")
-async def health_check():
-    checks = {
-        "service": True,
-        "redis": await check_redis(),  # 可选
-        "llm": await check_llm(),      # 可选
+```java
+// 健康检查端点（Spring Boot Actuator 自动提供）
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.stereotype.Component;
+import java.util.Map;
+
+@Component
+public class HarnessHealthIndicator implements HealthIndicator {
+
+    @Override
+    public Health health() {
+        Map<String, Object> checks = new java.util.HashMap<>();
+        checks.put("service", true);
+        checks.put("redis", checkRedis());
+        checks.put("llm", checkLlm());
+
+        boolean allHealthy = checks.values().stream().allMatch(v -> Boolean.TRUE.equals(v));
+        if (allHealthy) {
+            return Health.up()
+                .withDetail("service", "healthy")
+                .withDetails(checks)
+                .build();
+        } else {
+            return Health.down()
+                .withDetail("service", "unhealthy")
+                .withDetails(checks)
+                .build();
+        }
     }
-    all_healthy = all(checks.values())
-    return JSONResponse(
-        status_code=200 if all_healthy else 503,
-        content={"status": "healthy" if all_healthy else "unhealthy", "checks": checks}
-    )
+
+    private boolean checkRedis() {
+        // 检查 Redis 连接
+        return true;
+    }
+
+    private boolean checkLlm() {
+        // 检查 LLM 服务
+        return true;
+    }
+}
 ```
 
 ---
@@ -657,311 +783,129 @@ Java Service → Gateway → Scraper Service (:8001)
 
 在 `packages/scraper/src/harness_scraper/` 目录下创建 `service.py`：
 
-```python
-# packages/scraper/src/harness_scraper/service.py
-"""
-Harness Scraper Service - 微服务入口
+```java
+// packages/scraper/src/main/java/com/harness/scraper/ScraperServiceApplication.java
+// Harness Scraper Service - 微服务入口
 
-启动方式:
-    uvicorn harness_scraper.service:app --port 8001
+package com.harness.scraper;
 
-路由:
-    GET  /health              - 健康检查
-    GET  /metrics             - Prometheus 指标
-    POST /api/scrape          - 同步执行
-    POST /api/scrape/skill    - 按技能执行
-    WebSocket /ws/scrape      - 流式执行
-"""
+import com.harness.integration.AgentHarness;
+import com.harness.types.LoopResult;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.socket.*;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import logging
-import os
-from contextlib import asynccontextmanager
-from pathlib import Path
+@SpringBootApplication
+@RestController
+public class ScraperServiceApplication {
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+    private static final String SERVICE_NAME = System.getenv().getOrDefault("SERVICE_NAME", "harness-scraper");
+    private static final int SERVICE_PORT = Integer.parseInt(System.getenv().getOrDefault("SERVICE_PORT", "8001"));
+    private static final Map<String, AgentHarness> agents = new ConcurrentHashMap<>();
 
-# Harness SDK Service 模块
-from harness.service import (
-    TracingMiddleware,
-    ErrorCode,
-    create_error_response,
-    get_metrics_collector,
-    PROMETHEUS_AVAILABLE,
-)
-
-# Scraper 本地模块
-from harness_scraper.agent import IntelAgent, REPO_SKILL_DIR
-from harness_scraper.config import load_config
-from harness_scraper.models import ScraperConfig
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# =============================================================================
-# 配置
-# =============================================================================
-
-SERVICE_NAME = os.getenv("SERVICE_NAME", "harness-scraper")
-SERVICE_PORT = int(os.getenv("SERVICE_PORT", "8001"))
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/tmp/scraper/output"))
-
-# =============================================================================
-# 应用状态
-# =============================================================================
-
-class AppState:
-    def __init__(self):
-        self.config: ScraperConfig | None = None
-        self.agents: dict[str, IntelAgent] = {}  # skill_name -> agent
-
-app_state = AppState()
-
-
-def get_agent(skill: str | None = None) -> IntelAgent:
-    """获取或创建 IntelAgent 实例"""
-    skill_name = skill or "ai-intelligence"
-    
-    if skill_name not in app_state.agents:
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        app_state.agents[skill_name] = IntelAgent(
-            config=app_state.config,
-            skill=skill_name,
-            memory_path=OUTPUT_DIR / "MEMORY.md",
-        )
-    
-    return app_state.agents[skill_name]
-
-
-# =============================================================================
-# 生命周期
-# =============================================================================
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """服务启动和关闭"""
-    logger.info(f"Starting {SERVICE_NAME}...")
-    
-    # 加载配置
-    app_state.config = load_config()
-    
-    # 初始化 Prometheus
-    if PROMETHEUS_AVAILABLE:
-        get_metrics_collector().setup()
-    
-    yield
-    
-    logger.info(f"Shutting down {SERVICE_NAME}...")
-
-
-# =============================================================================
-# FastAPI 应用
-# =============================================================================
-
-app = FastAPI(
-    title="Harness Scraper Service",
-    description="AI 情报提取微服务",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(TracingMiddleware)
-
-
-# =============================================================================
-# 请求/响应模型
-# =============================================================================
-
-class ScrapeRequest(BaseModel):
-    prompt: str
-    skill: str | None = None  # ai-intelligence, hk-stocks-alpha, etc.
-    session_id: str | None = None
-
-class ScrapeResponse(BaseModel):
-    status: str
-    content: str
-    skill: str
-    session_id: str | None = None
-
-
-class SkillInfo(BaseModel):
-    name: str
-    description: str | None = None
-
-
-# =============================================================================
-# 端点：健康检查
-# =============================================================================
-
-@app.get("/health")
-async def health_check():
-    """健康检查端点"""
-    return {
-        "status": "healthy",
-        "service": SERVICE_NAME,
-        "skills_loaded": list(app_state.agents.keys()),
+    public static void main(String[] args) {
+        SpringApplication.run(ScraperServiceApplication.class, args);
     }
 
+    private static AgentHarness getAgent(String skill) {
+        String skillName = skill != null ? skill : "ai-intelligence";
+        return agents.computeIfAbsent(skillName, k -> AgentHarness.builder().build());
+    }
 
-# =============================================================================
-# 端点：Prometheus 指标
-# =============================================================================
+    // 端点：健康检查
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> healthCheck() {
+        return ResponseEntity.ok(Map.of(
+            "status", "healthy",
+            "service", SERVICE_NAME,
+            "skills_loaded", agents.keySet()
+        ));
+    }
 
-@app.get("/metrics")
-async def metrics():
-    """Prometheus 指标端点"""
-    if not PROMETHEUS_AVAILABLE:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "Prometheus not available"},
-        )
-    
-    collector = get_metrics_collector()
-    return Response(
-        content=collector.export(),
-        media_type=collector.get_content_type(),
-    )
+    // 端点：Prometheus 指标
+    @GetMapping("/metrics")
+    public ResponseEntity<String> metrics() {
+        return ResponseEntity.ok("# Prometheus metrics\nharness_loop_iterations_total 0\n");
+    }
 
+    // 端点：列出可用技能
+    @GetMapping("/api/skills")
+    public ResponseEntity<?> listSkills() {
+        return ResponseEntity.ok(java.util.List.of(
+            Map.of("name", "ai-intelligence", "description", "AI intelligence skill"),
+            Map.of("name", "hk-stocks-alpha", "description", "HK stocks alpha skill")
+        ));
+    }
 
-# =============================================================================
-# 端点：列出可用技能
-# =============================================================================
+    // 端点：REST API
+    @PostMapping("/api/scrape")
+    public ResponseEntity<?> scrape(@RequestBody Map<String, String> body) {
+        String prompt = body.getOrDefault("prompt", "");
+        String skill = body.getOrDefault("skill", "ai-intelligence");
+        String sessionId = body.get("session_id");
 
-@app.get("/api/skills", response_model=list[SkillInfo])
-async def list_skills():
-    """列出所有可用的技能"""
-    skills = []
-    if REPO_SKILL_DIR.exists():
-        for skill_file in REPO_SKILL_DIR.glob("*.md"):
-            skills.append(SkillInfo(
-                name=skill_file.stem,
-                description=f"Skill file: {skill_file.name}",
-            ))
-    return skills
+        try {
+            AgentHarness agent = getAgent(skill);
+            LoopResult result = agent.run(prompt, sessionId).join();
 
+            return ResponseEntity.ok(Map.of(
+                "status", "completed",
+                "content", result.content(),
+                "skill", skill,
+                "session_id", sessionId != null ? sessionId : ""
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "errorCode", "AGENT_500_001",
+                "errorMessage", e.getMessage()
+            ));
+        }
+    }
 
-# =============================================================================
-# 端点：REST API
-# =============================================================================
+    // WebSocket 流式端点
+    @org.springframework.web.socket.config.annotation.EnableWebSocket
+    @org.springframework.web.socket.config.annotation.WebSocketConfigurer
+    public class WebSocketConfig implements org.springframework.web.socket.config.annotation.WebSocketConfigurer {
+        @Override
+        public void registerWebSocketHandlers(org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry registry) {
+            registry.addHandler(new ScraperWebSocketHandler(), "/ws/scrape").setAllowedOrigins("*");
+        }
+    }
 
-@app.post("/api/scrape", response_model=ScrapeResponse)
-async def scrape(request: Request, body: ScrapeRequest):
-    """
-    同步执行情报提取（适合短任务）
-    
-    Body:
-        - prompt: 执行提示词
-        - skill: 技能名称（默认 ai-intelligence）
-        - session_id: 会话 ID（可选，用于多轮对话）
-    """
-    trace_id = request.headers.get("X-Trace-Id")
-    user_id = request.headers.get("X-User-Id")
-    
-    try:
-        agent = get_agent(body.skill)
-        
-        result = await agent.run(
-            prompt=body.prompt,
-            session_id=body.session_id,
-            verbose=False,
-        )
-        
-        return ScrapeResponse(
-            status="completed",
-            content=result.content,
-            skill=body.skill or "ai-intelligence",
-            session_id=body.session_id,
-        )
-    
-    except Exception as e:
-        logger.exception(f"Scrape failed: {e}")
-        return JSONResponse(
-            status_code=500,
-            content=create_error_response(
-                ErrorCode.INTERNAL_ERROR,
-                str(e),
-                trace_id,
-            ).model_dump(),
-        )
+    public static class ScraperWebSocketHandler extends TextWebSocketHandler {
+        @Override
+        public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+            // 连接已建立
+        }
 
+        @Override
+        protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+            // 解析请求
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> data = mapper.readValue(message.getPayload(), Map.class);
+            String prompt = (String) data.getOrDefault("prompt", "");
+            String skill = (String) data.getOrDefault("skill", "ai-intelligence");
 
-# =============================================================================
-# 端点：WebSocket 流式
-# =============================================================================
+            AgentHarness agent = getAgent(skill);
+            LoopResult result = agent.run(prompt).join();
 
-@app.websocket("/ws/scrape")
-async def scrape_ws(websocket: WebSocket):
-    """
-    WebSocket 流式执行（适合长任务）
-    
-    协议:
-    1. 客户端发送: {"prompt": "...", "skill": "ai-intelligence"}
-    2. 服务端流式返回 ProgressEvent
-    3. 服务端最终返回: {"type": "done", "result": {...}}
-    """
-    await websocket.accept()
-    
-    try:
-        data = await websocket.receive_json()
-        prompt = data.get("prompt", "")
-        skill = data.get("skill", "ai-intelligence")
-        session_id = data.get("session_id")
-        
-        agent = get_agent(skill)
-        
-        # 进度回调
-        async def on_progress(event):
-            await websocket.send_json({
-                "type": "progress",
-                "event_type": event.type.value,
-                "message": event.message,
-                "data": event.data,
-            })
-        
-        result = await agent._agent.run(
-            prompt=prompt,
-            session_id=session_id,
-            on_progress=on_progress,
-        )
-        
-        await websocket.send_json({
-            "type": "done",
-            "result": {
-                "status": "completed",
-                "content": result.content,
-                "skill": skill,
-                "session_id": result.session.id,
-            },
-        })
-    
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
-    
-    except Exception as e:
-        logger.exception(f"WebSocket error: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "error": str(e),
-        })
-
-
-# =============================================================================
-# 启动入口
-# =============================================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=SERVICE_PORT)
+            // 发送结果
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(Map.of(
+                "type", "done",
+                "result", Map.of(
+                    "status", "completed",
+                    "content", result.content(),
+                    "skill", skill
+                )
+            ))));
+        }
+    }
+}
 ```
 
 #### 步骤 2：更新 pyproject.toml

@@ -428,7 +428,7 @@ asyncio.run(main())
 - `TriggerManager` - 管理多个触发器
 - `Automation` - 简化 API
 
-详见 [06-triggers.md](./06-triggers.md)。
+详见 [06-trigger-system.md](./06-trigger-system.md)。
 
 ### Phase 3: Worktrees（并行隔离）✅ 已实现
 
