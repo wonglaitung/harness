@@ -5,20 +5,21 @@ An embeddable AI Agent SDK for Python.
 ## Installation
 
 ```bash
-pip install harness-ai
+pip install harness-sdk
 ```
 
 ### Optional Extensions
 
+OpenAI support is included in the core dependencies. Additional extensions:
+
 ```bash
-pip install "harness-ai[openai]"        # OpenAI support
-pip install "harness-ai[observability]" # OpenTelemetry observability
-pip install "harness-ai[sqlite]"        # SQLite session storage
-pip install "harness-ai[web]"           # Web scraping tools
-pip install "harness-ai[guardrails]"    # PII detection and content safety
+pip install "harness-sdk[observability]" # OpenTelemetry observability
+pip install "harness-sdk[sqlite]"        # SQLite session storage
+pip install "harness-sdk[web]"           # Web scraping tools
+pip install "harness-sdk[guardrails]"    # PII detection and content safety
 
 # Install multiple extensions
-pip install "harness-ai[openai,sqlite,web,guardrails]"
+pip install "harness-sdk[observability,sqlite,web,guardrails]"
 ```
 
 ### Development Mode
