@@ -7,9 +7,11 @@ This module implements Trigger for interval-based scheduling.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from harness.triggers.base import Trigger
 from harness.triggers.types import TriggerAction, TriggerEvent, TriggerType
@@ -110,9 +112,7 @@ class IntervalTrigger(Trigger):
         # Start the background task
         self._task = asyncio.create_task(self._run_loop())
 
-        logger.info(
-            f"IntervalTrigger {self.id} started with interval {self.interval_seconds}s"
-        )
+        logger.info(f"IntervalTrigger {self.id} started with interval {self.interval_seconds}s")
 
     async def stop(self) -> None:
         """Stop the interval trigger."""
@@ -123,10 +123,8 @@ class IntervalTrigger(Trigger):
 
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
         self._set_stopped()
@@ -174,9 +172,7 @@ class IntervalTrigger(Trigger):
         switching issues when another async task is running synchronously.
         """
         self._fire_count += 1
-        event = self.create_event(
-            payload={"fire_number": self._fire_count}
-        )
+        event = self.create_event(payload={"fire_number": self._fire_count})
         logger.info(
             f"IntervalTrigger {self.id} firing event #{self._fire_count}, "
             f"callback={self._callback is not None}"

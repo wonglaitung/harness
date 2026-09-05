@@ -7,7 +7,8 @@ This module defines the Trigger ABC that all trigger implementations must follow
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from harness.triggers.types import TriggerEvent, TriggerState, TriggerType
 
@@ -60,7 +61,7 @@ class Trigger(ABC):
     trigger_type: TriggerType
     id: str = ""
     state: TriggerState = TriggerState.IDLE
-    action: "TriggerAction | None" = None
+    action: TriggerAction | None = None
 
     @abstractmethod
     async def start(self, callback: Callable[[TriggerEvent], None]) -> None:

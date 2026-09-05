@@ -13,17 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
 from harness.types import (
-    Chunk,
-    ChunkType,
     LLMResponse,
     ProgressEvent,
     ProgressEventType,
-    StopReason,
-    TokenUsage,
 )
 
 if TYPE_CHECKING:
@@ -114,7 +111,9 @@ class RoutingLLMClient(LLMClient):
     @property
     def model_name(self) -> str:
         """Return a descriptive model name."""
-        return f"routing(high={self.routing_config.high_model}, low={self.routing_config.low_model})"
+        return (
+            f"routing(high={self.routing_config.high_model}, low={self.routing_config.low_model})"
+        )
 
     def _init_router_client(self) -> LLMClient:
         """Initialize the router client (embedded or HTTP)."""
@@ -189,7 +188,7 @@ class RoutingLLMClient(LLMClient):
                 break
 
         # Build conversation history (last N messages)
-        history_messages = messages[-self.routing_config.history_window:]
+        history_messages = messages[-self.routing_config.history_window :]
         history_parts = []
 
         for msg in history_messages:
@@ -221,8 +220,10 @@ class RoutingLLMClient(LLMClient):
 
             return self._parse_route_label(response.content)
 
-        except asyncio.TimeoutError:
-            logger.warning(f"Router timeout ({self.routing_config.router_timeout}s), using default: high")
+        except TimeoutError:
+            logger.warning(
+                f"Router timeout ({self.routing_config.router_timeout}s), using default: high"
+            )
             return self.routing_config.default_route
 
         except Exception as e:
@@ -285,15 +286,19 @@ class RoutingLLMClient(LLMClient):
         self._last_router_latency_ms = router_latency_ms
 
         # 5. Emit progress event
-        self._emit_progress(ProgressEvent(
-            type=ProgressEventType.ROUTER_DECISION,
-            message=f"Routed to: {route}",
-            data={
-                "route": route,
-                "target_model": self.routing_config.high_model if route == "high" else self.routing_config.low_model,
-                "router_latency_ms": router_latency_ms,
-            },
-        ))
+        self._emit_progress(
+            ProgressEvent(
+                type=ProgressEventType.ROUTER_DECISION,
+                message=f"Routed to: {route}",
+                data={
+                    "route": route,
+                    "target_model": self.routing_config.high_model
+                    if route == "high"
+                    else self.routing_config.low_model,
+                    "router_latency_ms": router_latency_ms,
+                },
+            )
+        )
 
         # 6. Select downstream client
         client = self.high_client if route == "high" else self.low_client

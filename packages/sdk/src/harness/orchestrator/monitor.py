@@ -11,10 +11,9 @@ This module provides the MonitorService class for:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from harness.orchestrator.types import ExecutionMetric, OrchestratorConfig, OrchestratorStatus
+from harness.orchestrator.types import ExecutionMetric, OrchestratorConfig
 
 if TYPE_CHECKING:
     from harness.orchestrator.core import LoopOrchestrator

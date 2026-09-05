@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from harness.loop.goal_loop import GoalLoop
 from harness.loop.types import GoalConfig, GoalResult, GoalStatus
 from harness.loop.worktree_manager import WorktreeManager
-from harness.loop.worktree_types import WorktreeConfig, WorktreeResult
+from harness.loop.worktree_types import WorktreeConfig
 
 if TYPE_CHECKING:
     from harness.sdk.harness import AgentHarness
@@ -162,9 +161,7 @@ class ParallelGoalExecutor:
         # Process results
         goal_results: dict[str, GoalResult] = {}
 
-        for (name, execution), result in zip(
-            self._executions.items(), results, strict=True
-        ):
+        for (name, execution), result in zip(self._executions.items(), results, strict=True):
             execution.completed_at = datetime.now()
 
             if isinstance(result, GoalResult):
@@ -187,9 +184,7 @@ class ParallelGoalExecutor:
 
         # Log summary
         achieved = sum(1 for r in goal_results.values() if r.achieved)
-        logger.info(
-            f"Parallel execution complete: {achieved}/{len(goal_results)} goals achieved"
-        )
+        logger.info(f"Parallel execution complete: {achieved}/{len(goal_results)} goals achieved")
 
         return goal_results
 

@@ -68,13 +68,9 @@ class PromptInjectionDetector:
         Args:
             custom_patterns: Additional patterns to detect
         """
-        self.patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.INJECTION_PATTERNS
-        ]
+        self.patterns = [re.compile(p, re.IGNORECASE) for p in self.INJECTION_PATTERNS]
         if custom_patterns:
-            self.patterns.extend(
-                re.compile(p, re.IGNORECASE) for p in custom_patterns
-            )
+            self.patterns.extend(re.compile(p, re.IGNORECASE) for p in custom_patterns)
 
     def detect(self, text: str | list[dict[str, Any]]) -> tuple[bool, list[str]]:
         """
@@ -199,11 +195,7 @@ class InputValidator:
                 warnings.append(f"Potential injection patterns detected: {patterns}")
 
         # Sanitize text
-        sanitized = (
-            self.injection_detector.sanitize(text)
-            if self.injection_detector
-            else text
-        )
+        sanitized = self.injection_detector.sanitize(text) if self.injection_detector else text
 
         # For ValidationResult, convert list back to string representation
         sanitized_text = sanitized if isinstance(sanitized, str) else str(sanitized)
@@ -336,5 +328,7 @@ class FileInputValidator:
             valid=len(errors) == 0,
             errors=errors,
             warnings=warnings,
-            sanitized_text=content if isinstance(content, str) else content.decode("utf-8", errors="replace"),
+            sanitized_text=content
+            if isinstance(content, str)
+            else content.decode("utf-8", errors="replace"),
         )

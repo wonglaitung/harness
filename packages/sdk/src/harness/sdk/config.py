@@ -94,30 +94,41 @@ class SecurityConfig:
     enable_sandbox: bool = True
     sandbox_max_execution_time: float = 30.0
     sandbox_max_output_size: int = 1_000_000  # 1MB
-    sandbox_blocked_commands: list[str] = field(default_factory=lambda: [
-        "rm -rf /",
-        "rm -rf ~",
-        "sudo",
-        "chmod -R 777",
-        "mkfs",
-        "dd if=",
-        "> /dev/",
-        ":(){ :|:& };:",  # Fork bomb
-    ])
-    sandbox_blocked_patterns: list[str] = field(default_factory=lambda: [
-        "rm -rf",
-        "sudo",
-        "chmod",
-        "chown",
-        "mkfs",
-        "dd if=",
-        "curl | bash",
-        "wget | bash",
-    ])
+    sandbox_blocked_commands: list[str] = field(
+        default_factory=lambda: [
+            "rm -rf /",
+            "rm -rf ~",
+            "sudo",
+            "chmod -R 777",
+            "mkfs",
+            "dd if=",
+            "> /dev/",
+            ":(){ :|:& };:",  # Fork bomb
+        ]
+    )
+    sandbox_blocked_patterns: list[str] = field(
+        default_factory=lambda: [
+            "rm -rf",
+            "sudo",
+            "chmod",
+            "chown",
+            "mkfs",
+            "dd if=",
+            "curl | bash",
+            "wget | bash",
+        ]
+    )
     sandbox_allowed_commands: list[str] | None = None  # None = allow all non-blocked
-    sandbox_allowed_env_vars: list[str] = field(default_factory=lambda: [
-        "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM",
-    ])
+    sandbox_allowed_env_vars: list[str] = field(
+        default_factory=lambda: [
+            "PATH",
+            "HOME",
+            "USER",
+            "LANG",
+            "LC_ALL",
+            "TERM",
+        ]
+    )
 
 
 @dataclass
@@ -316,7 +327,7 @@ class HarnessConfig:
         return self._max_tokens
 
     @classmethod
-    def from_file(cls, path: str) -> "HarnessConfig":
+    def from_file(cls, path: str) -> HarnessConfig:
         """Load configuration from YAML or JSON file."""
         import json
 
@@ -333,8 +344,7 @@ class HarnessConfig:
                 data = yaml.safe_load(content)
             except ImportError as err:
                 raise ImportError(
-                    "PyYAML is required for YAML config files. "
-                    "Install with: pip install pyyaml"
+                    "PyYAML is required for YAML config files. Install with: pip install pyyaml"
                 ) from err
         else:
             data = json.loads(content)
@@ -342,7 +352,7 @@ class HarnessConfig:
         return cls(**data)
 
     @classmethod
-    def from_env(cls) -> "HarnessConfig":
+    def from_env(cls) -> HarnessConfig:
         """
         Load configuration from environment variables.
 

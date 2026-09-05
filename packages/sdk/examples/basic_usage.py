@@ -7,19 +7,20 @@ with basic file tools, including progress tracking.
 
 import asyncio
 import os
-from pathlib import Path
 
 # Add src to path for development
 import sys
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from harness import (
     AgentHarness,
-    ReadTool,
-    WriteTool,
     GlobTool,
     ProgressEvent,
     ProgressEventType,
+    ReadTool,
+    WriteTool,
     create_progress_handler,
 )
 

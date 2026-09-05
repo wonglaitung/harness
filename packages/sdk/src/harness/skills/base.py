@@ -240,7 +240,10 @@ class Skill:
         if self.metadata:
             frontmatter["metadata"] = self.metadata
 
-        content = f"---\n{yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)}---\n\n{self.content}"
+        content = (
+            f"---\n{yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)}"
+            f"---\n\n{self.content}"
+        )
         path.write_text(content, encoding="utf-8")
 
     def should_activate(self, user_input: str, context: dict | None = None) -> bool:

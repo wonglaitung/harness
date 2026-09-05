@@ -13,6 +13,7 @@ from harness.types import ToolCall, ToolResult
 @dataclass
 class ExecutorConfig:
     """Configuration for tool executor."""
+
     timeout: float = 30.0
     max_parallel: int = 10
     fail_fast: bool = False  # Stop on first failure
@@ -116,10 +117,7 @@ class ToolExecutor:
             return []
 
         # Create tasks for parallel execution
-        tasks = [
-            self.execute(call, context)
-            for call in tool_calls
-        ]
+        tasks = [self.execute(call, context) for call in tool_calls]
 
         # Execute with concurrency limit
         semaphore = asyncio.Semaphore(self.config.max_parallel)
@@ -137,13 +135,15 @@ class ToolExecutor:
         processed = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                processed.append(ToolResult(
-                    tool_call_id=tool_calls[i].id,
-                    success=False,
-                    content="",
-                    error=f"Execution failed: {str(result)}",
-                    tool_name=tool_calls[i].name,
-                ))
+                processed.append(
+                    ToolResult(
+                        tool_call_id=tool_calls[i].id,
+                        success=False,
+                        content="",
+                        error=f"Execution failed: {str(result)}",
+                        tool_name=tool_calls[i].name,
+                    )
+                )
             else:
                 processed.append(result)
 

@@ -47,74 +47,73 @@ Guardrails 模块 - PII 检测和内容安全
 """
 
 # 配置类
+# PII 过滤核心类
+from harness.guardrails.chinese_guardrail import (
+    ChinesePIIGuardrail,
+    PIIEntity,
+    UniversalPIIGuardrail,
+    check_pii,
+    create_guardrail,
+    create_universal_guardrail,
+    mask_pii,
+    redact_pii,
+    redact_pii_traditional,
+    scan_pii,
+)
+
+# 中文姓名识别器
+from harness.guardrails.chinese_name_recognizer import (
+    COMMON_SURNAMES,
+    COMPOUND_SURNAMES,
+    ChineseNameRecognizer,
+    NameMatch,
+    create_name_recognizer,
+    extract_chinese_names,
+)
+
+# PII 识别器
+from harness.guardrails.chinese_pii_recognizers import (
+    CHINA_PII_RECOGNIZERS,
+    ChinaBankCardRecognizer,
+    ChinaIDCardRecognizer,
+    ChinaLicensePlateRecognizer,
+    ChinaMobilePhoneRecognizer,
+    ChinaPassportRecognizer,
+    ChinaSocialCreditCodeRecognizer,
+    EmailRecognizerCN,
+    HongKongIDCardRecognizer,
+    HongKongNameRecognizer,
+    HongKongPhoneRecognizer,
+    IpRecognizerCN,
+)
 from harness.guardrails.config import (
     GuardrailConfig,
     JudgeConfig,
     StreamInterceptConfig,
 )
 
+# 异常
+from harness.guardrails.exceptions import (
+    ContentRiskException,
+    JudgeResult,
+    JudgeTimeoutException,
+    JudgeUnavailableException,
+    StreamInterruptException,
+)
+
 # Hook
 from harness.guardrails.hook import GuardrailHook
 
-# PII 过滤核心类
-from harness.guardrails.chinese_guardrail import (
-    PIIEntity,
-    ChinesePIIGuardrail,
-    UniversalPIIGuardrail,
-    create_guardrail,
-    create_universal_guardrail,
-    check_pii,
-    redact_pii,
-    redact_pii_traditional,
-    scan_pii,
-    mask_pii,
-)
-
-# PII 识别器
-from harness.guardrails.chinese_pii_recognizers import (
-    ChinaMobilePhoneRecognizer,
-    ChinaIDCardRecognizer,
-    ChinaBankCardRecognizer,
-    ChinaPassportRecognizer,
-    ChinaSocialCreditCodeRecognizer,
-    ChinaLicensePlateRecognizer,
-    EmailRecognizerCN,
-    IpRecognizerCN,
-    HongKongPhoneRecognizer,
-    HongKongIDCardRecognizer,
-    HongKongNameRecognizer,
-    CHINA_PII_RECOGNIZERS,
-)
-
-# 中文姓名识别器
-from harness.guardrails.chinese_name_recognizer import (
-    NameMatch,
-    ChineseNameRecognizer,
-    create_name_recognizer,
-    extract_chinese_names,
-    COMMON_SURNAMES,
-    COMPOUND_SURNAMES,
-)
-
 # Judge (Layer 2)
 from harness.guardrails.judge import (
-    RiskLevel,
     ComplianceJudge,
+    RiskLevel,
 )
 
 # 流式拦截器
 from harness.guardrails.stream_interceptor import (
     InterceptResult,
     StreamInterceptor,
-)
-
-# 异常
-from harness.guardrails.exceptions import (
-    JudgeResult,
-    ContentRiskException,
-    JudgeTimeoutException,
-    JudgeUnavailableException,
-    StreamInterruptException,
 )
 
 __all__ = [

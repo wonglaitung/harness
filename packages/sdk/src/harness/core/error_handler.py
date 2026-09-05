@@ -13,16 +13,18 @@ from typing import Any
 
 class ErrorAction(Enum):
     """Actions to take when an error occurs."""
-    RETRY = "retry"              # Retry the operation
+
+    RETRY = "retry"  # Retry the operation
     COMPRESS_CONTEXT = "compress"  # Compress context and retry
-    ABORT = "abort"              # Stop execution
-    SKIP = "skip"                # Skip and continue
-    ESCALATE = "escalate"        # Escalate to user
+    ABORT = "abort"  # Stop execution
+    SKIP = "skip"  # Skip and continue
+    ESCALATE = "escalate"  # Escalate to user
 
 
 @dataclass
 class ErrorContext:
     """Context for error handling decision."""
+
     error: Exception
     iteration: int
     tool_name: str | None = None
@@ -40,6 +42,7 @@ class ErrorContext:
 @dataclass
 class ErrorDecision:
     """Decision on how to handle an error."""
+
     action: ErrorAction
     delay_seconds: float = 0.0
     message: str = ""
@@ -133,9 +136,8 @@ class ErrorHandler:
             "rate limit",
             "quota exceeded",
         ]
-        return (
-            "rate" in error_type.lower() or
-            any(indicator in message for indicator in rate_limit_indicators)
+        return "rate" in error_type.lower() or any(
+            indicator in message for indicator in rate_limit_indicators
         )
 
     def _is_context_error(
@@ -153,9 +155,8 @@ class ErrorHandler:
             "length",
             "context_length_exceeded",
         ]
-        return (
-            context.is_context_overflow or
-            any(indicator in message for indicator in context_indicators)
+        return context.is_context_overflow or any(
+            indicator in message for indicator in context_indicators
         )
 
     def _is_permission_error(self, error_type: str, message: str) -> bool:
@@ -168,9 +169,8 @@ class ErrorHandler:
             "access denied",
             "not allowed",
         ]
-        return (
-            "permission" in error_type.lower() or
-            any(indicator in message for indicator in permission_indicators)
+        return "permission" in error_type.lower() or any(
+            indicator in message for indicator in permission_indicators
         )
 
     def _is_timeout_error(self, error_type: str, message: str) -> bool:
@@ -180,9 +180,8 @@ class ErrorHandler:
             "timed out",
             "deadline",
         ]
-        return (
-            "timeout" in error_type.lower() or
-            any(indicator in message for indicator in timeout_indicators)
+        return "timeout" in error_type.lower() or any(
+            indicator in message for indicator in timeout_indicators
         )
 
     def _is_network_error(self, error_type: str, message: str) -> bool:
@@ -195,10 +194,9 @@ class ErrorHandler:
             "refused",
             "unreachable",
         ]
-        return (
-            any(term in error_type.lower() for term in ["connection", "network", "socket"]) or
-            any(indicator in message for indicator in network_indicators)
-        )
+        return any(
+            term in error_type.lower() for term in ["connection", "network", "socket"]
+        ) or any(indicator in message for indicator in network_indicators)
 
     def _handle_rate_limit(self, context: ErrorContext) -> ErrorDecision:
         """Handle rate limit errors with exponential backoff."""
@@ -212,7 +210,7 @@ class ErrorHandler:
             )
 
         # Exponential backoff
-        delay = min(self.base_delay * (2 ** attempts), self.max_delay)
+        delay = min(self.base_delay * (2**attempts), self.max_delay)
         self._retry_counts[key] = attempts + 1
 
         return ErrorDecision(
@@ -259,7 +257,7 @@ class ErrorHandler:
                 message=f"Operation timed out after {attempts} retries",
             )
 
-        delay = min(self.base_delay * (2 ** attempts), self.max_delay)
+        delay = min(self.base_delay * (2**attempts), self.max_delay)
         self._retry_counts[key] = attempts + 1
 
         return ErrorDecision(
@@ -279,7 +277,7 @@ class ErrorHandler:
                 message=f"Network error persisted after {attempts} retries",
             )
 
-        delay = min(self.base_delay * (2 ** attempts), self.max_delay)
+        delay = min(self.base_delay * (2**attempts), self.max_delay)
         self._retry_counts[key] = attempts + 1
 
         return ErrorDecision(

@@ -70,6 +70,7 @@ class PermissionSet:
 
         # Get system temp directory
         import tempfile
+
         temp_dir = Path(tempfile.gettempdir())
 
         return cls(

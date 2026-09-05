@@ -6,7 +6,7 @@ Wraps MCP tools as Harness Tool instances.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from harness.types import ToolResult
 
@@ -25,11 +25,11 @@ class MCPToolWrapper:
 
     def __init__(
         self,
-        mcp_client: "MCPClient",
+        mcp_client: MCPClient,
         server_name: str,
         tool_name: str,
         description: str,
-        input_schema: Dict[str, Any],
+        input_schema: dict[str, Any],
         timeout: float = 30.0,
     ):
         """
@@ -78,23 +78,23 @@ class MCPToolWrapper:
         return self._description
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """Parameter definitions."""
         return self._parameters
 
     @property
-    def required(self) -> List[str]:
+    def required(self) -> list[str]:
         """Required parameters."""
         return self._required
 
     @property
-    def input_schema(self) -> Dict[str, Any]:
+    def input_schema(self) -> dict[str, Any]:
         """Tool input schema (JSON Schema format)."""
         return self._input_schema
 
     def validate_arguments(
         self,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> tuple[bool, str | None]:
         """
         Validate tool arguments using JSON Schema.
@@ -126,8 +126,8 @@ class MCPToolWrapper:
 
     async def execute(
         self,
-        arguments: Dict[str, Any],
-        context: Optional["ToolContext"] = None,
+        arguments: dict[str, Any],
+        context: ToolContext | None = None,
     ) -> ToolResult:
         """
         Execute MCP tool.
@@ -172,7 +172,7 @@ class MCPToolWrapper:
                 error=f"MCP tool execution failed: {e}",
             )
 
-    def to_definition(self) -> Dict[str, Any]:
+    def to_definition(self) -> dict[str, Any]:
         """
         Convert to tool definition format (same as Anthropic schema).
 
@@ -185,7 +185,7 @@ class MCPToolWrapper:
             "input_schema": self._input_schema,
         }
 
-    def to_anthropic_schema(self) -> Dict[str, Any]:
+    def to_anthropic_schema(self) -> dict[str, Any]:
         """
         Convert to Anthropic tool schema format.
 
@@ -194,7 +194,7 @@ class MCPToolWrapper:
         """
         return self.to_definition()
 
-    def to_openai_schema(self) -> Dict[str, Any]:
+    def to_openai_schema(self) -> dict[str, Any]:
         """
         Convert to OpenAI tool schema format.
 

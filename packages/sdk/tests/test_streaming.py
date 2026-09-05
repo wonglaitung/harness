@@ -2,10 +2,11 @@
 Tests for Streaming Backpressure system.
 """
 
-import pytest
 import asyncio
 
-from harness.core import StreamingHandler, StreamingConfig, StreamingStats
+import pytest
+
+from harness.core import StreamingConfig, StreamingHandler, StreamingStats
 from harness.types import Chunk, ChunkType
 
 

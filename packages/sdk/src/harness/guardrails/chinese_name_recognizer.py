@@ -8,22 +8,42 @@
 """
 
 import re
-from typing import List, Optional, Tuple, Set
 from dataclasses import dataclass
 
-
 # 中国常见姓氏（前100大姓，覆盖约85%人口）
-COMMON_SURNAMES = set('王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾侯邵孟龙万段漕钱汤尹黎易常武乔贺赖龚文')
+COMMON_SURNAMES = set(
+    "王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾侯邵孟龙万段漕钱汤尹黎易常武乔贺赖龚文"
+)
 
 # 复姓
 COMPOUND_SURNAMES = [
-    '欧阳', '上官', '司马', '诸葛', '东方', '皇甫', '尉迟', '公孙', '令狐', '宇文',
-    '长孙', '慕容', '司徒', '南宫', '独孤', '百里', '端木', '轩辕', '赫连', '澹台',
+    "欧阳",
+    "上官",
+    "司马",
+    "诸葛",
+    "东方",
+    "皇甫",
+    "尉迟",
+    "公孙",
+    "令狐",
+    "宇文",
+    "长孙",
+    "慕容",
+    "司徒",
+    "南宫",
+    "独孤",
+    "百里",
+    "端木",
+    "轩辕",
+    "赫连",
+    "澹台",
 ]
+
 
 @dataclass
 class NameMatch:
     """姓名匹配结果"""
+
     text: str
     start: int
     end: int
@@ -58,11 +78,12 @@ class ChineseNameRecognizer:
         if use_spacy:
             try:
                 import spacy
-                self.nlp = spacy.load('zh_core_web_sm')
+
+                self.nlp = spacy.load("zh_core_web_sm")
             except Exception:
                 self.nlp = None
 
-    def recognize(self, text: str) -> List[NameMatch]:
+    def recognize(self, text: str) -> list[NameMatch]:
         """
         识别文本中的中文姓名
 
@@ -89,18 +110,18 @@ class ChineseNameRecognizer:
 
         return results
 
-    def _recognize_by_rules(self, text: str) -> List[NameMatch]:
+    def _recognize_by_rules(self, text: str) -> list[NameMatch]:
         """基于规则识别姓名"""
         results = []
 
         # 模式1：姓名上下文关键词
         name_patterns = [
             # "叫/是/姓名" + 姓名
-            r'(?:叫|是|姓名|名字|联系人|联系|客户|用户|本人|持卡人)[:：]?\s*([一-龥]{2,4})',
+            r"(?:叫|是|姓名|名字|联系人|联系|客户|用户|本人|持卡人)[:：]?\s*([一-龥]{2,4})",
             # 姓名 + "的" + 其他
-            r'([一-龥]{2,3})的(?:手机|电话|邮箱|身份证|银行卡)',
+            r"([一-龥]{2,3})的(?:手机|电话|邮箱|身份证|银行卡)",
             # 姓氏开头的2-4字姓名
-            r'(?<![一-龥])([一-龥]{2,4})(?![一-龥])',
+            r"(?<![一-龥])([一-龥]{2,4})(?![一-龥])",
         ]
 
         for pattern in name_patterns:
@@ -116,14 +137,14 @@ class ChineseNameRecognizer:
 
         return results
 
-    def _recognize_by_spacy(self, text: str) -> List[NameMatch]:
+    def _recognize_by_spacy(self, text: str) -> list[NameMatch]:
         """使用 spaCy NER 识别"""
         results = []
 
         try:
             doc = self.nlp(text)
             for ent in doc.ents:
-                if ent.label_ == 'PERSON':
+                if ent.label_ == "PERSON":
                     candidate = ent.text
                     start, end = ent.start_char, ent.end_char
 
@@ -136,7 +157,7 @@ class ChineseNameRecognizer:
 
         return results
 
-    def _validate_name(self, candidate: str, start: int, end: int) -> Optional[NameMatch]:
+    def _validate_name(self, candidate: str, start: int, end: int) -> NameMatch | None:
         """
         验证候选字符串是否为有效中文姓名
 
@@ -153,7 +174,7 @@ class ChineseNameRecognizer:
             return None
 
         # 必须全是汉字
-        if not all('\u4e00' <= c <= '\u9fff' for c in candidate):
+        if not all("\u4e00" <= c <= "\u9fff" for c in candidate):
             return None
 
         # 检查姓氏
@@ -164,7 +185,7 @@ class ChineseNameRecognizer:
         for cs in COMPOUND_SURNAMES:
             if candidate.startswith(cs):
                 surname = cs
-                given_name = candidate[len(cs):]
+                given_name = candidate[len(cs) :]
                 break
 
         # 检查单姓
@@ -179,11 +200,34 @@ class ChineseNameRecognizer:
 
         # 过滤常见误报词汇
         false_positives = {
-            '手机号', '电话号', '身份证', '银行卡', '邮箱地', '联系方',
-            '公司名', '产品名', '用户名', '账号', '账户',
-            '北京市', '上海市', '广州市', '深圳市',  # 城市名
-            '周一', '周二', '周三', '周四', '周五', '周六', '周日',  # 星期
-            '一月', '二月', '三月', '四月', '五月', '六月',  # 月份
+            "手机号",
+            "电话号",
+            "身份证",
+            "银行卡",
+            "邮箱地",
+            "联系方",
+            "公司名",
+            "产品名",
+            "用户名",
+            "账号",
+            "账户",
+            "北京市",
+            "上海市",
+            "广州市",
+            "深圳市",  # 城市名
+            "周一",
+            "周二",
+            "周三",
+            "周四",
+            "周五",
+            "周六",
+            "周日",  # 星期
+            "一月",
+            "二月",
+            "三月",
+            "四月",
+            "五月",
+            "六月",  # 月份
         }
 
         if candidate in false_positives:
@@ -198,7 +242,7 @@ class ChineseNameRecognizer:
             end=end,
             score=score,
             surname=surname,
-            given_name=given_name
+            given_name=given_name,
         )
 
     def _calculate_score(self, candidate: str, surname: str, given_name: str) -> float:
@@ -223,13 +267,17 @@ class ChineseNameRecognizer:
             score += 0.1
 
         # 名字不含罕见字（简单判断）
-        common_chars = set('伟芳娜敏静丽强磊军洋勇艳杰娟涛明超秀霞平刚桂英兰华建国文辉斌波宇红梅玲鹏峰毅浩清云翔林海天山风龙飞')
+        common_chars = set(
+            "伟芳娜敏静丽强磊军洋勇艳杰娟涛明超秀霞平刚桂英兰华建国文辉斌波宇红梅玲鹏峰毅浩清云翔林海天山风龙飞"
+        )
         if given_name and all(c in common_chars for c in given_name):
             score += 0.05
 
         return min(score, 1.0)
 
-    def _merge_results(self, rule_results: List[NameMatch], spacy_results: List[NameMatch]) -> List[NameMatch]:
+    def _merge_results(
+        self, rule_results: list[NameMatch], spacy_results: list[NameMatch]
+    ) -> list[NameMatch]:
         """合并规则和 spaCy 结果"""
         # 使用位置作为唯一标识
         seen = {}
@@ -256,7 +304,7 @@ def create_name_recognizer(use_spacy: bool = True) -> ChineseNameRecognizer:
 
 
 # 便捷函数
-def extract_chinese_names(text: str) -> List[str]:
+def extract_chinese_names(text: str) -> list[str]:
     """
     快速提取文本中的中文姓名
 

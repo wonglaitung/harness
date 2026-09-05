@@ -250,7 +250,7 @@ async def execute_verification_command(
                 process.communicate(),
                 timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             await process.wait()
             return CommandResult(
@@ -316,7 +316,9 @@ async def run_tool_verification(
         if not result.success:
             all_passed = False
             if first_failure is None:
-                first_failure = f"{cmd.name} failed (exit code {result.exit_code}): {result.error_output}"
+                first_failure = (
+                    f"{cmd.name} failed (exit code {result.exit_code}): {result.error_output}"
+                )
 
             if config.fail_fast:
                 break

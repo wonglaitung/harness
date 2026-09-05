@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from harness.types import ProgressEvent, ProgressEventType
+from harness.types import ProgressEvent
 
 if TYPE_CHECKING:
     from harness.types import Session, TokenUsage
@@ -110,10 +110,12 @@ class ObservabilityManager:
 
         try:
             # Create resource
-            resource = Resource.create({
-                "service.name": self.config.service_name,
-                "service.version": self.config.service_version,
-            })
+            resource = Resource.create(
+                {
+                    "service.name": self.config.service_name,
+                    "service.version": self.config.service_version,
+                }
+            )
 
             # Create tracer provider
             self._tracer_provider = TracerProvider(resource=resource)
@@ -121,9 +123,7 @@ class ObservabilityManager:
             # Add exporters
             if self.config.export_console:
                 console_exporter = ConsoleSpanExporter()
-                self._tracer_provider.add_span_processor(
-                    BatchSpanProcessor(console_exporter)
-                )
+                self._tracer_provider.add_span_processor(BatchSpanProcessor(console_exporter))
 
             if self.config.export_otlp:
                 try:
@@ -131,12 +131,8 @@ class ObservabilityManager:
                         OTLPSpanExporter,
                     )
 
-                    otlp_exporter = OTLPSpanExporter(
-                        endpoint=self.config.otlp_endpoint
-                    )
-                    self._tracer_provider.add_span_processor(
-                        BatchSpanProcessor(otlp_exporter)
-                    )
+                    otlp_exporter = OTLPSpanExporter(endpoint=self.config.otlp_endpoint)
+                    self._tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
                 except ImportError:
                     logger.warning(
                         "OTLP exporter not available. "
@@ -147,9 +143,7 @@ class ObservabilityManager:
             trace.set_tracer_provider(self._tracer_provider)
 
             self._setup_complete = True
-            logger.info(
-                f"OpenTelemetry initialized: service={self.config.service_name}"
-            )
+            logger.info(f"OpenTelemetry initialized: service={self.config.service_name}")
             return True
 
         except Exception as e:
@@ -214,7 +208,7 @@ class SpanBuilder:
         self._span: Span | None = None
         self._start_time: float | None = None
 
-    def __enter__(self) -> "SpanBuilder":
+    def __enter__(self) -> SpanBuilder:
         tracer = get_tracer()
         if tracer is None:
             return self
@@ -244,13 +238,13 @@ class SpanBuilder:
 
         self._span.__exit__(exc_type, exc_val, exc_tb)
 
-    def set_attr(self, key: str, value: Any) -> "SpanBuilder":
+    def set_attr(self, key: str, value: Any) -> SpanBuilder:
         """Set an attribute on the span."""
         if self._span:
             self._span.set_attribute(key, value)
         return self
 
-    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> "SpanBuilder":
+    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> SpanBuilder:
         """Add an event to the span."""
         if self._span:
             self._span.add_event(name, attributes or {})
@@ -314,7 +308,7 @@ def trace_progress_event(event: ProgressEvent, span: Span | None = None) -> None
         span.add_event(f"progress.{event.type.value}", attributes)
 
 
-def create_session_span(session: "Session", parent: Span | None = None) -> SpanBuilder:
+def create_session_span(session: Session, parent: Span | None = None) -> SpanBuilder:
     """
     Create a span for a session.
 
@@ -331,7 +325,7 @@ def create_session_span(session: "Session", parent: Span | None = None) -> SpanB
     )
 
 
-def record_token_usage(usage: "TokenUsage", span: Span | None = None) -> None:
+def record_token_usage(usage: TokenUsage, span: Span | None = None) -> None:
     """
     Record token usage as span attributes.
 

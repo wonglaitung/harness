@@ -6,13 +6,11 @@ Handles discovery and loading of skill files from various locations.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from harness.skills.base import Skill
     from harness.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -170,11 +168,10 @@ class SkillLoader:
         try:
             import aiohttp
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        return False
-                    content = await response.text()
+            async with aiohttp.ClientSession() as session, session.get(url) as response:
+                if response.status != 200:
+                    return False
+                content = await response.text()
 
             # Create temp file
             temp_path = Path("/tmp") / Path(url).name

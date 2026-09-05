@@ -17,8 +17,8 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from harness.types import LoopResult, Session
     from harness.loop.tool_verification import ToolVerificationConfig
+    from harness.types import LoopResult, Session
 
 
 class GoalStatus(Enum):
@@ -152,8 +152,13 @@ class GoalConfig:
             raise ValueError("custom_verifier is required when verification_method is CUSTOM")
 
         # Validate tool_verification_config if verification_method is TOOL
-        if self.verification_method == VerificationMethod.TOOL and self.tool_verification_config is None:
-            raise ValueError("tool_verification_config is required when verification_method is TOOL")
+        if (
+            self.verification_method == VerificationMethod.TOOL
+            and self.tool_verification_config is None
+        ):
+            raise ValueError(
+                "tool_verification_config is required when verification_method is TOOL"
+            )
 
 
 @dataclass

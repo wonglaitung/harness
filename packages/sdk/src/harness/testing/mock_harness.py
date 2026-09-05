@@ -6,13 +6,12 @@ Provides a fully mocked agent harness for unit testing without real LLM calls.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from harness.types import (
     LLMResponse,
@@ -21,13 +20,13 @@ from harness.types import (
     Message,
     Session,
     StopReason,
-    ToolCall,
     TokenUsage,
+    ToolCall,
 )
 
 if TYPE_CHECKING:
+    from harness.loop.types import GoalConfig, GoalResult
     from harness.tools.base import Tool
-    from harness.llm.base import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MockResponse:
     """A mock LLM response for testing."""
+
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     stop_reason: StopReason = StopReason.END_TURN
@@ -57,6 +57,7 @@ class MockResponse:
 @dataclass
 class MockHarnessConfig:
     """Configuration for MockHarness."""
+
     responses: list[MockResponse] = field(default_factory=list)
     auto_tool_results: dict[str, str] = field(default_factory=dict)
     record_mode: bool = False
@@ -101,7 +102,7 @@ class MockHarness:
         self,
         config: MockHarnessConfig | None = None,
         responses: list[MockResponse] | None = None,
-        tools: list["Tool"] | None = None,
+        tools: list[Tool] | None = None,
     ):
         self.config = config or MockHarnessConfig()
         if responses:
@@ -182,16 +183,18 @@ class MockHarness:
 
                 # Record if in record mode
                 if self.config.record_mode:
-                    self._recordings.append({
-                        "type": "llm_response",
-                        "iteration": iteration,
-                        "response": {
-                            "content": response.content,
-                            "tool_calls": [tc.to_dict() for tc in response.tool_calls],
-                            "stop_reason": response.stop_reason.value,
-                        },
-                        "timestamp": datetime.now().isoformat(),
-                    })
+                    self._recordings.append(
+                        {
+                            "type": "llm_response",
+                            "iteration": iteration,
+                            "response": {
+                                "content": response.content,
+                                "tool_calls": [tc.to_dict() for tc in response.tool_calls],
+                                "stop_reason": response.stop_reason.value,
+                            },
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 # Handle tool calls
                 if response.is_tool_use:
@@ -203,21 +206,25 @@ class MockHarness:
                             # Use default mock result
                             result_content = f"Mock result for {tool_call.name}"
 
-                        session.add_message(Message(
-                            role="tool",
-                            content=result_content,
-                            metadata={"tool_call_id": tool_call.id},
-                        ))
+                        session.add_message(
+                            Message(
+                                role="tool",
+                                content=result_content,
+                                metadata={"tool_call_id": tool_call.id},
+                            )
+                        )
 
                         # Record
                         if self.config.record_mode:
-                            self._recordings.append({
-                                "type": "tool_result",
-                                "tool_name": tool_call.name,
-                                "tool_call_id": tool_call.id,
-                                "result": result_content,
-                                "timestamp": datetime.now().isoformat(),
-                            })
+                            self._recordings.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_name": tool_call.name,
+                                    "tool_call_id": tool_call.id,
+                                    "result": result_content,
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+                            )
 
                     iteration += 1
                     continue
@@ -255,9 +262,9 @@ class MockHarness:
 
     async def run_goal(
         self,
-        goal: str | "GoalConfig",
+        goal: str | GoalConfig,
         **kwargs,
-    ) -> "GoalResult":
+    ) -> GoalResult:
         """
         Mock implementation of run_goal for testing.
 
@@ -273,10 +280,7 @@ class MockHarness:
         from harness.loop.types import GoalConfig, GoalResult, GoalStatus
 
         # Extract goal description
-        if isinstance(goal, GoalConfig):
-            description = goal.description
-        else:
-            description = goal
+        description = goal.description if isinstance(goal, GoalConfig) else goal
 
         # Return mock successful result
         return GoalResult(
@@ -305,13 +309,17 @@ class MockHarness:
             return
 
         with open(path, "w") as f:
-            json.dump({
-                "recordings": self._recordings,
-                "config": {
-                    "responses_count": len(self.config.responses),
-                    "tool_results": self._tool_results,
+            json.dump(
+                {
+                    "recordings": self._recordings,
+                    "config": {
+                        "responses_count": len(self.config.responses),
+                        "tool_results": self._tool_results,
+                    },
                 },
-            }, f, indent=2)
+                f,
+                indent=2,
+            )
 
         logger.info(f"Saved recording to {path}")
 
@@ -325,11 +333,15 @@ class MockHarness:
         for rec in data["recordings"]:
             if rec["type"] == "llm_response":
                 resp_data = rec["response"]
-                responses.append(MockResponse(
-                    content=resp_data["content"],
-                    tool_calls=[ToolCall.from_dict(tc) for tc in resp_data.get("tool_calls", [])],
-                    stop_reason=StopReason(resp_data["stop_reason"]),
-                ))
+                responses.append(
+                    MockResponse(
+                        content=resp_data["content"],
+                        tool_calls=[
+                            ToolCall.from_dict(tc) for tc in resp_data.get("tool_calls", [])
+                        ],
+                        stop_reason=StopReason(resp_data["stop_reason"]),
+                    )
+                )
 
         self.set_responses(responses)
 

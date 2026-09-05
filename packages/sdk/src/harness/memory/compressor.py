@@ -7,8 +7,8 @@ Implements automatic compression strategies to keep context within budget.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from harness.types import Message
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompressionConfig:
     """Configuration for context compression."""
+
     min_messages_before_compress: int = 10  # Minimum messages before considering compression
     keep_recent_messages: int = 5  # Always keep this many recent messages
     keep_system_messages: bool = True  # Keep system messages
@@ -31,6 +32,7 @@ class CompressionConfig:
 @dataclass
 class CompressionResult:
     """Result of context compression."""
+
     original_messages: list[Message]
     compressed_messages: list[Message]
     summary: str | None = None
@@ -61,7 +63,7 @@ class ContextCompressor:
 
     def __init__(
         self,
-        token_counter: "TokenCounter",
+        token_counter: TokenCounter,
         config: CompressionConfig | None = None,
     ):
         self.token_counter = token_counter
@@ -173,7 +175,6 @@ class ContextCompressor:
         user_requests = []
         assistant_actions = []
         tool_calls = []
-        key_decisions = []
 
         for msg in messages:
             content = msg.content if isinstance(msg.content, str) else ""
@@ -256,7 +257,7 @@ class IncrementalTokenCounter:
 
     def __init__(
         self,
-        token_counter: "TokenCounter",
+        token_counter: TokenCounter,
         cache_size: int = 1000,
     ):
         self.token_counter = token_counter
@@ -288,7 +289,7 @@ class IncrementalTokenCounter:
         # Manage cache size
         if len(self._cache) >= self._cache_size:
             # Remove oldest entries (simple FIFO)
-            keys_to_remove = list(self._cache.keys())[:self._cache_size // 4]
+            keys_to_remove = list(self._cache.keys())[: self._cache_size // 4]
             for key in keys_to_remove:
                 del self._cache[key]
 
@@ -315,6 +316,7 @@ class IncrementalTokenCounter:
     def _hash_content(self, content: str) -> str:
         """Create hash key for content."""
         import hashlib
+
         return hashlib.md5(content.encode()).hexdigest()
 
     def clear_cache(self) -> None:

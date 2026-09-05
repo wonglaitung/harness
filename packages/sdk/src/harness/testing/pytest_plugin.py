@@ -4,11 +4,12 @@ pytest plugin for Harness testing.
 Provides fixtures and utilities for testing Harness agents.
 """
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from harness.testing.mock_harness import MockHarness, MockHarnessConfig, MockResponse
-from harness.testing.recording import RecordingHarness, RecordingConfig
+from harness.testing.recording import RecordingConfig
 from harness.types import StopReason, ToolCall
 
 
@@ -70,9 +71,7 @@ def create_mock_sequence(responses: list[str]) -> MockHarness:
     Returns:
         MockHarness configured with the sequence
     """
-    return MockHarness(
-        responses=[MockResponse(content=r) for r in responses]
-    )
+    return MockHarness(responses=[MockResponse(content=r) for r in responses])
 
 
 def create_mock_with_tools(
@@ -94,10 +93,12 @@ def create_mock_with_tools(
 
     for tool_name, arguments, result in tool_sequence:
         call_id = f"call_{tool_name}"
-        responses.append(MockResponse(
-            tool_calls=[ToolCall(id=call_id, name=tool_name, arguments=arguments)],
-            stop_reason=StopReason.TOOL_USE,
-        ))
+        responses.append(
+            MockResponse(
+                tool_calls=[ToolCall(id=call_id, name=tool_name, arguments=arguments)],
+                stop_reason=StopReason.TOOL_USE,
+            )
+        )
         tool_results[tool_name] = result
 
     responses.append(MockResponse(content=final_response))
@@ -122,19 +123,22 @@ def pytest_configure(config):
 def pytest_runtest_makereport(item, call):
     """Hook to save recordings after test."""
     outcome = yield
-    report = outcome.get_result()
+    outcome.get_result()
 
     # Check if test is marked for recording
-    if "harness_recording" in item.keywords and call.when == "call":
+    if (
+        "harness_recording" in item.keywords
+        and call.when == "call"
+        and "mock_harness" in item.funcargs
+    ):
         # Look for mock_harness fixture
-        if "mock_harness" in item.funcargs:
-            harness = item.funcargs["mock_harness"]
-            if hasattr(harness, "_recordings") and harness._recordings:
-                # Save recording
-                name = f"{item.name}_recording"
-                recording_dir = Path(".pytest_recordings")
-                recording_dir.mkdir(exist_ok=True)
-                harness.save_recording(recording_dir / f"{name}.json")
+        harness = item.funcargs["mock_harness"]
+        if hasattr(harness, "_recordings") and harness._recordings:
+            # Save recording
+            name = f"{item.name}_recording"
+            recording_dir = Path(".pytest_recordings")
+            recording_dir.mkdir(exist_ok=True)
+            harness.save_recording(recording_dir / f"{name}.json")
 
 
 # Plugin registration

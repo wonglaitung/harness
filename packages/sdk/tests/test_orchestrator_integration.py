@@ -4,13 +4,9 @@ Integration tests for Phase 5: Loop Orchestrator.
 Tests end-to-end workflow and team execution with MockHarness.
 """
 
-import asyncio
-from datetime import datetime
 
 import pytest
 
-from harness import AgentHarness
-from harness.loop.types import GoalConfig, GoalResult, GoalStatus
 from harness.orchestrator import (
     AgentRole,
     CoordinationMode,
@@ -19,11 +15,9 @@ from harness.orchestrator import (
     OrchestratorConfig,
     TeamConfig,
     WorkflowConfig,
-    WorkflowResult,
     WorkflowStep,
 )
 from harness.testing import MockHarness, MockResponse
-
 
 # =============================================================================
 # Fixtures

@@ -15,8 +15,6 @@ from harness.types import (
     HookAction,
     HookContext,
     HookPoint,
-    HookResult,
-    Message,
     ToolResult,
 )
 

@@ -2,8 +2,6 @@
 Tests for tool-based goal verification.
 """
 
-import asyncio
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,14 +9,11 @@ import pytest
 from harness.loop import (
     GoalConfig,
     GoalVerifier,
-    GoalStatus,
     ToolVerificationConfig,
     VerificationCommand,
     VerificationMethod,
-    VerificationResult,
 )
 from harness.loop.tool_verification import (
-    CommandResult,
     execute_verification_command,
     run_tool_verification,
 )

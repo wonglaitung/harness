@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from harness.connectors.base import Connector, EventCallback
@@ -115,20 +114,14 @@ class WebhookConnector(Connector):
         if self._app:
             # Register route with FastAPI app
             try:
-                from fastapi import Request, Response
 
                 @self._app.post(self.config.endpoint)
                 async def handle_webhook(request: Request) -> Response:
                     return await self.handle_request(request)
 
-                logger.info(
-                    f"Registered webhook endpoint: {self.config.endpoint}"
-                )
+                logger.info(f"Registered webhook endpoint: {self.config.endpoint}")
             except ImportError:
-                logger.warning(
-                    "FastAPI not installed. "
-                    "Install with: pip install fastapi"
-                )
+                logger.warning("FastAPI not installed. Install with: pip install fastapi")
 
         logger.info(f"WebhookConnector started: {self.id}")
 
@@ -160,7 +153,7 @@ class WebhookConnector(Connector):
             )
 
             if not self._verify_signature(body, signature):
-                logger.warning(f"Invalid signature for webhook request")
+                logger.warning("Invalid signature for webhook request")
                 return Response(status_code=401, content="Invalid signature")
 
         # Parse payload
@@ -226,9 +219,7 @@ class WebhookConnector(Connector):
         metadata = {}
 
         # Extract request ID for tracing
-        request_id = request.headers.get("X-Request-ID") or request.headers.get(
-            "X-GitHub-Delivery"
-        )
+        request_id = request.headers.get("X-Request-ID") or request.headers.get("X-GitHub-Delivery")
         if request_id:
             metadata[RoutingKeys.WEBHOOK_REQUEST_ID] = request_id
 

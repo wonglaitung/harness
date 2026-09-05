@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -46,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 class SubAgentStatus(Enum):
     """Status of a sub-agent."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -146,7 +146,7 @@ class SubAgentManager:
             print(f"{name}: {result.summary}")
     """
 
-    def __init__(self, parent_agent: "AgentHarness"):
+    def __init__(self, parent_agent: AgentHarness):
         """
         Initialize the sub-agent manager.
 
@@ -154,7 +154,7 @@ class SubAgentManager:
             parent_agent: The parent agent that owns this manager
         """
         self.parent = parent_agent
-        self._sub_agents: dict[str, "AgentHarness"] = {}
+        self._sub_agents: dict[str, AgentHarness] = {}
         self._configs: dict[str, SubAgentConfig] = {}
         self._results: dict[str, SubAgentResult] = {}
         self._statuses: dict[str, SubAgentStatus] = {}
@@ -170,24 +170,28 @@ class SubAgentManager:
         Returns:
             The name of the created sub-agent
         """
-        from harness.sdk.harness import AgentHarness
         from harness.sdk.config import HarnessConfig
+        from harness.sdk.harness import AgentHarness
 
         # Create sub-agent configuration
         # Inherit API settings from parent
-        parent_config = getattr(self.parent, 'config', None)
+        parent_config = getattr(self.parent, "config", None)
         sub_config = HarnessConfig(
-            model=getattr(parent_config, 'model', "claude-sonnet-4-6") if parent_config else "claude-sonnet-4-6",
-            api_key=getattr(parent_config, 'api_key', None) if parent_config else None,
-            provider=getattr(parent_config, 'provider', "anthropic") if parent_config else "anthropic",
-            base_url=getattr(parent_config, 'base_url', None) if parent_config else None,
+            model=getattr(parent_config, "model", "claude-sonnet-4-6")
+            if parent_config
+            else "claude-sonnet-4-6",
+            api_key=getattr(parent_config, "api_key", None) if parent_config else None,
+            provider=getattr(parent_config, "provider", "anthropic")
+            if parent_config
+            else "anthropic",
+            base_url=getattr(parent_config, "base_url", None) if parent_config else None,
             max_iterations=config.max_iterations,
             system_prompt=config.system_prompt or self._build_default_prompt(config),
         )
 
         # Inherit tools from parent, filtered by config.tools if specified
         inherited_tools = None
-        if hasattr(self.parent, '_tool_registry'):
+        if hasattr(self.parent, "_tool_registry"):
             all_tools = self.parent._tool_registry.get_all()
             if config.tools is not None:
                 # Filter tools by name - support both exact names and common aliases
@@ -213,10 +217,7 @@ class SubAgentManager:
                         if target == name:
                             allowed_names.add(alias)
 
-                inherited_tools = [
-                    tool for tool in all_tools
-                    if tool.name in allowed_names
-                ]
+                inherited_tools = [tool for tool in all_tools if tool.name in allowed_names]
             else:
                 # Inherit all tools if not specified
                 inherited_tools = all_tools
@@ -275,7 +276,7 @@ class SubAgentManager:
             logger.info(f"Sub-agent {name} completed: success={sub_result.success}")
             return sub_result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Sub-agent {name} timed out")
             result = SubAgentResult(
                 name=name,
@@ -307,8 +308,7 @@ class SubAgentManager:
             Dict mapping sub-agent names to their results
         """
         pending = [
-            name for name, status in self._statuses.items()
-            if status == SubAgentStatus.PENDING
+            name for name, status in self._statuses.items() if status == SubAgentStatus.PENDING
         ]
 
         # Run all in parallel
@@ -317,13 +317,15 @@ class SubAgentManager:
 
         # Collect results
         return {
-            name: result if isinstance(result, SubAgentResult) else SubAgentResult(
+            name: result
+            if isinstance(result, SubAgentResult)
+            else SubAgentResult(
                 name=name,
                 success=False,
                 status=SubAgentStatus.FAILED,
                 error=str(result),
             )
-            for name, result in zip(pending, results)
+            for name, result in zip(pending, results, strict=False)
         }
 
     def get_result(self, name: str) -> SubAgentResult | None:
@@ -405,7 +407,9 @@ When finished, provide a concise summary of what you accomplished."""
                 iterations=loop_result.iterations,
                 token_usage={
                     "input": loop_result.token_usage.input_tokens if loop_result.token_usage else 0,
-                    "output": loop_result.token_usage.output_tokens if loop_result.token_usage else 0,
+                    "output": loop_result.token_usage.output_tokens
+                    if loop_result.token_usage
+                    else 0,
                 },
             )
 
@@ -418,7 +422,9 @@ When finished, provide a concise summary of what you accomplished."""
                 iterations=loop_result.iterations,
                 token_usage={
                     "input": loop_result.token_usage.input_tokens if loop_result.token_usage else 0,
-                    "output": loop_result.token_usage.output_tokens if loop_result.token_usage else 0,
+                    "output": loop_result.token_usage.output_tokens
+                    if loop_result.token_usage
+                    else 0,
                 },
             )
 
@@ -430,11 +436,15 @@ When finished, provide a concise summary of what you accomplished."""
                 structured_result={
                     "response": loop_result.final_response,
                     "iterations": loop_result.iterations,
-                    "messages": [m.to_api_format() for m in loop_result.messages] if loop_result.messages else [],
+                    "messages": [m.to_api_format() for m in loop_result.messages]
+                    if loop_result.messages
+                    else [],
                 },
                 iterations=loop_result.iterations,
                 token_usage={
                     "input": loop_result.token_usage.input_tokens if loop_result.token_usage else 0,
-                    "output": loop_result.token_usage.output_tokens if loop_result.token_usage else 0,
+                    "output": loop_result.token_usage.output_tokens
+                    if loop_result.token_usage
+                    else 0,
                 },
             )

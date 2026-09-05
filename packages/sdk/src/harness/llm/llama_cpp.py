@@ -54,8 +54,16 @@ class EmbeddedLlamaClient(LLMClient):
 
     # GGUF filename patterns to strip when extracting model name
     QUANTIZATION_SUFFIXES = [
-        "-q4_k_m", "-q4_k_s", "-q4_0", "-q5_k_m", "-q5_k_s", "-q5_0",
-        "-q6_k", "-q8_0", "-f16", "-bf16",
+        "-q4_k_m",
+        "-q4_k_s",
+        "-q4_0",
+        "-q5_k_m",
+        "-q5_k_s",
+        "-q5_0",
+        "-q6_k",
+        "-q8_0",
+        "-f16",
+        "-bf16",
     ]
     OTHER_SUFFIXES = ["-instruct", "-chat"]
 

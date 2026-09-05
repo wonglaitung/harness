@@ -2,14 +2,14 @@
 Tests for Mock Testing Toolchain.
 """
 
-import pytest
-from pathlib import Path
 import tempfile
-import json
+from pathlib import Path
 
-from harness.testing import MockHarness, MockHarnessConfig, RecordingHarness, RecordingConfig
+import pytest
+
+from harness.testing import MockHarness, MockHarnessConfig, RecordingConfig, RecordingHarness
 from harness.testing.mock_harness import MockResponse
-from harness.types import StopReason, ToolCall, LoopState
+from harness.types import LoopState, StopReason, ToolCall
 
 
 class TestMockResponse:

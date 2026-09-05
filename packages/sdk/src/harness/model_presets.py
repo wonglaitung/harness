@@ -57,7 +57,6 @@ MODEL_PRESETS: dict[str, ModelPreset] = {
     "claude-3-haiku": ModelPreset("claude-3-haiku", 200000, 4096, "anthropic"),
     "claude-3-5-sonnet": ModelPreset("claude-3-5-sonnet", 200000, 8192, "anthropic"),
     "claude-3-5-haiku": ModelPreset("claude-3-5-haiku", 200000, 8192, "anthropic"),
-
     # OpenAI GPT
     "gpt-4o": ModelPreset("gpt-4o", 128000, 16384, "openai"),
     "gpt-4o-mini": ModelPreset("gpt-4o-mini", 128000, 16384, "openai"),
@@ -69,35 +68,29 @@ MODEL_PRESETS: dict[str, ModelPreset] = {
     "o1": ModelPreset("o1", 200000, 100000, "openai"),
     "o1-mini": ModelPreset("o1-mini", 128000, 65536, "openai"),
     "o1-preview": ModelPreset("o1-preview", 128000, 32768, "openai"),
-
     # GLM (Zhipu AI)
     "glm-4": ModelPreset("glm-4", 128000, 4096, "openai"),
     "glm-4-plus": ModelPreset("glm-4-plus", 128000, 4096, "openai"),
     "glm-4-air": ModelPreset("glm-4-air", 128000, 4096, "openai"),
     "glm-4-flash": ModelPreset("glm-4-flash", 128000, 4096, "openai"),
     "glm-5": ModelPreset("glm-5", 65536, 4096, "openai"),  # 64K
-
     # Qwen (Alibaba)
     "qwen-turbo": ModelPreset("qwen-turbo", 128000, 6144, "openai"),
     "qwen-plus": ModelPreset("qwen-plus", 128000, 6144, "openai"),
     "qwen-max": ModelPreset("qwen-max", 32768, 6144, "openai"),  # 32K
     "qwen-72b": ModelPreset("qwen-72b", 32768, 4096, "openai"),
     "qwen2.5-72b": ModelPreset("qwen2.5-72b", 131072, 8192, "openai"),
-
     # DeepSeek
     "deepseek-chat": ModelPreset("deepseek-chat", 64000, 4096, "openai"),  # 64K
     "deepseek-coder": ModelPreset("deepseek-coder", 64000, 4096, "openai"),
-
     # Yi (01.AI)
     "yi-large": ModelPreset("yi-large", 32768, 4096, "openai"),
     "yi-medium": ModelPreset("yi-medium", 16384, 4096, "openai"),
-
     # LLaMA variants (typical configurations)
     "llama-3-70b": ModelPreset("llama-3-70b", 8192, 4096, "openai"),
     "llama-3-8b": ModelPreset("llama-3-8b", 8192, 4096, "openai"),
     "llama-3.1-70b": ModelPreset("llama-3.1-70b", 131072, 4096, "openai"),  # 128K
     "llama-3.1-8b": ModelPreset("llama-3.1-8b", 131072, 4096, "openai"),  # 128K
-
     # Mistral
     "mistral-large": ModelPreset("mistral-large", 128000, 4096, "openai"),
     "mistral-medium": ModelPreset("mistral-medium", 32768, 4096, "openai"),

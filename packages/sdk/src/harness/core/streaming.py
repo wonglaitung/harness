@@ -9,13 +9,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from harness.types import Chunk, ChunkType, ProgressEventType
 
 if TYPE_CHECKING:
-    from harness.types import ProgressCallback, ProgressEvent
+    from harness.types import ProgressCallback
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StreamingConfig:
     """Configuration for streaming handler."""
+
     buffer_size: int = 8192  # Max chunks in buffer
     backpressure_threshold: float = 0.9  # Trigger backpressure at 90% capacity
     pause_on_backpressure: bool = True  # Pause upstream on backpressure
@@ -32,6 +34,7 @@ class StreamingConfig:
 @dataclass
 class StreamingStats:
     """Statistics for streaming session."""
+
     chunks_received: int = 0
     chunks_processed: int = 0
     backpressure_events: int = 0
@@ -66,7 +69,7 @@ class StreamingHandler:
     def __init__(
         self,
         config: StreamingConfig | None = None,
-        on_progress: "ProgressCallback | None" = None,
+        on_progress: ProgressCallback | None = None,
         on_chunk: Callable[[Chunk], None] | None = None,
     ):
         self.config = config or StreamingConfig()
@@ -146,9 +149,7 @@ class StreamingHandler:
 
         elif chunk.type == ChunkType.TOOL_CALL_DELTA:
             if chunk.tool_call_id in self._tool_calls:
-                self._tool_calls[chunk.tool_call_id]["arguments"].update(
-                    chunk.tool_arguments
-                )
+                self._tool_calls[chunk.tool_call_id]["arguments"].update(chunk.tool_arguments)
 
         elif chunk.type == ChunkType.ERROR:
             logger.error(f"Stream error: {chunk.content}")
@@ -161,15 +162,18 @@ class StreamingHandler:
         # Emit progress event
         if self._on_progress:
             from harness.types import ProgressEvent
-            self._on_progress(ProgressEvent(
-                type=ProgressEventType.STREAM_BACKPRESSURE,
-                message=f"Backpressure applied: buffer at {self.buffer_usage:.0%}",
-                data={
-                    "buffer_size": len(self._buffer),
-                    "buffer_max": self.config.buffer_size,
-                    "usage": self.buffer_usage,
-                },
-            ))
+
+            self._on_progress(
+                ProgressEvent(
+                    type=ProgressEventType.STREAM_BACKPRESSURE,
+                    message=f"Backpressure applied: buffer at {self.buffer_usage:.0%}",
+                    data={
+                        "buffer_size": len(self._buffer),
+                        "buffer_max": self.config.buffer_size,
+                        "usage": self.buffer_usage,
+                    },
+                )
+            )
 
         # Wait for buffer to drain
         pause_start = asyncio.get_event_loop().time()
@@ -202,10 +206,7 @@ class StreamingHandler:
         Returns:
             List of tool call dictionaries with name and arguments
         """
-        return [
-            {"id": id_, **data}
-            for id_, data in self._tool_calls.items()
-        ]
+        return [{"id": id_, **data} for id_, data in self._tool_calls.items()]
 
     def clear(self) -> None:
         """Clear buffer and accumulated content."""

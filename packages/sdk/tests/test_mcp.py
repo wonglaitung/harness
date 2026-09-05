@@ -3,9 +3,9 @@ Tests for MCP (Model Context Protocol) Support.
 """
 
 import json
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from harness.mcp import (
     HTTPTransport,
@@ -14,9 +14,9 @@ from harness.mcp import (
     MCPServerConfig,
     MCPServerInfo,
     MCPTool,
+    MCPToolWrapper,
     MCPTransport,
     StdioTransport,
-    MCPToolWrapper,
 )
 
 
@@ -155,7 +155,7 @@ class TestMCPClient:
 
         transport.send = mock_send
 
-        client = MCPClient(transport)
+        _ = MCPClient(transport)
 
         # Note: Full connect test would require more complex mocking
         # This tests the basic structure

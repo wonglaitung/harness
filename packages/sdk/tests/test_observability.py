@@ -8,7 +8,6 @@ from harness.core.observability import (
     SpanBuilder,
     get_observability_manager,
     is_tracing,
-    setup_observability,
     traced_operation,
 )
 from harness.types import ProgressEvent, ProgressEventType, TokenUsage
@@ -119,7 +118,7 @@ class TestTracedOperation:
 
     def test_traced_operation_disabled(self):
         """Test traced_operation when disabled."""
-        with traced_operation("test.op", {"attr": "value"}) as span:
+        with traced_operation("test.op", {"attr": "value"}):
             # Should work without error even when disabled
             pass
 
@@ -150,7 +149,7 @@ class TestGlobalFunctions:
     def test_is_tracing_disabled(self):
         """Test is_tracing when disabled."""
         # Create a disabled manager
-        manager = ObservabilityManager(ObservabilityConfig(enabled=False))
+        _ = ObservabilityManager(ObservabilityConfig(enabled=False))
         # Don't set it as global to avoid affecting other tests
 
         # The global manager might be configured differently

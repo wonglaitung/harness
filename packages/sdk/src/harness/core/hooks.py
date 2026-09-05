@@ -11,17 +11,17 @@ This is the foundation for advanced features like:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
-from harness.types import HookAction, HookContext, HookPoint, HookResult, Message
+from harness.types import HookAction, HookContext, HookPoint, HookResult
 
 if TYPE_CHECKING:
-    from harness.core.agent_loop import AgentLoop
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -207,9 +207,7 @@ class HookManager:
                 result = await hook.execute(context)
 
                 if result.action != HookAction.CONTINUE:
-                    logger.debug(
-                        f"Hook {hook} returned action {result.action} at {point}"
-                    )
+                    logger.debug(f"Hook {hook} returned action {result.action} at {point}")
                     return result
 
             except Exception as e:
@@ -227,6 +225,7 @@ class HookManager:
 # =============================================================================
 # Built-in Hooks
 # =============================================================================
+
 
 class LoggingHook(LifecycleHook):
     """
@@ -282,9 +281,7 @@ class AbortOnDangerousToolHook(LifecycleHook):
             for blocked in self.blocked_tools:
                 if blocked in command.split():
                     logger.warning(f"Blocked dangerous command: {blocked}")
-                    return HookResult.abort(
-                        f"Command contains blocked tool '{blocked}'"
-                    )
+                    return HookResult.abort(f"Command contains blocked tool '{blocked}'")
 
         return HookResult.continue_()
 
@@ -382,39 +379,35 @@ class ConfirmationHook(LifecycleHook):
     # Based on: Claude Code security research, OWASP guidelines, and cross-platform considerations
     DANGEROUS_COMMANDS = {
         # === System-destructive commands ===
-        "rm",           # Delete files
-        "rmdir",        # Delete directories
-        "del",          # Windows delete
-        "erase",        # Windows erase
-        "format",       # Format disk (Windows)
-        "diskpart",     # Windows disk management
-        "dd",           # Disk duplicator (can wipe disks)
-        "mkfs",         # Make filesystem
-        "fdisk",        # Disk partitioning
-        "shred",        # Secure delete
-        "wipefs",       # Wipe filesystem signature
-
+        "rm",  # Delete files
+        "rmdir",  # Delete directories
+        "del",  # Windows delete
+        "erase",  # Windows erase
+        "format",  # Format disk (Windows)
+        "diskpart",  # Windows disk management
+        "dd",  # Disk duplicator (can wipe disks)
+        "mkfs",  # Make filesystem
+        "fdisk",  # Disk partitioning
+        "shred",  # Secure delete
+        "wipefs",  # Wipe filesystem signature
         # === Privilege escalation ===
-        "sudo",         # Run as superuser (Linux/macOS)
-        "su",           # Switch user
-        "runas",        # Windows run as administrator
-        "doas",         # OpenBSD alternative to sudo
-        "pkexec",       # PolicyKit execute
-
+        "sudo",  # Run as superuser (Linux/macOS)
+        "su",  # Switch user
+        "runas",  # Windows run as administrator
+        "doas",  # OpenBSD alternative to sudo
+        "pkexec",  # PolicyKit execute
         # === Permission changes ===
-        "chmod",        # Change mode
-        "chown",        # Change owner
-        "chgrp",        # Change group
-        "icacls",       # Windows ACL management
-        "attrib",       # Windows file attributes
-
+        "chmod",  # Change mode
+        "chown",  # Change owner
+        "chgrp",  # Change group
+        "icacls",  # Windows ACL management
+        "attrib",  # Windows file attributes
         # === Git destructive operations ===
         "git push --force",
         "git push -f",
         "git reset --hard",
         "git clean -fd",
         "git checkout --",  # Discard changes
-
         # === Package publishing ===
         "npm publish",
         "yarn publish",
@@ -423,57 +416,50 @@ class ConfirmationHook(LifecycleHook):
         "cargo publish",
         "gem push",
         "mvn deploy",
-
         # === Network/data exfiltration ===
-        "curl | bash",      # Dangerous pipe pattern
-        "curl | sh",        # Dangerous pipe pattern
-        "wget | bash",      # Dangerous pipe pattern
-        "wget | sh",        # Dangerous pipe pattern
-        "nc -l",            # Netcat listen (potential backdoor)
-        "ncat -l",          # Ncat listen
-
+        "curl | bash",  # Dangerous pipe pattern
+        "curl | sh",  # Dangerous pipe pattern
+        "wget | bash",  # Dangerous pipe pattern
+        "wget | sh",  # Dangerous pipe pattern
+        "nc -l",  # Netcat listen (potential backdoor)
+        "ncat -l",  # Ncat listen
         # === Process/job control ===
-        "kill",         # Terminate processes
-        "killall",      # Kill all processes by name
-        "pkill",        # Kill by pattern
-        "taskkill",     # Windows kill process
-
+        "kill",  # Terminate processes
+        "killall",  # Kill all processes by name
+        "pkill",  # Kill by pattern
+        "taskkill",  # Windows kill process
         # === Environment/shell manipulation ===
-        "export",       # Set environment variable (can poison)
-        "setenv",       # Set environment
-        "source",       # Execute shell script
-        "eval",         # Evaluate expression (code execution)
-
+        "export",  # Set environment variable (can poison)
+        "setenv",  # Set environment
+        "source",  # Execute shell script
+        "eval",  # Evaluate expression (code execution)
         # === Python dangerous patterns ===
-        "python -c",    # Execute Python code
-        "python3 -c",   # Execute Python code
+        "python -c",  # Execute Python code
+        "python3 -c",  # Execute Python code
         "pip install --force",
         "pip uninstall",
-
         # === Node.js dangerous patterns ===
-        "node -e",      # Execute Node.js code
-        "node -p",      # Execute and print
+        "node -e",  # Execute Node.js code
+        "node -p",  # Execute and print
         "npm install -g",  # Global install
-
         # === Database operations ===
         "DROP TABLE",
         "DROP DATABASE",
         "TRUNCATE",
         "DELETE FROM",
-
         # === Service management ===
         "systemctl stop",
         "systemctl disable",
         "systemctl restart",
         "service stop",
-        "net stop",     # Windows service
+        "net stop",  # Windows service
     }
 
     def __init__(
         self,
-        on_confirm: "Callable[[str, dict], Coroutine[Any, Any, ConfirmationResult]]",
-        is_trusted: "Callable[[str], bool] | None" = None,
-        on_trust: "Callable[[str], None] | None" = None,
+        on_confirm: Callable[[str, dict], Coroutine[Any, Any, ConfirmationResult]],
+        is_trusted: Callable[[str], bool] | None = None,
+        on_trust: Callable[[str], None] | None = None,
         dangerous_tools: set[str] | None = None,
         dangerous_commands: set[str] | None = None,
     ):
@@ -496,11 +482,11 @@ class ConfirmationHook(LifecycleHook):
     @property
     def hook_points(self) -> list[HookPoint]:
         from harness.types import HookPoint
+
         return [HookPoint.BEFORE_TOOL_EXECUTE]
 
-    async def execute(self, context: "HookContext") -> "HookResult":
+    async def execute(self, context: HookContext) -> HookResult:
         """Check if tool requires confirmation and ask user."""
-        from harness.types import HookPoint
 
         if not self._is_dangerous(context.tool_name, context.tool_args):
             return HookResult.continue_()

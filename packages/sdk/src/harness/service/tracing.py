@@ -11,7 +11,7 @@ Python Agent Service.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 try:
     from opentelemetry import context, trace
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
     OTEL_AVAILABLE = True
     propagator = TraceContextTextMapPropagator()
 except ImportError:

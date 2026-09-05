@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -30,8 +29,8 @@ from harness.orchestrator.types import (
 )
 
 if TYPE_CHECKING:
-    from harness.orchestrator.core import LoopOrchestrator
     from harness.loop.types import GoalConfig
+    from harness.orchestrator.core import LoopOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +122,7 @@ class WorkflowEngine:
 
             # Determine final status
             all_success = all(
-                s.status in (StepStatus.SUCCESS, StepStatus.SKIPPED)
-                for s in result.steps.values()
+                s.status in (StepStatus.SUCCESS, StepStatus.SKIPPED) for s in result.steps.values()
             )
             result.status = WorkflowStatus.COMPLETED if all_success else WorkflowStatus.FAILED
 
@@ -226,12 +224,13 @@ class WorkflowEngine:
                     return step_result
 
             # Check condition
-            if step.condition:
-                if not await self._evaluate_condition_safe(step.condition, result, context):
-                    step_result.status = StepStatus.SKIPPED
-                    graph.mark_skipped(step.name)
-                    logger.info(f"Step '{step.name}' skipped due to condition: {step.condition}")
-                    return step_result
+            if step.condition and not await self._evaluate_condition_safe(
+                step.condition, result, context
+            ):
+                step_result.status = StepStatus.SKIPPED
+                graph.mark_skipped(step.name)
+                logger.info(f"Step '{step.name}' skipped due to condition: {step.condition}")
+                return step_result
 
             # Render goal with template variables
             rendered_goal = self._render_goal(step.goal, result, context)
@@ -257,9 +256,7 @@ class WorkflowEngine:
             # Update graph state
             graph.mark_completed(step.name)
 
-            logger.info(
-                f"Step '{step.name}' completed with status {step_result.status.value}"
-            )
+            logger.info(f"Step '{step.name}' completed with status {step_result.status.value}")
 
         except Exception as e:
             step_result.status = StepStatus.FAILED
@@ -324,7 +321,7 @@ class WorkflowEngine:
 
         # Simple template rendering
         rendered = goal_template
-        pattern = r'\{\{([^}]+)\}\}'
+        pattern = r"\{\{([^}]+)\}\}"
         matches = re.findall(pattern, goal_template)
 
         for match in matches:
@@ -421,7 +418,7 @@ class WorkflowEngine:
                 ),
                 timeout=5.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Condition evaluation timed out: {condition}")
             return False
         except Exception as e:
@@ -506,7 +503,7 @@ class WorkflowEngine:
             graph: Dependency graph with skip state
             result: Workflow result to update
         """
-        for step_name, step in graph._steps.items():
+        for step_name, _step in graph._steps.items():
             if step_name not in result.steps and graph.is_skipped(step_name):
                 result.steps[step_name] = StepResult(
                     step_name=step_name,

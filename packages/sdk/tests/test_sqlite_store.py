@@ -1,8 +1,8 @@
 """Tests for SQLite session storage."""
 
 import asyncio
+import importlib.util
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,11 +11,7 @@ from harness.memory.store import AsyncSQLiteSessionStore, SQLiteSessionStore
 from harness.types import Message, Session
 
 # Check if aiosqlite is available
-try:
-    import aiosqlite
-    AIOSQLITE_AVAILABLE = True
-except ImportError:
-    AIOSQLITE_AVAILABLE = False
+AIOSQLITE_AVAILABLE = importlib.util.find_spec("aiosqlite") is not None
 
 
 class TestSQLiteSessionStore:

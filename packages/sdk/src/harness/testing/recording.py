@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from harness.sdk.harness import AgentHarness
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RecordingConfig:
     """Configuration for recording."""
+
     recording_dir: Path = field(default_factory=lambda: Path(".harness_recordings"))
     auto_save: bool = True
     include_metadata: bool = True
@@ -60,7 +61,7 @@ class RecordingHarness:
 
     def __init__(
         self,
-        harness: "AgentHarness",
+        harness: AgentHarness,
         config: RecordingConfig | None = None,
     ):
         self.harness = harness
@@ -80,43 +81,49 @@ class RecordingHarness:
         system: str | None,
     ) -> None:
         """Record an LLM request."""
-        self._interactions.append({
-            "type": "llm_request",
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "messages": messages,
-                "tools": tools,
-                "system": system,
-            },
-        })
-
-    def record_llm_response(self, response: "LLMResponse") -> None:
-        """Record an LLM response."""
-        self._interactions.append({
-            "type": "llm_response",
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "content": response.content,
-                "tool_calls": [tc.to_dict() for tc in response.tool_calls],
-                "stop_reason": response.stop_reason.value,
-                "usage": {
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
+        self._interactions.append(
+            {
+                "type": "llm_request",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "messages": messages,
+                    "tools": tools,
+                    "system": system,
                 },
-            },
-        })
+            }
+        )
 
-    def record_tool_call(self, tool_call: "ToolCall") -> None:
+    def record_llm_response(self, response: LLMResponse) -> None:
+        """Record an LLM response."""
+        self._interactions.append(
+            {
+                "type": "llm_response",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "content": response.content,
+                    "tool_calls": [tc.to_dict() for tc in response.tool_calls],
+                    "stop_reason": response.stop_reason.value,
+                    "usage": {
+                        "input_tokens": response.usage.input_tokens,
+                        "output_tokens": response.usage.output_tokens,
+                    },
+                },
+            }
+        )
+
+    def record_tool_call(self, tool_call: ToolCall) -> None:
         """Record a tool call."""
-        self._interactions.append({
-            "type": "tool_call",
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "id": tool_call.id,
-                "name": tool_call.name,
-                "arguments": tool_call.arguments,
-            },
-        })
+        self._interactions.append(
+            {
+                "type": "tool_call",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "arguments": tool_call.arguments,
+                },
+            }
+        )
 
     def record_tool_result(
         self,
@@ -126,32 +133,36 @@ class RecordingHarness:
         success: bool,
     ) -> None:
         """Record a tool result."""
-        self._interactions.append({
-            "type": "tool_result",
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "result": result[:5000],  # Truncate large results
-                "success": success,
-            },
-        })
-
-    def record_loop_result(self, result: "LoopResult") -> None:
-        """Record final loop result."""
-        self._interactions.append({
-            "type": "loop_result",
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "status": result.status.value,
-                "iterations": result.iterations,
-                "final_response": result.final_response,
-                "token_usage": {
-                    "input_tokens": result.token_usage.input_tokens,
-                    "output_tokens": result.token_usage.output_tokens,
+        self._interactions.append(
+            {
+                "type": "tool_result",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "result": result[:5000],  # Truncate large results
+                    "success": success,
                 },
-            },
-        })
+            }
+        )
+
+    def record_loop_result(self, result: LoopResult) -> None:
+        """Record final loop result."""
+        self._interactions.append(
+            {
+                "type": "loop_result",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "status": result.status.value,
+                    "iterations": result.iterations,
+                    "final_response": result.final_response,
+                    "token_usage": {
+                        "input_tokens": result.token_usage.input_tokens,
+                        "output_tokens": result.token_usage.output_tokens,
+                    },
+                },
+            }
+        )
 
     def save_recording(self, name: str) -> Path:
         """
@@ -180,7 +191,9 @@ class RecordingHarness:
             "interactions": self._interactions,
             "metadata": {
                 "total_interactions": len(self._interactions),
-                "harness_model": self.harness.config.model if hasattr(self.harness, 'config') else "unknown",
+                "harness_model": self.harness.config.model
+                if hasattr(self.harness, "config")
+                else "unknown",
             },
         }
 

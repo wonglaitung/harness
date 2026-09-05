@@ -15,7 +15,7 @@ from harness.tools.base import Tool, ToolContext
 from harness.types import ToolResult
 
 if TYPE_CHECKING:
-    from bs4 import NavigableString, Tag
+    from bs4 import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -338,7 +338,9 @@ class GlobTool(Tool):
         if not base.is_absolute():
             base = context.working_directory / base
 
-        logger.debug(f"GlobTool: pattern={pattern}, base={base}, working_dir={context.working_directory}")
+        logger.debug(
+            f"GlobTool: pattern={pattern}, base={base}, working_dir={context.working_directory}"
+        )
 
         try:
             # Find matches
@@ -646,9 +648,10 @@ class WebSearchTool(Tool):
                             break
                         elif response.status == 202:
                             # 202 means request accepted but not complete, retry
-                            last_error = f"Search API busy (HTTP 202), retrying..."
+                            last_error = "Search API busy (HTTP 202), retrying..."
                             if attempt < max_retries:
                                 import asyncio
+
                                 await asyncio.sleep(1)  # Wait before retry
                                 continue
                             return ToolResult(
@@ -683,16 +686,12 @@ class WebSearchTool(Tool):
 
             # Related topics
             for topic in data.get("RelatedTopics", [])[:num_results]:
-                if isinstance(topic, dict):
-                    if "Text" in topic:
-                        results.append(f"- {topic['Text']}")
-                        if "FirstURL" in topic:
-                            results.append(f"  URL: {topic['FirstURL']}")
+                if isinstance(topic, dict) and "Text" in topic:
+                    results.append(f"- {topic['Text']}")
+                    if "FirstURL" in topic:
+                        results.append(f"  URL: {topic['FirstURL']}")
 
-            if not results:
-                content = f"No results found for: {query}"
-            else:
-                content = "\n".join(results)
+            content = f"No results found for: {query}" if not results else "\n".join(results)
 
             return ToolResult(
                 tool_call_id="",
@@ -774,9 +773,7 @@ class WebFetchTool(Tool):
                     "User-Agent": "Mozilla/5.0 (compatible; HarnessBot/1.0)",
                 }
 
-                async with session.get(
-                    url, headers=headers, timeout=30
-                ) as response:
+                async with session.get(url, headers=headers, timeout=30) as response:
                     if response.status != 200:
                         return ToolResult(
                             tool_call_id="",
@@ -885,7 +882,8 @@ class WebToMarkdownTool(Tool):
                 },
                 "selector": {
                     "type": "string",
-                    "description": "CSS selector to extract specific content (optional, defaults to main content)",
+                    "description": "CSS selector to extract specific content "
+                    "(optional, defaults to main content)",
                 },
                 "max_length": {
                     "type": "integer",
@@ -925,7 +923,7 @@ class WebToMarkdownTool(Tool):
             )
 
         try:
-            from bs4 import BeautifulSoup, NavigableString, Tag
+            from bs4 import BeautifulSoup
         except ImportError:
             return ToolResult(
                 tool_call_id="",
@@ -960,21 +958,48 @@ class WebToMarkdownTool(Tool):
             soup = BeautifulSoup(html, "html.parser")
 
             # Remove unwanted elements
-            for element in soup([
-                "script", "style", "nav", "footer", "header",
-                "aside", "iframe", "noscript", "form",
-                "button", "input", "select", "textarea",
-            ]):
+            for element in soup(
+                [
+                    "script",
+                    "style",
+                    "nav",
+                    "footer",
+                    "header",
+                    "aside",
+                    "iframe",
+                    "noscript",
+                    "form",
+                    "button",
+                    "input",
+                    "select",
+                    "textarea",
+                ]
+            ):
                 element.decompose()
 
             # Remove elements with common ad/class names
-            for class_name in ["ad", "ads", "advertisement", "sidebar", "comment", "comments", "social", "share", "related", "recommendation"]:
-                for element in soup.find_all(class_=lambda x: x and class_name in str(x).lower()):
+            for class_name in [
+                "ad",
+                "ads",
+                "advertisement",
+                "sidebar",
+                "comment",
+                "comments",
+                "social",
+                "share",
+                "related",
+                "recommendation",
+            ]:
+                for element in soup.find_all(
+                    class_=lambda x, name=class_name: x and name in str(x).lower()
+                ):
                     element.decompose()
 
             # Remove elements with ad-related IDs
             for id_pattern in ["ad", "ads", "sidebar", "comment"]:
-                for element in soup.find_all(id=lambda x: x and id_pattern in str(x).lower()):
+                for element in soup.find_all(
+                    id=lambda x, name=id_pattern: x and name in str(x).lower()
+                ):
                     element.decompose()
 
             # Extract main content
@@ -992,10 +1017,18 @@ class WebToMarkdownTool(Tool):
             else:
                 # Try to find main content areas
                 main_content = (
-                    soup.find("article") or
-                    soup.find("main") or
-                    soup.find("div", class_=lambda x: x and any(c in str(x).lower() for c in ["content", "article", "post", "entry"])) or
-                    soup.find("body")
+                    soup.find("article")
+                    or soup.find("main")
+                    or soup.find(
+                        "div",
+                        class_=lambda x: (
+                            x
+                            and any(
+                                c in str(x).lower() for c in ["content", "article", "post", "entry"]
+                            )
+                        ),
+                    )
+                    or soup.find("body")
                 )
 
                 if not main_content:
@@ -1023,7 +1056,7 @@ class WebToMarkdownTool(Tool):
                 content=markdown,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(
                 tool_call_id="",
                 success=False,
@@ -1109,7 +1142,11 @@ class WebToMarkdownTool(Tool):
             text = element.get_text()
             if "\n" in text:
                 # Multi-line code block
-                lang = element.get("class", [""])[0].replace("language-", "") if element.get("class") else ""
+                lang = (
+                    element.get("class", [""])[0].replace("language-", "")
+                    if element.get("class")
+                    else ""
+                )
                 return f"\n\n```{lang}\n{text}\n```\n\n"
             else:
                 # Inline code
@@ -1231,7 +1268,7 @@ class WebToMarkdownTool(Tool):
                 # Pad row if needed
                 while len(row) < len(header):
                     row.append(" ")
-                md_lines.append("| " + " | ".join(row[:len(header)]) + " |")
+                md_lines.append("| " + " | ".join(row[: len(header)]) + " |")
 
         return "\n\n" + "\n".join(md_lines) + "\n\n"
 
@@ -1261,13 +1298,14 @@ class UpdateCoreMemoryTool(Tool):
             "更新用户偏好或项目约定到长期记忆。\n\n"
             "重要规则：\n"
             "1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述\n"
-            "   - 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」\n"
+            "   - 用户说「使用 cmd，不要用 powershell」"
+            "→ 存储「Shell：使用 cmd（不使用 PowerShell）」\n"
             "   - 用户说「我使用 Windows」→ 存储「操作系统：Windows」\n"
             "2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加\n"
             "3. **适用场景**：用户提到长期偏好、工作环境、项目约束等\n\n"
             "示例：\n"
-            "- 用户：「我习惯用深色主题」→ category=user_profile, content=\"主题偏好：深色\"\n"
-            "- 用户：「以后回复简短一点」→ category=learned_patterns, content=\"回复风格：简洁\""
+            '- 用户：「我习惯用深色主题」→ category=user_profile, content="主题偏好：深色"\n'
+            '- 用户：「以后回复简短一点」→ category=learned_patterns, content="回复风格：简洁"'
         )
 
     @property
@@ -1361,7 +1399,7 @@ class UpdateCoreMemoryTool(Tool):
                 return ToolResult(
                     tool_call_id="",
                     success=True,
-                    content=f"跳过重复记忆: 已有类似内容",
+                    content="跳过重复记忆: 已有类似内容",
                 )
 
         elif action == "remove":

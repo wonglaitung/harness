@@ -4,11 +4,6 @@ MCP (Model Context Protocol) Support.
 Provides integration with external MCP servers for tool extension.
 """
 
-from harness.mcp.transport import (
-    HTTPTransport,
-    MCPTransport,
-    StdioTransport,
-)
 from harness.mcp.client import (
     MCPClient,
     MCPServerInfo,
@@ -19,6 +14,11 @@ from harness.mcp.manager import (
     MCPServerConfig,
 )
 from harness.mcp.tool_wrapper import MCPToolWrapper
+from harness.mcp.transport import (
+    HTTPTransport,
+    MCPTransport,
+    StdioTransport,
+)
 
 __all__ = [
     # Transport

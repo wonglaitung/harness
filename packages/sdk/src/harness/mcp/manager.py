@@ -6,12 +6,11 @@ Manages multiple MCP server connections and integrates tools into Harness.
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from harness.mcp.client import MCPClient, MCPServerInfo
 from harness.mcp.transport import HTTPTransport, StdioTransport
@@ -31,17 +30,17 @@ class MCPServerConfig:
 
     name: str
     transport: str  # "stdio" or "http"
-    command: Optional[str] = None
-    args: List[str] = field(default_factory=list)
-    url: Optional[str] = None
-    env: Dict[str, str] = field(default_factory=dict)
-    headers: Dict[str, str] = field(default_factory=dict)
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    url: str | None = None
+    env: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     timeout: float = 30.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format."""
-        result: Dict[str, Any] = {"transport": self.transport}
+        result: dict[str, Any] = {"transport": self.transport}
 
         if self.command:
             result["command"] = self.command
@@ -59,7 +58,7 @@ class MCPServerConfig:
         return result
 
     @classmethod
-    def from_dict(cls, name: str, config: Dict[str, Any]) -> "MCPServerConfig":
+    def from_dict(cls, name: str, config: dict[str, Any]) -> MCPServerConfig:
         """Create from dictionary format."""
         transport = config.get("transport", "stdio")
 
@@ -102,7 +101,7 @@ class MCPManager:
 
     def __init__(
         self,
-        tool_registry: Optional["ToolRegistry"] = None,
+        tool_registry: ToolRegistry | None = None,
         auto_load_configs: bool = True,
     ):
         """
@@ -113,9 +112,9 @@ class MCPManager:
             auto_load_configs: Whether to auto-load config files
         """
         self.tool_registry = tool_registry
-        self._clients: Dict[str, MCPClient] = {}
-        self._configs: Dict[str, MCPServerConfig] = {}
-        self._tool_wrappers: Dict[str, List["MCPToolWrapper"]] = {}
+        self._clients: dict[str, MCPClient] = {}
+        self._configs: dict[str, MCPServerConfig] = {}
+        self._tool_wrappers: dict[str, list[MCPToolWrapper]] = {}
 
         if auto_load_configs:
             self._load_default_configs()
@@ -164,6 +163,7 @@ class MCPManager:
             path: Config file path
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         try:
@@ -232,11 +232,11 @@ class MCPManager:
             return True
         return False
 
-    def get_server_config(self, name: str) -> Optional[MCPServerConfig]:
+    def get_server_config(self, name: str) -> MCPServerConfig | None:
         """Get server configuration by name."""
         return self._configs.get(name)
 
-    def list_server_configs(self) -> List[MCPServerConfig]:
+    def list_server_configs(self) -> list[MCPServerConfig]:
         """List all server configurations."""
         return list(self._configs.values())
 
@@ -255,6 +255,7 @@ class MCPManager:
             RuntimeError: If connection fails
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         if name in self._clients:
@@ -272,9 +273,16 @@ class MCPManager:
             raise ValueError(f"MCP server {name} is disabled")
 
         logger.info(f"[MCPManager] Connecting to MCP server: {name} (transport={config.transport})")
-        logger.debug(f"[MCPManager] Config: command={config.command}, args={config.args}, url={config.url}")
+        logger.debug(
+            f"[MCPManager] Config: command={config.command}, args={config.args}, url={config.url}"
+        )
         if config.env:
-            masked_env = {k: '***' + v[-4:] if len(v) > 4 and ('KEY' in k.upper() or 'SECRET' in k.upper()) else v for k, v in config.env.items()}
+            masked_env = {
+                k: "***" + v[-4:]
+                if len(v) > 4 and ("KEY" in k.upper() or "SECRET" in k.upper())
+                else v
+                for k, v in config.env.items()
+            }
             logger.debug(f"[MCPManager] Environment: {masked_env}")
 
         # Create transport based on config
@@ -282,7 +290,7 @@ class MCPManager:
             if not config.command:
                 logger.error(f"[MCPManager] Stdio transport requires command for {name}")
                 raise ValueError(f"Stdio transport requires command for {name}")
-            logger.debug(f"[MCPManager] Creating StdioTransport")
+            logger.debug("[MCPManager] Creating StdioTransport")
             transport = StdioTransport(
                 command=config.command,
                 args=config.args,
@@ -292,7 +300,7 @@ class MCPManager:
             if not config.url:
                 logger.error(f"[MCPManager] HTTP transport requires url for {name}")
                 raise ValueError(f"HTTP transport requires url for {name}")
-            logger.debug(f"[MCPManager] Creating HTTPTransport")
+            logger.debug("[MCPManager] Creating HTTPTransport")
             transport = HTTPTransport(
                 url=config.url,
                 headers=config.headers,
@@ -303,25 +311,25 @@ class MCPManager:
             raise ValueError(f"Unknown transport type: {config.transport}")
 
         # Create client and connect
-        logger.debug(f"[MCPManager] Creating MCPClient")
+        logger.debug("[MCPManager] Creating MCPClient")
         client = MCPClient(transport)
-        logger.info(f"[MCPManager] Calling client.connect()")
+        logger.info("[MCPManager] Calling client.connect()")
         try:
             await client.connect()
-            logger.info(f"[MCPManager] client.connect() completed successfully")
+            logger.info("[MCPManager] client.connect() completed successfully")
         except Exception as e:
             logger.error(f"[MCPManager] client.connect() failed: {e}")
             raise
 
         # Register tools
-        logger.debug(f"[MCPManager] Registering tools")
+        logger.debug("[MCPManager] Registering tools")
         self._register_tools(name, client)
 
         self._clients[name] = client
         logger.info(f"[MCPManager] MCP server {name} connected successfully")
         return client
 
-    async def connect_all(self) -> Dict[str, MCPServerInfo]:
+    async def connect_all(self) -> dict[str, MCPServerInfo]:
         """
         Connect to all enabled MCP servers.
 
@@ -329,10 +337,11 @@ class MCPManager:
             Dictionary of server name to server info
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         logger.info(f"Connecting to all MCP servers ({len(self._configs)} configured)")
-        results: Dict[str, MCPServerInfo] = {}
+        results: dict[str, MCPServerInfo] = {}
 
         for name, config in self._configs.items():
             if not config.enabled:
@@ -361,6 +370,7 @@ class MCPManager:
             True if server was disconnected
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         if name not in self._clients:
@@ -379,6 +389,7 @@ class MCPManager:
     async def disconnect_all(self) -> None:
         """Disconnect from all MCP servers."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         logger.info(f"Disconnecting all MCP servers ({len(self._clients)} connected)")
@@ -394,11 +405,12 @@ class MCPManager:
             client: Connected MCP client
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         from harness.mcp.tool_wrapper import MCPToolWrapper
 
-        wrappers: List[MCPToolWrapper] = []
+        wrappers: list[MCPToolWrapper] = []
 
         for mcp_tool in client.tools:
             wrapper = MCPToolWrapper(
@@ -431,6 +443,7 @@ class MCPManager:
             server_name: Server name
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         wrappers = self._tool_wrappers.pop(server_name, [])
@@ -438,20 +451,18 @@ class MCPManager:
 
         if self.tool_registry:
             for wrapper in wrappers:
-                try:
+                with contextlib.suppress(KeyError):
                     self.tool_registry.unregister(wrapper.name)
-                except KeyError:
-                    pass
 
-    def get_client(self, name: str) -> Optional[MCPClient]:
+    def get_client(self, name: str) -> MCPClient | None:
         """Get connected client by name."""
         return self._clients.get(name)
 
-    def list_connected_servers(self) -> List[str]:
+    def list_connected_servers(self) -> list[str]:
         """List connected server names."""
         return list(self._clients.keys())
 
-    def get_server_tools(self, name: str) -> List["MCPToolWrapper"]:
+    def get_server_tools(self, name: str) -> list[MCPToolWrapper]:
         """Get tools from a specific server."""
         return self._tool_wrappers.get(name, [])
 
@@ -459,9 +470,9 @@ class MCPManager:
         self,
         server_name: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Directly call a tool on an MCP server.
 

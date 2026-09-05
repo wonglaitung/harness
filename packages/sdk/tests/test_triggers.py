@@ -25,8 +25,6 @@ from harness.triggers import (
     TriggerState,
     TriggerType,
 )
-from harness.triggers.types import TriggerRegistration
-
 
 # ============================================================================
 # TriggerAction Tests
@@ -633,11 +631,11 @@ class TestAutomationWithManager:
 
     def test_get_global_manager_singleton(self):
         """Test that get_global_manager returns a singleton."""
-        from harness.testing import MockHarness
         from harness.loop.automation import (
             get_global_manager,
             reset_global_manager,
         )
+        from harness.testing import MockHarness
 
         reset_global_manager()
 
@@ -652,12 +650,12 @@ class TestAutomationWithManager:
     @pytest.mark.asyncio
     async def test_automation_uses_global_manager(self):
         """Test that Automation uses the global TriggerManager."""
-        from harness.testing import MockHarness
         from harness.loop.automation import (
             Automation,
             get_global_manager,
             reset_global_manager,
         )
+        from harness.testing import MockHarness
 
         reset_global_manager()
 
@@ -680,8 +678,8 @@ class TestAutomationWithManager:
     @pytest.mark.asyncio
     async def test_automation_with_explicit_manager(self):
         """Test Automation with explicitly provided TriggerManager."""
-        from harness.testing import MockHarness
         from harness.loop.automation import Automation, reset_global_manager
+        from harness.testing import MockHarness
 
         reset_global_manager()
 
@@ -703,8 +701,8 @@ class TestAutomationWithManager:
     @pytest.mark.asyncio
     async def test_automation_pause_resume(self):
         """Test Automation pause and resume with TriggerManager."""
-        from harness.testing import MockHarness
         from harness.loop.automation import Automation, reset_global_manager
+        from harness.testing import MockHarness
 
         reset_global_manager()
 
@@ -730,8 +728,8 @@ class TestAutomationWithManager:
     @pytest.mark.asyncio
     async def test_automation_result_syncs_from_manager(self):
         """Test that Automation.result syncs from TriggerManager stats."""
-        from harness.testing import MockHarness
         from harness.loop.automation import Automation, reset_global_manager
+        from harness.testing import MockHarness
 
         reset_global_manager()
 

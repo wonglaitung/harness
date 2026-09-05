@@ -25,6 +25,7 @@ class BudgetLevel(Enum):
     - CRITICAL: Near limits (critical_threshold)
     - EXCEEDED: Budget exceeded, action required
     """
+
     NORMAL = "normal"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -48,6 +49,7 @@ class StepBudgetConfig:
         action_on_exceed: Action when budget exceeded (stop | warn | throttle)
         throttle_ratio: Ratio of budget to use when throttling (default 0.5)
     """
+
     max_iterations_per_task: int = 50
     max_tool_calls_per_step: int = 10
     max_tool_calls_per_task: int = 200
@@ -89,6 +91,7 @@ class StepUsage:
         task_start_time: When the task started
         last_step_time: When the last step started
     """
+
     iterations: int = 0
     tool_calls_total: int = 0
     tool_calls_this_step: int = 0
@@ -127,6 +130,7 @@ class BudgetCheckResult:
         should_stop: True if execution should stop
         throttle_limit: Optional throttle limit for tool calls
     """
+
     level: BudgetLevel
     is_within_budget: bool
     message: str
@@ -255,15 +259,24 @@ class StepBudgetController:
         projected_total = self._usage.tool_calls_total + 1
         projected_step = self._usage.tool_calls_this_step + 1
 
-        logger.info(f"Step budget check: tool={tool_name}, projected_step={projected_step}/{self.config.max_tool_calls_per_step}, projected_total={projected_total}/{self.config.max_tool_calls_per_task}")
+        logger.info(
+            f"Step budget check: tool={tool_name}, "
+            f"projected_step={projected_step}/{self.config.max_tool_calls_per_step}, "
+            f"projected_total={projected_total}/{self.config.max_tool_calls_per_task}"
+        )
 
         # Check step limit first (more restrictive)
         if projected_step > self.config.max_tool_calls_per_step:
-            logger.warning(f"Step budget exceeded: {projected_step}/{self.config.max_tool_calls_per_step}")
+            logger.warning(
+                f"Step budget exceeded: {projected_step}/{self.config.max_tool_calls_per_step}"
+            )
             return BudgetCheckResult(
                 level=BudgetLevel.EXCEEDED,
                 is_within_budget=False,
-                message=f"Step tool call limit exceeded: {projected_step}/{self.config.max_tool_calls_per_step}",
+                message=(
+                    f"Step tool call limit exceeded: {projected_step}/"
+                    f"{self.config.max_tool_calls_per_step}"
+                ),
                 should_stop=True,
             )
 
@@ -305,24 +318,29 @@ class StepBudgetController:
             if self.config.action_on_exceed == "stop":
                 should_stop = True
             elif self.config.action_on_exceed == "throttle":
-                throttle_limit = max(
-                    1,
-                    int(remaining_tool_calls * self.config.throttle_ratio)
-                )
+                throttle_limit = max(1, int(remaining_tool_calls * self.config.throttle_ratio))
 
         # Generate message
         if level == BudgetLevel.NORMAL:
-            message = f"Budget OK: {self._usage.iterations}/{self.config.max_iterations_per_task} iterations, {self._usage.tool_calls_total}/{self.config.max_tool_calls_per_task} tool calls"
+            message = (
+                f"Budget OK: {self._usage.iterations}/{self.config.max_iterations_per_task} "
+                f"iterations, {self._usage.tool_calls_total}/"
+                f"{self.config.max_tool_calls_per_task} tool calls"
+            )
         elif level == BudgetLevel.WARNING:
             message = f"Budget warning: {max_ratio:.0%} used"
         elif level == BudgetLevel.CRITICAL:
             message = f"Budget critical: {max_ratio:.0%} used, consider stopping"
         else:  # EXCEEDED
-            message = f"Budget exceeded: iterations={self._usage.iterations}, tool_calls={self._usage.tool_calls_total}"
+            message = (
+                f"Budget exceeded: iterations={self._usage.iterations}, "
+                f"tool_calls={self._usage.tool_calls_total}"
+            )
 
         return BudgetCheckResult(
             level=level,
-            is_within_budget=level != BudgetLevel.EXCEEDED or self.config.action_on_exceed != "stop",
+            is_within_budget=level != BudgetLevel.EXCEEDED
+            or self.config.action_on_exceed != "stop",
             message=message,
             remaining_iterations=remaining_iterations,
             remaining_tool_calls=remaining_tool_calls,
@@ -366,11 +384,15 @@ class StepBudgetController:
             elif self.config.action_on_exceed == "throttle":
                 throttle_limit = max(1, int(remaining_tool_calls * self.config.throttle_ratio))
 
-        message = f"Projected budget: {projected_tool_calls}/{self.config.max_tool_calls_per_task} tool calls"
+        message = (
+            f"Projected budget: {projected_tool_calls}/"
+            f"{self.config.max_tool_calls_per_task} tool calls"
+        )
 
         return BudgetCheckResult(
             level=level,
-            is_within_budget=level != BudgetLevel.EXCEEDED or self.config.action_on_exceed != "stop",
+            is_within_budget=level != BudgetLevel.EXCEEDED
+            or self.config.action_on_exceed != "stop",
             message=message,
             remaining_iterations=remaining_iterations,
             remaining_tool_calls=remaining_tool_calls,
@@ -399,7 +421,9 @@ class StepBudgetController:
                 "used": self._usage.tool_calls_total,
                 "limit": self.config.max_tool_calls_per_task,
                 "remaining": remaining_tool_calls,
-                "percentage": self._usage.tool_calls_total / self.config.max_tool_calls_per_task * 100,
+                "percentage": self._usage.tool_calls_total
+                / self.config.max_tool_calls_per_task
+                * 100,
                 "this_step": self._usage.tool_calls_this_step,
                 "step_limit": self.config.max_tool_calls_per_step,
             },

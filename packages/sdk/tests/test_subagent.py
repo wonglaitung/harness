@@ -10,7 +10,6 @@ from harness.core.subagent import (
     SubAgentResult,
     SubAgentStatus,
 )
-from harness.testing.mock_harness import MockHarness, MockHarnessConfig, MockResponse
 
 
 class MockLLMClient:
@@ -21,7 +20,7 @@ class MockLLMClient:
         return "mock-model"
 
     async def call(self, messages, tools=None, system=None):
-        from harness.types import LLMResponse, TokenUsage, StopReason
+        from harness.types import LLMResponse, StopReason, TokenUsage
         return LLMResponse(
             content="Mock response",
             stop_reason=StopReason.END_TURN,

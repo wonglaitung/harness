@@ -7,9 +7,9 @@ Tests:
 - ErrorResponse: Unified error response format
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
 
 # =============================================================================
 # TracingMiddleware Tests
@@ -21,7 +21,6 @@ class TestTracingMiddleware:
 
     def test_traceparent_header_extraction(self):
         """Test extracting W3C traceparent header."""
-        from harness.service.tracing import TracingMiddleware
 
         # W3C format: version-traceid-parentid-flags
         # Example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
@@ -50,6 +49,7 @@ class TestTracingMiddleware:
     def test_middleware_without_opentelemetry(self, monkeypatch):
         """Test middleware behavior when OpenTelemetry is not available."""
         from fastapi import FastAPI
+
         from harness.service.tracing import TracingMiddleware
 
         # Create app with middleware
@@ -200,10 +200,9 @@ class TestMetricsGlobalFunctions:
 
     def test_get_metrics_collector_singleton(self):
         """Test that get_metrics_collector returns singleton."""
-        from harness.service.metrics import get_metrics_collector
-
         # Reset global state
         import harness.service.metrics as metrics_module
+        from harness.service.metrics import get_metrics_collector
         metrics_module._global_collector = None
 
         collector1 = get_metrics_collector()
@@ -234,7 +233,6 @@ class TestErrorResponse:
     def test_error_response_creation(self):
         """Test creating ErrorResponse."""
         from harness.service.error_handler import (
-            ErrorResponse,
             ErrorCode,
             create_error_response,
         )
@@ -253,8 +251,8 @@ class TestErrorResponse:
     def test_error_response_timestamp_format(self):
         """Test ErrorResponse timestamp is ISO 8601 format."""
         from harness.service.error_handler import (
-            create_error_response,
             ErrorCode,
+            create_error_response,
         )
 
         response = create_error_response(
@@ -273,8 +271,8 @@ class TestErrorResponse:
     def test_error_response_without_trace_id(self):
         """Test ErrorResponse without trace ID."""
         from harness.service.error_handler import (
-            create_error_response,
             ErrorCode,
+            create_error_response,
         )
 
         response = create_error_response(
@@ -314,8 +312,8 @@ class TestCustomExceptions:
     def test_iteration_limit_error(self):
         """Test IterationLimitError."""
         from harness.service.error_handler import (
-            IterationLimitError,
             ErrorCode,
+            IterationLimitError,
         )
 
         error = IterationLimitError(50)
@@ -326,8 +324,8 @@ class TestCustomExceptions:
     def test_stuck_detected_error(self):
         """Test StuckDetectedError."""
         from harness.service.error_handler import (
-            StuckDetectedError,
             ErrorCode,
+            StuckDetectedError,
         )
 
         error = StuckDetectedError("Repeating pattern detected")
@@ -338,8 +336,8 @@ class TestCustomExceptions:
     def test_llm_error(self):
         """Test LLMError."""
         from harness.service.error_handler import (
-            LLMError,
             ErrorCode,
+            LLMError,
         )
 
         error = LLMError("API timeout")
@@ -350,8 +348,8 @@ class TestCustomExceptions:
     def test_tool_execution_error(self):
         """Test ToolExecutionError."""
         from harness.service.error_handler import (
-            ToolExecutionError,
             ErrorCode,
+            ToolExecutionError,
         )
 
         error = ToolExecutionError("bash", "Command failed")
@@ -373,6 +371,7 @@ class TestFastAPIIntegration:
     def app(self):
         """Create test FastAPI app."""
         from fastapi import FastAPI
+
         from harness.service.tracing import TracingMiddleware
 
         app = FastAPI()
@@ -444,7 +443,7 @@ class TestRedisSessionStore:
     @pytest.mark.asyncio
     async def test_save_and_load_session(self, redis_store):
         """Test saving and loading session from Redis."""
-        from harness.types import Session, Message
+        from harness.types import Message, Session
 
         session = Session(id="test-session-123")
         session.messages.append(Message(
@@ -507,8 +506,9 @@ class TestRedisSessionStore:
     @pytest.mark.asyncio
     async def test_touch(self, redis_store):
         """Test TTL refresh."""
-        from harness.types import Session
         import asyncio
+
+        from harness.types import Session
 
         session = Session(id="touch-test-session")
         await redis_store.save(session)
@@ -533,7 +533,7 @@ class TestRedisSessionStore:
     @pytest.mark.asyncio
     async def test_session_roundtrip_with_multiple_messages(self, redis_store):
         """Test session with multiple messages."""
-        from harness.types import Session, Message
+        from harness.types import Message, Session
 
         session = Session(id="multi-msg-session")
 

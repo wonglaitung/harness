@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from harness.loop.types import GoalConfig, GoalResult
 from harness.triggers import (
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 _global_manager: TriggerManager | None = None
 
 
-def get_global_manager(agent: "AgentHarness | None" = None) -> TriggerManager:
+def get_global_manager(agent: AgentHarness | None = None) -> TriggerManager:
     """
     Get the global TriggerManager singleton.
 
@@ -73,11 +74,11 @@ class AutomationStatus(Enum):
     Automations transition through these states during their lifecycle.
     """
 
-    PENDING = "pending"       # Not started yet
-    RUNNING = "running"       # Active and monitoring
-    PAUSED = "paused"         # Temporarily paused
-    STOPPED = "stopped"       # Permanently stopped
-    ERROR = "error"           # Error state
+    PENDING = "pending"  # Not started yet
+    RUNNING = "running"  # Active and monitoring
+    PAUSED = "paused"  # Temporarily paused
+    STOPPED = "stopped"  # Permanently stopped
+    ERROR = "error"  # Error state
 
 
 @dataclass
@@ -152,13 +153,9 @@ class AutomationConfig:
             self.trigger is not None,
         ]
         if sum(triggers) == 0:
-            raise ValueError(
-                "One of schedule, interval_seconds, or trigger is required"
-            )
+            raise ValueError("One of schedule, interval_seconds, or trigger is required")
         if sum(triggers) > 1:
-            raise ValueError(
-                "Only one of schedule, interval_seconds, or trigger can be specified"
-            )
+            raise ValueError("Only one of schedule, interval_seconds, or trigger can be specified")
 
 
 @dataclass
@@ -272,7 +269,7 @@ class Automation:
         schedule: str | None = None,
         interval_seconds: int | None = None,
         **kwargs,
-    ) -> "Automation":
+    ) -> Automation:
         """
         Convenience factory method.
 
@@ -325,7 +322,7 @@ class Automation:
 
     async def start(
         self,
-        agent: "AgentHarness",
+        agent: AgentHarness,
         manager: TriggerManager | None = None,
     ) -> None:
         """
@@ -498,13 +495,10 @@ class Automation:
 
             if result.achieved:
                 logger.info(
-                    f"Automation {self.name} goal achieved in "
-                    f"{result.total_iterations} iterations"
+                    f"Automation {self.name} goal achieved in {result.total_iterations} iterations"
                 )
             else:
-                logger.warning(
-                    f"Automation {self.name} goal not achieved: {result.status.value}"
-                )
+                logger.warning(f"Automation {self.name} goal not achieved: {result.status.value}")
 
             # Handle output channels
             await self._handle_output(result)

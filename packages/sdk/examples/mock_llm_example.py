@@ -11,9 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from harness import AgentHarness, ReadTool
-from harness.llm.mock import MockLLMClient, create_tool_use_mock
-from harness.sdk.config import HarnessConfig
+from harness.llm.mock import MockLLMClient
 
 
 async def main():
@@ -32,7 +30,11 @@ async def main():
     )
     mock_llm.add_response(
         MockLLMClient.MockResponse(
-            content="Based on the pyproject.toml, this is a Python SDK for AI agents called 'harness-sdk'. It provides an embeddable framework for building AI agents with tools, memory, and skills.",
+            content=(
+                "Based on the pyproject.toml, this is a Python SDK for AI agents "
+                "called 'harness-sdk'. It provides an embeddable framework for "
+                "building AI agents with tools, memory, and skills."
+            ),
             stop_reason="end_turn",
         )
     )
@@ -71,5 +73,4 @@ async def main():
 
 if __name__ == "__main__":
     # Import MockResponse
-    from harness.llm.mock import MockResponse
     asyncio.run(main())

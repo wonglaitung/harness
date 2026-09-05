@@ -1,18 +1,19 @@
 """Tests for core types."""
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from harness.types import (
+    LLMResponse,
+    LoopResult,
+    LoopState,
     Message,
     Session,
-    ToolCall,
-    ToolResult,
-    LLMResponse,
-    LoopState,
     StopReason,
     TokenUsage,
-    LoopResult,
+    ToolCall,
+    ToolResult,
 )
 
 

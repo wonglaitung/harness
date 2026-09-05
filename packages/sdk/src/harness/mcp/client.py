@@ -7,10 +7,11 @@ Implements JSON-RPC 2.0 protocol for MCP server communication.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from harness.mcp.transport import MCPTransport
@@ -28,7 +29,7 @@ class MCPTool:
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
 
 @dataclass
@@ -41,7 +42,7 @@ class MCPServerInfo:
 
     name: str
     version: str
-    capabilities: List[str] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
 
 
 class MCPClient:
@@ -54,7 +55,7 @@ class MCPClient:
 
     def __init__(
         self,
-        transport: "MCPTransport",
+        transport: MCPTransport,
         client_name: str = "harness",
         client_version: str = "1.0.0",
     ):
@@ -70,11 +71,11 @@ class MCPClient:
         self.client_name = client_name
         self.client_version = client_version
 
-        self._server_info: Optional[MCPServerInfo] = None
-        self._tools: List[MCPTool] = []
-        self._resources: List[Dict[str, Any]] = []
-        self._request_handlers: Dict[str, asyncio.Future[Dict[str, Any]]] = {}
-        self._message_task: Optional[asyncio.Task] = None
+        self._server_info: MCPServerInfo | None = None
+        self._tools: list[MCPTool] = []
+        self._resources: list[dict[str, Any]] = []
+        self._request_handlers: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._message_task: asyncio.Task | None = None
         self._connected = False
 
     async def connect(self) -> MCPServerInfo:
@@ -85,28 +86,31 @@ class MCPClient:
             Server information after successful initialization
         """
         if self._connected:
-            logger.debug(f"[MCPClient] Already connected to {self._server_info.name if self._server_info else 'unknown'}")
+            logger.debug(
+                f"[MCPClient] Already connected to "
+                f"{self._server_info.name if self._server_info else 'unknown'}"
+            )
             return self._server_info
 
-        logger.info(f"[MCPClient] Starting connection process...")
+        logger.info("[MCPClient] Starting connection process...")
         logger.debug(f"[MCPClient] Transport type: {type(self.transport).__name__}")
 
         # Connect transport
-        logger.info(f"[MCPClient] Connecting transport...")
+        logger.info("[MCPClient] Connecting transport...")
         try:
             await self.transport.connect()
-            logger.info(f"[MCPClient] Transport connected successfully")
+            logger.info("[MCPClient] Transport connected successfully")
         except Exception as e:
             logger.error(f"[MCPClient] Transport connection failed: {e}")
             raise
 
         # Start message handling loop
-        logger.debug(f"[MCPClient] Starting message loop task")
+        logger.debug("[MCPClient] Starting message loop task")
         self._message_task = asyncio.create_task(self._message_loop())
 
         # Send initialize request
         try:
-            logger.info(f"[MCPClient] Sending initialize request...")
+            logger.info("[MCPClient] Sending initialize request...")
             init_params = {
                 "protocolVersion": "2024-11-05",
                 "clientInfo": {
@@ -123,9 +127,11 @@ class MCPClient:
             response = await self._request(
                 "initialize",
                 init_params,
-                timeout=30.0,  # Increased timeout for npm-based servers that may need to download packages
+                # Increased timeout for npm-based servers that
+                # may need to download packages
+                timeout=30.0,
             )
-            logger.info(f"[MCPClient] Initialize response received")
+            logger.info("[MCPClient] Initialize response received")
             logger.debug(f"[MCPClient] Initialize response: {response}")
 
             # Parse server info
@@ -135,21 +141,26 @@ class MCPClient:
                 version=server_info.get("version", "0.0.0"),
                 capabilities=list(response.get("capabilities", {}).keys()),
             )
-            logger.info(f"[MCPClient] Server: {self._server_info.name} v{self._server_info.version}")
+            logger.info(
+                f"[MCPClient] Server: {self._server_info.name} v{self._server_info.version}"
+            )
             logger.debug(f"[MCPClient] Capabilities: {self._server_info.capabilities}")
 
             # Send initialized notification
-            logger.debug(f"[MCPClient] Sending initialized notification")
+            logger.debug("[MCPClient] Sending initialized notification")
             await self._notify("notifications/initialized", {})
 
             # Discover tools and resources
-            logger.info(f"[MCPClient] Discovering tools...")
+            logger.info("[MCPClient] Discovering tools...")
             await self._discover_tools()
-            logger.info(f"[MCPClient] Discovering resources...")
+            logger.info("[MCPClient] Discovering resources...")
             await self._discover_resources()
 
             self._connected = True
-            logger.info(f"[MCPClient] Connection complete: {len(self._tools)} tools, {len(self._resources)} resources")
+            logger.info(
+                f"[MCPClient] Connection complete: {len(self._tools)} tools, "
+                f"{len(self._resources)} resources"
+            )
             return self._server_info
 
         except Exception as e:
@@ -157,8 +168,8 @@ class MCPClient:
             logger.error(f"[MCPClient] Failed to connect to MCP server: {e}")
             logger.error(f"[MCPClient] Exception type: {type(e).__name__}")
             # Check stderr for more info
-            if hasattr(self.transport, 'check_stderr'):
-                logger.debug(f"[MCPClient] Checking stderr for more info...")
+            if hasattr(self.transport, "check_stderr"):
+                logger.debug("[MCPClient] Checking stderr for more info...")
                 stderr = await self.transport.check_stderr()
                 if stderr:
                     logger.error(f"[MCPClient] MCP server stderr: {stderr}")
@@ -169,15 +180,16 @@ class MCPClient:
 
     async def disconnect(self) -> None:
         """Disconnect from MCP server."""
-        logger.info(f"Disconnecting from MCP server: {self._server_info.name if self._server_info else 'unknown'}")
+        logger.info(
+            f"Disconnecting from MCP server: "
+            f"{self._server_info.name if self._server_info else 'unknown'}"
+        )
         self._connected = False
 
         if self._message_task:
             self._message_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._message_task
-            except asyncio.CancelledError:
-                pass
             self._message_task = None
 
         # Cancel pending requests
@@ -223,9 +235,9 @@ class MCPClient:
     async def call_tool(
         self,
         name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Call a tool on the MCP server.
 
@@ -257,9 +269,7 @@ class MCPClient:
 
         # Extract text content
         text_content = "\n".join(
-            item.get("text", "")
-            for item in content_items
-            if item.get("type") == "text"
+            item.get("text", "") for item in content_items if item.get("type") == "text"
         )
 
         result_len = len(text_content) if text_content else 0
@@ -275,7 +285,7 @@ class MCPClient:
         self,
         uri: str,
         timeout: float = 10.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Read a resource from the MCP server.
 
@@ -300,9 +310,9 @@ class MCPClient:
     async def _request(
         self,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Send JSON-RPC request.
 
@@ -315,7 +325,7 @@ class MCPClient:
             Response result
         """
         request_id = str(uuid.uuid4())
-        future: asyncio.Future[Dict[str, Any]] = asyncio.Future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
         self._request_handlers[request_id] = future
 
         # Send request
@@ -332,16 +342,16 @@ class MCPClient:
         try:
             result = await asyncio.wait_for(future, timeout=timeout)
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._request_handlers.pop(request_id, None)
-            raise asyncio.TimeoutError(f"Request {method} timed out")
+            raise TimeoutError(f"Request {method} timed out") from None
         finally:
             self._request_handlers.pop(request_id, None)
 
     async def _notify(
         self,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
     ) -> None:
         """
         Send JSON-RPC notification (no response expected).
@@ -372,14 +382,10 @@ class MCPClient:
                             error = message.get("error", {})
                             error_msg = error.get("message", "Unknown error")
                             if not future.done():
-                                future.set_exception(
-                                    RuntimeError(error_msg)
-                                )
+                                future.set_exception(RuntimeError(error_msg))
                         else:
                             if not future.done():
-                                future.set_result(
-                                    message.get("result", {})
-                                )
+                                future.set_result(message.get("result", {}))
 
                 # Handle server notifications
                 elif "method" in message:
@@ -392,17 +398,17 @@ class MCPClient:
             self._connected = False
 
     @property
-    def server_info(self) -> Optional[MCPServerInfo]:
+    def server_info(self) -> MCPServerInfo | None:
         """Get server information."""
         return self._server_info
 
     @property
-    def tools(self) -> List[MCPTool]:
+    def tools(self) -> list[MCPTool]:
         """Get available tools."""
         return self._tools
 
     @property
-    def resources(self) -> List[Dict[str, Any]]:
+    def resources(self) -> list[dict[str, Any]]:
         """Get available resources."""
         return self._resources
 

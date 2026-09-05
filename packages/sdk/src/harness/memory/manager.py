@@ -37,7 +37,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from harness.memory.memory_file import (
     MemoryCategory,
@@ -246,6 +246,7 @@ class MemoryManager:
         Returns:
             Number of entries archived
         """
+
         # Define archive callback for vector store
         async def archive_callback(entry: MemoryEntry) -> None:
             if self.vector_store:

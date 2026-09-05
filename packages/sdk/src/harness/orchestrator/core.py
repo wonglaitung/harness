@@ -23,6 +23,7 @@ from harness.orchestrator.types import (
     OrchestratorConfig,
     OrchestratorStatus,
     TeamConfig,
+    TeamResult,
     WorkflowConfig,
     WorkflowResult,
 )
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
     from harness.connectors import Connector, ConnectorManager
     from harness.connectors.types import OutputChannel
     from harness.loop.worktree_orchestrator import WorktreeOrchestrator
-    from harness.triggers import TriggerManager
 
 logger = logging.getLogger(__name__)
 
@@ -159,9 +159,8 @@ class LoopOrchestrator:
             Workflow execution result
         """
         # Check if it's a file path
-        if name.endswith(".yaml") or name.endswith(".yml"):
-            if name not in self._workflows:
-                self.create_workflow_from_yaml(name)
+        if (name.endswith(".yaml") or name.endswith(".yml")) and name not in self._workflows:
+            self.create_workflow_from_yaml(name)
 
         config = self._workflows.get(name)
         if not config:
@@ -204,7 +203,7 @@ class LoopOrchestrator:
         name: str,
         task: str,
         mode: str | None = None,
-    ) -> "TeamResult":
+    ) -> TeamResult:
         """
         Execute a team task.
 

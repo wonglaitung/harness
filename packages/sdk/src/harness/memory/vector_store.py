@@ -29,11 +29,10 @@ Usage:
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +187,7 @@ class SimpleInMemoryVectorStore:
         import math
 
         def cosine_similarity(a: list[float], b: list[float]) -> float:
-            dot = sum(x * y for x, y in zip(a, b))
+            dot = sum(x * y for x, y in zip(a, b, strict=False))
             norm_a = math.sqrt(sum(x * x for x in a))
             norm_b = math.sqrt(sum(x * x for x in b))
             if norm_a == 0 or norm_b == 0:
@@ -213,12 +212,14 @@ class SimpleInMemoryVectorStore:
         # Return top k results
         results = []
         for id_, score in similarities[:top_k]:
-            results.append(VectorSearchResult(
-                id=id_,
-                content=self._documents.get(id_, ""),
-                score=score,
-                metadata=self._metadatas.get(id_, {}),
-            ))
+            results.append(
+                VectorSearchResult(
+                    id=id_,
+                    content=self._documents.get(id_, ""),
+                    score=score,
+                    metadata=self._metadatas.get(id_, {}),
+                )
+            )
 
         return results
 
@@ -384,6 +385,7 @@ class VectorMemoryStore:
 
                     async def embed(self, texts: list[str]) -> list[list[float]]:
                         import asyncio
+
                         loop = asyncio.get_event_loop()
                         embeddings = await loop.run_in_executor(
                             None,
@@ -461,7 +463,7 @@ class VectorMemoryStore:
 
         # Track entries for Retrieval Strength
         if metadatas:
-            for i, (id_, content, meta) in enumerate(zip(ids, contents, metadatas)):
+            for _i, (id_, content, meta) in enumerate(zip(ids, contents, metadatas, strict=False)):
                 if meta.get("archived_from") == "core_memory":
                     self._entries[id_] = ArchivedMemoryEntry(
                         id=id_,
@@ -518,28 +520,32 @@ class VectorMemoryStore:
                 )
                 final_score = result.score * strength
 
-                scored_results.append((
-                    VectorSearchResult(
-                        id=result.id,
-                        content=result.content,
-                        score=final_score,
-                        metadata=result.metadata,
-                        retrieval_strength=strength,
-                    ),
-                    entry,
-                ))
+                scored_results.append(
+                    (
+                        VectorSearchResult(
+                            id=result.id,
+                            content=result.content,
+                            score=final_score,
+                            metadata=result.metadata,
+                            retrieval_strength=strength,
+                        ),
+                        entry,
+                    )
+                )
             else:
                 # No entry tracking, use original score
-                scored_results.append((
-                    VectorSearchResult(
-                        id=result.id,
-                        content=result.content,
-                        score=result.score,
-                        metadata=result.metadata,
-                        retrieval_strength=1.0,
-                    ),
-                    None,
-                ))
+                scored_results.append(
+                    (
+                        VectorSearchResult(
+                            id=result.id,
+                            content=result.content,
+                            score=result.score,
+                            metadata=result.metadata,
+                            retrieval_strength=1.0,
+                        ),
+                        None,
+                    )
+                )
 
         # Sort by weighted score descending
         scored_results.sort(key=lambda x: x[0].score, reverse=True)
@@ -584,11 +590,13 @@ class VectorMemoryStore:
 
             ids.append(f"{session_id}_{i}")
             contents.append(content)
-            metadatas.append({
-                "session_id": session_id,
-                "role": msg.get("role", "user"),
-                "type": "conversation",
-            })
+            metadatas.append(
+                {
+                    "session_id": session_id,
+                    "role": msg.get("role", "user"),
+                    "type": "conversation",
+                }
+            )
 
         if ids:
             await self.add_batch(ids, contents, metadatas)

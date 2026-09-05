@@ -8,6 +8,7 @@ handling registration, lifecycle, and goal execution.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import threading
 from collections import deque
@@ -44,10 +45,8 @@ class EventQueue:
             self._queue.append(event)
         # Notify waiter if exists
         if self._notifier is not None:
-            try:
-                self._notifier.set()
-            except Exception:
-                pass  # Event might be bound to old loop
+            with contextlib.suppress(Exception):
+                self._notifier.set()  # Event might be bound to old loop
 
     async def get(self) -> TriggerEvent:
         """Get event from queue (async, waits if empty)."""
@@ -110,7 +109,7 @@ class TriggerManager:
 
     def __init__(
         self,
-        agent: "AgentHarness",
+        agent: AgentHarness,
         max_concurrent_goals: int = 5,
     ):
         """
@@ -133,7 +132,7 @@ class TriggerManager:
 
     def register(
         self,
-        trigger: "Trigger",
+        trigger: Trigger,
         action: TriggerAction | None = None,
         enabled: bool = True,
     ) -> str:
@@ -260,9 +259,7 @@ class TriggerManager:
                     logger.error(f"Failed to start trigger {reg.trigger.id}: {e}")
                     reg.last_error = str(e)
 
-        logger.info(
-            f"TriggerManager started with {len(self._registrations)} triggers"
-        )
+        logger.info(f"TriggerManager started with {len(self._registrations)} triggers")
 
     async def stop(self) -> None:
         """
@@ -290,9 +287,7 @@ class TriggerManager:
 
         # Wait for active tasks to complete (with timeout)
         if self._running_tasks:
-            logger.info(
-                f"Waiting for {len(self._running_tasks)} active tasks to complete..."
-            )
+            logger.info(f"Waiting for {len(self._running_tasks)} active tasks to complete...")
             try:
                 done, pending = await asyncio.wait(
                     self._running_tasks,
@@ -325,7 +320,10 @@ class TriggerManager:
             event: Event to enqueue
         """
         self._event_queue.put_nowait(event)
-        logger.debug(f"Event enqueued for trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
+        logger.debug(
+            f"Event enqueued for trigger {event.trigger_id}, "
+            f"queue size: {self._event_queue.qsize()}"
+        )
 
     async def enqueue_event(self, event: TriggerEvent) -> None:
         """
@@ -359,7 +357,10 @@ class TriggerManager:
                 # EventQueue is resilient to event loop switching
                 event = await self._event_queue.get()
 
-                logger.debug(f"Processing event from trigger {event.trigger_id}, queue size: {self._event_queue.qsize()}")
+                logger.debug(
+                    f"Processing event from trigger {event.trigger_id}, "
+                    f"queue size: {self._event_queue.qsize()}"
+                )
                 # Execute concurrently, not blocking queue consumption
                 task = asyncio.create_task(self._handle_event_concurrent(event))
                 self._running_tasks.add(task)
@@ -443,13 +444,10 @@ class TriggerManager:
 
             if result.achieved:
                 logger.info(
-                    f"Trigger {trigger_id} goal achieved in "
-                    f"{result.total_iterations} iterations"
+                    f"Trigger {trigger_id} goal achieved in {result.total_iterations} iterations"
                 )
             else:
-                logger.warning(
-                    f"Trigger {trigger_id} goal not achieved: {result.status.value}"
-                )
+                logger.warning(f"Trigger {trigger_id} goal not achieved: {result.status.value}")
 
         except Exception as e:
             reg.error_count += 1
@@ -476,9 +474,7 @@ class TriggerManager:
             await asyncio.sleep(reg.action.retry_delay_seconds * (attempt + 1))
 
             try:
-                logger.info(
-                    f"Retrying trigger {reg.trigger.id}, attempt {attempt + 1}"
-                )
+                logger.info(f"Retrying trigger {reg.trigger.id}, attempt {attempt + 1}")
                 await self._handle_event(event)
                 break
             except Exception as e:

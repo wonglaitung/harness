@@ -13,7 +13,6 @@ import asyncio
 import os
 import shutil
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -165,9 +164,7 @@ class LightweightSandbox:
             )
 
             # Truncate output if needed
-            stdout_str = stdout[: self.config.max_output_size].decode(
-                "utf-8", errors="replace"
-            )
+            stdout_str = stdout[: self.config.max_output_size].decode("utf-8", errors="replace")
             stderr_str = stderr.decode("utf-8", errors="replace")
 
             return SandboxResult(
@@ -177,7 +174,7 @@ class LightweightSandbox:
                 exit_code=process.returncode or 0,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             return SandboxResult(
                 success=False,
@@ -232,14 +229,16 @@ class SandboxExecutor:
     Integrates with PermissionSet for comprehensive access control.
     """
 
-    blocked_commands: list[str] = field(default_factory=lambda: [
-        "rm -rf /",
-        "rm -rf ~",
-        "sudo",
-        "chmod -R 777",
-        "mkfs",
-        "dd if=",
-    ])
+    blocked_commands: list[str] = field(
+        default_factory=lambda: [
+            "rm -rf /",
+            "rm -rf ~",
+            "sudo",
+            "chmod -R 777",
+            "mkfs",
+            "dd if=",
+        ]
+    )
     max_execution_time: float = 60.0
     max_memory_mb: int = 512
 
@@ -253,10 +252,7 @@ class SandboxExecutor:
         Returns:
             True if command is allowed
         """
-        for blocked in self.blocked_commands:
-            if blocked in command:
-                return False
-        return True
+        return all(blocked not in command for blocked in self.blocked_commands)
 
     async def execute(
         self,
@@ -278,7 +274,7 @@ class SandboxExecutor:
         if not self.is_command_allowed(command):
             return SandboxResult(
                 success=False,
-                error=f"Command not allowed: contains blocked pattern",
+                error="Command not allowed: contains blocked pattern",
             )
 
         sandbox = LightweightSandbox(

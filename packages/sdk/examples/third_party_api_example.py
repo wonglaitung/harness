@@ -56,198 +56,95 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # ============================================================================
 
 # 主入口 - 创建 AI Agent 的核心类
-from harness import AgentHarness
-
 # 配置类 - 自定义 Agent 行为
-from harness import HarnessConfig
-
 # 内置工具 - 开箱即用的文件操作工具
-from harness import (
-    ReadTool,      # 读取文件
-    WriteTool,     # 写入文件
-    EditTool,      # 编辑文件
-    GlobTool,      # 文件名搜索 (类似 find)
-    GrepTool,      # 文件内容搜索 (类似 grep)
-    BashTool,      # 执行 Shell 命令
-    WebSearchTool, # 网络搜索
-    WebFetchTool,  # 网页抓取
-)
-
 # 成本控制 - 管理 Token 消耗
-from harness import (
-    CostConfig,        # 成本配置
-    CostController,    # 成本控制器
-    TokenUsage,        # Token 使用量
-    BudgetExceededError,  # 预算超限异常
-)
-
 # 进度追踪 - 监控执行过程
-from harness import (
-    ProgressEvent,     # 进度事件
-    ProgressEventType, # 事件类型
-    create_progress_handler,  # 创建进度处理器
-)
-
 # 会话管理 - 持久化对话
-from harness import (
-    Session,           # 会话对象
-    SQLiteSessionStore, # SQLite 存储
-)
-
 # 类型定义
-from harness import (
-    LoopResult,  # 执行结果
-    LoopState,   # 执行状态
-    Message,     # 消息
-    ToolResult,  # 工具执行结果
-)
-
-# Mock 测试 - 不需要真实 API 的测试
-from harness.testing import MockHarness, MockResponse
-
 # Skills 技能系统 - 模块化能力单元
-from harness import (
-    Skill,          # 技能定义
-    SkillTrigger,   # 触发条件
-    SkillTools,     # 工具权限配置
-    SkillRegistry,  # 技能注册表
-    SkillInjector,  # 技能注入器
-    SkillLoader,    # 技能加载器
-    InjectionConfig, # 注入配置
-)
-
 # MCP 支持 - 连接外部工具服务器
-from harness import (
-    MCPManager,       # MCP 管理器
-    MCPServerConfig,  # MCP 服务器配置
-    StdioTransport,   # 标准输入输出传输
-    HTTPTransport,    # HTTP 传输
-)
-
 # Observability 可观测性 - OpenTelemetry 集成
-from harness import (
-    ObservabilityManager,  # 可观测性管理器
-    ObservabilityConfig,   # 配置
-    setup_observability,   # 快速初始化函数
-)
-
-
 # Security 安全系统 - 保护 Agent 免受攻击
-from harness import (
-    LightweightSandbox,    # 轻量沙箱
-    InputValidator,        # 输入验证器
-    PromptInjectionDetector,  # 提示注入检测
-    AuditLogger,           # 审计日志
-    SecurityConfig,        # 安全配置（新增）
-)
-
-
 # 多级成本存储
-from harness import (
-    InMemoryCostStorage,   # 内存存储
-    AsyncSQLiteSessionStore,  # 异步 SQLite 存储
-    CostControlConfig,     # 成本控制配置（新增）
-    StorageConfig,         # 存储配置（新增）
-)
-
-
 # Lifecycle Hooks - 工具执行前后的钩子系统 (P0)
-from harness import (
-    HookPoint,           # 钩子触发点
-    HookAction,          # 钩子动作
-    HookContext,         # 钩子上下文
-    HookResult,          # 钩子结果
-    LifecycleHook,       # 钩子基类
-    HookManager,         # 钩子管理器
-    LoggingHook,         # 日志钩子
-    AbortOnDangerousToolHook,  # 阻止危险工具钩子
-    MaxToolCallsHook,    # 限制工具调用次数钩子
-)
-
-
 # 动态系统提示组装 (P0)
-from harness import (
-    SystemPromptSource,    # 系统提示源
-    SystemPromptConfig,    # 系统提示配置
-    SystemPromptBuilder,   # 系统提示构建器
-    discover_project_context,  # 发现项目上下文
-)
-
-
 # Ralph Loop - 长任务循环 (P1)
-from harness import (
-    RalphLoopConfig,    # Ralph Loop 配置
-    RalphLoopHook,      # Ralph Loop 钩子
-)
-
-
 # Sub-Agent 管理 (P1)
-from harness import (
-    SubAgentConfig,     # 子代理配置
-    SubAgentStatus,     # 子代理状态
-    SubAgentResult,     # 子代理结果
-    SubAgentManager,    # 子代理管理器
-)
-
-
 # 自验证钩子 (P2)
-from harness import (
-    SelfVerificationConfig,  # 自验证配置
-    SelfVerificationHook,    # 自验证钩子
-)
-
-
 # 渐进式技能加载 (P2)
-from harness import (
-    ProgressiveSkillLoader,  # 渐进式技能加载器
-    SkillMetadata,           # 技能元数据
-    LoadingLevel,            # 加载级别
-)
-
-
 # MEMORY.md 标准 (P2)
-from harness import (
-    MemoryFileManager,   # MEMORY.md 文件管理器
-    MemoryEntry,         # 记忆条目
-    MemoryCategory,      # 记忆分类
-    MemorySource,        # 记忆来源
-    MemorySections,      # 记忆章节
-    create_default_memory,  # 创建默认记忆
-)
-
-
 # 向量检索 (P2)
 from harness import (
-    VectorMemoryStore,        # 向量记忆存储
-    VectorMemoryConfig,       # 向量配置
-    VectorSearchResult,       # 搜索结果
+    AbortOnDangerousToolHook,  # 阻止危险工具钩子
+    AgentHarness,
+    CostConfig,  # 成本配置
+    CostController,  # 成本控制器
+    GlobTool,  # 文件名搜索 (类似 find)
+    GrepTool,  # 文件内容搜索 (类似 grep)
+    HarnessConfig,
+    HookAction,  # 钩子动作
+    HookContext,  # 钩子上下文
+    HookManager,  # 钩子管理器
+    HookPoint,  # 钩子触发点
+    HookResult,  # 钩子结果
+    InjectionConfig,  # 注入配置
+    InMemoryCostStorage,  # 内存存储
+    LifecycleHook,  # 钩子基类
+    LoggingHook,  # 日志钩子
+    MaxToolCallsHook,  # 限制工具调用次数钩子
+    MCPManager,  # MCP 管理器
+    MCPServerConfig,  # MCP 服务器配置
+    MemoryCategory,  # 记忆分类
+    MemoryEntry,  # 记忆条目
+    MemoryFileManager,  # MEMORY.md 文件管理器
+    MemorySource,  # 记忆来源
+    MockEmbeddingModel,  # Mock 嵌入模型
+    ObservabilityConfig,  # 配置
+    ObservabilityManager,  # 可观测性管理器
+    ProgressEvent,  # 进度事件
+    ProgressEventType,  # 事件类型
+    ProgressiveSkillLoader,  # 渐进式技能加载器
+    RalphLoopConfig,  # Ralph Loop 配置
+    RalphLoopHook,  # Ralph Loop 钩子
+    ReadTool,  # 读取文件
+    SecurityConfig,  # 安全配置（新增）
+    SelfVerificationConfig,  # 自验证配置
+    SelfVerificationHook,  # 自验证钩子
     SimpleInMemoryVectorStore,  # 简单内存向量存储
-    MockEmbeddingModel,       # Mock 嵌入模型
-)
-
+    Skill,  # 技能定义
+    SkillInjector,  # 技能注入器
+    SkillLoader,  # 技能加载器
+    SkillRegistry,  # 技能注册表
+    SkillTools,  # 工具权限配置
+    SkillTrigger,  # 触发条件
+    SubAgentConfig,  # 子代理配置
+    SubAgentManager,  # 子代理管理器
+    SubAgentResult,  # 子代理结果
+    SystemPromptBuilder,  # 系统提示构建器
+    SystemPromptConfig,  # 系统提示配置
+    SystemPromptSource,  # 系统提示源
+    VectorMemoryConfig,  # 向量配置
+    VectorMemoryStore,  # 向量记忆存储
+    create_default_memory,  # 创建默认记忆
+    discover_project_context,  # 发现项目上下文
+    )
 
 # 语义卡住检测 (P2)
 from harness.core import (
-    StuckDetector,           # 卡住检测器
-    StuckDetectorConfig,     # 检测配置
-    StuckDetectionResult,    # 检测结果
+    StuckDetector,  # 卡住检测器
+    StuckDetectorConfig,  # 检测配置
 )
-
 
 # Loop Engineering - 目标驱动执行 (P2)
 from harness.loop import (
-    GoalConfig,              # 目标配置
-    GoalResult,              # 目标执行结果
-    GoalStatus,              # 目标状态
-    GoalVerifier,            # 目标验证器
-    GoalLoop,                # 目标循环
-    Automation,              # 自动化任务
-    AutomationConfig,        # 自动化配置
-    WorktreeOrchestrator,    # Worktree 编排器
-    WorktreeConfig,          # Worktree 配置
-    WorktreeResult,          # Worktree 执行结果
-)
+    Automation,  # 自动化任务
+    GoalResult,  # 目标执行结果
+    GoalStatus,  # 目标状态
+    )
 
+# Mock 测试 - 不需要真实 API 的测试
+from harness.testing import MockHarness, MockResponse
 
 # ============================================================================
 # 配置区 - 修改这里使用你的 API
@@ -312,7 +209,10 @@ async def demo_basic_conversation():
     print(f"\nAgent: {result.content}")
     print(f"\n执行状态: {result.status.value}")
     print(f"迭代次数: {result.iterations}")
-    print(f"Token 使用: 输入 {result.token_usage.input_tokens}, 输出 {result.token_usage.output_tokens}")
+    print(
+        f"Token 使用: 输入 {result.token_usage.input_tokens}, "
+        f"输出 {result.token_usage.output_tokens}"
+    )
 
 
 # ============================================================================
@@ -464,7 +364,7 @@ async def demo_cost_control():
         warning_threshold=0.8,  # 80% 时发出警告
     )
 
-    print(f"成本配置:")
+    print("成本配置:")
     print(f"  - 会话 Token 限制: {cost_config.max_tokens_per_session}")
     print(f"  - 最大迭代次数: {cost_config.max_iterations_per_request}")
     print(f"  - 警告阈值: {cost_config.warning_threshold * 100}%")
@@ -485,7 +385,7 @@ async def demo_cost_control():
     result = await agent.run("请用 100 字介绍 Python 编程语言。")
 
     print(f"\n响应: {result.content[:200]}...")
-    print(f"\nToken 使用统计:")
+    print("\nToken 使用统计:")
     print(f"  - 输入 tokens: {result.token_usage.input_tokens}")
     print(f"  - 输出 tokens: {result.token_usage.output_tokens}")
     print(f"  - 总计: {result.token_usage.total_tokens}")
@@ -522,9 +422,9 @@ async def demo_progress_tracking():
 
         # 根据事件类型显示不同信息
         if event.type == ProgressEventType.LOOP_START:
-            print(f"\n🚀 开始执行...")
+            print("\n🚀 开始执行...")
         elif event.type == ProgressEventType.LLM_CALL:
-            print(f"📡 调用 LLM...")
+            print("📡 调用 LLM...")
         elif event.type == ProgressEventType.LLM_RESPONSE:
             duration = event.duration_ms or 0
             print(f"✅ LLM 响应 ({duration:.0f}ms)")
@@ -536,7 +436,7 @@ async def demo_progress_tracking():
             status = "✅" if success else "❌"
             print(f"📋 工具结果: {status}")
         elif event.type == ProgressEventType.LOOP_END:
-            print(f"🏁 执行完成")
+            print("🏁 执行完成")
 
     agent = AgentHarness(
         base_url=BASE_URL,
@@ -548,12 +448,12 @@ async def demo_progress_tracking():
 
     # 使用自定义进度回调
     print("\n用户: 列出所有 Markdown 文件并读取 README.md")
-    result = await agent.run(
+    result = await agent.run(  # noqa: F841
         "使用 glob 工具列出所有 *.md 文件，然后读取 README.md 的前 10 行。",
         on_progress=on_progress,
     )
 
-    print(f"\n事件统计:")
+    print("\n事件统计:")
     event_counts = {}
     for event in events_log:
         event_counts[event.type.value] = event_counts.get(event.type.value, 0) + 1
@@ -766,7 +666,7 @@ async def demo_skills_system():
 
     # 8. 预览注入效果
     preview = injector.get_injection_preview(base_prompt, user_input)
-    print(f"\n注入预览:")
+    print("\n注入预览:")
     print(f"  - 匹配的技能: {preview['matching_skills']}")
     print(f"  - 将注入的技能数: {preview['total_to_inject']}")
     print(f"  - 原始 prompt 长度: {preview['original_prompt_length']}")
@@ -975,7 +875,7 @@ async def demo_mcp_integration():
     # 4. 添加服务器配置
     manager.add_server(stdio_config)
     print("\nMCP 管理器配置:")
-    print(f"  - 默认配置路径: .mcp.json 或 ~/.harness/mcp.json")
+    print("  - 默认配置路径: .mcp.json 或 ~/.harness/mcp.json")
     print(f"  - 已添加服务器: {[c.name for c in manager.list_server_configs()]}")
 
     # 5. 配置文件格式示例
@@ -1146,7 +1046,7 @@ async def demo_security_system():
     """)
 
     # 使用 SecurityConfig 配置安全选项
-    from harness import SecurityConfig, HarnessConfig
+    from harness import HarnessConfig
 
     security_config = SecurityConfig(
         # 输入验证
@@ -1281,14 +1181,14 @@ async def demo_observability():
         sample_rate=1.0,
     )
 
-    print(f"\n配置:")
+    print("\n配置:")
     print(f"  - 服务名称: {config.service_name}")
     print(f"  - 控制台输出: {config.export_console}")
     print(f"  - OTLP 导出: {config.export_otlp}")
 
     # 3. 快速初始化
     manager = ObservabilityManager(config=config)
-    print(f"\n可观测性管理器已创建")
+    print("\n可观测性管理器已创建")
     print(f"  - 已启用: {manager.is_enabled}")
 
     # -------------------------------------------------------------------------
@@ -1430,7 +1330,7 @@ async def demo_advanced_cost_control():
 
     # 记录全局使用量
     global_usage = storage.record_global_usage(cost_usd=0.05, tokens=4500)
-    print(f"\n全局使用量:")
+    print("\n全局使用量:")
     print(f"  每日成本: ${global_usage.daily_cost_usd:.4f}")
     print(f"  每日 tokens: {global_usage.daily_tokens}")
 
@@ -1443,7 +1343,7 @@ async def demo_advanced_cost_control():
         global_daily_budget_usd=50.0,      # 全局级
     )
 
-    print(f"\n多级预算配置:")
+    print("\n多级预算配置:")
     print(f"  会话级: {cost_config.max_tokens_per_session} tokens/会话")
     print(f"  用户级: {cost_config.daily_token_limit} tokens/天")
     print(f"  全局级: ${cost_config.global_daily_budget_usd}/天")
@@ -1474,9 +1374,8 @@ async def demo_advanced_cost_control():
     print("\n--- 实际集成代码 ---")
 
     # 创建成本控制器
-    from harness import CostController
 
-    controller = CostController(config=cost_config, storage=storage)
+    controller = CostController(config=cost_config, storage=storage)  # noqa: F841
 
     # 创建 Agent
     cost_controlled_agent = AgentHarness(
@@ -1541,7 +1440,7 @@ async def demo_advanced_cost_control():
     # -------------------------------------------------------------------------
     # 5. 异步 SQLite 存储（生产环境推荐）
     # -------------------------------------------------------------------------
-    print(f"\n--- 异步 SQLite 存储（生产环境推荐）---")
+    print("\n--- 异步 SQLite 存储（生产环境推荐）---")
     print("""
     # 创建异步存储（WAL 模式 + 连接池）
     store = AsyncSQLiteSessionStore(
@@ -1673,7 +1572,6 @@ async def demo_interrupt_and_resume():
     # -------------------------------------------------------------------------
     print("\n--- 3. 创建快照 ---")
 
-    from harness import LoopSnapshot
 
     # 使用公开 API 创建快照（需要先有 session）
     snapshot = agent.create_snapshot(
@@ -1681,7 +1579,7 @@ async def demo_interrupt_and_resume():
         iteration=result.iterations,
     )
 
-    print(f"\n已创建执行快照:")
+    print("\n已创建执行快照:")
     print(f"  - Session ID: {snapshot.session_id}")
     print(f"  - 消息数: {len(snapshot.messages)}")
     print(f"  - 迭代次数: {snapshot.current_iteration}")
@@ -1944,7 +1842,7 @@ async def demo_lifecycle_hooks():
             return HookResult(action=HookAction.CONTINUE)
 
     timing_hook = TimingHook()
-    print(f"已创建自定义钩子: TimingHook")
+    print("已创建自定义钩子: TimingHook")
 
     # -------------------------------------------------------------------------
     # 2. 内置钩子 - LoggingHook
@@ -1953,17 +1851,17 @@ async def demo_lifecycle_hooks():
 
     # 日志钩子 - 记录所有工具调用
     logging_hook = LoggingHook()
-    print(f"日志钩子: LoggingHook")
+    print("日志钩子: LoggingHook")
 
     # 阻止危险工具钩子 - 阻止 bash, write 等危险操作
     abort_hook = AbortOnDangerousToolHook(
         blocked_tools=["bash", "write_file", "edit_file"],
     )
-    print(f"阻止危险工具钩子: AbortOnDangerousToolHook")
+    print("阻止危险工具钩子: AbortOnDangerousToolHook")
 
     # 限制工具调用次数钩子（需要指定工具名称）
     max_calls_hook = MaxToolCallsHook(tool_name="bash", max_calls=10)
-    print(f"限制调用次数钩子: MaxToolCallsHook (工具 'bash' 最多 10 次)")
+    print("限制调用次数钩子: MaxToolCallsHook (工具 'bash' 最多 10 次)")
 
     # -------------------------------------------------------------------------
     # 3. 使用 HookManager 管理钩子
@@ -1971,13 +1869,16 @@ async def demo_lifecycle_hooks():
     print("\n--- 3. HookManager 管理钩子 ---")
 
     hook_manager = HookManager()
-    hook_manager.register(timing_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE, HookPoint.AFTER_TOOL_EXECUTE])
+    hook_manager.register(
+        timing_hook,
+        points=[HookPoint.BEFORE_TOOL_EXECUTE, HookPoint.AFTER_TOOL_EXECUTE],
+    )
     hook_manager.register(logging_hook)
     hook_manager.register(abort_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE])
     hook_manager.register(max_calls_hook, points=[HookPoint.BEFORE_TOOL_EXECUTE])
 
     # 检查哪些 HookPoint 有注册的钩子
-    print(f"已注册钩子到 HookManager:")
+    print("已注册钩子到 HookManager:")
     for point in HookPoint:
         if hook_manager.has_hooks(point):
             print(f"  - {point.value}: 有钩子")
@@ -2018,7 +1919,7 @@ async def demo_lifecycle_hooks():
     for hook in [timing_hook, logging_hook, max_calls_hook]:
         agent.add_hook(hook)
 
-    print(f"已注册钩子到 Agent 的循环")
+    print("已注册钩子到 Agent 的循环")
 
     # 运行 Agent
     print("\n用户: 列出所有 Python 文件")
@@ -2030,7 +1931,7 @@ async def demo_lifecycle_hooks():
 
     # 查看计时结果
     if timing_hook.timings:
-        print(f"\n工具执行计时:")
+        print("\n工具执行计时:")
         for tool, elapsed in timing_hook.timings.items():
             print(f"  - {tool}: {elapsed:.1f}ms")
 
@@ -2089,7 +1990,7 @@ async def demo_dynamic_system_prompt():
     )
 
     builder = SystemPromptBuilder(config=config)
-    print(f"已创建 SystemPromptBuilder")
+    print("已创建 SystemPromptBuilder")
     print(f"  - 基础提示: '{config.base_prompt}'")
     print(f"  - 自动发现: {config.auto_discover}")
 
@@ -2141,7 +2042,7 @@ async def demo_dynamic_system_prompt():
     available_sources = builder.get_available_sources()
     print(f"可用源: {available_sources}")
 
-    print(f"\n系统提示内容预览:")
+    print("\n系统提示内容预览:")
     print("-" * 40)
     preview = system_prompt[:600] + "..." if len(system_prompt) > 600 else system_prompt
     print(preview)
@@ -2152,7 +2053,7 @@ async def demo_dynamic_system_prompt():
     print("\n--- 4. discover_project_context ---")
 
     project_context = discover_project_context()
-    print(f"发现的项目上下文:")
+    print("发现的项目上下文:")
     for key, value in project_context.items():
         if value:
             val_str = str(value)[:100]
@@ -2250,7 +2151,7 @@ async def demo_ralph_loop():
         progress_dir=None,               # 进度保存目录（None 则不持久化）
     )
 
-    print(f"Ralph Loop 配置:")
+    print("Ralph Loop 配置:")
     print(f"  - 最大循环次数: {ralph_config.max_loops}")
     print(f"  - 上下文阈值: {ralph_config.context_threshold * 100}%")
     print(f"  - 自定义完成检查: {'是' if ralph_config.task_complete_check else '否'}")
@@ -2261,7 +2162,7 @@ async def demo_ralph_loop():
     print("\n--- 2. 创建 RalphLoopHook ---")
 
     ralph_hook = RalphLoopHook(config=ralph_config)
-    print(f"已创建 RalphLoopHook")
+    print("已创建 RalphLoopHook")
 
     # -------------------------------------------------------------------------
     # 3. 与 AgentHarness 集成
@@ -2293,7 +2194,7 @@ async def demo_ralph_loop():
 
     # 注册 Ralph Loop Hook 到 Agent
     agent.add_hook(ralph_hook)
-    print(f"已注册 RalphLoopHook 到 Agent")
+    print("已注册 RalphLoopHook 到 Agent")
 
     # 运行一个简单的任务
     print("\n用户: 列出项目中的 Python 文件并总结项目结构")
@@ -2363,7 +2264,7 @@ async def demo_sub_agent():
     )
 
     manager = SubAgentManager(parent_agent=parent)
-    print(f"已创建 SubAgentManager (基于主代理)")
+    print("已创建 SubAgentManager (基于主代理)")
 
     # -------------------------------------------------------------------------
     # 2. 创建 SubAgentConfig
@@ -2389,7 +2290,7 @@ async def demo_sub_agent():
         report_format="summary",  # 结果报告格式: summary, full, structured
     )
 
-    print(f"子代理配置:")
+    print("子代理配置:")
     print(f"  - {config1.name}: {config1.task}")
     print(f"  - {config2.name}: {config2.task}")
 
@@ -2408,7 +2309,7 @@ async def demo_sub_agent():
     # 运行单个子代理（使用配置中的名称）
     print(f"\n运行子代理 '{config1.name}'...")
     result1: SubAgentResult = await manager.run(config1.name)
-    print(f"子代理结果:")
+    print("子代理结果:")
     print(f"  - 名称: {result1.name}")
     print(f"  - 成功: {result1.success}")
     print(f"  - 状态: {result1.status.value}")
@@ -2522,7 +2423,7 @@ async def demo_self_verification():
         test_pattern="test_*.py",
     )
 
-    print(f"自验证配置:")
+    print("自验证配置:")
     print(f"  - 测试命令: {verify_config.test_command} {' '.join(verify_config.test_args)}")
     print(f"  - 触发工具: {verify_config.trigger_tools}")
     print(f"  - 超时时间: {verify_config.timeout}s")
@@ -2569,7 +2470,7 @@ async def demo_self_verification():
 
     # 注册自验证钩子到 Agent
     agent.add_hook(verify_hook)
-    print(f"已注册自验证钩子到 Agent")
+    print("已注册自验证钩子到 Agent")
 
     # 运行 Agent（当前只读操作，不会触发验证）
     result = await agent.run("请列出当前目录下的 Python 文件。")
@@ -2671,7 +2572,7 @@ triggers:
 """)
 
     loader = ProgressiveSkillLoader(cache_size=50)
-    print(f"已创建 ProgressiveSkillLoader")
+    print("已创建 ProgressiveSkillLoader")
 
     # -------------------------------------------------------------------------
     # 2. Level 1: 发现技能 - 只加载元信息
@@ -2718,13 +2619,13 @@ triggers:
 
     # 构建技能列表提示（用于让 LLM 选择使用哪个技能）
     prompt = loader.build_skill_selection_prompt(discovered, format_style="list")
-    print(f"技能选择提示 (list 格式):")
+    print("技能选择提示 (list 格式):")
     print(f"  {prompt[:200]}")
 
     # Token 估算
     l1_tokens = loader.estimate_tokens(discovered, level=1)
     l2_tokens = loader.estimate_tokens(discovered, level=2)
-    print(f"\nToken 估算:")
+    print("\nToken 估算:")
     print(f"  - Level 1 (元信息): ~{l1_tokens} tokens")
     print(f"  - Level 2 (完整内容): ~{l2_tokens} tokens")
 
@@ -2808,7 +2709,7 @@ async def demo_memory_md():
         content="用户是 Python 后端开发者，熟悉 FastAPI 和 SQLAlchemy。",
         source=MemorySource.USER_INPUT,
     ))
-    print(f"  ✅ 添加用户信息 (USER_PROFILE)")
+    print("  ✅ 添加用户信息 (USER_PROFILE)")
 
     # 关键决策
     manager.add_entry(MemoryEntry(
@@ -2816,7 +2717,7 @@ async def demo_memory_md():
         content="使用分层架构: routes → services → models，数据库用 PostgreSQL。",
         source=MemorySource.AGENT_OBSERVATION,
     ))
-    print(f"  ✅ 添加关键决策 (KEY_DECISIONS)")
+    print("  ✅ 添加关键决策 (KEY_DECISIONS)")
 
     # 学到的模式
     manager.add_entry(MemoryEntry(
@@ -2824,7 +2725,7 @@ async def demo_memory_md():
         content="用户偏好使用类型注解，不偏好过多的注释。",
         source=MemorySource.USER_INPUT,
     ))
-    print(f"  ✅ 添加学到模式 (LEARNED_PATTERNS)")
+    print("  ✅ 添加学到模式 (LEARNED_PATTERNS)")
 
     # 项目上下文
     manager.add_entry(MemoryEntry(
@@ -2832,7 +2733,7 @@ async def demo_memory_md():
         content="项目 API 文档在 /docs/api/ 目录下，使用 OpenAPI 格式。",
         source=MemorySource.AGENT_OBSERVATION,
     ))
-    print(f"  ✅ 添加项目上下文 (PROJECT_CONTEXT)")
+    print("  ✅ 添加项目上下文 (PROJECT_CONTEXT)")
 
     # -------------------------------------------------------------------------
     # 3. 保存和加载
@@ -2846,14 +2747,14 @@ async def demo_memory_md():
 
     # 读取文件内容
     file_content = memory_file.read_text(encoding="utf-8")
-    print(f"\nMEMORY.md 内容预览:")
+    print("\nMEMORY.md 内容预览:")
     print("-" * 40)
     print(file_content[:600] + "..." if len(file_content) > 600 else file_content)
 
     # 从文件加载
     loaded_manager = MemoryFileManager(project_root=project_root)
     sections = loaded_manager.load()
-    print(f"\n从文件加载了记忆:")
+    print("\n从文件加载了记忆:")
     print(f"  - 用户信息: {sections.user_profile}")
     print(f"  - 关键决策: {len(sections.key_decisions)} 条")
     print(f"  - 学到模式: {len(sections.learned_patterns)} 条")
@@ -2867,7 +2768,7 @@ async def demo_memory_md():
     # 转换为可注入系统提示的文本
     context_str = manager.to_context_string()
     print(f"上下文字符串长度: {len(context_str)} 字符")
-    print(f"\n上下文内容:")
+    print("\n上下文内容:")
     print("-" * 40)
     print(context_str[:500] + "..." if len(context_str) > 500 else context_str)
 
@@ -2883,7 +2784,7 @@ async def demo_memory_md():
     # 加载查看内容
     default_manager = MemoryFileManager(project_root=default_root)
     default_sections = default_manager.load()
-    print(f"默认记忆内容:")
+    print("默认记忆内容:")
     print(f"  - 用户信息: {default_sections.user_profile}")
     print(f"  - 项目上下文: {default_sections.project_context}")
 
@@ -2966,8 +2867,8 @@ async def demo_vector_search():
         config=config,
         embedding_model=MockEmbeddingModel(dimension=config.embedding_dimension),
     )
-    print(f"已创建 VectorMemoryStore")
-    print(f"  - 嵌入模型: mock")
+    print("已创建 VectorMemoryStore")
+    print("  - 嵌入模型: mock")
     print(f"  - 嵌入维度: {config.embedding_dimension}")
 
     # -------------------------------------------------------------------------
@@ -2978,7 +2879,10 @@ async def demo_vector_search():
     # 添加文档
     await store.add(
         id="doc-001",
-        content="Harness SDK 是一个可内嵌的 Python AI Agent SDK，支持工具调用、会话管理和技能系统。",
+        content=(
+            "Harness SDK 是一个可内嵌的 Python AI Agent SDK，"
+            "支持工具调用、会话管理和技能系统。"
+        ),
         metadata={"type": "documentation", "topic": "overview"},
     )
     await store.add(
@@ -2998,7 +2902,7 @@ async def demo_vector_search():
         query="如何扩展 Agent 的工具能力",
         top_k=3,
     )
-    print(f"\n搜索 '如何扩展 Agent 的工具能力' 结果:")
+    print("\n搜索 '如何扩展 Agent 的工具能力' 结果:")
     for r in results:
         print(f"  - 相似度: {r.score:.3f}, ID: {r.id}")
         print(f"    内容: {r.content[:80]}...")
@@ -3029,7 +2933,7 @@ async def demo_vector_search():
         top_k=2,
         filter={"type": "conversation"},
     )
-    print(f"\n搜索 'FastAPI 开发 API' (仅对话) 结果:")
+    print("\n搜索 'FastAPI 开发 API' (仅对话) 结果:")
     for r in conv_results:
         print(f"  - 相似度: {r.score:.3f}, ID: {r.id}")
         print(f"    内容: {r.content[:80]}...")
@@ -3040,7 +2944,7 @@ async def demo_vector_search():
     print("\n--- 4. SimpleInMemoryVectorStore ---")
 
     simple_store = SimpleInMemoryVectorStore()
-    print(f"已创建 SimpleInMemoryVectorStore (更轻量的底层存储)")
+    print("已创建 SimpleInMemoryVectorStore (更轻量的底层存储)")
 
     # 添加数据
     mock_model = MockEmbeddingModel(dimension=64)
@@ -3129,7 +3033,7 @@ async def demo_semantic_stuck_detection():
         enable_semantic=False,  # 禁用语义检测
     )
     detector_basic = StuckDetector(config=basic_config)
-    print(f"已创建基础检测器（仅空/错误检测）")
+    print("已创建基础检测器（仅空/错误检测）")
 
     # 完整配置（包含语义检测）
     semantic_config = StuckDetectorConfig(
@@ -3139,8 +3043,8 @@ async def demo_semantic_stuck_detection():
         window_size=6,                 # 对比窗口大小
         min_chars=30,                  # 最小文本长度
     )
-    detector_semantic = StuckDetector(config=semantic_config)
-    print(f"已创建语义检测器（需要 sentence-transformers）")
+    detector_semantic = StuckDetector(config=semantic_config)  # noqa: F841
+    print("已创建语义检测器（需要 sentence-transformers）")
 
     # -------------------------------------------------------------------------
     # 2. 模拟检测场景
@@ -3170,7 +3074,7 @@ async def demo_semantic_stuck_detection():
         Message(role="tool", content="没有找到相关内容，请换一个搜索词试试。"),
     ]
 
-    print(f"模拟消息:")
+    print("模拟消息:")
     print(f"  - 空结果: {len(empty_messages)} 条")
     print(f"  - 错误结果: {len(error_messages)} 条")
     print(f"  - 语义重复: {len(semantic_repeat_messages)} 条")
@@ -3228,7 +3132,7 @@ async def demo_semantic_stuck_detection():
     # 创建带卡住检测的 Agent
     from harness.core.agent_loop import LoopConfig
 
-    loop_config = LoopConfig(
+    loop_config = LoopConfig(  # noqa: F841
         max_iterations=20,
         stuck_detector_config=semantic_config,
         max_stuck_feedbacks=2,
@@ -3242,7 +3146,7 @@ async def demo_semantic_stuck_detection():
         tools=[ReadTool(), GlobTool()],
     )
 
-    print(f"已创建带语义卡住检测的 Agent")
+    print("已创建带语义卡住检测的 Agent")
     print(f"  - 语义检测: {semantic_config.enable_semantic}")
     print(f"  - 相似度阈值: {semantic_config.similarity_threshold}")
     print(f"  - 连续轮数: {semantic_config.consecutive_rounds}")
@@ -3346,9 +3250,12 @@ async def demo_guardrails():
 
     # 扫描 PII（返回详细信息, 也是 tuple）
     _, scan_entities, _ = scan_pii(test_text)
-    print(f"\nPII 实体详情:")
+    print("\nPII 实体详情:")
     for entity in scan_entities:
-        print(f"  - 类型: {entity.entity_type}, 值: {entity.text}, 位置: {entity.start}-{entity.end}")
+        print(
+        f"  - 类型: {entity.entity_type}, 值: {entity.text}, "
+        f"位置: {entity.start}-{entity.end}"
+    )
 
     # -------------------------------------------------------------------------
     # 2. PII 脱敏
@@ -3377,14 +3284,14 @@ async def demo_guardrails():
     print(f"Layer 1 配置: {config_layer1}")
 
     # Layer 1 + Layer 2（PII + LLM Judge）
-    config_full = GuardrailConfig(
+    config_full = GuardrailConfig(  # noqa: F841
         enabled=True,
         layer1_enabled=True,
         layer2_enabled=True,
         judge_endpoint="http://localhost:8001/v1/chat/completions",
         judge_timeout=5.0,
     )
-    print(f"完整配置: Layer 1 + Layer 2")
+    print("完整配置: Layer 1 + Layer 2")
 
     # -------------------------------------------------------------------------
     # 4. 与 AgentHarness 集成
@@ -3419,7 +3326,7 @@ async def demo_guardrails():
         guardrails=config_layer1,
     )
 
-    print(f"已创建带 PII 检测的 Agent")
+    print("已创建带 PII 检测的 Agent")
 
     # 运行 Agent 演示
     result = await agent.run("你好，请简单介绍你自己。")
@@ -3431,9 +3338,9 @@ async def demo_guardrails():
     # -------------------------------------------------------------------------
     print("\n--- 5. 流式拦截器 ---")
 
-    from harness.guardrails import StreamInterceptor, StreamInterceptConfig
-    from harness.guardrails.judge import ComplianceJudge
+    from harness.guardrails import StreamInterceptConfig, StreamInterceptor
     from harness.guardrails.config import JudgeConfig
+    from harness.guardrails.judge import ComplianceJudge
 
     # 创建拦截器（需要 ComplianceJudge）
     interceptor_config = StreamInterceptConfig(
@@ -3446,12 +3353,12 @@ async def demo_guardrails():
     # 创建 Judge（可选，用于 Layer 2 检测）
     judge_config = JudgeConfig(enabled=False, endpoint="", timeout=5.0)
     judge = ComplianceJudge(config=judge_config)
-    interceptor = StreamInterceptor(judge=judge, config=interceptor_config)
-    print(f"已创建流式拦截器")
+    interceptor = StreamInterceptor(judge=judge, config=interceptor_config)  # noqa: F841
+    print("已创建流式拦截器")
 
     # 模拟流式输出
-    print(f"\n模拟流式输出:")
-    print(f"  (流式拦截器需要与 AgentLoop 集成使用，这里仅展示配置)")
+    print("\n模拟流式输出:")
+    print("  (流式拦截器需要与 AgentLoop 集成使用，这里仅展示配置)")
 
     # -------------------------------------------------------------------------
     # 6. 支持的 PII 类型
@@ -3522,7 +3429,6 @@ async def demo_cpu_router():
     print("演示 27: CPU Router - 成本优化的请求路由 (P2)")
     print("=" * 70)
 
-    from harness.sdk.config import RoutingConfig
 
     # -------------------------------------------------------------------------
     # 1. RoutingConfig 基础配置
@@ -3605,7 +3511,6 @@ async def demo_cpu_router():
     # -------------------------------------------------------------------------
     print("\n--- 4. context_window 自动检测 ---")
 
-    from harness.model_presets import parse_context_window
 
     print("""
     EmbeddedLlamaClient 支持从 GGUF 文件名推断模型:
@@ -3667,10 +3572,9 @@ async def demo_guardrails_advanced():
     print("\n--- 1. Layer 2: LLM Judge 语义检测 ---")
 
     from harness.guardrails import (
-        GuardrailConfig,
         JudgeConfig,
     )
-    from harness.guardrails.judge import ComplianceJudge, RiskLevel
+    from harness.guardrails.judge import RiskLevel
 
     # 创建 Judge 配置
     judge_config = JudgeConfig(
@@ -3704,9 +3608,7 @@ async def demo_guardrails_advanced():
     print("\n--- 2. 流式拦截器 (StreamInterceptor) ---")
 
     from harness.guardrails import (
-        StreamInterceptor,
         StreamInterceptConfig,
-        InterceptResult,
     )
 
     # 拦截器配置
@@ -3736,12 +3638,11 @@ async def demo_guardrails_advanced():
     # -------------------------------------------------------------------------
     print("\n--- 3. 中文姓名识别器 ---")
 
-    from harness.guardrails.chinese_guardrail import ChinesePIIGuardrail
     from harness.guardrails.chinese_name_recognizer import (
-        ChineseNameRecognizer,
-        extract_chinese_names,
         COMMON_SURNAMES,
         COMPOUND_SURNAMES,
+        ChineseNameRecognizer,
+        extract_chinese_names,
     )
 
     # 测试中文姓名识别
@@ -3752,7 +3653,7 @@ async def demo_guardrails_advanced():
     """
 
     # 创建姓名识别器
-    name_recognizer = ChineseNameRecognizer()
+    name_recognizer = ChineseNameRecognizer()  # noqa: F841
     names = extract_chinese_names(test_text)
 
     print(f"测试文本:\n  {test_text.strip()}")
@@ -3765,11 +3666,6 @@ async def demo_guardrails_advanced():
     # -------------------------------------------------------------------------
     print("\n--- 4. 异常处理 ---")
 
-    from harness.guardrails import (
-        JudgeTimeoutException,
-        JudgeUnavailableException,
-        StreamInterruptException,
-    )
 
     print("""
     Guardrails 定义了以下异常:
@@ -4117,13 +4013,13 @@ async def demo_loop_engineering_automation():
     print("\n--- 1. 创建 Automation 配置 ---")
 
     # Cron 定时任务：每天 9:00 执行
-    cron_automation = Automation(
+    cron_automation = Automation(  # noqa: F841
         name="daily-report",
         schedule="0 9 * * *",  # 每天 9:00
         goal="分析昨日 Git 提交，生成工作日报",
     )
 
-    print(f"""
+    print("""
     Cron 定时任务:
 
     Automation(
@@ -4139,13 +4035,13 @@ async def demo_loop_engineering_automation():
     """)
 
     # 间隔任务：每 5 分钟执行
-    interval_automation = Automation(
+    interval_automation = Automation(  # noqa: F841
         name="health-check",
         interval_seconds=300,  # 每 5 分钟
         goal="检查系统健康状态，如有异常发送告警",
     )
 
-    print(f"""
+    print("""
     间隔任务:
 
     Automation(

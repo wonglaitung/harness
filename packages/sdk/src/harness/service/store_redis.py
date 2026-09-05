@@ -25,9 +25,9 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from harness.types import Session, Message
+from harness.types import Message, Session
 
 if TYPE_CHECKING:
     pass
@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 try:
     import redis.asyncio as aioredis
     from redis.asyncio import Redis as AsyncRedis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -92,8 +93,7 @@ class RedisSessionStore:
         """
         if not REDIS_AVAILABLE:
             raise ImportError(
-                "Redis is required for RedisSessionStore. "
-                "Install with: pip install redis"
+                "Redis is required for RedisSessionStore. Install with: pip install redis"
             )
 
         self.config = config or RedisSessionConfig(redis_url=redis_url)
@@ -137,7 +137,7 @@ class RedisSessionStore:
         }
         return json.dumps(data, ensure_ascii=False)
 
-    def _deserialize(self, data: str) -> Optional[Session]:
+    def _deserialize(self, data: str) -> Session | None:
         """
         Deserialize session from JSON.
 
@@ -165,12 +165,14 @@ class RedisSessionStore:
 
             # Load messages
             for msg_data in raw.get("messages", []):
-                session.messages.append(Message(
-                    role=msg_data["role"],
-                    content=msg_data["content"],
-                    timestamp=datetime.fromisoformat(msg_data["timestamp"]),
-                    metadata=msg_data.get("metadata", {}),
-                ))
+                session.messages.append(
+                    Message(
+                        role=msg_data["role"],
+                        content=msg_data["content"],
+                        timestamp=datetime.fromisoformat(msg_data["timestamp"]),
+                        metadata=msg_data.get("metadata", {}),
+                    )
+                )
 
             return session
 
@@ -202,7 +204,7 @@ class RedisSessionStore:
         )
         logger.debug(f"Saved session {session.id} to Redis")
 
-    async def load(self, session_id: str) -> Optional[Session]:
+    async def load(self, session_id: str) -> Session | None:
         """
         Load a session from Redis.
 
@@ -296,8 +298,7 @@ class RedisDistributedLock:
     ):
         if not REDIS_AVAILABLE:
             raise ImportError(
-                "Redis is required for RedisDistributedLock. "
-                "Install with: pip install redis"
+                "Redis is required for RedisDistributedLock. Install with: pip install redis"
             )
 
         self.redis_url = redis_url
@@ -335,7 +336,6 @@ class RedisDistributedLock:
             Lock token (used for release), or None if failed
         """
         import uuid
-        import asyncio
 
         redis = await self._get_redis()
         key = self._lock_key(resource)

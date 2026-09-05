@@ -21,9 +21,9 @@ sdk_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if sdk_path not in sys.path:
     sys.path.insert(0, sdk_path)
 
-from harness import AgentHarness, ReadTool, GlobTool
-from harness.sdk.config import HarnessConfig, StepBudgetConfig
-from harness.types import ProgressEvent, ProgressEventType
+from harness import AgentHarness, GlobTool, ReadTool  # noqa: E402
+from harness.sdk.config import HarnessConfig, StepBudgetConfig  # noqa: E402
+from harness.types import ProgressEvent, ProgressEventType  # noqa: E402
 
 # 配置 - 使用第三方 OpenAI 兼容 API
 BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -74,7 +74,12 @@ async def test_demo():
     )
 
     # 问题 - 需要查找信息
-    question = "请执行以下两个操作：\n1. 使用 glob 工具列出当前目录下所有的 *.py 文件\n2. 使用 read 工具读取 pyproject.toml 文件的全部内容\n\n完成后直接展示结果，不要做额外操作。"
+    question = (
+        "请执行以下两个操作：\n"
+        "1. 使用 glob 工具列出当前目录下所有的 *.py 文件\n"
+        "2. 使用 read 工具读取 pyproject.toml 文件的全部内容\n"
+        "\n完成后直接展示结果，不要做额外操作。"
+    )
 
     print("=" * 60)
     print(f"问题: {question}")

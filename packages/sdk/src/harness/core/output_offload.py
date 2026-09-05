@@ -9,8 +9,6 @@ instead of the full content.
 from __future__ import annotations
 
 import logging
-import os
-import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -71,6 +69,7 @@ class OffloadedOutput:
         session_id: Session this output belongs to
         metadata: Additional metadata
     """
+
     file_path: Path
     tool_name: str
     tool_call_id: str
@@ -112,7 +111,7 @@ class OffloadedOutput:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "OffloadedOutput":
+    def from_dict(cls, data: dict) -> OffloadedOutput:
         """Deserialize from dictionary."""
         return cls(
             file_path=Path(data["file_path"]),
@@ -121,7 +120,9 @@ class OffloadedOutput:
             original_size=data["original_size"],
             preview=data["preview"],
             summary=data.get("summary"),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
+            created_at=datetime.fromisoformat(data["created_at"])
+            if "created_at" in data
+            else datetime.now(),
             session_id=data.get("session_id", ""),
             metadata=data.get("metadata", {}),
         )
@@ -214,7 +215,7 @@ class OutputOffloader:
             f.write(content)
 
         # Extract preview
-        preview = content[:self.config.preview_length]
+        preview = content[: self.config.preview_length]
         if len(content) > self.config.preview_length:
             preview += "..."
 
@@ -235,17 +236,15 @@ class OutputOffloader:
         self._session_outputs[session_id].append(output)
         self._total_outputs += 1
 
-        logger.info(
-            f"Offloaded {len(content)} chars from {tool_name} to {file_path}"
-        )
+        logger.info(f"Offloaded {len(content)} chars from {tool_name} to {file_path}")
 
         return output
 
     def create_offloaded_result(
         self,
-        original_result: "ToolResult",
+        original_result: ToolResult,
         session_id: str = "",
-    ) -> "ToolResult":
+    ) -> ToolResult:
         """
         Create a ToolResult with offloaded content reference.
 
@@ -298,7 +297,7 @@ class OutputOffloader:
         if not path.exists():
             raise FileNotFoundError(f"Offloaded file not found: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return f.read()
 
     def cleanup_session(self, session_id: str) -> int:
@@ -362,9 +361,7 @@ class OutputOffloader:
         """
         total_files = sum(len(outputs) for outputs in self._session_outputs.values())
         total_size = sum(
-            output.original_size
-            for outputs in self._session_outputs.values()
-            for output in outputs
+            output.original_size for outputs in self._session_outputs.values() for output in outputs
         )
 
         return {

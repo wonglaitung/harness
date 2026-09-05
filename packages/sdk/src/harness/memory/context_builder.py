@@ -8,12 +8,16 @@ Includes automatic compression when context exceeds budget.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from harness.memory.compressor import CompressionConfig, CompressionResult, ContextCompressor
-from harness.memory.system_prompt import SystemPromptBuilder, SystemPromptConfig
+from harness.memory.system_prompt import (
+    SystemPromptBuilder,
+    SystemPromptConfig,
+    SystemPromptSource,
+)
 from harness.memory.token_counter import TokenCounter
 from harness.types import Message, Session
 
@@ -39,6 +43,7 @@ class ContextBudget:
         skills: Tokens allocated for skill prompts
         memory: Tokens allocated for memory/context
     """
+
     max_tokens: int = 200000
     response_reserve: int = 4096
     system_prompt: int = 0
@@ -55,13 +60,7 @@ class ContextBudget:
     @property
     def used(self) -> int:
         """Total tokens allocated."""
-        return (
-            self.system_prompt +
-            self.tools +
-            self.recent_messages +
-            self.skills +
-            self.memory
-        )
+        return self.system_prompt + self.tools + self.recent_messages + self.skills + self.memory
 
     @property
     def remaining(self) -> int:
@@ -82,7 +81,7 @@ class ContextBudget:
         message_ratio: float = 0.7,
         skills_ratio: float = 0.2,
         memory_ratio: float = 0.1,
-    ) -> "ContextBudget":
+    ) -> ContextBudget:
         """
         Create a budget with automatic allocation.
 
@@ -132,6 +131,7 @@ class ContextBudget:
 @dataclass
 class ContextConfig:
     """Configuration for context building."""
+
     max_tokens: int = 200000
     system_prompt: str = ""
     window_size: int = 100  # Max number of recent messages
@@ -148,6 +148,7 @@ class ContextConfig:
 @dataclass
 class BuiltContext:
     """Result of context building."""
+
     messages: list[dict[str, Any]]
     system_prompt: str
     estimated_tokens: int
@@ -209,17 +210,17 @@ class ContextBuilder:
             # Add global memory source if specified
             if self.config.memory_md_path:
                 from harness.memory.system_prompt import SystemPromptSource
+
                 # memory_md_path can be either a directory or full file path
                 memory_path = self.config.memory_md_path
-                if memory_path.is_dir():
-                    memory_file = memory_path / "MEMORY.md"
-                else:
-                    memory_file = memory_path
-                self._prompt_builder.add_source(SystemPromptSource(
-                    name="GlobalMemory",
-                    priority=40,
-                    file_path=memory_file,
-                ))
+                memory_file = memory_path / "MEMORY.md" if memory_path.is_dir() else memory_path
+                self._prompt_builder.add_source(
+                    SystemPromptSource(
+                        name="GlobalMemory",
+                        priority=40,
+                        file_path=memory_file,
+                    )
+                )
         else:
             # No dynamic prompt building
             self._prompt_builder = None
@@ -263,7 +264,9 @@ class ContextBuilder:
         estimated = self._estimate_tokens(windowed_messages)
 
         # Check if compression is needed
-        compression_needed = estimated > budget.available_for_input * self.config.compression_threshold
+        compression_needed = (
+            estimated > budget.available_for_input * self.config.compression_threshold
+        )
         compression_result = None
 
         if compression_needed and self._compressor:
@@ -286,7 +289,10 @@ class ContextBuilder:
             # If compression generated a summary, prepend it to system prompt
             # This ensures system message stays first (required by chat templates)
             if compression_result.summary:
-                system_prompt = f"{system_prompt}\n\n[Previous conversation summary]\n{compression_result.summary}"
+                system_prompt = (
+                    f"{system_prompt}\n\n[Previous conversation summary]\n"
+                    f"{compression_result.summary}"
+                )
 
             logger.info(
                 f"Compression complete: {compression_result.tokens_before} -> "
@@ -312,7 +318,9 @@ class ContextBuilder:
             return self._prompt_builder.build()
         return self.config.system_prompt
 
-    def _calculate_budget(self, tools: list[ToolDefinition] | None = None, system_prompt: str | None = None) -> ContextBudget:
+    def _calculate_budget(
+        self, tools: list[ToolDefinition] | None = None, system_prompt: str | None = None
+    ) -> ContextBudget:
         """Calculate token budget allocation."""
         # Use provided system_prompt to avoid duplicate build() calls
         if system_prompt is None:
@@ -339,7 +347,7 @@ class ContextBuilder:
         if len(messages) <= self.config.window_size:
             return messages
 
-        return messages[-self.config.window_size:]
+        return messages[-self.config.window_size :]
 
     def _estimate_tokens(self, messages: list[Message]) -> int:
         """
@@ -372,14 +380,16 @@ class ContextBuilder:
         messages = []
 
         # Start with window size limit
-        recent = session.messages[-self.config.window_size:]
+        recent = session.messages[-self.config.window_size :]
 
         # Add messages from newest to oldest until budget exhausted
         current_tokens = 0
         included_messages = []
 
         for msg in reversed(recent):
-            msg_tokens = self._token_counter.count(msg.content if isinstance(msg.content, str) else "")
+            msg_tokens = self._token_counter.count(
+                msg.content if isinstance(msg.content, str) else ""
+            )
 
             if current_tokens + msg_tokens <= token_budget:
                 included_messages.insert(0, msg)
@@ -394,10 +404,12 @@ class ContextBuilder:
 
         # Add new prompt if provided
         if new_prompt:
-            messages.append({
-                "role": "user",
-                "content": new_prompt,
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": new_prompt,
+                }
+            )
 
         return messages
 
@@ -429,7 +441,7 @@ class ContextBuilder:
         # Re-initialize prompt builder with new project root
         self._init_system_prompt_builder()
 
-    def add_prompt_source(self, source: "SystemPromptSource") -> None:
+    def add_prompt_source(self, source: SystemPromptSource) -> None:
         """
         Add a custom system prompt source.
 

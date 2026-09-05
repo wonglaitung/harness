@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,7 +30,7 @@ from harness.core.hooks import LifecycleHook
 from harness.types import HookAction, HookContext, HookPoint, HookResult, Message
 
 if TYPE_CHECKING:
-    from harness.types import ToolResult
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,9 @@ class SelfVerificationConfig:
     test_args: list[str] = field(default_factory=lambda: ["-x", "--tb=short"])
 
     # Tools that trigger verification (code modification tools)
-    trigger_tools: list[str] = field(default_factory=lambda: ["write", "edit", "write_file", "edit_file"])
+    trigger_tools: list[str] = field(
+        default_factory=lambda: ["write", "edit", "write_file", "edit_file"]
+    )
 
     # Working directory for tests (None = current directory)
     working_directory: Path | None = None
@@ -160,10 +161,9 @@ class SelfVerificationHook(LifecycleHook):
         work_dir = self.config.working_directory or Path.cwd()
 
         # Check if tests exist
-        if self.config.skip_if_no_tests:
-            if not self._has_tests(work_dir):
-                logger.info("Self-verification: No tests found, skipping")
-                return None
+        if self.config.skip_if_no_tests and not self._has_tests(work_dir):
+            logger.info("Self-verification: No tests found, skipping")
+            return None
 
         cmd = [self.config.test_command] + self.config.test_args
 
@@ -194,7 +194,7 @@ class SelfVerificationHook(LifecycleHook):
                 "returncode": process.returncode,
             }
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Self-verification: Tests timed out after {self.config.timeout}s")
             return {
                 "success": False,
@@ -231,10 +231,7 @@ class SelfVerificationHook(LifecycleHook):
 
         # Check for test files in root
         root_test_files = list(work_dir.glob(self.config.test_pattern))
-        if root_test_files:
-            return True
-
-        return False
+        return bool(root_test_files)
 
     def _build_error_message(self, test_result: dict, context: HookContext) -> str:
         """Build the error message to inject."""

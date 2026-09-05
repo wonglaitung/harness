@@ -5,12 +5,11 @@
 """
 
 import logging
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
-from harness.guardrails.judge import ComplianceJudge
 from harness.guardrails.config import StreamInterceptConfig
-from harness.guardrails.exceptions import StreamInterruptException
+from harness.guardrails.judge import ComplianceJudge
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InterceptResult:
     """拦截结果"""
+
     should_stop: bool
     safety_score: float
     reason: str
@@ -31,11 +31,7 @@ class StreamInterceptor:
     在流式输出过程中实时监控内容，检测到违规内容时立即中断。
     """
 
-    def __init__(
-        self,
-        judge: ComplianceJudge,
-        config: StreamInterceptConfig
-    ):
+    def __init__(self, judge: ComplianceJudge, config: StreamInterceptConfig):
         self.judge = judge
         self.config = config
         logger.info(
@@ -44,9 +40,7 @@ class StreamInterceptor:
         )
 
     async def intercept(
-        self,
-        stream: AsyncIterator[str],
-        context: Optional[str] = None
+        self, stream: AsyncIterator[str], context: str | None = None
     ) -> AsyncIterator[str]:
         """
         拦截流式输出，检测有害内容
@@ -74,9 +68,9 @@ class StreamInterceptor:
 
             # 判断是否需要检测
             should_check = (
-                token_count >= self.config.min_tokens_before_check and
-                token_count % self.config.check_interval == 0 and
-                check_count < token_count // self.config.check_interval  # 避免重复检测
+                token_count >= self.config.min_tokens_before_check
+                and token_count % self.config.check_interval == 0
+                and check_count < token_count // self.config.check_interval  # 避免重复检测
             )
 
             if should_check and self.config.enabled:
@@ -92,7 +86,8 @@ class StreamInterceptor:
                     if score < self.config.safety_threshold:
                         # 检测到风险，中断流
                         logger.warning(
-                            f"Stream interrupted: score={score:.2f} < threshold={self.config.safety_threshold}, "
+                            f"Stream interrupted: score={score:.2f} < "
+                            f"threshold={self.config.safety_threshold}, "
                             f"tokens={token_count}"
                         )
                         # 先发送中断消息
@@ -136,7 +131,7 @@ class StreamInterceptor:
                 tokens_checked=len(content.split()),
             )
 
-    def _extract_text_from_sse(self, line: str) -> Optional[str]:
+    def _extract_text_from_sse(self, line: str) -> str | None:
         """
         从 SSE 行中提取文本内容
 
@@ -185,11 +180,13 @@ class StreamInterceptor:
 
         # 构造 OpenAI 格式的 SSE 数据
         data = {
-            "choices": [{
-                "delta": {"content": message},
-                "finish_reason": "content_filter",
-                "index": 0,
-            }],
+            "choices": [
+                {
+                    "delta": {"content": message},
+                    "finish_reason": "content_filter",
+                    "index": 0,
+                }
+            ],
             "object": "chat.completion.chunk",
         }
 

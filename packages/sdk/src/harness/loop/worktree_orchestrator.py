@@ -180,17 +180,14 @@ class WorktreeOrchestrator:
         # Phase 4: Optional auto-cleanup
         for config in configs:
             result = results.get(config.name)
-            if config.auto_cleanup and result:
+            if config.auto_cleanup and result and result.achieved:
                 # Only cleanup achieved goals
-                if result.achieved:
-                    try:
-                        await self.worktree_manager.cleanup_worktree(
-                            config.name, force=False
-                        )
-                        result.cleanup_done = True
-                        logger.info(f"Auto-cleaned worktree: {config.name}")
-                    except WorktreeError as e:
-                        logger.warning(f"Failed to cleanup worktree {config.name}: {e}")
+                try:
+                    await self.worktree_manager.cleanup_worktree(config.name, force=False)
+                    result.cleanup_done = True
+                    logger.info(f"Auto-cleaned worktree: {config.name}")
+                except WorktreeError as e:
+                    logger.warning(f"Failed to cleanup worktree {config.name}: {e}")
 
         return results
 
@@ -221,8 +218,7 @@ class WorktreeOrchestrator:
         # Check main repo is clean
         if await self.worktree_manager.is_dirty():
             raise WorktreeError(
-                "Main repository has uncommitted changes. "
-                "Please commit or stash before merging."
+                "Main repository has uncommitted changes. Please commit or stash before merging."
             )
 
         merged = []

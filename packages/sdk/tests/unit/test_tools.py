@@ -1,13 +1,12 @@
 """Tests for tool system."""
 
-import pytest
-from pathlib import Path
 
-from harness.tools.base import Tool, ToolContext
-from harness.tools.registry import ToolRegistry
+import pytest
+
+from harness.tools.base import ToolContext
+from harness.tools.builtins import GlobTool, ReadTool, WriteTool
 from harness.tools.permissions import PermissionSet
-from harness.tools.builtins import ReadTool, WriteTool, GlobTool
-from harness.types import ToolResult
+from harness.tools.registry import ToolRegistry
 
 
 class TestToolRegistry:

@@ -21,7 +21,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,7 +29,7 @@ from harness.core.hooks import LifecycleHook
 from harness.types import HookAction, HookContext, HookPoint, HookResult, Message
 
 if TYPE_CHECKING:
-    from harness.llm.base import LLMResponse
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +104,7 @@ class RalphLoopHook(LifecycleHook):
         """Handle exit attempt - check if task is truly complete."""
         # Check if we've exceeded max loops
         if self._loop_count >= self.config.max_loops:
-            logger.info(
-                f"Ralph Loop: Max loops ({self.config.max_loops}) reached, allowing exit"
-            )
+            logger.info(f"Ralph Loop: Max loops ({self.config.max_loops}) reached, allowing exit")
             return HookResult.continue_()
 
         # Get the LLM response
@@ -203,11 +201,9 @@ class RalphLoopHook(LifecycleHook):
                 return False
 
         # If response is very short and doesn't indicate completion, likely incomplete
-        if len(response) < 100 and not any(p in response_lower for p in ["done", "complete"]):
-            return False
-
-        # Default: assume complete if no indicators either way
-        return True
+        return not (
+            len(response) < 100 and not any(p in response_lower for p in ["done", "complete"])
+        )
 
     def _build_continuation_prompt(
         self,

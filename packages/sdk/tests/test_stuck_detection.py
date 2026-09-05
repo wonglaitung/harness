@@ -4,15 +4,15 @@ Tests for Stuck Detection and tool error encoding fix.
 
 import pytest
 
-from harness.types import LoopState, Message, Session, ToolCall, ToolResult
 from harness.core.agent_loop import AgentLoop, LoopConfig
+from harness.types import LoopState, Message, Session, ToolResult
 
 
 def _make_loop(config: LoopConfig | None = None) -> AgentLoop:
     """Create an AgentLoop with mock components for unit testing."""
     from harness.llm import MockLLMClient
-    from harness.memory import SessionManager, ContextBuilder
-    from harness.tools import ToolRegistry, ToolExecutor
+    from harness.memory import ContextBuilder, SessionManager
+    from harness.tools import ToolExecutor, ToolRegistry
 
     llm = MockLLMClient(model="mock")
     registry = ToolRegistry()
@@ -68,7 +68,7 @@ class TestIsStuck:
         session = Session(id="test")
 
         # 3 consecutive empty results
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content=""))
 
         result = await loop._is_stuck(session, iteration=4)
@@ -82,7 +82,7 @@ class TestIsStuck:
         session = Session(id="test")
 
         # 3 consecutive error results
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content="Error: file not found"))
 
         result = await loop._is_stuck(session, iteration=4)
@@ -128,7 +128,7 @@ class TestIsStuck:
             session.add_message(Message(role="tool", content=f"Content {i}"))
 
         # Recent 3: all empty
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content=""))
 
         result = await loop._is_stuck(session, iteration=10)
@@ -142,7 +142,7 @@ class TestIsStuck:
         session = Session(id="test")
 
         # 3 errors not enough for threshold of 5
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content="Error: fail"))
 
         result = await loop._is_stuck(session, iteration=4)
@@ -295,7 +295,7 @@ class TestGenerateStuckFeedback:
         loop = _make_loop()
         session = Session(id="test")
         # Add some error tool messages for the summary
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content="Error: not found"))
 
         feedback = loop._generate_stuck_feedback(2, session)
@@ -319,7 +319,7 @@ class TestSummarizeRecentErrors:
         """Empty tool results should be counted in summary."""
         loop = _make_loop()
         session = Session(id="test")
-        for i in range(3):
+        for _ in range(3):
             session.add_message(Message(role="tool", content=""))
 
         summary = loop._summarize_recent_errors(session)
@@ -330,7 +330,7 @@ class TestSummarizeRecentErrors:
         """Error tool results should be counted in summary."""
         loop = _make_loop()
         session = Session(id="test")
-        for i in range(2):
+        for _ in range(2):
             session.add_message(Message(role="tool", content="Error: permission denied"))
 
         summary = loop._summarize_recent_errors(session)

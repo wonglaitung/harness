@@ -1,11 +1,13 @@
 """Session management."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, Optional
 import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
-from harness.types import Session, Message
+from harness.types import Session
+
+if TYPE_CHECKING:
+    from harness.memory.store import SessionStore
 
 
 class SessionManager:
@@ -13,9 +15,9 @@ class SessionManager:
 
     def __init__(self, store: Optional["SessionStore"] = None):
         self.store = store
-        self._sessions: Dict[str, Session] = {}
+        self._sessions: dict[str, Session] = {}
 
-    def create_session(self, session_id: Optional[str] = None) -> Session:
+    def create_session(self, session_id: str | None = None) -> Session:
         """Create a new session."""
         if session_id is None:
             session_id = f"session_{uuid.uuid4().hex[:8]}"
@@ -24,7 +26,7 @@ class SessionManager:
         self._sessions[session_id] = session
         return session
 
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str) -> Session | None:
         """Get an existing session."""
         # Check memory cache first
         if session_id in self._sessions:
@@ -39,7 +41,7 @@ class SessionManager:
 
         return None
 
-    def get_or_create(self, session_id: Optional[str] = None) -> Session:
+    def get_or_create(self, session_id: str | None = None) -> Session:
         """Get existing session or create new one."""
         if session_id:
             session = self.get_session(session_id)

@@ -26,7 +26,6 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,36 +33,23 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from harness import AgentHarness, HarnessConfig, ProgressEvent
-from harness.service.tracing import TracingMiddleware
 from harness.service.error_handler import (
-    ErrorResponse,
     ErrorCode,
     create_error_response,
 )
 from harness.service.metrics import (
-    MetricsCollector,
-    MetricsConfig,
-    get_metrics_collector,
     PROMETHEUS_AVAILABLE,
+    get_metrics_collector,
 )
-from harness.service.discovery import (
-    ServiceInstance,
-    ServiceRegistry,
-    NacosServiceRegistry,
-    EurekaServiceRegistry,
-    get_pod_ip,
-    get_service_instance,
-    NACOS_AVAILABLE,
-    EUREKA_AVAILABLE,
-)
+from harness.service.tracing import TracingMiddleware
 
 # Redis session store (optional)
 try:
     from harness.service.store_redis import (
-        RedisSessionStore,
-        RedisSessionConfig,
-        RedisDistributedLock,
         REDIS_AVAILABLE,
+        RedisDistributedLock,
+        RedisSessionConfig,
+        RedisSessionStore,
     )
 except ImportError:
     RedisSessionStore = None
@@ -249,7 +235,7 @@ async def metrics_endpoint():
             },
         )
 
-    from harness.service.metrics import export_metrics, get_metrics_collector
+    from harness.service.metrics import get_metrics_collector
 
     collector = get_metrics_collector()
     metrics_data = collector.export()
@@ -357,13 +343,15 @@ async def run_agent_ws(websocket: WebSocket):
 
         # Progress callback
         async def on_progress(event: ProgressEvent):
-            await websocket.send_json({
-                "type": "progress",
-                "event_type": event.type.value,
-                "message": event.message,
-                "data": event.data,
-                "duration_ms": event.duration_ms,
-            })
+            await websocket.send_json(
+                {
+                    "type": "progress",
+                    "event_type": event.type.value,
+                    "message": event.message,
+                    "data": event.data,
+                    "duration_ms": event.duration_ms,
+                }
+            )
 
         # Run agent
         result = await agent.run(
@@ -373,29 +361,33 @@ async def run_agent_ws(websocket: WebSocket):
         )
 
         # Send final result
-        await websocket.send_json({
-            "type": "done",
-            "result": {
-                "status": result.status.value,
-                "content": result.content,
-                "session_id": result.session.id,
-                "iterations": result.iterations,
-                "token_usage": {
-                    "input": result.token_usage.input_tokens,
-                    "output": result.token_usage.output_tokens,
+        await websocket.send_json(
+            {
+                "type": "done",
+                "result": {
+                    "status": result.status.value,
+                    "content": result.content,
+                    "session_id": result.session.id,
+                    "iterations": result.iterations,
+                    "token_usage": {
+                        "input": result.token_usage.input_tokens,
+                        "output": result.token_usage.output_tokens,
+                    },
                 },
-            },
-        })
+            }
+        )
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
 
     except Exception as e:
         logger.exception(f"WebSocket error: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "error": str(e),
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "error": str(e),
+            }
+        )
 
 
 # =============================================================================

@@ -5,15 +5,12 @@ Tests for Progressive Skill Loading.
 import tempfile
 from pathlib import Path
 
-import pytest
-
+from harness.skills.base import Skill
 from harness.skills.progressive import (
     LoadingLevel,
-    ProgressiveLoadResult,
     ProgressiveSkillLoader,
     SkillMetadata,
 )
-from harness.skills.base import Skill
 
 
 class TestSkillMetadata:
@@ -39,7 +36,7 @@ class TestSkillMetadata:
             path=Path("/tmp/test.md"),
         )
         item = meta.to_list_item()
-        assert "- code_review: Review code for issues" == item
+        assert item == "- code_review: Review code for issues"
 
     def test_matches_keywords(self):
         """Test keyword matching."""

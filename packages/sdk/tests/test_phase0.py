@@ -2,12 +2,11 @@
 Tests for Phase 0 components: TokenCounter, ContextBudget, CircuitBreaker, ErrorHandler.
 """
 
-import pytest
 
-from harness.memory.token_counter import TokenCounter, count_tokens
-from harness.memory.context_builder import ContextBudget, ContextBuilder, ContextConfig
 from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
-from harness.core.error_handler import ErrorHandler, ErrorAction, ErrorContext
+from harness.core.error_handler import ErrorAction, ErrorContext, ErrorHandler
+from harness.memory.context_builder import ContextBudget, ContextBuilder, ContextConfig
+from harness.memory.token_counter import TokenCounter
 
 
 class TestTokenCounter:
@@ -286,7 +285,6 @@ class TestContextBuilder:
 
     def test_context_builder_uses_tiktoken(self):
         """Test that ContextBuilder uses tiktoken for counting."""
-        from harness.types import Session
 
         builder = ContextBuilder()
 

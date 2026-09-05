@@ -10,9 +10,9 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from harness.types import Session, Message
+from harness.types import Message, Session
 
 if TYPE_CHECKING:
     pass
@@ -29,7 +29,7 @@ class SessionStore(ABC):
         pass
 
     @abstractmethod
-    def load(self, session_id: str) -> Optional[Session]:
+    def load(self, session_id: str) -> Session | None:
         """Load a session by ID."""
         pass
 
@@ -71,7 +71,7 @@ class FileSessionStore(SessionStore):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-    def load(self, session_id: str) -> Optional[Session]:
+    def load(self, session_id: str) -> Session | None:
         """Load a session from file."""
         path = self._session_path(session_id)
 
@@ -79,7 +79,7 @@ class FileSessionStore(SessionStore):
             return None
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
 
             session = Session(
@@ -170,49 +170,53 @@ class SQLiteSessionStore(SessionStore):
         """Save a session to SQLite."""
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO sessions
                 (id, created_at, updated_at, user_id, working_directory, summary, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                session.id,
-                session.created_at.isoformat(),
-                session.updated_at.isoformat(),
-                session.metadata.get("user_id"),
-                session.metadata.get("working_directory", ""),
-                session.metadata.get("summary"),
-                json.dumps(session.metadata),
-            ))
+            """,
+                (
+                    session.id,
+                    session.created_at.isoformat(),
+                    session.updated_at.isoformat(),
+                    session.metadata.get("user_id"),
+                    session.metadata.get("working_directory", ""),
+                    session.metadata.get("summary"),
+                    json.dumps(session.metadata),
+                ),
+            )
 
             # Delete old messages
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session.id,))
 
             # Save new messages
             for msg in session.messages:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO messages
                     (session_id, role, content, timestamp, tool_call_id, metadata)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    session.id,
-                    msg.role,
-                    msg.content if isinstance(msg.content, str) else json.dumps(msg.content),
-                    msg.timestamp.isoformat(),
-                    msg.metadata.get("tool_call_id"),
-                    json.dumps(msg.metadata),
-                ))
+                """,
+                    (
+                        session.id,
+                        msg.role,
+                        msg.content if isinstance(msg.content, str) else json.dumps(msg.content),
+                        msg.timestamp.isoformat(),
+                        msg.metadata.get("tool_call_id"),
+                        json.dumps(msg.metadata),
+                    ),
+                )
 
             conn.commit()
         finally:
             conn.close()
 
-    def load(self, session_id: str) -> Optional[Session]:
+    def load(self, session_id: str) -> Session | None:
         """Load a session from SQLite."""
         conn = sqlite3.connect(self.db_path)
         try:
-            cursor = conn.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
-            )
+            cursor = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
             row = cursor.fetchone()
             if not row:
                 return None
@@ -226,16 +230,19 @@ class SQLiteSessionStore(SessionStore):
 
             # Load messages
             cursor = conn.execute(
-                "SELECT role, content, timestamp, metadata FROM messages WHERE session_id = ? ORDER BY id",
+                "SELECT role, content, timestamp, metadata "
+                "FROM messages WHERE session_id = ? ORDER BY id",
                 (session_id,),
             )
             for msg_row in cursor.fetchall():
-                session.messages.append(Message(
-                    role=msg_row[0],
-                    content=msg_row[1],
-                    timestamp=datetime.fromisoformat(msg_row[2]),
-                    metadata=json.loads(msg_row[3]) if msg_row[3] else {},
-                ))
+                session.messages.append(
+                    Message(
+                        role=msg_row[0],
+                        content=msg_row[1],
+                        timestamp=datetime.fromisoformat(msg_row[2]),
+                        metadata=json.loads(msg_row[3]) if msg_row[3] else {},
+                    )
+                )
 
             return session
         except Exception:
@@ -353,13 +360,14 @@ class AsyncSQLiteSessionStore:
             else:
                 try:
                     import aiosqlite
+
                     conn = await aiosqlite.connect(self.db_path)
                     await self._init_connection(conn)
                 except ImportError:
                     raise ImportError(
                         "aiosqlite is required for async SQLite support. "
                         "Install with: pip install aiosqlite"
-                    )
+                    ) from None
 
         try:
             yield conn
@@ -378,54 +386,60 @@ class AsyncSQLiteSessionStore:
         for attempt in range(max_retries):
             try:
                 async with self._get_connection() as conn:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT OR REPLACE INTO sessions
                         (id, created_at, updated_at, user_id, working_directory, summary, metadata)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        session.id,
-                        session.created_at.isoformat(),
-                        session.updated_at.isoformat(),
-                        session.metadata.get("user_id"),
-                        session.metadata.get("working_directory", ""),
-                        session.metadata.get("summary"),
-                        json.dumps(session.metadata),
-                    ))
+                    """,
+                        (
+                            session.id,
+                            session.created_at.isoformat(),
+                            session.updated_at.isoformat(),
+                            session.metadata.get("user_id"),
+                            session.metadata.get("working_directory", ""),
+                            session.metadata.get("summary"),
+                            json.dumps(session.metadata),
+                        ),
+                    )
 
                     # Delete old messages
                     await conn.execute("DELETE FROM messages WHERE session_id = ?", (session.id,))
 
                     # Save new messages
                     for msg in session.messages:
-                        await conn.execute("""
+                        await conn.execute(
+                            """
                             INSERT INTO messages
                             (session_id, role, content, timestamp, tool_call_id, metadata)
                             VALUES (?, ?, ?, ?, ?, ?)
-                        """, (
-                            session.id,
-                            msg.role,
-                            msg.content if isinstance(msg.content, str) else json.dumps(msg.content),
-                            msg.timestamp.isoformat(),
-                            msg.metadata.get("tool_call_id"),
-                            json.dumps(msg.metadata),
-                        ))
+                        """,
+                            (
+                                session.id,
+                                msg.role,
+                                msg.content
+                                if isinstance(msg.content, str)
+                                else json.dumps(msg.content),
+                                msg.timestamp.isoformat(),
+                                msg.metadata.get("tool_call_id"),
+                                json.dumps(msg.metadata),
+                            ),
+                        )
 
                     await conn.commit()
                 return
             except Exception as e:
                 if "locked" in str(e) and attempt < max_retries - 1:
-                    await asyncio.sleep(0.1 * (2 ** attempt))
+                    await asyncio.sleep(0.1 * (2**attempt))
                     continue
                 raise
 
-    async def load(self, session_id: str) -> Optional[Session]:
+    async def load(self, session_id: str) -> Session | None:
         """Load a session asynchronously."""
         await self._ensure_initialized()
 
         async with self._get_connection() as conn:
-            cursor = await conn.execute(
-                "SELECT * FROM sessions WHERE id = ?", (session_id,)
-            )
+            cursor = await conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
             row = await cursor.fetchone()
             if not row:
                 return None
@@ -439,16 +453,19 @@ class AsyncSQLiteSessionStore:
 
             # Load messages
             cursor = await conn.execute(
-                "SELECT role, content, timestamp, metadata FROM messages WHERE session_id = ? ORDER BY id",
+                "SELECT role, content, timestamp, metadata "
+                "FROM messages WHERE session_id = ? ORDER BY id",
                 (session_id,),
             )
             async for msg_row in cursor:
-                session.messages.append(Message(
-                    role=msg_row[0],
-                    content=msg_row[1],
-                    timestamp=datetime.fromisoformat(msg_row[2]),
-                    metadata=json.loads(msg_row[3]) if msg_row[3] else {},
-                ))
+                session.messages.append(
+                    Message(
+                        role=msg_row[0],
+                        content=msg_row[1],
+                        timestamp=datetime.fromisoformat(msg_row[2]),
+                        metadata=json.loads(msg_row[3]) if msg_row[3] else {},
+                    )
+                )
 
             return session
 

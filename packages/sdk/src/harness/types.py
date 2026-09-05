@@ -6,30 +6,32 @@ These types form the foundation of the agent loop, tool system, and memory manag
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine
-
+from typing import Any
 
 # =============================================================================
 # Progress Events - 进度事件类型
 # =============================================================================
 
+
 class ProgressEventType(Enum):
     """Progress event types for tracking agent execution."""
-    LOOP_START = "loop_start"            # Agent 循环开始
-    LOOP_END = "loop_end"                # Agent 循环结束
-    STATE_CHANGE = "state_change"        # 状态变化
-    TOOL_CALL = "tool_call"              # 工具调用开始
-    TOOL_RESULT = "tool_result"          # 工具调用结果
-    LLM_CALL = "llm_call"                # LLM 调用开始
-    LLM_RESPONSE = "llm_response"        # LLM 响应接收
-    TEXT_CHUNK = "text_chunk"            # 流式文本块
-    ITERATION = "iteration"              # 迭代计数
-    ERROR = "error"                      # 错误发生
+
+    LOOP_START = "loop_start"  # Agent 循环开始
+    LOOP_END = "loop_end"  # Agent 循环结束
+    STATE_CHANGE = "state_change"  # 状态变化
+    TOOL_CALL = "tool_call"  # 工具调用开始
+    TOOL_RESULT = "tool_result"  # 工具调用结果
+    LLM_CALL = "llm_call"  # LLM 调用开始
+    LLM_RESPONSE = "llm_response"  # LLM 响应接收
+    TEXT_CHUNK = "text_chunk"  # 流式文本块
+    ITERATION = "iteration"  # 迭代计数
+    ERROR = "error"  # 错误发生
     STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压
-    STUCK_DETECTED = "stuck_detected"    # 检测到停滞状态
+    STUCK_DETECTED = "stuck_detected"  # 检测到停滞状态
     ROUTER_DECISION = "router_decision"  # 路由决策（CPU Router）
 
 
@@ -45,6 +47,7 @@ class ProgressEvent:
         data: Additional event data (tool name, arguments, timing, etc.)
         duration_ms: Duration in milliseconds (for timed events)
     """
+
     type: ProgressEventType
     message: str
     timestamp: datetime = field(default_factory=datetime.now)
@@ -65,29 +68,33 @@ ProgressCallback = Callable[[ProgressEvent], None]
 # Loop State - 循环状态
 # =============================================================================
 
+
 class LoopState(Enum):
     """Agent loop state machine states."""
-    IDLE = "idle"                    # 空闲，等待输入
-    BUILDING_CONTEXT = "building"    # 构建上下文
-    CALLING_LLM = "calling"          # 调用 LLM
-    PARSING_RESPONSE = "parsing"     # 解析响应
-    EXECUTING_TOOLS = "executing"    # 执行工具
-    COMPLETED = "completed"          # 完成
-    ERROR = "error"                  # 错误状态
-    INTERRUPTED = "interrupted"      # 被中断
-    STUCK = "stuck"                  # 陷入停滞
+
+    IDLE = "idle"  # 空闲，等待输入
+    BUILDING_CONTEXT = "building"  # 构建上下文
+    CALLING_LLM = "calling"  # 调用 LLM
+    PARSING_RESPONSE = "parsing"  # 解析响应
+    EXECUTING_TOOLS = "executing"  # 执行工具
+    COMPLETED = "completed"  # 完成
+    ERROR = "error"  # 错误状态
+    INTERRUPTED = "interrupted"  # 被中断
+    STUCK = "stuck"  # 陷入停滞
 
 
 class StopReason(Enum):
     """LLM response stop reason."""
-    END_TURN = "end_turn"            # 正常结束
-    TOOL_USE = "tool_use"            # 需要工具调用
-    MAX_TOKENS = "max_tokens"        # 达到最大 token
+
+    END_TURN = "end_turn"  # 正常结束
+    TOOL_USE = "tool_use"  # 需要工具调用
+    MAX_TOKENS = "max_tokens"  # 达到最大 token
     STOP_SEQUENCE = "stop_sequence"  # 遇到停止序列
 
 
 class MessageRole(Enum):
     """Message role in conversation."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -97,6 +104,7 @@ class MessageRole(Enum):
 @dataclass
 class Message:
     """A single message in the conversation."""
+
     role: str
     content: str | list[dict[str, Any]]
     timestamp: datetime = field(default_factory=datetime.now)
@@ -122,6 +130,7 @@ class Message:
 @dataclass
 class ToolCall:
     """A tool call request from the LLM."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -144,7 +153,7 @@ class ToolCall:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ToolCall":
+    def from_dict(cls, data: dict[str, Any]) -> ToolCall:
         """Deserialize from dictionary."""
         return cls(
             id=data["id"],
@@ -156,6 +165,7 @@ class ToolCall:
 @dataclass
 class ToolResult:
     """Result from a tool execution."""
+
     tool_call_id: str
     success: bool
     content: str
@@ -177,10 +187,11 @@ class ToolResult:
 # Cost Control - 成本控制
 # =============================================================================
 
+
 class BudgetExceededError(Exception):
     """Raised when session budget is exceeded."""
 
-    def __init__(self, message: str, usage: "TokenUsage | None" = None, limit: int = 0):
+    def __init__(self, message: str, usage: TokenUsage | None = None, limit: int = 0):
         super().__init__(message)
         self.usage = usage
         self.limit = limit
@@ -211,7 +222,10 @@ class DocumentTooLargeError(Exception):
         self.filename = filename
         self.size = size
         self.limit = limit
-        message = f"Document '{filename}' ({size / 1024 / 1024:.1f}MB) exceeds limit ({limit / 1024 / 1024:.1f}MB)"
+        message = (
+            f"Document '{filename}' ({size / 1024 / 1024:.1f}MB) exceeds limit "
+            f"({limit / 1024 / 1024:.1f}MB)"
+        )
         super().__init__(message)
 
 
@@ -237,6 +251,7 @@ class CostConfig:
         fallback_model: Model to switch to when budget is tight
         context_reduction_ratio: Ratio to reduce context when budget is tight
     """
+
     # Session level
     max_tokens_per_session: int = 1_000_000
     max_tool_calls_per_session: int = 500
@@ -264,6 +279,7 @@ class CostConfig:
 @dataclass
 class TokenUsage:
     """Token usage statistics."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -286,10 +302,16 @@ class TokenUsage:
             Tuple of (is_within_budget, warning_message)
         """
         if self.total_tokens > config.max_tokens_per_session:
-            return False, f"Token limit exceeded: {self.total_tokens}/{config.max_tokens_per_session}"
+            return (
+                False,
+                f"Token limit exceeded: {self.total_tokens}/{config.max_tokens_per_session}",
+            )
 
         if self.tool_calls > config.max_tool_calls_per_session:
-            return False, f"Tool call limit exceeded: {self.tool_calls}/{config.max_tool_calls_per_session}"
+            return (
+                False,
+                f"Tool call limit exceeded: {self.tool_calls}/{config.max_tool_calls_per_session}",
+            )
 
         # Check warning threshold
         usage_ratio = self.total_tokens / config.max_tokens_per_session
@@ -302,11 +324,12 @@ class TokenUsage:
 @dataclass
 class UserUsage:
     """User-level usage statistics."""
+
     user_id: str
     daily_tokens: int = 0
     hourly_requests: int = 0
     date: str = ""  # YYYY-MM-DD format
-    hour: int = 0   # 0-23
+    hour: int = 0  # 0-23
 
     def check_budget(self, config: CostConfig) -> tuple[bool, str | None]:
         """
@@ -319,10 +342,17 @@ class UserUsage:
             Tuple of (is_within_budget, warning_message)
         """
         if self.daily_tokens > config.daily_token_limit:
-            return False, f"Daily token limit exceeded: {self.daily_tokens}/{config.daily_token_limit}"
+            return (
+                False,
+                f"Daily token limit exceeded: {self.daily_tokens}/{config.daily_token_limit}",
+            )
 
         if self.hourly_requests > config.hourly_request_limit:
-            return False, f"Hourly request limit exceeded: {self.hourly_requests}/{config.hourly_request_limit}"
+            return (
+                False,
+                f"Hourly request limit exceeded: "
+                f"{self.hourly_requests}/{config.hourly_request_limit}",
+            )
 
         # Check warning threshold
         usage_ratio = self.daily_tokens / config.daily_token_limit
@@ -335,6 +365,7 @@ class UserUsage:
 @dataclass
 class LLMResponse:
     """Response from LLM."""
+
     content: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     stop_reason: StopReason = StopReason.END_TURN
@@ -359,6 +390,7 @@ class LLMResponse:
 @dataclass
 class Session:
     """A conversation session."""
+
     id: str
     messages: list[Message] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
@@ -384,6 +416,7 @@ class Session:
 @dataclass
 class LoopResult:
     """Result from agent loop execution."""
+
     status: LoopState
     session: Session
     messages: list[Message] = field(default_factory=list)
@@ -407,15 +440,17 @@ class LoopResult:
 # Streaming Types - 流式输出类型
 # =============================================================================
 
+
 class ChunkType(Enum):
     """Types of chunks in streaming output."""
-    TEXT = "text"                    # 文本内容
-    TOOL_CALL_START = "tool_start"   # 工具调用开始
-    TOOL_CALL_DELTA = "tool_delta"   # 工具调用增量
-    TOOL_CALL_END = "tool_end"       # 工具调用结束
-    THINKING = "thinking"            # 思考过程（Claude）
-    ERROR = "error"                  # 错误
-    DONE = "done"                    # 流结束
+
+    TEXT = "text"  # 文本内容
+    TOOL_CALL_START = "tool_start"  # 工具调用开始
+    TOOL_CALL_DELTA = "tool_delta"  # 工具调用增量
+    TOOL_CALL_END = "tool_end"  # 工具调用结束
+    THINKING = "thinking"  # 思考过程（Claude）
+    ERROR = "error"  # 错误
+    DONE = "done"  # 流结束
 
 
 @dataclass
@@ -431,6 +466,7 @@ class Chunk:
         tool_arguments: Partial arguments (for TOOL_CALL_DELTA)
         metadata: Additional metadata
     """
+
     type: ChunkType
     content: str = ""
     tool_call_id: str | None = None
@@ -459,6 +495,7 @@ class Chunk:
 # Loop Snapshot - 循环快照（用于中断恢复）
 # =============================================================================
 
+
 @dataclass
 class LoopSnapshot:
     """
@@ -474,6 +511,7 @@ class LoopSnapshot:
         last_llm_response: Last response from LLM
         created_at: When snapshot was created
     """
+
     session_id: str
     messages: list[Message] = field(default_factory=list)
     current_iteration: int = 0
@@ -485,7 +523,13 @@ class LoopSnapshot:
         """Serialize snapshot to dictionary."""
         return {
             "session_id": self.session_id,
-            "messages": [{"role": m.role, "content": m.content if isinstance(m.content, str) else str(m.content)} for m in self.messages],
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": m.content if isinstance(m.content, str) else str(m.content),
+                }
+                for m in self.messages
+            ],
             "current_iteration": self.current_iteration,
             "pending_tool_calls": [tc.to_dict() for tc in self.pending_tool_calls],
             "last_llm_response": self.last_llm_response,
@@ -493,21 +537,26 @@ class LoopSnapshot:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LoopSnapshot":
+    def from_dict(cls, data: dict[str, Any]) -> LoopSnapshot:
         """Deserialize snapshot from dictionary."""
         return cls(
             session_id=data["session_id"],
             messages=[Message(**m) for m in data.get("messages", [])],
             current_iteration=data.get("current_iteration", 0),
-            pending_tool_calls=[ToolCall.from_dict(tc) for tc in data.get("pending_tool_calls", [])],
+            pending_tool_calls=[
+                ToolCall.from_dict(tc) for tc in data.get("pending_tool_calls", [])
+            ],
             last_llm_response=data.get("last_llm_response"),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else datetime.now(),
+            created_at=datetime.fromisoformat(data["created_at"])
+            if "created_at" in data
+            else datetime.now(),
         )
 
 
 # =============================================================================
 # Lifecycle Hooks - 生命周期钩子
 # =============================================================================
+
 
 class HookPoint(Enum):
     """
@@ -520,14 +569,15 @@ class HookPoint(Enum):
     - On loop start/end
     - On exit attempts (for Ralph Loop)
     """
-    BEFORE_LLM_CALL = "before_llm_call"        # LLM 调用前
-    AFTER_LLM_CALL = "after_llm_call"          # LLM 调用后
+
+    BEFORE_LLM_CALL = "before_llm_call"  # LLM 调用前
+    AFTER_LLM_CALL = "after_llm_call"  # LLM 调用后
     BEFORE_TOOL_EXECUTE = "before_tool_execute"  # 工具执行前
-    AFTER_TOOL_EXECUTE = "after_tool_execute"    # 工具执行后
-    ON_ERROR = "on_error"                      # 错误发生时
-    ON_LOOP_START = "on_loop_start"            # 循环开始
-    ON_LOOP_END = "on_loop_end"                # 循环结束
-    ON_EXIT_ATTEMPT = "on_exit_attempt"        # 尝试退出时（Ralph Loop）
+    AFTER_TOOL_EXECUTE = "after_tool_execute"  # 工具执行后
+    ON_ERROR = "on_error"  # 错误发生时
+    ON_LOOP_START = "on_loop_start"  # 循环开始
+    ON_LOOP_END = "on_loop_end"  # 循环结束
+    ON_EXIT_ATTEMPT = "on_exit_attempt"  # 尝试退出时（Ralph Loop）
 
 
 class HookAction(Enum):
@@ -542,6 +592,7 @@ class HookAction(Enum):
     - MODIFY_RESULT: Modify tool result (after execution)
     - REINJECT: Clear context and reinject a prompt (for Ralph Loop)
     """
+
     CONTINUE = "continue"
     ABORT = "abort"
     RETRY = "retry"
@@ -571,6 +622,7 @@ class HookContext:
         messages: Current messages (optional)
         metadata: Additional context data
     """
+
     hook_point: HookPoint
     session_id: str
     iteration: int = 0
@@ -599,6 +651,7 @@ class HookResult:
         clear_context: Whether to clear context (for Ralph Loop)
         metadata: Additional data (e.g., abort reason)
     """
+
     action: HookAction = HookAction.CONTINUE
     modified_args: dict[str, Any] | None = None
     modified_result: ToolResult | None = None
@@ -608,17 +661,17 @@ class HookResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def continue_(cls) -> "HookResult":
+    def continue_(cls) -> HookResult:
         """Convenience method for continue action."""
         return cls(action=HookAction.CONTINUE)
 
     @classmethod
-    def abort(cls, reason: str = "") -> "HookResult":
+    def abort(cls, reason: str = "") -> HookResult:
         """Convenience method for abort action."""
         return cls(action=HookAction.ABORT, metadata={"reason": reason} if reason else {})
 
     @classmethod
-    def inject(cls, message: Message) -> "HookResult":
+    def inject(cls, message: Message) -> HookResult:
         """Convenience method for inject message action."""
         return cls(action=HookAction.INJECT_MESSAGE, inject_message=message)
 
@@ -626,12 +679,12 @@ class HookResult:
     inject_message = inject
 
     @classmethod
-    def modify_args(cls, args: dict[str, Any]) -> "HookResult":
+    def modify_args(cls, args: dict[str, Any]) -> HookResult:
         """Convenience method for modify args action."""
         return cls(action=HookAction.MODIFY_ARGS, modified_args=args)
 
     @classmethod
-    def modify_result(cls, result: ToolResult) -> "HookResult":
+    def modify_result(cls, result: ToolResult) -> HookResult:
         """Convenience method for modify result action."""
         return cls(action=HookAction.MODIFY_RESULT, modified_result=result)
 

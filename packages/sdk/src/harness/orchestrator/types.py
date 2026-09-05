@@ -26,7 +26,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from harness.loop.types import GoalConfig, GoalResult
+    from harness.loop.types import GoalResult
 
 
 class WorkflowStatus(Enum):
@@ -271,27 +271,15 @@ class WorkflowResult:
 
     def get_successful_steps(self) -> list[str]:
         """Get names of successfully completed steps."""
-        return [
-            name
-            for name, result in self.steps.items()
-            if result.status == StepStatus.SUCCESS
-        ]
+        return [name for name, result in self.steps.items() if result.status == StepStatus.SUCCESS]
 
     def get_failed_steps(self) -> list[str]:
         """Get names of failed steps."""
-        return [
-            name
-            for name, result in self.steps.items()
-            if result.status == StepStatus.FAILED
-        ]
+        return [name for name, result in self.steps.items() if result.status == StepStatus.FAILED]
 
     def get_skipped_steps(self) -> list[str]:
         """Get names of skipped steps."""
-        return [
-            name
-            for name, result in self.steps.items()
-            if result.status == StepStatus.SKIPPED
-        ]
+        return [name for name, result in self.steps.items() if result.status == StepStatus.SKIPPED]
 
 
 # =============================================================================

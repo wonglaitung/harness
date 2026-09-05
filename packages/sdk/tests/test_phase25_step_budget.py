@@ -51,7 +51,10 @@ class TestStepBudgetConfig:
 
     def test_tool_calls_task_less_than_step(self):
         """Test tool calls per task must be >= tool calls per step."""
-        with pytest.raises(ValueError, match="max_tool_calls_per_task must be >= max_tool_calls_per_step"):
+        with pytest.raises(
+            ValueError,
+            match="max_tool_calls_per_task must be >= max_tool_calls_per_step",
+        ):
             StepBudgetConfig(max_tool_calls_per_step=20, max_tool_calls_per_task=10)
 
     def test_invalid_warning_threshold(self):

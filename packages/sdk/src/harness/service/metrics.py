@@ -17,26 +17,27 @@ from __future__ import annotations
 
 import logging
 import time
-from contextlib import contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from harness.types import ProgressEvent, ProgressEventType, TokenUsage
+    from harness.types import ProgressEvent, TokenUsage
 
 logger = logging.getLogger(__name__)
 
 # Check if Prometheus client is available
 try:
     from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        REGISTRY,
+        CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
-        CollectorRegistry,
         generate_latest,
-        CONTENT_TYPE_LATEST,
-        REGISTRY,
     )
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -54,9 +55,7 @@ class MetricsConfig:
     enabled: bool = True
     prefix: str = "harness"  # Metric name prefix
     # Histogram buckets (in seconds)
-    duration_buckets: tuple[float, ...] = (
-        0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0
-    )
+    duration_buckets: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0)
 
 
 class MetricsCollector:
@@ -214,7 +213,7 @@ class MetricsCollector:
         if duration_seconds and self._tool_duration:
             self._tool_duration.labels(tool=tool_name).observe(duration_seconds)
 
-    def record_token_usage(self, usage: "TokenUsage") -> None:
+    def record_token_usage(self, usage: TokenUsage) -> None:
         """
         Record token usage.
 
@@ -265,7 +264,7 @@ class MetricsCollector:
     # Progress event handler
     # =========================================================================
 
-    def create_progress_handler(self) -> Callable[["ProgressEvent"], None]:
+    def create_progress_handler(self) -> Callable[[ProgressEvent], None]:
         """
         Create a progress event handler that records metrics.
 
@@ -284,7 +283,7 @@ class MetricsCollector:
         _llm_call_start_time: float | None = None
         _session_start_time: float | None = None
 
-        def handle_event(event: "ProgressEvent") -> None:
+        def handle_event(event: ProgressEvent) -> None:
             event_type = event.type.value
 
             if event_type == "loop_start":
@@ -312,6 +311,7 @@ class MetricsCollector:
                 # Record token usage if available
                 if event.data and "token_usage" in event.data:
                     from harness.types import TokenUsage
+
                     usage_data = event.data["token_usage"]
                     if isinstance(usage_data, dict):
                         usage = TokenUsage(
@@ -384,16 +384,23 @@ def create_metrics_app() -> Any:
     if not PROMETHEUS_AVAILABLE:
         # Return a simple fallback app
         async def fallback_app(scope, receive, send):
-            await send({
-                "type": "http.response.start",
-                "status": 503,
-                "headers": [[b"content-type", b"text/plain"]],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": b"Prometheus client not available. Install with: pip install prometheus-client",
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 503,
+                    "headers": [[b"content-type", b"text/plain"]],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b"Prometheus client not available. "
+                    b"Install with: pip install prometheus-client",
+                }
+            )
+
         return fallback_app
 
     from prometheus_client import make_asgi_app
+
     return make_asgi_app(REGISTRY)

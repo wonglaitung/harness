@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from harness.connectors.base import Connector, EventCallback
+from harness.connectors.base import Connector
 from harness.connectors.types import (
     ConnectorEvent,
     ConnectorType,
@@ -179,7 +179,6 @@ class ConnectorManager:
         (e.g., Slack Socket Mode).
         """
         # Import here to avoid circular dependency
-        from harness.triggers.types import TriggerType
 
         # Convert to TriggerEvent
         trigger_event = TriggerEvent(

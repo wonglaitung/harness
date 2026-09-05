@@ -15,7 +15,7 @@ import hashlib
 import logging
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from harness.orchestrator.types import (
     AgentRole,
@@ -26,9 +26,9 @@ from harness.orchestrator.types import (
 from harness.sdk.config import HarnessConfig
 
 if TYPE_CHECKING:
-    from harness.orchestrator.core import LoopOrchestrator
     from harness import AgentHarness
-    from harness.loop.types import GoalConfig, GoalResult
+    from harness.loop.types import GoalResult
+    from harness.orchestrator.core import LoopOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +285,7 @@ class TeamOrchestrator:
 
         results = await asyncio.gather(*tasks)
 
-        return {role.name: result for role, result in zip(config.roles, results)}
+        return {role.name: result for role, result in zip(config.roles, results, strict=False)}
 
     async def _run_sequential(
         self,
@@ -321,8 +321,7 @@ class TeamOrchestrator:
             # Pass result to next agent
             if result.achieved:
                 current_task = (
-                    f"{task}\n\n"
-                    f"Previous agent ({role.name}) output:\n{result.final_response}"
+                    f"{task}\n\nPrevious agent ({role.name}) output:\n{result.final_response}"
                 )
 
         return results
@@ -370,9 +369,7 @@ Provide your allocation in the following format:
 - [agent_name]: [subtask]
 """
 
-        allocation_result = await self._run_agent(
-            leader_agent, allocation_prompt, worktree_path
-        )
+        allocation_result = await self._run_agent(leader_agent, allocation_prompt, worktree_path)
         results = {leader_role.name: allocation_result}
 
         # Workers execute assigned tasks

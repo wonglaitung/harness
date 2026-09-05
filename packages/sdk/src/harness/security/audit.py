@@ -7,7 +7,6 @@ Provides comprehensive logging of tool calls, file access, and commands.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -72,7 +71,7 @@ class AuditLogEntry:
         return sanitized
 
     @classmethod
-    def from_json(cls, json_str: str) -> "AuditLogEntry":
+    def from_json(cls, json_str: str) -> AuditLogEntry:
         """
         Create entry from JSON string.
 

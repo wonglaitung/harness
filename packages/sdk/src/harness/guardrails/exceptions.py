@@ -4,24 +4,24 @@
 用于 Judge 模块和其他组件的异常处理。
 """
 
-from typing import Optional, List
 from dataclasses import dataclass
 
 
 @dataclass
 class JudgeResult:
     """Judge 检测结果"""
+
     is_safe: bool
     risk_level: str  # "safe", "low", "medium", "high", "critical"
-    risk_categories: List[str]
+    risk_categories: list[str]
     reason: str
     confidence: float
 
 
-class ContentRiskException(Exception):
+class ContentRiskException(Exception):  # noqa: N818
     """内容风险异常 - 当 Judge 检测到高风险内容时抛出"""
 
-    def __init__(self, result: JudgeResult, message: Optional[str] = None):
+    def __init__(self, result: JudgeResult, message: str | None = None):
         self.result = result
         self.message = message or f"Content risk detected: {result.risk_level} - {result.reason}"
         super().__init__(self.message)
@@ -39,7 +39,7 @@ class ContentRiskException(Exception):
         }
 
 
-class JudgeTimeoutException(Exception):
+class JudgeTimeoutException(Exception):  # noqa: N818
     """Judge 服务超时异常"""
 
     def __init__(self, timeout: float, endpoint: str):
@@ -59,7 +59,7 @@ class JudgeTimeoutException(Exception):
         }
 
 
-class JudgeUnavailableException(Exception):
+class JudgeUnavailableException(Exception):  # noqa: N818
     """Judge 服务不可用异常"""
 
     def __init__(self, endpoint: str, reason: str = "Unknown error"):
@@ -79,7 +79,7 @@ class JudgeUnavailableException(Exception):
         }
 
 
-class StreamInterruptException(Exception):
+class StreamInterruptException(Exception):  # noqa: N818
     """流式输出中断异常 - 当检测到违规内容时中断流式输出"""
 
     def __init__(self, reason: str, partial_content: str = ""):

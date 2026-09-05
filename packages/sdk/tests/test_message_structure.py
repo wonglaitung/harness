@@ -8,9 +8,9 @@ This module tests that:
 """
 
 import pytest
-from harness.types import Message, Session, ToolCall, ToolResult
-from harness.memory.session import SessionManager
+
 from harness.memory.context_builder import ContextBuilder
+from harness.types import Message, Session
 
 
 class TestMessageStructure:

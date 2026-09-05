@@ -5,32 +5,32 @@
 支持中国特有的 PII 类型：手机号、身份证、银行卡、护照、车牌等。
 """
 
-import re
-from typing import List, Dict, Optional, Tuple
+import contextlib
 from dataclasses import dataclass
 
-from presidio_analyzer import AnalyzerEngine, RecognizerResult
+from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
+from harness.guardrails.chinese_name_recognizer import ChineseNameRecognizer
 from harness.guardrails.chinese_pii_recognizers import (
-    ChinaMobilePhoneRecognizer,
-    ChinaIDCardRecognizer,
     ChinaBankCardRecognizer,
+    ChinaIDCardRecognizer,
+    ChinaLicensePlateRecognizer,
+    ChinaMobilePhoneRecognizer,
     ChinaPassportRecognizer,
     ChinaSocialCreditCodeRecognizer,
-    ChinaLicensePlateRecognizer,
     EmailRecognizerCN,
-    IpRecognizerCN,
-    HongKongPhoneRecognizer,
     HongKongIDCardRecognizer,
     HongKongNameRecognizer,
+    HongKongPhoneRecognizer,
+    IpRecognizerCN,
 )
-from harness.guardrails.chinese_name_recognizer import ChineseNameRecognizer, NameMatch
 
 
 @dataclass
 class PIIEntity:
     """PII 实体信息"""
+
     entity_type: str
     text: str
     start: int
@@ -101,7 +101,7 @@ class ChinesePIIGuardrail:
 
     def __init__(
         self,
-        placeholders: Optional[Dict[str, str]] = None,
+        placeholders: dict[str, str] | None = None,
         min_score: float = 0.5,
         script_type: str = "simplified",
         enable_name_recognition: bool = True,
@@ -116,10 +116,14 @@ class ChinesePIIGuardrail:
             enable_name_recognition: 是否启用中文姓名识别
         """
         # 配置 Presidio：使用轻量级英文模型，避免运行时下载大模型
-        from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+        from presidio_analyzer import RecognizerRegistry
         from presidio_analyzer.nlp_engine import NlpEngineProvider
+
         registry = RecognizerRegistry()
-        nlp_config = {"nlp_engine_name": "spacy", "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]}
+        nlp_config = {
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+        }
         nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
         self.analyzer = AnalyzerEngine(registry=registry, nlp_engine=nlp_engine)
         self.anonymizer = AnonymizerEngine()
@@ -138,10 +142,8 @@ class ChinesePIIGuardrail:
         # 初始化中文姓名识别器
         self.name_recognizer = None
         if enable_name_recognition:
-            try:
+            with contextlib.suppress(Exception):
                 self.name_recognizer = ChineseNameRecognizer(use_spacy=True)
-            except Exception:
-                pass
 
         # 注册中国 PII 识别器
         self._register_china_recognizers()
@@ -155,10 +157,8 @@ class ChinesePIIGuardrail:
             "SpacyRecognizer",  # 英语 NER 识别器，在中文上误报严重
         ]
         for rec_name in default_recognizers_to_remove:
-            try:
+            with contextlib.suppress(Exception):
                 self.analyzer.registry.remove_recognizer(rec_name)
-            except Exception:
-                pass
 
         # 注册自定义识别器
         recognizers = [
@@ -178,7 +178,7 @@ class ChinesePIIGuardrail:
         for recognizer in recognizers:
             self.analyzer.registry.add_recognizer(recognizer)
 
-    def detect(self, text: str, language: str = "en") -> List[PIIEntity]:
+    def detect(self, text: str, language: str = "en") -> list[PIIEntity]:
         """
         检测文本中的 PII 实体
 
@@ -194,33 +194,37 @@ class ChinesePIIGuardrail:
         entities = []
         for r in results:
             if r.score >= self.min_score:
-                entities.append(PIIEntity(
-                    entity_type=r.entity_type,
-                    text=text[r.start:r.end],
-                    start=r.start,
-                    end=r.end,
-                    score=r.score
-                ))
+                entities.append(
+                    PIIEntity(
+                        entity_type=r.entity_type,
+                        text=text[r.start : r.end],
+                        start=r.start,
+                        end=r.end,
+                        score=r.score,
+                    )
+                )
 
         # 中文姓名识别
         if self.enable_name_recognition and self.name_recognizer:
             name_matches = self.name_recognizer.recognize(text)
             for name in name_matches:
                 if name.score >= self.min_score:
-                    entities.append(PIIEntity(
-                        entity_type="PERSON",
-                        text=name.text,
-                        start=name.start,
-                        end=name.end,
-                        score=name.score
-                    ))
+                    entities.append(
+                        PIIEntity(
+                            entity_type="PERSON",
+                            text=name.text,
+                            start=name.start,
+                            end=name.end,
+                            score=name.score,
+                        )
+                    )
 
         # 按位置排序并去重
         entities = self._deduplicate_entities(entities)
 
         return entities
 
-    def _deduplicate_entities(self, entities: List[PIIEntity]) -> List[PIIEntity]:
+    def _deduplicate_entities(self, entities: list[PIIEntity]) -> list[PIIEntity]:
         """去除重叠和重复的实体"""
         if not entities:
             return entities
@@ -234,7 +238,7 @@ class ChinesePIIGuardrail:
             # 检查是否与已有实体重叠
             overlap = False
             for existing in result:
-                if (entity.start < existing.end and entity.end > existing.start):
+                if entity.start < existing.end and entity.end > existing.start:
                     overlap = True
                     break
             if not overlap:
@@ -242,12 +246,7 @@ class ChinesePIIGuardrail:
 
         return result
 
-    def redact(
-        self,
-        text: str,
-        language: str = "en",
-        placeholder_style: str = "type"
-    ) -> str:
+    def redact(self, text: str, language: str = "en", placeholder_style: str = "type") -> str:
         """
         对文本中的 PII 进行脱敏处理
 
@@ -273,22 +272,19 @@ class ChinesePIIGuardrail:
         else:
             return self._redact_with_type(text, entities)
 
-    def _redact_with_type(self, text: str, entities: List[PIIEntity]) -> str:
+    def _redact_with_type(self, text: str, entities: list[PIIEntity]) -> str:
         """使用类型标签进行脱敏"""
         # 从后往前替换，避免索引变化
         sorted_entities = sorted(entities, key=lambda x: x.start, reverse=True)
 
         result = text
         for entity in sorted_entities:
-            placeholder = self.placeholders.get(
-                entity.entity_type,
-                f"<{entity.entity_type}>"
-            )
-            result = result[:entity.start] + placeholder + result[entity.end:]
+            placeholder = self.placeholders.get(entity.entity_type, f"<{entity.entity_type}>")
+            result = result[: entity.start] + placeholder + result[entity.end :]
 
         return result
 
-    def _redact_with_mask(self, text: str, entities: List[PIIEntity]) -> str:
+    def _redact_with_mask(self, text: str, entities: list[PIIEntity]) -> str:
         """使用星号遮盖进行脱敏"""
         sorted_entities = sorted(entities, key=lambda x: x.start, reverse=True)
 
@@ -300,11 +296,11 @@ class ChinesePIIGuardrail:
             else:
                 # 保留首尾字符，中间用星号替代
                 masked = original[0] + "*" * (len(original) - 2) + original[-1]
-            result = result[:entity.start] + masked + result[entity.end:]
+            result = result[: entity.start] + masked + result[entity.end :]
 
         return result
 
-    def check(self, text: str, language: str = "en") -> Tuple[str, List[PIIEntity], bool]:
+    def check(self, text: str, language: str = "en") -> tuple[str, list[PIIEntity], bool]:
         """
         完整检查：检测并脱敏
 
@@ -318,10 +314,7 @@ class ChinesePIIGuardrail:
         entities = self.detect(text, language)
         has_pii = len(entities) > 0
 
-        if has_pii:
-            redacted = self.redact(text, language)
-        else:
-            redacted = text
+        redacted = self.redact(text, language) if has_pii else text
 
         return redacted, entities, has_pii
 
@@ -341,7 +334,7 @@ class ChinesePIIGuardrail:
 
 
 def create_guardrail(
-    placeholders: Optional[Dict[str, str]] = None,
+    placeholders: dict[str, str] | None = None,
     min_score: float = 0.5,
     script_type: str = "simplified",
 ) -> ChinesePIIGuardrail:
@@ -364,7 +357,7 @@ def create_guardrail(
 
 
 # 便捷函数
-def check_pii(text: str) -> Tuple[str, List[PIIEntity], bool]:
+def check_pii(text: str) -> tuple[str, list[PIIEntity], bool]:
     """
     快速检查文本中的 PII
 
@@ -440,7 +433,7 @@ class UniversalPIIGuardrail:
 
     def __init__(
         self,
-        placeholders: Optional[Dict[str, str]] = None,
+        placeholders: dict[str, str] | None = None,
         min_score: float = 0.5,
         default_lang: str = "auto",
     ):
@@ -457,23 +450,11 @@ class UniversalPIIGuardrail:
         self.custom_placeholders = placeholders or {}
 
         # 创建三个 guardrail 实例
-        self._guardrail_sc = ChinesePIIGuardrail(
-            min_score=min_score,
-            script_type="simplified"
-        )
-        self._guardrail_tc = ChinesePIIGuardrail(
-            min_score=min_score,
-            script_type="traditional"
-        )
-        self._guardrail_en = ChinesePIIGuardrail(
-            min_score=min_score,
-            script_type="simplified"
-        )
+        self._guardrail_sc = ChinesePIIGuardrail(min_score=min_score, script_type="simplified")
+        self._guardrail_tc = ChinesePIIGuardrail(min_score=min_score, script_type="traditional")
+        self._guardrail_en = ChinesePIIGuardrail(min_score=min_score, script_type="simplified")
         # 设置英文占位符
-        self._guardrail_en.placeholders = {
-            **self.ENGLISH_PLACEHOLDERS,
-            **self.custom_placeholders
-        }
+        self._guardrail_en.placeholders = {**self.ENGLISH_PLACEHOLDERS, **self.custom_placeholders}
 
     def _detect_script(self, text: str) -> str:
         """
@@ -484,19 +465,19 @@ class UniversalPIIGuardrail:
         """
         # 繁体中文特有字符（简体中没有或写法不同的）
         traditional_chars = set(
-            '們個時說國過這裡學經動點話書電車頭長問體機開樣東聽聲請義見間實氣報給起錢東邊變還'
-            '職傳優確調師產號場歷備據車頭項師畫質議識辦國際視際體際際際際際際際際際際際際際際'
-            '機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機'
-            '電話號碼證字聯絡信箱伺服器位址護照統社會信用代碼車輛號牌聯繫方式銀行帳號電子郵件'
-            '手機號碼身分證字號護照號碼統一社會信用代碼車牌號碼聯絡信箱電子信箱'
+            "們個時說國過這裡學經動點話書電車頭長問體機開樣東聽聲請義見間實氣報給起錢東邊變還"
+            "職傳優確調師產號場歷備據車頭項師畫質議識辦國際視際體際際際際際際際際際際際際際際"
+            "機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機機"
+            "電話號碼證字聯絡信箱伺服器位址護照統社會信用代碼車輛號牌聯繫方式銀行帳號電子郵件"
+            "手機號碼身分證字號護照號碼統一社會信用代碼車牌號碼聯絡信箱電子信箱"
         )
 
         # 简体中文特有字符
         simplified_chars = set(
-            '们个时说国过这里学经动点话书电车头长问体机开样东听声请义见间实气报给起钱东边变还'
-            '职传优确调师产号场历备据车头项师画质议识办国际视际体电话号码证字联络信箱服务器地址'
-            '护照统社会信用代码车辆号牌联系方式银行账号电子邮件手机号码身份证号码护照号码统一社会'
-            '信用代码车牌号码联络信箱电子信箱'
+            "们个时说国过这里学经动点话书电车头长问体机开样东听声请义见间实气报给起钱东边变还"
+            "职传优确调师产号场历备据车头项师画质议识办国际视际体电话号码证字联络信箱服务器地址"
+            "护照统社会信用代码车辆号牌联系方式银行账号电子邮件手机号码身份证号码护照号码统一社会"
+            "信用代码车牌号码联络信箱电子信箱"
         )
 
         tc_count = 0
@@ -505,13 +486,13 @@ class UniversalPIIGuardrail:
         cn_count = 0
 
         for char in text:
-            if '\u4e00' <= char <= '\u9fff':
+            if "\u4e00" <= char <= "\u9fff":
                 cn_count += 1
                 if char in traditional_chars:
                     tc_count += 1
                 elif char in simplified_chars:
                     sc_count += 1
-            elif 'a' <= char.lower() <= 'z':
+            elif "a" <= char.lower() <= "z":
                 en_count += 1
 
         # 如果没有中文字符，认为是英文
@@ -526,8 +507,23 @@ class UniversalPIIGuardrail:
         else:
             # 没有明显差异时，检查特定繁体词组
             traditional_keywords = [
-                '手機', '電話', '聯絡', '信箱', '身分證', '身份證', '護照', '銀行卡', '車牌',
-                '統一', '代碼', '位址', '伺服器', '客戶', '顧客', '聯絡人', '證件',
+                "手機",
+                "電話",
+                "聯絡",
+                "信箱",
+                "身分證",
+                "身份證",
+                "護照",
+                "銀行卡",
+                "車牌",
+                "統一",
+                "代碼",
+                "位址",
+                "伺服器",
+                "客戶",
+                "顧客",
+                "聯絡人",
+                "證件",
             ]
             for kw in traditional_keywords:
                 if kw in text:
@@ -543,7 +539,7 @@ class UniversalPIIGuardrail:
         else:
             return self._guardrail_sc
 
-    def detect(self, text: str) -> List[PIIEntity]:
+    def detect(self, text: str) -> list[PIIEntity]:
         """
         检测文本中的 PII 实体
 
@@ -563,7 +559,7 @@ class UniversalPIIGuardrail:
         guardrail = self._get_guardrail(script_type)
         return guardrail.redact(text)
 
-    def check(self, text: str) -> Tuple[str, List[PIIEntity], bool]:
+    def check(self, text: str) -> tuple[str, list[PIIEntity], bool]:
         """
         完整检查：检测并脱敏
 
@@ -573,10 +569,7 @@ class UniversalPIIGuardrail:
         entities = self.detect(text)
         has_pii = len(entities) > 0
 
-        if has_pii:
-            redacted = self.redact(text)
-        else:
-            redacted = text
+        redacted = self.redact(text) if has_pii else text
 
         return redacted, entities, has_pii
 
@@ -592,7 +585,7 @@ class UniversalPIIGuardrail:
 
 
 def create_universal_guardrail(
-    placeholders: Optional[Dict[str, str]] = None,
+    placeholders: dict[str, str] | None = None,
     min_score: float = 0.5,
     default_lang: str = "auto",
 ) -> UniversalPIIGuardrail:
@@ -615,7 +608,7 @@ def create_universal_guardrail(
 
 
 # 统一入口函数
-def scan_pii(text: str, lang: str = "auto") -> Tuple[str, List[PIIEntity], bool]:
+def scan_pii(text: str, lang: str = "auto") -> tuple[str, list[PIIEntity], bool]:
     """
     统一 PII 扫描入口 - 自动处理中英文
 

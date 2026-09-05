@@ -38,7 +38,7 @@ async def example_anthropic():
         model="claude-sonnet-4-6",
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
     )
-    agent = AgentHarness(
+    agent = AgentHarness(  # noqa: F841
         llm_client=anthropic_client,
         tools=[ReadTool()],
     )
@@ -62,7 +62,7 @@ async def example_openai():
         model="gpt-4o",
         api_key=os.environ.get("OPENAI_API_KEY"),
     )
-    agent = AgentHarness(
+    agent = AgentHarness(  # noqa: F841
         llm_client=openai_client,
         tools=[ReadTool()],
     )
@@ -84,7 +84,7 @@ async def example_openai_custom_endpoint():
     )
 
     # Azure OpenAI
-    agent = AgentHarness(
+    agent = AgentHarness(  # noqa: F841
         model="gpt-4o",
         provider="openai",
         base_url="https://your-resource.openai.azure.com/openai/deployments/your-deployment",
@@ -172,7 +172,7 @@ async def example_config_file():
         system_prompt="You are a helpful code assistant.",
     )
 
-    agent = AgentHarness(config=config, tools=[ReadTool(), GlobTool()])
+    agent = AgentHarness(config=config, tools=[ReadTool(), GlobTool()])  # noqa: F841
     print("Config-based agent configured.")
 
 

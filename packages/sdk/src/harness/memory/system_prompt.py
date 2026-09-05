@@ -13,9 +13,9 @@ This enables project-level conventions and agent customization.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +40,24 @@ class SystemPromptSource:
         if self.file_path is not None:
             if self.file_path.exists():
                 content = self.file_path.read_text(encoding="utf-8")
-                logger.debug(f"Loaded system prompt from '{self.name}' ({self.file_path}): {len(content)} chars")
+                logger.debug(
+                    f"Loaded system prompt from '{self.name}' "
+                    f"({self.file_path}): {len(content)} chars"
+                )
                 return content
             else:
                 # Use debug level for missing files (warning only for required files)
                 if self.required:
-                    logger.warning(f"Required system prompt file not found for '{self.name}': {self.file_path}")
-                    raise FileNotFoundError(f"Required system prompt file not found: {self.file_path}")
+                    logger.warning(
+                        f"Required system prompt file not found for '{self.name}': {self.file_path}"
+                    )
+                    raise FileNotFoundError(
+                        f"Required system prompt file not found: {self.file_path}"
+                    )
                 else:
-                    logger.debug(f"System prompt file not found for '{self.name}': {self.file_path}")
+                    logger.debug(
+                        f"System prompt file not found for '{self.name}': {self.file_path}"
+                    )
                 return ""
 
         return ""
@@ -109,11 +118,13 @@ class SystemPromptBuilder:
 
         # Base prompt (highest priority)
         if self.config.base_prompt:
-            self._sources.append(SystemPromptSource(
-                name="base",
-                priority=100,
-                content=self.config.base_prompt,
-            ))
+            self._sources.append(
+                SystemPromptSource(
+                    name="base",
+                    priority=100,
+                    content=self.config.base_prompt,
+                )
+            )
 
         # AGENTS.md (project instructions)
         agents_path = self.config.agents_md_path
@@ -121,11 +132,13 @@ class SystemPromptBuilder:
             agents_path = self.config.project_root / "AGENTS.md"
 
         if agents_path is not None:
-            self._sources.append(SystemPromptSource(
-                name="AGENTS.md",
-                priority=50,
-                file_path=agents_path,
-            ))
+            self._sources.append(
+                SystemPromptSource(
+                    name="AGENTS.md",
+                    priority=50,
+                    file_path=agents_path,
+                )
+            )
 
         # MEMORY.md (persistent context)
         memory_path = self.config.memory_md_path
@@ -133,14 +146,16 @@ class SystemPromptBuilder:
             memory_path = self.config.project_root / "MEMORY.md"
 
         if memory_path is not None:
-            self._sources.append(SystemPromptSource(
-                name="MEMORY.md",
-                priority=40,
-                file_path=memory_path,
-            ))
+            self._sources.append(
+                SystemPromptSource(
+                    name="MEMORY.md",
+                    priority=40,
+                    file_path=memory_path,
+                )
+            )
 
         # Custom sources
-        for name, source in self.config.custom_sources.items():
+        for _name, source in self.config.custom_sources.items():
             self._sources.append(source)
 
         # Sort by priority (highest first)
@@ -173,7 +188,9 @@ class SystemPromptBuilder:
                 content = source.get_content()
                 if content.strip():
                     sections.append(content)
-                    logger.debug(f"Added system prompt section from '{source.name}': {len(content)} chars")
+                    logger.debug(
+                        f"Added system prompt section from '{source.name}': {len(content)} chars"
+                    )
             except FileNotFoundError as e:
                 logger.warning(f"System prompt source '{source.name}' not found: {e}")
                 if source.required:

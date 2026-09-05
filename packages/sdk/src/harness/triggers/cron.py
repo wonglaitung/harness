@@ -9,13 +9,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 try:
     import croniter
 except ImportError:
     croniter = None  # type: ignore
+
+import contextlib
 
 from harness.triggers.base import Trigger
 from harness.triggers.types import TriggerAction, TriggerEvent, TriggerType
@@ -142,10 +145,8 @@ class CronTrigger(Trigger):
 
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
         self._set_stopped()
@@ -188,9 +189,7 @@ class CronTrigger(Trigger):
 
                 # Fire event if still running
                 if self._running and self._callback:
-                    event = self.create_event(
-                        payload={"scheduled_time": next_run.isoformat()}
-                    )
+                    event = self.create_event(payload={"scheduled_time": next_run.isoformat()})
                     logger.info(f"CronTrigger {self.id} firing event")
                     self._callback(event)
 

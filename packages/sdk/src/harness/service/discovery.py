@@ -120,7 +120,7 @@ class NacosServiceRegistry(ServiceRegistry):
             except ImportError:
                 raise ImportError(
                     "Nacos SDK is required. Install with: pip install nacos-sdk-python"
-                )
+                ) from None
         return self._client
 
     async def register(self, instance: ServiceInstance) -> bool:
@@ -153,10 +153,7 @@ class NacosServiceRegistry(ServiceRegistry):
                 port=instance.port,
                 group_name=self.group_name,
             )
-            logger.info(
-                f"Deregistered service {instance.service_name} "
-                f"from Nacos"
-            )
+            logger.info(f"Deregistered service {instance.service_name} from Nacos")
             return True
         except Exception as e:
             logger.error(f"Failed to deregister from Nacos: {e}")
@@ -215,9 +212,8 @@ class EurekaServiceRegistry(ServiceRegistry):
                 self._session = aiohttp.ClientSession()
             except ImportError:
                 raise ImportError(
-                    "aiohttp is required for Eureka integration. "
-                    "Install with: pip install aiohttp"
-                )
+                    "aiohttp is required for Eureka integration. Install with: pip install aiohttp"
+                ) from None
         return self._session
 
     async def register(self, instance: ServiceInstance) -> bool:
@@ -362,6 +358,7 @@ def get_service_instance(
 # Check what's available
 try:
     import nacos  # noqa: F401
+
     NACOS_AVAILABLE = True
 except ImportError:
     NACOS_AVAILABLE = False

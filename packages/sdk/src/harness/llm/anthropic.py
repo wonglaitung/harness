@@ -11,7 +11,6 @@ from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
 from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage, ToolCall
 
 if TYPE_CHECKING:
-    from harness.core import StreamingConfig
     from harness.types import ProgressCallback
 
 
@@ -48,6 +47,7 @@ class AnthropicClient(LLMClient):
         """Get or create the Anthropic client."""
         if self._client is None:
             import anthropic
+
             self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
         return self._client
 
@@ -171,11 +171,13 @@ class AnthropicClient(LLMClient):
                 content += block.text
             elif hasattr(block, "name"):
                 # Tool use block
-                tool_calls.append(ToolCall(
-                    id=block.id,
-                    name=block.name,
-                    arguments=block.input if hasattr(block, "input") else {},
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input if hasattr(block, "input") else {},
+                    )
+                )
 
         # Map stop reason
         stop_reason_map = {
@@ -184,10 +186,7 @@ class AnthropicClient(LLMClient):
             "max_tokens": StopReason.MAX_TOKENS,
             "stop_sequence": StopReason.STOP_SEQUENCE,
         }
-        stop_reason = stop_reason_map.get(
-            response.stop_reason,
-            StopReason.END_TURN
-        )
+        stop_reason = stop_reason_map.get(response.stop_reason, StopReason.END_TURN)
 
         # Parse usage
         usage = TokenUsage(

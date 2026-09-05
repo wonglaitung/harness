@@ -11,6 +11,7 @@ from harness.tools.base import Tool
 @dataclass
 class ToolInfo:
     """Information about a registered tool."""
+
     tool: Tool
     category: str = "custom"
     enabled: bool = True
@@ -86,11 +87,7 @@ class ToolRegistry:
         Returns:
             List of tool instances
         """
-        return [
-            info.tool
-            for info in self._tools.values()
-            if not enabled_only or info.enabled
-        ]
+        return [info.tool for info in self._tools.values() if not enabled_only or info.enabled]
 
     def get_definitions(self) -> list[dict[str, Any]]:
         """
@@ -99,10 +96,7 @@ class ToolRegistry:
         Returns:
             List of tool definitions
         """
-        return [
-            tool.to_definition()
-            for tool in self.get_all(enabled_only=True)
-        ]
+        return [tool.to_definition() for tool in self.get_all(enabled_only=True)]
 
     def enable(self, name: str) -> bool:
         """Enable a tool."""

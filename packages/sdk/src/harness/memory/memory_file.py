@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 class MemoryCategory(Enum):
     """Categories for memory entries."""
+
     USER_PROFILE = "user_profile"
     KEY_DECISIONS = "key_decisions"
     LEARNED_PATTERNS = "learned_patterns"
@@ -50,6 +51,7 @@ class MemoryCategory(Enum):
 
 class MemorySource(Enum):
     """Source of memory entry."""
+
     USER_INPUT = "user_input"
     AGENT_OBSERVATION = "agent_observation"
     EXPLICIT_SAVE = "explicit_save"
@@ -58,10 +60,11 @@ class MemorySource(Enum):
 @dataclass
 class MemoryScoringConfig:
     """Memory scoring configuration for Retrieval Strength calculation."""
-    decay_lambda: float = 0.05            # Decay speed (higher = faster decay)
-    min_retrieval_strength: float = 0.3   # Minimum retrieval strength (floor)
-    max_core_memory_tokens: int = 2000    # Core Memory token limit
-    enable_llm_evaluation: bool = False   # Enable LLM importance evaluation
+
+    decay_lambda: float = 0.05  # Decay speed (higher = faster decay)
+    min_retrieval_strength: float = 0.3  # Minimum retrieval strength (floor)
+    max_core_memory_tokens: int = 2000  # Core Memory token limit
+    enable_llm_evaluation: bool = False  # Enable LLM importance evaluation
     archive_fallback: Literal["file", "delete", "none"] = "file"
     # file: Archive to MEMORY_ARCHIVE.md (default, no data loss)
     # delete: Delete directly (not recommended)
@@ -79,9 +82,9 @@ class MemoryEntry:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     # New fields for scoring (backward compatible with defaults)
-    importance: float = 1.0           # Storage Strength (used for archive decision)
+    importance: float = 1.0  # Storage Strength (used for archive decision)
     last_accessed: datetime | None = None  # Last access time
-    access_count: int = 0             # Access count
+    access_count: int = 0  # Access count
 
     def calculate_retrieval_strength(
         self,
@@ -154,7 +157,7 @@ class MemoryEntry:
         if meta_match:
             importance = float(meta_match.group(1))
             access_count = int(meta_match.group(2))
-            content = content[:meta_match.start()].strip()
+            content = content[: meta_match.start()].strip()
 
         # Check for date prefix (YYYY-MM-DD:)
         created_at = datetime.now()
@@ -213,10 +216,10 @@ class MemorySections:
     def total_entries(self) -> int:
         """Count total entries across all sections."""
         return (
-            len(self.user_profile) +
-            len(self.key_decisions) +
-            len(self.learned_patterns) +
-            len(self.project_context)
+            len(self.user_profile)
+            + len(self.key_decisions)
+            + len(self.learned_patterns)
+            + len(self.project_context)
         )
 
 
@@ -464,12 +467,14 @@ class MemoryFileManager:
         """
         sections = self.load()
 
-        if not any([
-            sections.user_profile,
-            sections.key_decisions,
-            sections.learned_patterns,
-            sections.project_context,
-        ]):
+        if not any(
+            [
+                sections.user_profile,
+                sections.key_decisions,
+                sections.learned_patterns,
+                sections.project_context,
+            ]
+        ):
             return ""
 
         lines = ["# Project Memory\n"]
@@ -545,7 +550,7 @@ class MemoryFileManager:
             # Check for section header
             if line.startswith("## "):
                 header = line[3:].strip()
-                in_section = (self.SECTION_HEADERS.get(header) == category)
+                in_section = self.SECTION_HEADERS.get(header) == category
                 continue
 
             # Parse entry if in target section
@@ -567,11 +572,13 @@ class MemoryFileManager:
         for category in MemoryCategory:
             entries = self._load_entries_with_metadata(category)
             for i, entry in enumerate(entries):
-                all_entries.append({
-                    "category": category,
-                    "index": i,
-                    "entry": entry,
-                })
+                all_entries.append(
+                    {
+                        "category": category,
+                        "index": i,
+                        "entry": entry,
+                    }
+                )
         return all_entries
 
     async def archive_low_importance(
@@ -646,11 +653,13 @@ class MemoryFileManager:
         if section_name not in archive_sections:
             archive_sections[section_name] = []
 
-        archive_sections[section_name].append({
-            "content": entry.content,
-            "importance": entry.importance,
-            "archived_at": datetime.now(),
-        })
+        archive_sections[section_name].append(
+            {
+                "content": entry.content,
+                "importance": entry.importance,
+                "archived_at": datetime.now(),
+            }
+        )
 
         # Save archive file
         self._save_archive_sections(archive_sections)
@@ -676,11 +685,13 @@ class MemoryFileManager:
                 # Parse archive entry: - [YYYY-MM-DD, importance=X] content
                 match = re.match(r"- \[(\d{4}-\d{2}-\d{2}), importance=(\d+\.\d+)\] (.+)", line[2:])
                 if match:
-                    sections[current_section].append({
-                        "archived_at": datetime.strptime(match.group(1), "%Y-%m-%d"),
-                        "importance": float(match.group(2)),
-                        "content": match.group(3),
-                    })
+                    sections[current_section].append(
+                        {
+                            "archived_at": datetime.strptime(match.group(1), "%Y-%m-%d"),
+                            "importance": float(match.group(2)),
+                            "content": match.group(3),
+                        }
+                    )
 
         return sections
 

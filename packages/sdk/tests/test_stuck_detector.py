@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from harness.core.stuck_detector import (
+    StuckDetectionResult,
     StuckDetector,
     StuckDetectorConfig,
-    StuckDetectionResult,
     _cosine_similarity,
     _normalize_text,
     _text_hash,
@@ -259,12 +259,12 @@ class TestStuckDetectorIntegration:
         assert result1.is_stuck is False
 
         # Second check - should trigger stuck
-        result2 = await detector.check("session-1", messages[:2], iteration=4)
+        _ = await detector.check("session-1", messages[:2], iteration=4)
         # Depending on similarity, may or may not be stuck
         # With identical embeddings, should be stuck
 
         # Third check - definitely stuck
-        result3 = await detector.check("session-1", messages, iteration=5)
+        _ = await detector.check("session-1", messages, iteration=5)
         # With identical mock embeddings and consecutive_rounds=2, should be stuck
 
     @pytest.mark.asyncio

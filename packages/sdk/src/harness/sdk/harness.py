@@ -9,14 +9,13 @@ from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from harness.core.agent_loop import AgentLoop, LoopConfig
 from harness.core.hooks import HookPoint, LifecycleHook
 from harness.core.observability import ObservabilityManager
 from harness.llm.anthropic import AnthropicClient
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.llm.openai import OpenAIClient
+from harness.mcp import MCPManager, MCPServerConfig, MCPServerInfo
 from harness.memory.context_builder import ContextBuilder, ContextConfig
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore, SQLiteSessionStore
@@ -30,7 +29,6 @@ from harness.skills import (
     SkillMetadata,
     SkillRegistry,
 )
-from harness.mcp import MCPManager, MCPServerConfig, MCPServerInfo
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
 from harness.tools.registry import ToolRegistry
@@ -42,6 +40,8 @@ from harness.types import (
     ProgressCallback,
     Session,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AgentHarness:
@@ -131,6 +131,7 @@ class AgentHarness:
         self._tool_registry = ToolRegistry()
         if tools:
             import logging
+
             _logger = logging.getLogger(__name__)
             for tool in tools:
                 try:
@@ -219,6 +220,7 @@ class AgentHarness:
             if storage_config.async_mode:
                 try:
                     from harness.memory.store import AsyncSQLiteSessionStore
+
                     return AsyncSQLiteSessionStore(
                         str(sqlite_path),
                         pool_size=storage_config.pool_size,
@@ -328,10 +330,15 @@ class AgentHarness:
 
                 # Check single document size
                 if doc_size > self.config.max_document_size:
-                    msg = f"Document '{filename}' ({doc_size / 1024 / 1024:.1f}MB) exceeds limit ({self.config.max_document_size / 1024 / 1024:.1f}MB)"
+                    msg = (
+                        f"Document '{filename}' ({doc_size / 1024 / 1024:.1f}MB) "
+                        f"exceeds limit ({self.config.max_document_size / 1024 / 1024:.1f}MB)"
+                    )
 
                     if self.config.document_size_action == "error":
-                        raise DocumentTooLargeError(filename, doc_size, self.config.max_document_size)
+                        raise DocumentTooLargeError(
+                            filename, doc_size, self.config.max_document_size
+                        )
                     elif self.config.document_size_action == "warn":
                         warnings_list.append(msg)
                         logger.warning(msg)
@@ -343,9 +350,14 @@ class AgentHarness:
 
         # Check total documents size
         if total_size > self.config.max_total_documents_size:
-            msg = f"Total document size ({total_size / 1024 / 1024:.1f}MB) exceeds limit ({self.config.max_total_documents_size / 1024 / 1024:.1f}MB)"
+            msg = (
+                f"Total document size ({total_size / 1024 / 1024:.1f}MB) exceeds limit "
+                f"({self.config.max_total_documents_size / 1024 / 1024:.1f}MB)"
+            )
             if self.config.document_size_action == "error":
-                raise DocumentTooLargeError("total", total_size, self.config.max_total_documents_size)
+                raise DocumentTooLargeError(
+                    "total", total_size, self.config.max_total_documents_size
+                )
             elif self.config.document_size_action == "warn":
                 warnings_list.append(msg)
                 logger.warning(msg)
@@ -356,7 +368,8 @@ class AgentHarness:
         if estimated_tokens > token_threshold:
             logger.warning(
                 f"Documents may use ~{estimated_tokens / 1000:.0f}K tokens "
-                f"({estimated_tokens / context_window * 100:.0f}% of {context_window / 1000:.0f}K context window), "
+                f"({estimated_tokens / context_window * 100:.0f}% of "
+                f"{context_window / 1000:.0f}K context window), "
                 f"leaving limited space for response"
             )
 
@@ -398,6 +411,7 @@ class AgentHarness:
         # Use model_presets for provider auto-detection
         if effective_provider == "auto":
             from harness.model_presets import get_model_preset
+
             preset = get_model_preset(effective_model)
             effective_provider = preset.provider
 
@@ -453,25 +467,34 @@ class AgentHarness:
         This scans skill directories and loads only frontmatter (~50 tokens/skill),
         not the full content. Full content is loaded on-demand in run().
         """
+        import logging
+
         from harness.skills.loader import DEFAULT_SKILL_PATHS
 
-        import logging
         logger = logging.getLogger(__name__)
         logger.info(f"[AgentHarness] _load_skill_metadata called, id={id(self)}")
 
         for directory in DEFAULT_SKILL_PATHS:
             if directory.exists():
                 skills = self._progressive_loader.discover_skills(directory)
-                logger.info(f"[AgentHarness] Discovered {len(skills)} skills from {directory}: {[m.name for m in skills]}")
+                logger.info(
+                    f"[AgentHarness] Discovered {len(skills)} skills from {directory}: "
+                    f"{[m.name for m in skills]}"
+                )
                 # Add only unique skills (avoid duplicates across directories)
                 for meta in skills:
                     if meta.name not in self._skill_metadata_by_name:
                         self._skill_metadata.append(meta)
                         self._skill_metadata_by_name[meta.name] = meta
                     else:
-                        logger.info(f"[AgentHarness] Skipping duplicate skill: {meta.name} from {meta.path}")
+                        logger.info(
+                            f"[AgentHarness] Skipping duplicate skill: {meta.name} from {meta.path}"
+                        )
 
-        logger.info(f"[AgentHarness] Total skills in _skill_metadata: {len(self._skill_metadata)}, unique names: {len(self._skill_metadata_by_name)}")
+        logger.info(
+            f"[AgentHarness] Total skills in _skill_metadata: {len(self._skill_metadata)}, "
+            f"unique names: {len(self._skill_metadata_by_name)}"
+        )
 
     def _load_skills(self) -> None:
         """
@@ -500,6 +523,7 @@ class AgentHarness:
 
         except ImportError as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(
                 f"Guardrails not available (missing dependencies): {e}. "
@@ -524,6 +548,7 @@ class AgentHarness:
         directory = Path(directory)
         if not directory.exists():
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Skill directory does not exist: {directory}")
             return 0
@@ -540,6 +565,7 @@ class AgentHarness:
             count += 1
 
         import logging
+
         logger = logging.getLogger(__name__)
         logger.info(f"Discovered {count} skills from {directory} (metadata only)")
 
@@ -569,6 +595,7 @@ class AgentHarness:
         meta = self._skill_metadata_by_name.get(skill_name)
         if meta is None:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Skill not found: {skill_name}")
             return False
@@ -577,6 +604,7 @@ class AgentHarness:
         skill = self._progressive_loader.load_full_content(meta)
         if skill is None:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to load skill content: {skill_name}")
             return False
@@ -843,7 +871,7 @@ class AgentHarness:
         matched_metadata = self._progressive_loader.match_skills(prompt, self._skill_metadata)
 
         # Also include explicitly activated skills that aren't loaded yet
-        skills_to_load = set(meta.name for meta in matched_metadata)
+        skills_to_load = {meta.name for meta in matched_metadata}
         skills_to_load.update(self._activated_skills)
 
         for meta in self._skill_metadata:
@@ -944,7 +972,7 @@ class AgentHarness:
             chunk_size = max(1, len(words) // 50)  # ~50 chunks
 
             for i in range(0, len(words), chunk_size):
-                chunk = " ".join(words[i:i + chunk_size])
+                chunk = " ".join(words[i : i + chunk_size])
                 if i + chunk_size < len(words):
                     chunk += " "
                 if on_chunk:
@@ -974,8 +1002,7 @@ class AgentHarness:
         else:
             # Running loop exists -> disallow sync call
             raise RuntimeError(
-                "run_sync() cannot be called from async context. "
-                "Use 'await agent.run()' instead."
+                "run_sync() cannot be called from async context. Use 'await agent.run()' instead."
             )
 
     async def run_goal(
@@ -1046,9 +1073,7 @@ class AgentHarness:
 
         # Build GoalConfig
         verification_method = (
-            VerificationMethod.CUSTOM
-            if custom_verifier
-            else VerificationMethod.LLM
+            VerificationMethod.CUSTOM if custom_verifier else VerificationMethod.LLM
         )
 
         config = GoalConfig(
@@ -1097,6 +1122,7 @@ class AgentHarness:
                 return f"Hello, {name}!"
             ```
         """
+
         def decorator(func: Callable) -> Callable:
             # Create a tool wrapper
             import inspect

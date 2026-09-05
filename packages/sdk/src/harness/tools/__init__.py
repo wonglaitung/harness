@@ -1,14 +1,6 @@
 """Tool system for Harness."""
 
 from harness.tools.base import Tool, ToolContext
-from harness.tools.builtins import (
-    BashTool,
-    EditTool,
-    GlobTool,
-    GrepTool,
-    ReadTool,
-    WriteTool,
-)
 from harness.tools.browser import (
     BrowserClickTool,
     BrowserCloseTool,
@@ -19,6 +11,14 @@ from harness.tools.browser import (
     BrowserTypeTool,
     BrowserWaitTool,
     get_browser_tools,
+)
+from harness.tools.builtins import (
+    BashTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+    ReadTool,
+    WriteTool,
 )
 from harness.tools.executor import ToolExecutor
 from harness.tools.permissions import PermissionSet

@@ -9,8 +9,7 @@ This module tests:
 
 from __future__ import annotations
 
-import asyncio
-import os
+import contextlib
 import subprocess
 import tempfile
 from datetime import datetime
@@ -55,10 +54,8 @@ def temp_git_repo():
         run_git(["commit", "-m", "Initial commit"], tmpdir)
 
         # Ensure we're on main branch
-        try:
+        with contextlib.suppress(subprocess.CalledProcessError):
             run_git(["branch", "-M", "main"], tmpdir)
-        except subprocess.CalledProcessError:
-            pass
 
         yield tmpdir
 
@@ -129,9 +126,10 @@ class TestWorktreeManager:
 
     def test_init_invalid_repo_raises_error(self):
         """Test that invalid repo raises WorktreeError."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(WorktreeError, match="Not a git repository"):
-                WorktreeManager(tmpdir)
+        with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(
+            WorktreeError, match="Not a git repository"
+        ):
+            WorktreeManager(tmpdir)
 
     @pytest.mark.asyncio
     async def test_create_worktree(self, temp_git_repo):

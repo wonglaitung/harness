@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
 from harness.connectors.types import ConnectorEvent, ConnectorState, ConnectorType
 

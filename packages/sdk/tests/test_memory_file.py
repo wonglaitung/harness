@@ -6,8 +6,6 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from harness.memory.memory_file import (
     MemoryCategory,
     MemoryEntry,

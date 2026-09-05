@@ -10,16 +10,17 @@ Simple, scalable approach following Bitter Lesson principles:
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
 from enum import Enum
+from typing import Any
 
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Blocking calls
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Blocking calls
     HALF_OPEN = "half_open"  # Testing if recovered
 
 
@@ -29,6 +30,7 @@ class CircuitBreakerConfig:
 
     Following Bitter Lesson: keep it simple, trust the model.
     """
+
     # Same tool + args threshold
     # Only trigger when calling same tool with same arguments repeatedly
     # This is the simplest, most reliable detection
@@ -123,10 +125,7 @@ class CircuitBreaker:
                     return False
             return True
 
-        if self._half_open_calls >= self.config.half_open_max_calls:
-            return True
-
-        return False
+        return self._half_open_calls >= self.config.half_open_max_calls
 
     def get_reason(self) -> str | None:
         """Get the reason why circuit is open."""

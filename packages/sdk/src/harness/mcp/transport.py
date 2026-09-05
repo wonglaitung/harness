@@ -7,10 +7,12 @@ Provides transport implementations for MCP protocol communication.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import aiohttp
@@ -86,7 +88,7 @@ class StdioTransport(MCPTransport):
         self.command = command
         self.args = args or []
         self.env = env or {}
-        self._process: Optional[asyncio.subprocess.Process] = None
+        self._process: asyncio.subprocess.Process | None = None
         self._connected = False
 
     async def connect(self) -> None:
@@ -99,12 +101,15 @@ class StdioTransport(MCPTransport):
 
         # Debug: log environment variables
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.debug(f"[StdioTransport] Environment variables passed to subprocess: {list(self.env.keys())}")
+        logger.debug(
+            f"[StdioTransport] Environment variables passed to subprocess: {list(self.env.keys())}"
+        )
         if self.env:
             for k, v in self.env.items():
                 # Mask sensitive values
-                if 'KEY' in k.upper() or 'SECRET' in k.upper() or 'TOKEN' in k.upper():
+                if "KEY" in k.upper() or "SECRET" in k.upper() or "TOKEN" in k.upper():
                     logger.debug(f"[StdioTransport]   {k}=***{v[-4:] if len(v) > 4 else '****'}")
                 else:
                     logger.debug(f"[StdioTransport]   {k}={v}")
@@ -136,12 +141,18 @@ class StdioTransport(MCPTransport):
                 # Process exited immediately - read stderr for error
                 stderr = await self._process.stderr.read()
                 stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
-                logger.error(f"[StdioTransport] Process exited immediately with code {self._process.returncode}")
+                logger.error(
+                    f"[StdioTransport] Process exited immediately "
+                    f"with code {self._process.returncode}"
+                )
                 logger.error(f"[StdioTransport] stderr: {stderr_text}")
-                raise RuntimeError(f"MCP server process exited immediately (code {self._process.returncode}): {stderr_text}")
+                raise RuntimeError(
+                    f"MCP server process exited immediately "
+                    f"(code {self._process.returncode}): {stderr_text}"
+                )
 
             self._connected = True
-            logger.debug(f"[StdioTransport] Process is running, stdin/stdout pipes ready")
+            logger.debug("[StdioTransport] Process is running, stdin/stdout pipes ready")
         except Exception as e:
             self._connected = False
             logger.error(f"[StdioTransport] Failed to start MCP server: {e}")
@@ -165,7 +176,7 @@ class StdioTransport(MCPTransport):
             # Wait for process to exit (max 5 seconds)
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Force kill if still running
                 if os.name != "nt":
                     os.killpg(os.getpgid(self._process.pid), 9)  # SIGKILL
@@ -181,44 +192,55 @@ class StdioTransport(MCPTransport):
     async def send(self, message: dict) -> None:
         """Send message via stdin."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         if self._process is None or self._process.stdin is None:
-            logger.error(f"[StdioTransport] send() called but process not connected")
+            logger.error("[StdioTransport] send() called but process not connected")
             raise RuntimeError("Transport not connected")
 
         # Debug: check if process is still running
         if self._process.returncode is not None:
-            logger.error(f"[StdioTransport] Process already exited with code {self._process.returncode}")
+            logger.error(
+                f"[StdioTransport] Process already exited with code {self._process.returncode}"
+            )
             raise RuntimeError(f"Process exited with code {self._process.returncode}")
 
         # JSON-RPC messages are newline-delimited
         data = json.dumps(message) + "\n"
-        logger.debug(f"[StdioTransport] Sending message: {message.get('method', 'unknown')} (id={message.get('id', 'none')})")
+        logger.debug(
+            f"[StdioTransport] Sending message: {message.get('method', 'unknown')} "
+            f"(id={message.get('id', 'none')})"
+        )
         logger.debug(f"[StdioTransport] Raw data: {data.strip()[:200]}...")
         self._process.stdin.write(data.encode("utf-8"))
         await self._process.stdin.drain()
-        logger.debug(f"[StdioTransport] Message sent successfully")
+        logger.debug("[StdioTransport] Message sent successfully")
 
     async def receive(self) -> AsyncIterator[dict]:
         """Receive messages from stdout."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         if self._process is None or self._process.stdout is None:
-            logger.error(f"[StdioTransport] receive() called but process not connected")
+            logger.error("[StdioTransport] receive() called but process not connected")
             raise RuntimeError("Transport not connected")
 
-        logger.debug(f"[StdioTransport] Starting receive loop")
+        logger.debug("[StdioTransport] Starting receive loop")
         while True:
             try:
                 line = await self._process.stdout.readline()
                 if not line:
                     # EOF reached
-                    logger.warning(f"[StdioTransport] EOF reached on stdout, process may have exited")
+                    logger.warning(
+                        "[StdioTransport] EOF reached on stdout, process may have exited"
+                    )
                     # Check process status
                     if self._process.returncode is not None:
-                        logger.error(f"[StdioTransport] Process exited with code {self._process.returncode}")
+                        logger.error(
+                            f"[StdioTransport] Process exited with code {self._process.returncode}"
+                        )
                     break
 
                 # Debug: log raw line
@@ -228,14 +250,20 @@ class StdioTransport(MCPTransport):
                 # Parse JSON-RPC message
                 try:
                     message = json.loads(line_text)
-                    logger.debug(f"[StdioTransport] Parsed message: method={message.get('method', 'n/a')}, id={message.get('id', 'n/a')}")
+                    logger.debug(
+                        f"[StdioTransport] Parsed message: "
+                        f"method={message.get('method', 'n/a')}, "
+                        f"id={message.get('id', 'n/a')}"
+                    )
                     yield message
                 except json.JSONDecodeError as e:
                     # Skip invalid messages
-                    logger.warning(f"[StdioTransport] JSON decode error: {e}, line: {line_text[:100]}")
+                    logger.warning(
+                        f"[StdioTransport] JSON decode error: {e}, line: {line_text[:100]}"
+                    )
                     continue
             except asyncio.CancelledError:
-                logger.debug(f"[StdioTransport] Receive loop cancelled")
+                logger.debug("[StdioTransport] Receive loop cancelled")
                 break
 
     @property
@@ -295,15 +323,15 @@ class HTTPTransport(MCPTransport):
         self.headers = headers or {}
         self.timeout = timeout
         self._forced_protocol = protocol
-        self._protocol: Optional[str] = None
-        self._session: Optional["aiohttp.ClientSession"] = None
-        self._sse_session: Optional["aiohttp.ClientSession"] = None  # Separate session for SSE streams
-        self._sse_task: Optional[asyncio.Task] = None
+        self._protocol: str | None = None
+        self._session: aiohttp.ClientSession | None = None
+        self._sse_session: aiohttp.ClientSession | None = None  # Separate session for SSE streams
+        self._sse_task: asyncio.Task | None = None
         self._message_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._connected = False
         self._endpoint_ready: asyncio.Event = asyncio.Event()
-        self._message_endpoint: Optional[str] = None  # For FastMCP dynamic endpoint
-        self._session_id: Optional[str] = None  # For Streamable HTTP session
+        self._message_endpoint: str | None = None  # For FastMCP dynamic endpoint
+        self._session_id: str | None = None  # For Streamable HTTP session
 
     async def connect(self) -> None:
         """Create HTTP session and detect/establish connection."""
@@ -314,16 +342,15 @@ class HTTPTransport(MCPTransport):
             import aiohttp
         except ImportError:
             raise ImportError(
-                "aiohttp is required for HTTP transport. "
-                "Install with: pip install aiohttp"
-            )
+                "aiohttp is required for HTTP transport. Install with: pip install aiohttp"
+            ) from None
 
         # Create separate session for SSE streams with unlimited total timeout
         # SSE is a long-lived connection that shouldn't have a total time limit
         self._sse_session = aiohttp.ClientSession(
             headers=self.headers,
             timeout=aiohttp.ClientTimeout(
-                total=None,      # No total timeout for SSE streams
+                total=None,  # No total timeout for SSE streams
                 sock_read=None,  # No timeout for SSE reads
             ),
         )
@@ -345,6 +372,7 @@ class HTTPTransport(MCPTransport):
                 self._protocol = await self._detect_protocol()
 
             import logging
+
             logger = logging.getLogger(__name__)
             logger.info(f"Detected MCP protocol: {self._protocol}")
 
@@ -361,10 +389,10 @@ class HTTPTransport(MCPTransport):
                 await asyncio.wait_for(self._endpoint_ready.wait(), timeout=10.0)
                 self._connected = True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if self._sse_task:
                 self._sse_task.cancel()
-            raise RuntimeError("Timeout waiting for SSE endpoint discovery")
+            raise RuntimeError("Timeout waiting for SSE endpoint discovery") from None
         except Exception:
             if self._session:
                 await self._session.close()
@@ -383,8 +411,10 @@ class HTTPTransport(MCPTransport):
         Returns:
             Protocol type constant
         """
-        import aiohttp
         import logging
+
+        import aiohttp
+
         logger = logging.getLogger(__name__)
 
         init_msg = {
@@ -393,9 +423,9 @@ class HTTPTransport(MCPTransport):
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "harness", "version": "1.0"}
+                "clientInfo": {"name": "harness", "version": "1.0"},
             },
-            "id": 1
+            "id": 1,
         }
 
         # Try Streamable HTTP endpoint first
@@ -460,11 +490,10 @@ class HTTPTransport(MCPTransport):
 
     async def _parse_sse_response(self, resp) -> None:
         """Parse SSE stream from Streamable HTTP response."""
-        current_event = None
         async for line in resp.content:
             line = line.decode("utf-8").strip()
             if line.startswith("event:"):
-                current_event = line[6:].strip()
+                line[6:].strip()
             elif line.startswith("data:"):
                 data = line[5:].strip()
                 try:
@@ -473,7 +502,7 @@ class HTTPTransport(MCPTransport):
                 except json.JSONDecodeError:
                     pass
             elif not line:
-                current_event = None
+                pass
 
     async def disconnect(self) -> None:
         """Close HTTP sessions."""
@@ -481,10 +510,8 @@ class HTTPTransport(MCPTransport):
 
         if self._sse_task:
             self._sse_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._sse_task
-            except asyncio.CancelledError:
-                pass
             self._sse_task = None
 
         if self._session:
@@ -516,8 +543,10 @@ class HTTPTransport(MCPTransport):
         if self._session is None:
             raise RuntimeError("Transport not connected")
 
-        import aiohttp
         import logging
+
+        import aiohttp
+
         logger = logging.getLogger(__name__)
 
         endpoint = self._get_send_endpoint()
@@ -554,7 +583,7 @@ class HTTPTransport(MCPTransport):
                         try:
                             response = await resp.json()
                             await self._message_queue.put(response)
-                        except:
+                        except Exception:
                             pass  # No JSON body
 
                     # Update session ID if provided
@@ -573,15 +602,14 @@ class HTTPTransport(MCPTransport):
         Restarts SSE listener to get new session_id.
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Cancel existing SSE task
         if self._sse_task:
             self._sse_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._sse_task
-            except asyncio.CancelledError:
-                pass
 
         # Reset endpoint discovery
         self._message_endpoint = None
@@ -592,11 +620,11 @@ class HTTPTransport(MCPTransport):
             try:
                 import aiohttp
             except ImportError:
-                raise ImportError("aiohttp is required for HTTP transport")
+                raise ImportError("aiohttp is required for HTTP transport") from None
             self._sse_session = aiohttp.ClientSession(
                 headers=self.headers,
                 timeout=aiohttp.ClientTimeout(
-                    total=None,      # No total timeout for SSE streams
+                    total=None,  # No total timeout for SSE streams
                     sock_read=None,  # No timeout for SSE reads
                 ),
             )
@@ -609,8 +637,8 @@ class HTTPTransport(MCPTransport):
         try:
             await asyncio.wait_for(self._endpoint_ready.wait(), timeout=10.0)
             logger.info(f"Reconnected with new endpoint: {self._message_endpoint}")
-        except asyncio.TimeoutError:
-            raise RuntimeError("Timeout waiting for SSE reconnection")
+        except TimeoutError:
+            raise RuntimeError("Timeout waiting for SSE reconnection") from None
 
     def _get_send_endpoint(self) -> str:
         """Get the POST endpoint based on protocol."""
@@ -644,7 +672,7 @@ class HTTPTransport(MCPTransport):
                     timeout=1.0,
                 )
                 yield message
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
@@ -660,8 +688,10 @@ class HTTPTransport(MCPTransport):
         if self._sse_session is None:
             return
 
-        import aiohttp
         import logging
+
+        import aiohttp
+
         logger = logging.getLogger(__name__)
 
         try:
@@ -728,8 +758,10 @@ class HTTPTransport(MCPTransport):
         if self._sse_session is None:
             return
 
-        import aiohttp
         import logging
+
+        import aiohttp
+
         logger = logging.getLogger(__name__)
 
         headers = {"Accept": "text/event-stream"}
@@ -751,12 +783,11 @@ class HTTPTransport(MCPTransport):
                     return
 
                 # Parse SSE stream
-                current_event = None
                 async for line in resp.content:
                     line = line.decode("utf-8").strip()
 
                     if line.startswith("event:"):
-                        current_event = line[6:].strip()
+                        line[6:].strip()
                     elif line.startswith("data:"):
                         data = line[5:].strip()
                         try:
@@ -765,7 +796,7 @@ class HTTPTransport(MCPTransport):
                         except json.JSONDecodeError:
                             continue
                     elif not line:
-                        current_event = None
+                        pass
 
         except asyncio.CancelledError:
             pass

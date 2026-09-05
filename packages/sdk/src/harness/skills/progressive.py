@@ -30,7 +30,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 class LoadingLevel:
     """Skill loading levels."""
+
     FRONTMATTER = 1  # Metadata only
     FULL_CONTENT = 2  # Complete skill content
     REFERENCES = 3  # Including reference files
@@ -313,7 +314,7 @@ class ProgressiveSkillLoader:
         content = skill.content
 
         # Pattern: @file:path or @path
-        file_refs = re.findall(r'@(?:file:)?([^\s,]+)', content)
+        file_refs = re.findall(r"@(?:file:)?([^\s,]+)", content)
 
         for ref_path in file_refs:
             try:

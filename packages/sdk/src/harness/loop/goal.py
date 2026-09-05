@@ -20,13 +20,13 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from harness.loop.tool_verification import run_tool_verification
 from harness.loop.types import (
     GoalConfig,
     VerificationMethod,
     VerificationRecord,
     VerificationResult,
 )
-from harness.loop.tool_verification import run_tool_verification
 
 if TYPE_CHECKING:
     from harness.llm.base import LLMClient
@@ -346,8 +346,7 @@ class GoalVerifier:
             # Check for retryable errors
             error_str = str(e).lower()
             should_retry = any(
-                keyword in error_str
-                for keyword in ["timeout", "rate limit", "503", "502"]
+                keyword in error_str for keyword in ["timeout", "rate limit", "503", "502"]
             )
             raise VerificationError(
                 f"Tool verification error: {e}",

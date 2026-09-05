@@ -2,11 +2,10 @@
 Tests for Interrupt/Recovery system.
 """
 
-import pytest
 from datetime import datetime
 
+from harness.core.agent_loop import AgentLoop
 from harness.types import LoopSnapshot, Message, ToolCall
-from harness.core.agent_loop import AgentLoop, LoopConfig
 
 
 class TestLoopSnapshot:
@@ -133,8 +132,8 @@ class TestAgentLoopInterrupt:
     def test_interrupt(self):
         """Test interrupt method."""
         from harness.llm import MockLLMClient
-        from harness.memory import SessionManager, ContextBuilder
-        from harness.tools import ToolRegistry, ToolExecutor
+        from harness.memory import ContextBuilder, SessionManager
+        from harness.tools import ToolExecutor, ToolRegistry
 
         llm = MockLLMClient(model="mock")
         registry = ToolRegistry()
@@ -159,8 +158,8 @@ class TestAgentLoopSnapshot:
     def test_create_snapshot(self):
         """Test creating snapshot from AgentLoop."""
         from harness.llm import MockLLMClient
-        from harness.memory import SessionManager, ContextBuilder
-        from harness.tools import ToolRegistry, ToolExecutor
+        from harness.memory import ContextBuilder, SessionManager
+        from harness.tools import ToolExecutor, ToolRegistry
         from harness.types import Session
 
         # Setup mock components
@@ -186,8 +185,8 @@ class TestAgentLoopSnapshot:
     def test_create_snapshot_with_tool_calls(self):
         """Test creating snapshot with pending tool calls."""
         from harness.llm import MockLLMClient
-        from harness.memory import SessionManager, ContextBuilder
-        from harness.tools import ToolRegistry, ToolExecutor
+        from harness.memory import ContextBuilder, SessionManager
+        from harness.tools import ToolExecutor, ToolRegistry
         from harness.types import Session
 
         llm = MockLLMClient(model="mock")

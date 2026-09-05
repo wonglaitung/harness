@@ -112,9 +112,7 @@ class WorktreeManager:
                     current_path = None
 
             if self._worktrees:
-                logger.info(
-                    f"Recovered {len(self._worktrees)} orphan worktree(s)"
-                )
+                logger.info(f"Recovered {len(self._worktrees)} orphan worktree(s)")
 
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to list worktrees for recovery: {e}")
@@ -221,9 +219,7 @@ class WorktreeManager:
             error_msg = stderr.decode().strip()
             if force:
                 # Try more aggressive cleanup
-                logger.warning(
-                    f"Force cleanup for worktree {name}: {error_msg}"
-                )
+                logger.warning(f"Force cleanup for worktree {name}: {error_msg}")
                 # Use git worktree prune
                 await self._prune_worktrees()
 

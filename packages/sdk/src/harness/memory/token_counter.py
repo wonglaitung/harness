@@ -10,7 +10,7 @@ import functools
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from harness.types import Message, ToolCall
+    from harness.types import Message
 
 # Model encoding mapping
 MODEL_ENCODING_MAP = {
@@ -75,12 +75,13 @@ class TokenCounter:
         """Get tiktoken encoder with caching."""
         try:
             import tiktoken
+
             return tiktoken.get_encoding(encoding_name)
         except ImportError:
             raise ImportError(
                 "tiktoken is required for token counting. "
                 "Install it with: pip install tiktoken>=0.5.0"
-            )
+            ) from None
 
     def count(self, text: str) -> int:
         """

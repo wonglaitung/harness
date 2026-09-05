@@ -36,7 +36,11 @@ class ProgressFormatter:
             tool_names = event.data.get("tool_names", [])
 
             # Remove content from data dict for display
-            display_data = {k: v for k, v in event.data.items() if k not in ("content", "has_tool_calls", "tool_names")}
+            display_data = {
+                k: v
+                for k, v in event.data.items()
+                if k not in ("content", "has_tool_calls", "tool_names")
+            }
             data_str = f" | {display_data}" if display_data else ""
 
             base = f"[{ts}] {event.type.value}: {event.message}{duration}{data_str}"
@@ -61,15 +65,15 @@ class ProgressFormatter:
         Requires terminal with ANSI color support.
         """
         colors = {
-            ProgressEventType.LOOP_START: "\033[92m",    # Green
-            ProgressEventType.LOOP_END: "\033[92m",      # Green
+            ProgressEventType.LOOP_START: "\033[92m",  # Green
+            ProgressEventType.LOOP_END: "\033[92m",  # Green
             ProgressEventType.STATE_CHANGE: "\033[94m",  # Blue
-            ProgressEventType.TOOL_CALL: "\033[93m",     # Yellow
-            ProgressEventType.TOOL_RESULT: "\033[93m",   # Yellow
-            ProgressEventType.LLM_CALL: "\033[95m",      # Magenta
+            ProgressEventType.TOOL_CALL: "\033[93m",  # Yellow
+            ProgressEventType.TOOL_RESULT: "\033[93m",  # Yellow
+            ProgressEventType.LLM_CALL: "\033[95m",  # Magenta
             ProgressEventType.LLM_RESPONSE: "\033[95m",  # Magenta
-            ProgressEventType.ITERATION: "\033[90m",     # Gray
-            ProgressEventType.ERROR: "\033[91m",         # Red
+            ProgressEventType.ITERATION: "\033[90m",  # Gray
+            ProgressEventType.ERROR: "\033[91m",  # Red
         }
         reset = "\033[0m"
         color = colors.get(event.type, "")

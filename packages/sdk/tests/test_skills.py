@@ -2,8 +2,9 @@
 Tests for Skills System.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from harness.skills import (
     Skill,

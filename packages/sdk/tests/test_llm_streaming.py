@@ -4,9 +4,9 @@ Tests for LLM streaming with backpressure integration.
 
 import pytest
 
-from harness.llm.base import LLMConfig
 from harness.core import StreamingConfig, StreamingHandler
-from harness.types import Chunk, ChunkType, ProgressEvent, ProgressEventType
+from harness.llm.base import LLMConfig
+from harness.types import Chunk, ChunkType, ProgressEvent
 
 
 class TestLLMConfigStreaming:

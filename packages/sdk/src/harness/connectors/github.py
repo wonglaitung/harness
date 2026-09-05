@@ -8,7 +8,6 @@ and interacting with GitHub API (creating comments, updating PRs, etc.).
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from harness.connectors.base import Connector, EventCallback

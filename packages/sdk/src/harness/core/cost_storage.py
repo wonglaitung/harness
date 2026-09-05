@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING
 
-from harness.types import CostConfig, TokenUsage, UserUsage
+from harness.types import UserUsage
 
 if TYPE_CHECKING:
     pass
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GlobalUsage:
     """Global usage statistics."""
+
     daily_cost_usd: float = 0.0
     daily_tokens: int = 0
     date: str = ""  # YYYY-MM-DD format
@@ -184,7 +185,6 @@ class SQLiteCostStorage(CostStorage):
 
     def __init__(self, db_path: str = ".harness/costs.db"):
         from pathlib import Path
-        import sqlite3
 
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,7 +235,8 @@ class SQLiteCostStorage(CostStorage):
         conn = sqlite3.connect(self.db_path)
         try:
             cursor = conn.execute(
-                "SELECT daily_tokens, hourly_requests, hour FROM user_usage WHERE user_id = ? AND date = ?",
+                "SELECT daily_tokens, hourly_requests, hour "
+                "FROM user_usage WHERE user_id = ? AND date = ?",
                 (user_id, date),
             )
             row = cursor.fetchone()
@@ -274,7 +275,8 @@ class SQLiteCostStorage(CostStorage):
         try:
             # Get current values
             cursor = conn.execute(
-                "SELECT daily_tokens, hourly_requests, hour FROM user_usage WHERE user_id = ? AND date = ?",
+                "SELECT daily_tokens, hourly_requests, hour "
+                "FROM user_usage WHERE user_id = ? AND date = ?",
                 (user_id, date),
             )
             row = cursor.fetchone()
@@ -284,24 +286,30 @@ class SQLiteCostStorage(CostStorage):
                 # Reset hourly if hour changed
                 hourly_requests = row[1] if stored_hour == hour else 0
 
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE user_usage
                     SET daily_tokens = daily_tokens + ?,
                         hourly_requests = ?,
                         hour = ?
                     WHERE user_id = ? AND date = ?
-                """, (
-                    tokens,
-                    hourly_requests + (1 if request else 0),
-                    hour,
-                    user_id,
-                    date,
-                ))
+                """,
+                    (
+                        tokens,
+                        hourly_requests + (1 if request else 0),
+                        hour,
+                        user_id,
+                        date,
+                    ),
+                )
             else:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO user_usage (user_id, date, hour, daily_tokens, hourly_requests)
                     VALUES (?, ?, ?, ?, ?)
-                """, (user_id, date, hour, tokens, 1 if request else 0))
+                """,
+                    (user_id, date, hour, tokens, 1 if request else 0),
+                )
 
             conn.commit()
         finally:
@@ -346,13 +354,16 @@ class SQLiteCostStorage(CostStorage):
 
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO global_usage (date, daily_cost_usd, daily_tokens)
                 VALUES (?, ?, ?)
                 ON CONFLICT(date) DO UPDATE SET
                     daily_cost_usd = daily_cost_usd + ?,
                     daily_tokens = daily_tokens + ?
-            """, (date, cost_usd, tokens, cost_usd, tokens))
+            """,
+                (date, cost_usd, tokens, cost_usd, tokens),
+            )
             conn.commit()
         finally:
             conn.close()

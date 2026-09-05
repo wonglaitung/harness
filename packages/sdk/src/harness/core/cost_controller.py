@@ -8,22 +8,19 @@ Supports multi-level budget management: session, user, and global.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from harness.types import (
     CostConfig,
-    GlobalBudgetExceededError,
     ProgressEventType,
     TokenUsage,
-    UserBudgetExceededError,
     UserUsage,
 )
 
 if TYPE_CHECKING:
     from harness.core.cost_storage import CostStorage
-    from harness.types import ProgressCallback, ProgressEvent
+    from harness.types import ProgressCallback
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BudgetStatus:
     """Current budget status."""
+
     is_within_budget: bool
     usage: TokenUsage
     config: CostConfig
@@ -58,6 +56,7 @@ class BudgetStatus:
 @dataclass
 class UserBudgetStatus:
     """User-level budget status."""
+
     is_within_budget: bool
     usage: UserUsage
     config: CostConfig
@@ -68,6 +67,7 @@ class UserBudgetStatus:
 @dataclass
 class GlobalBudgetStatus:
     """Global budget status."""
+
     is_within_budget: bool
     current_cost: float
     budget: float
@@ -99,8 +99,8 @@ class CostController:
     def __init__(
         self,
         config: CostConfig | None = None,
-        storage: "CostStorage | None" = None,
-        on_progress: "ProgressCallback | None" = None,
+        storage: CostStorage | None = None,
+        on_progress: ProgressCallback | None = None,
     ):
         self.config = config or CostConfig()
         self._storage = storage
@@ -146,16 +146,21 @@ class CostController:
         # Emit progress event for warnings
         if warning and self._on_progress:
             from harness.types import ProgressEvent
-            event_type = ProgressEventType.ERROR if not is_within else ProgressEventType.STATE_CHANGE
-            self._on_progress(ProgressEvent(
-                type=event_type,
-                message=warning,
-                data={
-                    "usage_ratio": usage_ratio,
-                    "total_tokens": usage.total_tokens,
-                    "limit": self.config.max_tokens_per_session,
-                },
-            ))
+
+            event_type = (
+                ProgressEventType.ERROR if not is_within else ProgressEventType.STATE_CHANGE
+            )
+            self._on_progress(
+                ProgressEvent(
+                    type=event_type,
+                    message=warning,
+                    data={
+                        "usage_ratio": usage_ratio,
+                        "total_tokens": usage.total_tokens,
+                        "limit": self.config.max_tokens_per_session,
+                    },
+                )
+            )
 
         return status
 
@@ -179,7 +184,11 @@ class CostController:
 
         usage = self._storage.get_user_usage(user_id)
         is_within, warning = usage.check_budget(self.config)
-        usage_ratio = usage.daily_tokens / self.config.daily_token_limit if self.config.daily_token_limit > 0 else 0
+        usage_ratio = (
+            usage.daily_tokens / self.config.daily_token_limit
+            if self.config.daily_token_limit > 0
+            else 0
+        )
 
         return UserBudgetStatus(
             is_within_budget=is_within,
@@ -204,17 +213,21 @@ class CostController:
             )
 
         usage = self._storage.get_global_usage()
-        usage_ratio = usage.daily_cost_usd / self.config.global_daily_budget_usd if self.config.global_daily_budget_usd > 0 else 0
+        usage_ratio = (
+            usage.daily_cost_usd / self.config.global_daily_budget_usd
+            if self.config.global_daily_budget_usd > 0
+            else 0
+        )
 
         is_within = usage.daily_cost_usd < self.config.global_daily_budget_usd
-        should_throttle = (
-            self.config.auto_throttle and
-            usage_ratio >= 0.8
-        )
+        should_throttle = self.config.auto_throttle and usage_ratio >= 0.8
 
         warning = None
         if not is_within:
-            warning = f"Global budget exceeded: ${usage.daily_cost_usd:.2f}/${self.config.global_daily_budget_usd:.2f}"
+            warning = (
+                f"Global budget exceeded: ${usage.daily_cost_usd:.2f}/"
+                f"{self.config.global_daily_budget_usd:.2f}"
+            )
         elif should_throttle:
             warning = f"Global budget warning: {usage_ratio:.0%} of daily budget used"
 

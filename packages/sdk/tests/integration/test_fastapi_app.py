@@ -11,9 +11,9 @@ Environment variables (optional):
     ANTHROPIC_API_KEY or OPENAI_API_KEY - For live LLM tests
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
 
 # =============================================================================
 # Fixtures
@@ -279,7 +279,7 @@ class TestWebSocketEndpoint:
         """Test that WebSocket endpoint is accessible."""
         # This tests the WebSocket endpoint exists
         # Full WebSocket testing requires async client
-        with client.websocket_connect("/ws/run") as websocket:
+        with client.websocket_connect("/ws/run"):
             # Connection should succeed
             pass
 

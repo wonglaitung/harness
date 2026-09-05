@@ -32,7 +32,7 @@ class LLMConfig:
     timeout: float = 120.0
     retry_count: int = 3
     retry_delay: float = 1.0
-    streaming_config: "StreamingConfig | None" = None  # Streaming with backpressure
+    streaming_config: StreamingConfig | None = None  # Streaming with backpressure
 
     # Compatibility settings for non-standard API endpoints
     # Some proxy APIs don't support Anthropic's "tool" role
@@ -43,6 +43,7 @@ class LLMConfig:
 @dataclass
 class ToolDefinition:
     """Definition of a tool for LLM."""
+
     name: str
     description: str
     input_schema: dict[str, Any]
@@ -184,15 +185,17 @@ class LLMClient(ABC):
     def _should_retry(self, error_type: str, error_message: str) -> bool:
         """Determine if an error should be retried."""
         # Retry on rate limits
-        if any(indicator in error_message for indicator in [
-            "ratelimit", "rate_limit", "429", "too many requests"
-        ]):
+        if any(
+            indicator in error_message
+            for indicator in ["ratelimit", "rate_limit", "429", "too many requests"]
+        ):
             return True
 
         # Retry on network errors
-        if any(indicator in error_message for indicator in [
-            "connection", "network", "socket", "timeout", "timed out"
-        ]):
+        if any(
+            indicator in error_message
+            for indicator in ["connection", "network", "socket", "timeout", "timed out"]
+        ):
             return True
 
         # Retry on 5xx server errors
@@ -216,13 +219,14 @@ class LLMClient(ABC):
         max_delay = 60.0
 
         # Exponential backoff: delay * 2^attempt
-        delay = base_delay * (2 ** attempt)
+        delay = base_delay * (2**attempt)
 
         # Cap at max delay
         delay = min(delay, max_delay)
 
         # Add jitter (±10%)
         import random
+
         jitter = delay * 0.1 * random.random()
         delay = delay + jitter
 

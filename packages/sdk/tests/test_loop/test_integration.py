@@ -5,11 +5,11 @@ Tests the full goal-driven execution flow from AgentHarness.run_goal().
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from harness import AgentHarness, GoalConfig, GoalStatus, VerificationResult
+from harness import AgentHarness, GoalStatus
 
 
 class TestRunGoalIntegration:

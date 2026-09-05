@@ -13,7 +13,6 @@ from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
 from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage, ToolCall
 
 if TYPE_CHECKING:
-    from harness.core import StreamingConfig
     from harness.types import ProgressCallback
 
 logger = logging.getLogger(__name__)
@@ -56,9 +55,13 @@ class OpenAIClient(LLMClient):
 
         # Eagerly initialize the client to catch import errors early
         # This is especially important on Windows with qasync
-        logger.info(f"OpenAIClient.__init__: api_key={'*' * 8 if self._api_key else 'None'}, base_url={self._base_url}")
+        logger.info(
+            f"OpenAIClient.__init__: api_key={'*' * 8 if self._api_key else 'None'}, "
+            f"base_url={self._base_url}"
+        )
         # Pre-import openai module
         import openai
+
         logger.info(f"OpenAI module pre-imported, version: {openai.__version__}")
 
     def _get_client(self):
@@ -125,7 +128,10 @@ class OpenAIClient(LLMClient):
             params["tools"] = [self._format_tool(t) for t in tools]
             params["tool_choice"] = "auto"
 
-        logger.info(f"OpenAI API request: messages={len(formatted_messages)}, tools={len(tools) if tools else 0}")
+        logger.info(
+            f"OpenAI API request: messages={len(formatted_messages)}, "
+            f"tools={len(tools) if tools else 0}"
+        )
 
         def sync_call():
             logger.info("sync_call: Starting API request")
@@ -147,10 +153,15 @@ class OpenAIClient(LLMClient):
 
             # Handle non-standard API responses (some APIs return string on error)
             if isinstance(response, str):
-                logger.error(f"OpenAI API returned string instead of response object: {response[:200]}")
+                logger.error(
+                    f"OpenAI API returned string instead of response object: {response[:200]}"
+                )
                 raise ValueError(f"API returned non-standard response: {response[:200]}")
 
-            logger.info(f"OpenAI response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+            logger.info(
+                f"OpenAI response received: finish_reason="
+                f"{response.choices[0].finish_reason if response.choices else 'no choices'}"
+            )
 
         except Exception as e:
             error_str = str(e)
@@ -158,7 +169,10 @@ class OpenAIClient(LLMClient):
             # Check if error is about unsupported content type (file type)
             # This happens with OpenAI-compatible APIs that don't support documents
             if "content type" in error_str and ("file" in error_str or "must be text" in error_str):
-                logger.warning(f"API doesn't support 'file' content type, retrying with text conversion: {error_str}")
+                logger.warning(
+                    f"API doesn't support 'file' content type, "
+                    f"retrying with text conversion: {error_str}"
+                )
 
                 # Check if we have document content in original messages
                 has_documents = False
@@ -187,7 +201,9 @@ class OpenAIClient(LLMClient):
                     formatted_messages.extend(converted_messages)
                     params["messages"] = formatted_messages
 
-                    logger.info(f"Retrying with converted messages: {len(formatted_messages)} messages")
+                    logger.info(
+                        f"Retrying with converted messages: {len(formatted_messages)} messages"
+                    )
 
                     # Retry the call
                     try:
@@ -197,9 +213,14 @@ class OpenAIClient(LLMClient):
                         response = future.result()
 
                         if isinstance(response, str):
-                            raise ValueError(f"API returned non-standard response: {response[:200]}")
+                            raise ValueError(
+                                f"API returned non-standard response: {response[:200]}"
+                            )
 
-                        logger.info(f"Retry successful: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+                        finish_reason = (
+                            response.choices[0].finish_reason if response.choices else "no choices"
+                        )
+                        logger.info(f"Retry successful: finish_reason={finish_reason}")
 
                     except Exception as retry_error:
                         logger.error(f"Retry failed: {retry_error}")
@@ -228,9 +249,10 @@ class OpenAIClient(LLMClient):
         Uses a sync client in a separate thread with a queue to avoid
         qasync/Windows compatibility issues.
         """
-        from harness.core import StreamingConfig, StreamingHandler
         import queue
         import threading
+
+        from harness.core import StreamingConfig, StreamingHandler
 
         client = self._get_client()
 
@@ -323,7 +345,10 @@ class OpenAIClient(LLMClient):
         """Check if the client supports vision/image inputs."""
         # GPT-4o, GPT-4-turbo, and later models support vision
         model_name = self.config.model.lower()
-        return any(v in model_name for v in ["gpt-4o", "gpt-4-turbo", "gpt-4-vision", "gpt-4-1106", "gpt-4-0125"])
+        return any(
+            v in model_name
+            for v in ["gpt-4o", "gpt-4-turbo", "gpt-4-vision", "gpt-4-1106", "gpt-4-0125"]
+        )
 
     def _convert_multimodal_content(self, content: list[dict]) -> list[dict]:
         """
@@ -346,10 +371,9 @@ class OpenAIClient(LLMClient):
                 source = block.get("source", {})
                 media_type = source.get("media_type", "image/png")
                 data = source.get("data", "")
-                converted.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{media_type};base64,{data}"}
-                })
+                converted.append(
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+                )
 
             elif block_type == "document":
                 # Convert document block (OpenAI supports file type)
@@ -357,13 +381,15 @@ class OpenAIClient(LLMClient):
                 media_type = source.get("media_type", "application/pdf")
                 data = source.get("data", "")
                 filename = block.get("filename", "document.pdf")
-                converted.append({
-                    "type": "file",
-                    "file": {
-                        "filename": filename,
-                        "file_data": f"data:{media_type};base64,{data}"
+                converted.append(
+                    {
+                        "type": "file",
+                        "file": {
+                            "filename": filename,
+                            "file_data": f"data:{media_type};base64,{data}",
+                        },
                     }
-                })
+                )
 
             else:
                 # Keep text and other blocks unchanged
@@ -401,30 +427,33 @@ class OpenAIClient(LLMClient):
 
                 try:
                     decoded_content = base64.b64decode(data).decode("utf-8", errors="replace")
-                    file_info = f"\n\n--- Attached File: {filename} ---\n{decoded_content}\n--- End of File ---\n"
+                    file_info = (
+                        f"\n\n--- Attached File: {filename} ---\n{decoded_content}"
+                        "\n--- End of File ---\n"
+                    )
                     document_texts.append(file_info)
-                    logger.info(f"Document '{filename}' converted to text ({len(decoded_content)} chars)")
+                    logger.info(
+                        f"Document '{filename}' converted to text ({len(decoded_content)} chars)"
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to decode document '{filename}': {e}")
-                    document_texts.append(f"\n\n[Attached file: {filename} - content could not be decoded]\n")
+                    document_texts.append(
+                        f"\n\n[Attached file: {filename} - content could not be decoded]\n"
+                    )
 
             elif block_type == "image":
                 # Keep image blocks unchanged (copy to avoid modifying original)
                 source = block.get("source", {})
                 media_type = source.get("media_type", "image/png")
                 data = source.get("data", "")
-                converted.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{media_type};base64,{data}"}
-                })
+                converted.append(
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+                )
 
             else:
                 # Copy other blocks (especially text) to avoid modifying original content
                 if block_type == "text":
-                    converted.append({
-                        "type": "text",
-                        "text": block.get("text", "")
-                    })
+                    converted.append({"type": "text", "text": block.get("text", "")})
                 else:
                     converted.append(block.copy())
 
@@ -435,10 +464,7 @@ class OpenAIClient(LLMClient):
                     converted[i]["text"] += "".join(document_texts)
                     break
             else:
-                converted.append({
-                    "type": "text",
-                    "text": "".join(document_texts)
-                })
+                converted.append({"type": "text", "text": "".join(document_texts)})
 
         return converted
 
@@ -463,11 +489,13 @@ class OpenAIClient(LLMClient):
                     except json.JSONDecodeError:
                         args = {}
 
-                tool_calls.append(ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    arguments=args,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=args,
+                    )
+                )
 
         # Map stop reason
         stop_reason_map = {
@@ -476,10 +504,7 @@ class OpenAIClient(LLMClient):
             "length": StopReason.MAX_TOKENS,
             "content_filter": StopReason.END_TURN,
         }
-        stop_reason = stop_reason_map.get(
-            choice.finish_reason,
-            StopReason.END_TURN
-        )
+        stop_reason = stop_reason_map.get(choice.finish_reason, StopReason.END_TURN)
 
         # Parse usage
         usage = TokenUsage(

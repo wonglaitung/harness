@@ -83,7 +83,7 @@ class DependencyGraph:
         Returns:
             True if all pending steps have skipped dependencies
         """
-        for name, step in self._steps.items():
+        for name, _step in self._steps.items():
             if name in self._completed or name in self._skipped:
                 continue
 
@@ -187,12 +187,7 @@ class DependencyGraph:
             rec_stack.remove(node)
             return False
 
-        for step_name in self._steps:
-            if step_name not in visited:
-                if has_cycle(step_name):
-                    return True
-
-        return False
+        return any(step_name not in visited and has_cycle(step_name) for step_name in self._steps)
 
     def get_step(self, step_name: str) -> WorkflowStep | None:
         """Get a step by name."""

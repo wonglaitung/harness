@@ -450,8 +450,7 @@ class BrowserClickTool(Tool):
                 "selector": {
                     "type": "string",
                     "description": (
-                        "CSS selector or XPath "
-                        "(e.g., '#submit-btn', '//button[text()=\"Submit\"]')"
+                        "CSS selector or XPath (e.g., '#submit-btn', '//button[text()=\"Submit\"]')"
                     ),
                 },
                 "timeout": {
@@ -660,7 +659,7 @@ class BrowserTypeTool(Tool):
             elapsed = time.time() - start_time
 
             result_content = f"""✅ Type: {selector}
-Text: {text[:50]}{'...' if len(text) > 50 else ''}
+Text: {text[:50]}{"..." if len(text) > 50 else ""}
 Length: {len(text)}
 Time: {elapsed * 1000:.0f}ms"""
             if press_enter:

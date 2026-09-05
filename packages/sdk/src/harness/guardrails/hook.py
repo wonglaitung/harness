@@ -7,12 +7,10 @@ Guardrail Hook - 在 LLM 调用前后执行安全检查
 """
 
 import logging
-from typing import Optional
 
 from harness.core.hooks import LifecycleHook
-from harness.types import HookPoint, HookContext, HookResult, Message
-
 from harness.guardrails.config import GuardrailConfig
+from harness.types import HookContext, HookPoint, HookResult, Message
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +56,7 @@ class GuardrailHook(LifecycleHook):
         if self.config.layer1_enabled:
             try:
                 from harness.guardrails.chinese_guardrail import UniversalPIIGuardrail
+
                 self._pii_guardrail = UniversalPIIGuardrail(
                     min_score=self.config.min_score,
                     placeholders=self.config.placeholders,
@@ -71,6 +70,7 @@ class GuardrailHook(LifecycleHook):
         if self.config.layer2_enabled and self.config.judge_endpoint:
             try:
                 from harness.guardrails.judge import ComplianceJudge
+
                 judge_config = self.config.get_judge_config()
                 self._judge = ComplianceJudge(judge_config)
                 logger.info(f"Layer 2 (Judge) initialized, endpoint: {self.config.judge_endpoint}")
@@ -155,9 +155,7 @@ class GuardrailHook(LifecycleHook):
 
         # 如果内容被修改（PII 脱敏），注入修改后的消息
         if modified_content != original_content:
-            return HookResult.inject_message(
-                Message(role="user", content=modified_content)
-            )
+            return HookResult.inject_message(Message(role="user", content=modified_content))
 
         return HookResult.continue_()
 
@@ -192,7 +190,7 @@ class GuardrailHook(LifecycleHook):
 
         return HookResult.continue_()
 
-    def _extract_last_user_message(self, messages: list) -> Optional[str]:
+    def _extract_last_user_message(self, messages: list) -> str | None:
         """提取最后一条用户消息"""
         for message in reversed(messages):
             if message.role == "user":
@@ -209,7 +207,7 @@ class GuardrailHook(LifecycleHook):
                     return " ".join(text_parts) if text_parts else None
         return None
 
-    def _extract_llm_response(self, context: HookContext) -> Optional[str]:
+    def _extract_llm_response(self, context: HookContext) -> str | None:
         """从上下文提取 LLM 响应内容"""
         # 尝试从不同位置获取响应
         if hasattr(context, "llm_response") and context.llm_response:
@@ -221,8 +219,7 @@ class GuardrailHook(LifecycleHook):
         # 从消息历史中获取最后一条助手消息
         if context.messages:
             for message in reversed(context.messages):
-                if message.role == "assistant":
-                    if isinstance(message.content, str):
-                        return message.content
+                if message.role == "assistant" and isinstance(message.content, str):
+                    return message.content
 
         return None

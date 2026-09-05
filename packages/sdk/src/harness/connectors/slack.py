@@ -8,7 +8,6 @@ and sending messages to Slack channels.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from harness.connectors.base import Connector, EventCallback
@@ -100,9 +99,7 @@ class SlackConnector(Connector):
             logger.info(f"SlackConnector started: {self.id}")
 
         except ImportError:
-            logger.error(
-                "slack_sdk not installed. Install with: pip install slack_sdk"
-            )
+            logger.error("slack_sdk not installed. Install with: pip install slack_sdk")
             self.state = ConnectorState.ERROR
             raise
 

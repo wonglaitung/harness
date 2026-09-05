@@ -16,19 +16,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from harness.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from harness.core.circuit_breaker import CircuitBreaker
 from harness.core.cost_controller import CostController
-from harness.core.error_handler import ErrorAction, ErrorContext, ErrorDecision, ErrorHandler
+from harness.core.error_handler import ErrorAction, ErrorContext, ErrorHandler
 from harness.core.hooks import HookManager, LifecycleHook
 from harness.core.observability import (
     SpanBuilder,
     is_tracing,
     record_token_usage,
-    traced_operation,
 )
 from harness.core.output_offload import OffloadConfig, OutputOffloader
 from harness.core.step_budget import StepBudgetConfig, StepBudgetController
-from harness.core.stuck_detector import StuckDetector, StuckDetectorConfig, StuckDetectionResult
+from harness.core.stuck_detector import StuckDetectionResult, StuckDetector, StuckDetectorConfig
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 
@@ -42,7 +41,6 @@ from harness.types import (
     HookAction,
     HookContext,
     HookPoint,
-    HookResult,
     LoopResult,
     LoopSnapshot,
     LoopState,
@@ -85,6 +83,7 @@ class LoopConfig:
         step_budget_config: Step budget configuration for fine-grained control.
         enable_step_budget: Whether to enable step budget control.
     """
+
     max_iterations: int = 10  # Industry standard (OpenAI Agents SDK: 10, LangChain: 10-15)
     timeout_per_tool: float = 30.0
     enable_parallel_tools: bool = True
@@ -156,25 +155,41 @@ class AgentLoop:
 
         # Initialize cost controller
         cost_config = self.config.cost_config or CostConfig()
-        self._cost_controller = CostController(
-            config=cost_config,
-            on_progress=None,  # Will be set in run()
-        ) if self.config.enable_cost_control else None
+        self._cost_controller = (
+            CostController(
+                config=cost_config,
+                on_progress=None,  # Will be set in run()
+            )
+            if self.config.enable_cost_control
+            else None
+        )
 
         # Initialize output offloader (Phase 24)
-        self._offloader = OutputOffloader(
-            config=self.config.offload_config or OffloadConfig(),
-        ) if self.config.enable_offload else None
+        self._offloader = (
+            OutputOffloader(
+                config=self.config.offload_config or OffloadConfig(),
+            )
+            if self.config.enable_offload
+            else None
+        )
 
         # Initialize step budget controller (Phase 25)
-        self._step_budget = StepBudgetController(
-            config=self.config.step_budget_config or StepBudgetConfig(),
-        ) if self.config.enable_step_budget else None
+        self._step_budget = (
+            StepBudgetController(
+                config=self.config.step_budget_config or StepBudgetConfig(),
+            )
+            if self.config.enable_step_budget
+            else None
+        )
 
         # Initialize stuck detector (semantic similarity detection)
-        self._stuck_detector = StuckDetector(
-            config=self.config.stuck_detector_config,
-        ) if self.config.stuck_detector_config else None
+        self._stuck_detector = (
+            StuckDetector(
+                config=self.config.stuck_detector_config,
+            )
+            if self.config.stuck_detector_config
+            else None
+        )
 
         # Initialize security components (lazy import to avoid circular dependency)
         from harness.security import AuditLogger, InputValidator, ResultSanitizer
@@ -182,19 +197,31 @@ class AgentLoop:
         if self.config.security_config:
             sec = self.config.security_config
 
-            self._input_validator = InputValidator(
-                max_length=sec.max_input_length,
-                check_injection=sec.check_prompt_injection,
-            ) if sec.enable_input_validation else None
+            self._input_validator = (
+                InputValidator(
+                    max_length=sec.max_input_length,
+                    check_injection=sec.check_prompt_injection,
+                )
+                if sec.enable_input_validation
+                else None
+            )
 
-            self._sanitizer = ResultSanitizer(
-                max_length=sec.max_output_length,
-            ) if sec.enable_output_sanitization else None
+            self._sanitizer = (
+                ResultSanitizer(
+                    max_length=sec.max_output_length,
+                )
+                if sec.enable_output_sanitization
+                else None
+            )
 
-            self._audit_logger = AuditLogger(
-                log_dir=sec.audit_log_dir,
-                retention_days=sec.audit_retention_days,
-            ) if sec.enable_audit_log else None
+            self._audit_logger = (
+                AuditLogger(
+                    log_dir=sec.audit_log_dir,
+                    retention_days=sec.audit_retention_days,
+                )
+                if sec.enable_audit_log
+                else None
+            )
         else:
             # Default: enable all security features
             self._input_validator = InputValidator()
@@ -306,7 +333,10 @@ class AgentLoop:
     ) -> LoopResult:
         """Internal implementation of run."""
         tool_names = [t.name for t in tools] if tools else []
-        logger.info(f"_run_impl called, prompt length={len(prompt)}, tools={len(tools) if tools else 0}: {tool_names}")
+        logger.info(
+            f"_run_impl called, prompt length={len(prompt)}, "
+            f"tools={len(tools) if tools else 0}: {tool_names}"
+        )
 
         # Input validation
         if self._input_validator:
@@ -332,7 +362,7 @@ class AgentLoop:
         prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
         self._emit_progress(
             ProgressEventType.LOOP_START,
-            f"Starting agent loop",
+            "Starting agent loop",
             {"prompt": prompt_preview, "session_id": session.id},
         )
 
@@ -452,14 +482,19 @@ class AgentLoop:
                 # Remaining steps hint: warn model to wrap up when approaching iteration limit
                 remaining_steps = self.config.max_iterations - iteration
                 if remaining_steps <= 2 and iteration > 0:
-                    session.add_message(Message(
-                        role="user",
-                        content=f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。请立即总结当前进展并给出最终回答。",
-                        metadata={"type": "remaining_steps_hint", "injected": True},
-                    ))
+                    session.add_message(
+                        Message(
+                            role="user",
+                            content=(
+                                f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。"
+                                "请立即总结当前进展并给出最终回答。"
+                            ),
+                            metadata={"type": "remaining_steps_hint", "injected": True},
+                        )
+                    )
 
                 context = self.context.build(session)
-                context_duration = (time.time() - context_build_start) * 1000
+                (time.time() - context_build_start) * 1000
 
                 # Call LLM
                 self.state = LoopState.CALLING_LLM
@@ -497,13 +532,21 @@ class AgentLoop:
                         if hook_result.action == HookAction.INJECT_MESSAGE:
                             session.add_message(hook_result.inject_message)
 
-                        logger.info(f"Calling LLM, attempt={llm_attempt + 1}, messages={len(context.messages)}")
+                        logger.info(
+                            f"Calling LLM, attempt={llm_attempt + 1}, "
+                            f"messages={len(context.messages)}"
+                        )
                         response = await self.llm.call(
                             messages=context.messages,
                             tools=tools,
                             system=context.system_prompt,
                         )
-                        logger.info(f"LLM response: content_len={len(response.content) if response.content else 0}, stop_reason={response.stop_reason}, tool_calls={len(response.tool_calls) if response.tool_calls else 0}")
+                        logger.info(
+                            f"LLM response: content_len="
+                            f"{len(response.content) if response.content else 0}, "
+                            f"stop_reason={response.stop_reason}, "
+                            f"tool_calls={len(response.tool_calls) if response.tool_calls else 0}"
+                        )
 
                         # Execute AFTER_LLM_CALL hooks
                         hook_result = await self._hooks.execute_hooks(
@@ -531,18 +574,23 @@ class AgentLoop:
                         error_ctx = ErrorContext(
                             error=e,
                             iteration=self._iteration,
-                            context_tokens=getattr(context, 'token_count', 0),
+                            context_tokens=getattr(context, "token_count", 0),
                         )
                         decision = self._error_handler.handle(e, error_ctx)
 
-                        if decision.action == ErrorAction.RETRY and llm_attempt < max_llm_retries - 1:
-                            # Use ErrorHandler's delay or fallback to exponential backoff with jitter
+                        if (
+                            decision.action == ErrorAction.RETRY
+                            and llm_attempt < max_llm_retries - 1
+                        ):
+                            # Use ErrorHandler's delay or fallback to exponential
+                            # backoff with jitter
                             if decision.delay_seconds > 0:
                                 delay = decision.delay_seconds
                             else:
                                 # Exponential backoff with jitter (cap at 30s)
                                 import random
-                                base_backoff = min(2 ** llm_attempt, 30)
+
+                                base_backoff = min(2**llm_attempt, 30)
                                 jitter = random.uniform(0, 0.5)
                                 delay = base_backoff + jitter
 
@@ -574,18 +622,24 @@ class AgentLoop:
                 # Prepare response content for progress event
                 response_content = response.content if response.content else ""
                 # Truncate long responses for display (keep first 500 chars)
-                content_preview = response_content[:500] + "..." if len(response_content) > 500 else response_content
+                content_preview = (
+                    response_content[:500] + "..."
+                    if len(response_content) > 500
+                    else response_content
+                )
 
                 self._emit_progress(
                     ProgressEventType.LLM_RESPONSE,
-                    f"LLM responded",
+                    "LLM responded",
                     {
                         "stop_reason": response.stop_reason.value,
                         "input_tokens": response.usage.input_tokens,
                         "output_tokens": response.usage.output_tokens,
                         "content": content_preview,
                         "has_tool_calls": response.is_tool_use,
-                        "tool_names": [tc.name for tc in response.tool_calls] if response.is_tool_use else [],
+                        "tool_names": [tc.name for tc in response.tool_calls]
+                        if response.is_tool_use
+                        else [],
                     },
                     duration_ms=llm_duration,
                 )
@@ -645,7 +699,11 @@ class AgentLoop:
                         self._circuit_breaker_stop_injected = True
                         stop_message = Message(
                             role="user",
-                            content="[系统强制停止] 工具调用被阻止，因为检测到重复调用相同工具。请立即停止调用工具，基于当前已有信息给出最终回答。不要再尝试调用任何工具。",
+                            content=(
+                                "[系统强制停止] 工具调用被阻止，因为检测到重复调用相同工具。"
+                                "请立即停止调用工具，基于当前已有信息给出最终回答。"
+                                "不要再尝试调用任何工具。"
+                            ),
                             metadata={"type": "circuit_breaker_stop", "injected": True},
                         )
                         session.add_message(stop_message)
@@ -653,7 +711,11 @@ class AgentLoop:
                         self._emit_progress(
                             ProgressEventType.STATE_CHANGE,
                             "Circuit breaker triggered, injecting stop message",
-                            {"circuit_breaker": self._circuit_breaker.stats if self._circuit_breaker else None},
+                            {
+                                "circuit_breaker": self._circuit_breaker.stats
+                                if self._circuit_breaker
+                                else None
+                            },
                         )
 
                     iteration += 1
@@ -667,15 +729,18 @@ class AgentLoop:
                             feedback = self._generate_stuck_feedback(
                                 self._stuck_feedback_count, session, stuck_result
                             )
-                            session.add_message(Message(
-                                role="user",
-                                content=feedback,
-                                metadata={"type": "stuck_feedback", "injected": True},
-                            ))
+                            session.add_message(
+                                Message(
+                                    role="user",
+                                    content=feedback,
+                                    metadata={"type": "stuck_feedback", "injected": True},
+                                )
+                            )
                             self._emit_progress(
                                 ProgressEventType.STATE_CHANGE,
-                                f"Stuck state detected at iteration {iteration} ({stuck_result.reason}), "
-                                f"injecting feedback ({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
+                                f"Stuck state detected at iteration {iteration} "
+                                f"({stuck_result.reason}), injecting feedback "
+                                f"({self._stuck_feedback_count}/{self.config.max_stuck_feedbacks})",
                                 {
                                     "stuck_feedback_count": self._stuck_feedback_count,
                                     "stuck_reason": stuck_result.reason,
@@ -726,13 +791,16 @@ class AgentLoop:
                     self._emit_progress(
                         ProgressEventType.STATE_CHANGE,
                         "Ralph Loop: Reinjecting continuation prompt",
-                        {"reason": exit_hook_result.metadata.get("reason", "Long task continuation")},
+                        {
+                            "reason": exit_hook_result.metadata.get(
+                                "reason", "Long task continuation"
+                            )
+                        },
                     )
                     # Clear session messages except the first user message
                     if session.messages:
                         first_user_msg = next(
-                            (m for m in session.messages if m.role == "user"),
-                            None
+                            (m for m in session.messages if m.role == "user"), None
                         )
                         session.messages.clear()
                         if first_user_msg:
@@ -741,10 +809,12 @@ class AgentLoop:
                     if exit_hook_result.inject_message:
                         session.add_message(exit_hook_result.inject_message)
                     else:
-                        session.add_message(Message(
-                            role="user",
-                            content="[继续] 请继续之前的任务。",
-                        ))
+                        session.add_message(
+                            Message(
+                                role="user",
+                                content="[继续] 请继续之前的任务。",
+                            )
+                        )
                     iteration += 1
                     self._iteration = iteration
                     continue  # Continue the loop with fresh context
@@ -775,7 +845,10 @@ class AgentLoop:
                 # Reset error handler state
                 self._error_handler.reset()
 
-                logger.info(f"Loop completed, iterations={iteration}, content_len={len(response.content) if response.content else 0}")
+                logger.info(
+                    f"Loop completed, iterations={iteration}, "
+                    f"content_len={len(response.content) if response.content else 0}"
+                )
                 return LoopResult(
                     status=LoopState.COMPLETED,
                     session=session,
@@ -911,13 +984,16 @@ class AgentLoop:
                 logger.debug(f"Step budget check: {budget_result}")
                 if budget_result.should_stop:
                     from harness.types import ToolResult
-                    results.append(ToolResult(
-                        tool_call_id=tool_call.id,
-                        success=False,
-                        content="",
-                        error=f"Step budget exceeded: {budget_result.message}",
-                        tool_name=tool_call.name,
-                    ))
+
+                    results.append(
+                        ToolResult(
+                            tool_call_id=tool_call.id,
+                            success=False,
+                            content="",
+                            error=f"Step budget exceeded: {budget_result.message}",
+                            tool_name=tool_call.name,
+                        )
+                    )
                     break  # 停止执行后续工具，而不是跳过当前工具
 
             # Check circuit breaker
@@ -930,13 +1006,16 @@ class AgentLoop:
                 )
                 # Return error for all remaining tools
                 from harness.types import ToolResult
-                results.append(ToolResult(
-                    tool_call_id=tool_call.id,
-                    success=False,
-                    content="",
-                    error=f"Circuit breaker open: {reason}",
-                    tool_name=tool_call.name,
-                ))
+
+                results.append(
+                    ToolResult(
+                        tool_call_id=tool_call.id,
+                        success=False,
+                        content="",
+                        error=f"Circuit breaker open: {reason}",
+                        tool_name=tool_call.name,
+                    )
+                )
                 continue
 
             # Record call for circuit breaker
@@ -956,6 +1035,7 @@ class AgentLoop:
 
             # Execute BEFORE_TOOL_EXECUTE hooks
             from harness.types import ToolResult
+
             hook_result = await self._hooks.execute_hooks(
                 HookPoint.BEFORE_TOOL_EXECUTE,
                 HookContext(
@@ -967,13 +1047,15 @@ class AgentLoop:
                 ),
             )
             if hook_result.action == HookAction.ABORT:
-                results.append(ToolResult(
-                    tool_call_id=tool_call.id,
-                    success=False,
-                    content="",
-                    error=hook_result.metadata.get("reason", "Aborted by hook"),
-                    tool_name=tool_call.name,
-                ))
+                results.append(
+                    ToolResult(
+                        tool_call_id=tool_call.id,
+                        success=False,
+                        content="",
+                        error=hook_result.metadata.get("reason", "Aborted by hook"),
+                        tool_name=tool_call.name,
+                    )
+                )
                 continue
             if hook_result.action == HookAction.MODIFY_ARGS:
                 tool_call.arguments = hook_result.modified_args
@@ -985,7 +1067,7 @@ class AgentLoop:
                     self.tools.execute(tool_call, context),
                     timeout=self.config.timeout_per_tool,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 tool_duration = (time.time() - tool_start) * 1000
                 result = ToolResult(
                     tool_call_id=tool_call.id,
@@ -1010,17 +1092,21 @@ class AgentLoop:
                 self._step_budget.record_tool_call(tool_call.name)
 
             # Offload large output if needed (Phase 24)
-            if self._offloader and result.success and result.content:
-                if self._offloader.should_offload(result.content, session.id):
-                    result = self._offloader.create_offloaded_result(result, session.id)
-                    self._emit_progress(
-                        ProgressEventType.STATE_CHANGE,
-                        f"Offloaded large output from {tool_call.name}",
-                        {
-                            "offloaded": True,
-                            "original_size": result.metadata.get("original_size", 0),
-                        },
-                    )
+            if (
+                self._offloader
+                and result.success
+                and result.content
+                and self._offloader.should_offload(result.content, session.id)
+            ):
+                result = self._offloader.create_offloaded_result(result, session.id)
+                self._emit_progress(
+                    ProgressEventType.STATE_CHANGE,
+                    f"Offloaded large output from {tool_call.name}",
+                    {
+                        "offloaded": True,
+                        "original_size": result.metadata.get("original_size", 0),
+                    },
+                )
 
             # Execute AFTER_TOOL_EXECUTE hooks
             hook_result = await self._hooks.execute_hooks(
@@ -1091,7 +1177,9 @@ class AgentLoop:
         """Interrupt the current loop."""
         self._interrupt_flag = True
 
-    def _check_empty_error_stuck(self, session: Session, iteration: int) -> StuckDetectionResult | None:
+    def _check_empty_error_stuck(
+        self, session: Session, iteration: int
+    ) -> StuckDetectionResult | None:
         """
         Check for empty/error stuck pattern (zero-cost detection).
 
@@ -1408,7 +1496,7 @@ class AgentLoop:
                 llm_duration = (time.time() - llm_call_start) * 1000
                 self._emit_progress(
                     ProgressEventType.LLM_RESPONSE,
-                    f"LLM responded",
+                    "LLM responded",
                     {
                         "stop_reason": response.stop_reason.value,
                         "input_tokens": response.usage.input_tokens,

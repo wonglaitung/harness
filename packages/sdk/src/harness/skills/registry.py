@@ -102,7 +102,7 @@ class SkillRegistry:
             parts1 = [int(p) for p in v1.split(".")]
             parts2 = [int(p) for p in v2.split(".")]
 
-            for p1, p2 in zip(parts1, parts2):
+            for p1, p2 in zip(parts1, parts2, strict=False):
                 if p1 != p2:
                     return p1 - p2
 
@@ -178,7 +178,10 @@ class SkillRegistry:
         if skill_name in self._skills:
             if skill_name not in self._active_skills:
                 self._active_skills.append(skill_name)
-                logger.info(f"[SkillRegistry] Skill '{skill_name}' activated, active skills: {self._active_skills}")
+                logger.info(
+                    f"[SkillRegistry] Skill '{skill_name}' activated, "
+                    f"active skills: {self._active_skills}"
+                )
             else:
                 logger.info(f"[SkillRegistry] Skill '{skill_name}' already active")
             return True
@@ -207,11 +210,7 @@ class SkillRegistry:
         Returns:
             List of active skills
         """
-        return [
-            self._skills[name]
-            for name in self._active_skills
-            if name in self._skills
-        ]
+        return [self._skills[name] for name in self._active_skills if name in self._skills]
 
     def clear_active(self) -> None:
         """Clear all active skills."""
@@ -231,10 +230,7 @@ class SkillRegistry:
         if not active:
             return True  # No active skills means all tools allowed
 
-        for skill in active:
-            if not skill.tools.is_allowed(tool_name):
-                return False
-        return True
+        return all(skill.tools.is_allowed(tool_name) for skill in active)
 
     def reload(self) -> None:
         """

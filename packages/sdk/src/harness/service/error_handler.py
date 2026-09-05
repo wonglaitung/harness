@@ -22,7 +22,7 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(str, Enum):  # noqa: UP042 - StrEnum requires Python 3.11+
     """
     Standard error codes for Agent Service.
 
@@ -64,9 +64,9 @@ class ErrorResponse(BaseModel):
         timestamp: ISO 8601 timestamp
     """
 
-    errorCode: str
-    errorMessage: str
-    traceId: str | None = None
+    errorCode: str  # noqa: N815
+    errorMessage: str  # noqa: N815
+    traceId: str | None = None  # noqa: N815
     timestamp: str
 
     model_config = {

@@ -2,11 +2,11 @@
 Tests for Cost Control system.
 """
 
-import pytest
-from unittest.mock import MagicMock
 
-from harness.core import CostController, CostConfig, BudgetStatus
-from harness.types import TokenUsage, BudgetExceededError
+import pytest
+
+from harness.core import BudgetStatus, CostConfig, CostController
+from harness.types import BudgetExceededError, TokenUsage
 
 
 class TestCostConfig:

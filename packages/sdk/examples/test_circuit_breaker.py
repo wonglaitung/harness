@@ -10,8 +10,8 @@ sdk_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if sdk_path not in sys.path:
     sys.path.insert(0, sdk_path)
 
-from harness import AgentHarness, ReadTool, GlobTool
-from harness.types import ProgressEvent, ProgressEventType
+from harness import AgentHarness, ReadTool  # noqa: E402
+from harness.types import ProgressEvent, ProgressEventType  # noqa: E402
 
 BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 API_KEY = os.environ.get("OPENAI_API_KEY", "")

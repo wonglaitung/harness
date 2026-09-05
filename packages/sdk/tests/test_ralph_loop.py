@@ -9,10 +9,9 @@ from harness.types import (
     HookAction,
     HookContext,
     HookPoint,
-    HookResult,
     LLMResponse,
-    TokenUsage,
     StopReason,
+    TokenUsage,
 )
 
 

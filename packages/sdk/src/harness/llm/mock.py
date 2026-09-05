@@ -13,6 +13,7 @@ from harness.types import LLMResponse, StopReason, TokenUsage, ToolCall
 @dataclass
 class MockResponse:
     """Predefined mock response."""
+
     content: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     stop_reason: StopReason = StopReason.END_TURN
@@ -88,11 +89,13 @@ class MockLLMClient(LLMClient):
         # Convert mock response to LLMResponse
         tool_calls = []
         for tc in mock.tool_calls:
-            tool_calls.append(ToolCall(
-                id=tc.get("id", f"mock_tool_{len(tool_calls)}"),
-                name=tc.get("name", "unknown"),
-                arguments=tc.get("arguments", {}),
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", f"mock_tool_{len(tool_calls)}"),
+                    name=tc.get("name", "unknown"),
+                    arguments=tc.get("arguments", {}),
+                )
+            )
 
         return LLMResponse(
             content=mock.content,

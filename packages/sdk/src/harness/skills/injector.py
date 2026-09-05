@@ -7,9 +7,10 @@ Injects active and matching skills into the LLM's system prompt.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from harness.skills.base import Skill
@@ -103,7 +104,8 @@ class SkillInjector:
             skill_len = len(skill_prompt)
             if self.config.warn_skill_length > 0 and skill_len > self.config.warn_skill_length:
                 logger.warning(
-                    f"Skill '{skill.name}' is {skill_len} chars (>{self.config.warn_skill_length}). "
+                    f"Skill '{skill.name}' is {skill_len} chars "
+                    f"(>{self.config.warn_skill_length}). "
                     f"Consider shortening for better LLM performance."
                 )
 
@@ -111,7 +113,8 @@ class SkillInjector:
             if self.config.max_skill_length > 0 and skill_len > self.config.max_skill_length:
                 skill_prompt = skill_prompt[: self.config.max_skill_length] + "\n...[truncated]"
                 logger.warning(
-                    f"Skill '{skill.name}' truncated from {skill_len} to {self.config.max_skill_length} chars"
+                    f"Skill '{skill.name}' truncated from {skill_len} "
+                    f"to {self.config.max_skill_length} chars"
                 )
 
             skill_prompts.append(skill_prompt)
@@ -190,7 +193,5 @@ class SkillInjector:
             "total_to_inject": len(all_skills[: self.config.max_skills_per_prompt]),
             "skill_names": [s.name for s in all_skills[: self.config.max_skills_per_prompt]],
             "original_prompt_length": len(system_prompt),
-            "estimated_injected_length": len(
-                self.inject_skills(system_prompt, user_input)
-            ),
+            "estimated_injected_length": len(self.inject_skills(system_prompt, user_input)),
         }

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from harness.loop.types import GoalConfig, LoopResult
+    from harness.triggers.base import Trigger
 
 
 class TriggerType(Enum):
@@ -27,12 +28,12 @@ class TriggerType(Enum):
     Each type defines a different way to trigger goal execution.
     """
 
-    CRON = "cron"               # Cron expression scheduling
-    INTERVAL = "interval"       # Fixed interval scheduling
-    WEBHOOK = "webhook"         # HTTP webhook trigger
-    HEARTBEAT = "heartbeat"     # Periodic heartbeat check
-    FILE_WATCH = "file_watch"   # File system changes
-    EVENT = "event"             # Event bus subscription
+    CRON = "cron"  # Cron expression scheduling
+    INTERVAL = "interval"  # Fixed interval scheduling
+    WEBHOOK = "webhook"  # HTTP webhook trigger
+    HEARTBEAT = "heartbeat"  # Periodic heartbeat check
+    FILE_WATCH = "file_watch"  # File system changes
+    EVENT = "event"  # Event bus subscription
 
 
 class TriggerState(Enum):
@@ -42,11 +43,11 @@ class TriggerState(Enum):
     Triggers transition between these states during their lifecycle.
     """
 
-    IDLE = "idle"           # Not started yet
-    RUNNING = "running"     # Active and waiting for trigger condition
-    PAUSED = "paused"       # Temporarily paused
-    STOPPED = "stopped"     # Permanently stopped
-    ERROR = "error"         # Error state
+    IDLE = "idle"  # Not started yet
+    RUNNING = "running"  # Active and waiting for trigger condition
+    PAUSED = "paused"  # Temporarily paused
+    STOPPED = "stopped"  # Permanently stopped
+    ERROR = "error"  # Error state
 
 
 @dataclass
@@ -122,7 +123,7 @@ class TriggerAction:
     timeout_seconds: int = 3600
 
     # Verification
-    custom_verifier: Callable[["LoopResult"], bool] | None = None
+    custom_verifier: Callable[[LoopResult], bool] | None = None
 
     # Skills and output
     skills: list[str] = field(default_factory=list)
@@ -135,7 +136,7 @@ class TriggerAction:
     max_retries: int = 3
     retry_delay_seconds: float = 5.0
 
-    def to_goal_config(self, event: TriggerEvent | None = None) -> "GoalConfig":
+    def to_goal_config(self, event: TriggerEvent | None = None) -> GoalConfig:
         """
         Convert to GoalConfig for goal-driven execution.
 
@@ -192,7 +193,7 @@ class TriggerRegistration:
         last_error: Most recent error message
     """
 
-    trigger: "Trigger"
+    trigger: Trigger
     action: TriggerAction
     enabled: bool = True
 

@@ -13,9 +13,8 @@ Environment variables:
 """
 
 import os
-import pytest
-from datetime import datetime
 
+import pytest
 
 # =============================================================================
 # Configuration
@@ -38,7 +37,10 @@ def is_service_available():
 # Skip all tests if service not available
 pytestmark = pytest.mark.skipif(
     not is_service_available(),
-    reason="Test service not available. Run: docker-compose -f packages/sdk/docker/docker-compose.test.yml up -d"
+    reason=(
+        "Test service not available. Run: "
+        "docker-compose -f packages/sdk/docker/docker-compose.test.yml up -d"
+    ),
 )
 
 
@@ -199,11 +201,12 @@ class TestAgentExecutionE2E:
     def test_websocket_streaming(self, api_client):
         """Test WebSocket streaming execution."""
         import asyncio
-        import websockets
         import json
 
+        import websockets
+
         async def run_websocket_test():
-            uri = f"ws://localhost:8000/ws/run"
+            uri = "ws://localhost:8000/ws/run"
             async with websockets.connect(uri) as websocket:
                 # Send request
                 await websocket.send(json.dumps({

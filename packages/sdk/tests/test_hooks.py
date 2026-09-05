@@ -7,7 +7,6 @@ import pytest
 from harness.core.hooks import (
     AbortOnDangerousToolHook,
     HookManager,
-    LifecycleHook,
     LoggingHook,
     MaxToolCallsHook,
 )

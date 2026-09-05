@@ -6,23 +6,27 @@ LLM Judge 模块
 支持结果缓存以减少重复调用。
 """
 
+import hashlib
 import json
 import logging
-import hashlib
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass
 from enum import Enum
+
 import httpx
 
 try:
     from cachetools import TTLCache
+
     HAS_CACHE = True
 except ImportError:
     HAS_CACHE = False
     TTLCache = None
 
 from harness.guardrails.config import JudgeConfig
-from harness.guardrails.exceptions import JudgeResult, JudgeTimeoutException, JudgeUnavailableException
+from harness.guardrails.exceptions import (
+    JudgeResult,
+    JudgeTimeoutException,
+    JudgeUnavailableException,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,7 @@ CACHE_MAXSIZE = 1000  # 最多缓存 1000 条
 
 class RiskLevel(Enum):
     """风险等级"""
+
     SAFE = "safe"
     LOW = "low"
     MEDIUM = "medium"
@@ -41,34 +46,36 @@ class RiskLevel(Enum):
 
 
 # 快速检测 Prompt（无 CoT，追求速度）
-FAST_JUDGE_PROMPT = """你是内容安全审核系统。请快速判断以下内容是否安全。
-
-内容：
-{content}
-
-请直接输出 JSON 格式结果（不要输出其他内容）：
-{{"is_safe": true/false, "risk_level": "safe/low/medium/high/critical", "risk_categories": ["category1", ...], "reason": "简短原因", "confidence": 0.0-1.0}}
-
-风险类别可选：prompt_injection, harmful_content, pii_leakage, bias_discrimination, illegal_content, other"""
+FAST_JUDGE_PROMPT = (
+    "你是内容安全审核系统。请快速判断以下内容是否安全。\n\n"
+    "内容：\n"
+    "{content}\n\n"
+    "请直接输出 JSON 格式结果（不要输出其他内容）：\n"
+    '{{"is_safe": true/false, "risk_level": "safe/low/medium/high/critical", '
+    '"risk_categories": ["category1", ...], "reason": "简短原因", "confidence": 0.0-1.0}}\n\n'
+    "风险类别可选：prompt_injection, harmful_content, pii_leakage, "
+    "bias_discrimination, illegal_content, other"
+)
 
 # 带上下文的检测 Prompt
-CONTEXT_JUDGE_PROMPT = """你是内容安全审核系统。请结合上下文判断用户输入是否安全。
-
-上下文：
-{context}
-
-用户输入：
-{content}
-
-请直接输出 JSON 格式结果（不要输出其他内容）：
-{{"is_safe": true/false, "risk_level": "safe/low/medium/high/critical", "risk_categories": ["category1", ...], "reason": "简短原因", "confidence": 0.0-1.0}}"""
+CONTEXT_JUDGE_PROMPT = (
+    "你是内容安全审核系统。请结合上下文判断用户输入是否安全。\n\n"
+    "上下文：\n"
+    "{context}\n\n"
+    "用户输入：\n"
+    "{content}\n\n"
+    "请直接输出 JSON 格式结果（不要输出其他内容）：\n"
+    '{{"is_safe": true/false, "risk_level": "safe/low/medium/high/critical", '
+    '"risk_categories": ["category1", ...], "reason": "简短原因", "confidence": 0.0-1.0}}'
+)
 
 # 快速安全分数检测 Prompt（用于流式拦截）
-QUICK_SCORE_PROMPT = """请快速评估以下内容的安全程度，只输出一个 0-1 之间的数字（0=完全危险，1=完全安全）：
-
-{content}
-
-安全分数："""
+QUICK_SCORE_PROMPT = (
+    "请快速评估以下内容的安全程度，只输出一个 0-1 之间的数字"
+    "（0=完全危险，1=完全安全）：\n\n"
+    "{content}\n\n"
+    "安全分数："
+)
 
 
 class ComplianceJudge:
@@ -93,11 +100,7 @@ class ComplianceJudge:
 
         logger.info(f"ComplianceJudge initialized, endpoint: {config.endpoint}")
 
-    async def judge(
-        self,
-        content: str,
-        context: Optional[str] = None
-    ) -> JudgeResult:
+    async def judge(self, content: str, context: str | None = None) -> JudgeResult:
         """
         判断内容是否安全
 
@@ -143,7 +146,11 @@ class ComplianceJudge:
 
             # 解析 JSON 结果
             judge_result = self._parse_judge_response(assistant_message)
-            logger.info(f"Judge result: is_safe={judge_result.is_safe}, risk_level={judge_result.risk_level}, confidence={judge_result.confidence}")
+            logger.info(
+                f"Judge result: is_safe={judge_result.is_safe}, "
+                f"risk_level={judge_result.risk_level}, "
+                f"confidence={judge_result.confidence}"
+            )
 
             # 存入缓存
             if self._judge_cache is not None:
@@ -154,15 +161,17 @@ class ComplianceJudge:
 
         except httpx.TimeoutException:
             logger.error(f"Judge service timeout: {self.config.endpoint}")
-            raise JudgeTimeoutException(self.config.timeout, self.config.endpoint)
+            raise JudgeTimeoutException(self.config.timeout, self.config.endpoint) from None
 
         except httpx.HTTPStatusError as e:
             logger.error(f"Judge service HTTP error: {e.response.status_code}")
-            raise JudgeUnavailableException(self.config.endpoint, f"HTTP {e.response.status_code}")
+            raise JudgeUnavailableException(
+                self.config.endpoint, f"HTTP {e.response.status_code}"
+            ) from e
 
         except httpx.RequestError as e:
             logger.error(f"Judge service request error: {e}")
-            raise JudgeUnavailableException(self.config.endpoint, str(e))
+            raise JudgeUnavailableException(self.config.endpoint, str(e)) from e
 
         except Exception as e:
             logger.error(f"Unexpected error in judge: {e}")
@@ -232,10 +241,10 @@ class ComplianceJudge:
             logger.warning(f"Quick check error: {e}, defaulting to safe")
             return 0.5
 
-    def _make_cache_key(self, content: str, context: Optional[str] = None) -> str:
+    def _make_cache_key(self, content: str, context: str | None = None) -> str:
         """生成缓存键"""
         key_data = f"{content}||{context or ''}"
-        return hashlib.sha256(key_data.encode('utf-8')).hexdigest()
+        return hashlib.sha256(key_data.encode("utf-8")).hexdigest()
 
     def _parse_judge_response(self, response: str) -> JudgeResult:
         """解析 Judge 服务的响应"""
@@ -246,7 +255,8 @@ class ComplianceJudge:
         except json.JSONDecodeError:
             # 尝试从文本中提取 JSON
             import re
-            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+
+            json_match = re.search(r"\{[^{}]*\}", response, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
             else:

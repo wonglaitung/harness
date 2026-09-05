@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Pattern
+from re import Pattern
+from typing import Any
 
 
 @dataclass
@@ -165,9 +166,7 @@ class ResultSanitizer:
                     }
                 )
 
-        report["total_redactions"] = sum(
-            r["count"] for r in report["redactions"]
-        )
+        report["total_redactions"] = sum(r["count"] for r in report["redactions"])
 
         return report
 
@@ -214,8 +213,7 @@ class ResultSanitizer:
                 result[key] = self.sanitize_dict(value)
             elif isinstance(value, list):
                 result[key] = [
-                    self.sanitize(item) if isinstance(item, str) else item
-                    for item in value
+                    self.sanitize(item) if isinstance(item, str) else item for item in value
                 ]
             else:
                 result[key] = value

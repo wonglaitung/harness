@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from harness.types import Message, Session
+    from harness.types import Message
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ DEFAULT_EMBEDDING_MODEL = "bge-small-zh-v1.5"
 # =============================================================================
 # Configuration
 # =============================================================================
+
 
 @dataclass
 class StuckDetectorConfig:
@@ -44,6 +45,7 @@ class StuckDetectorConfig:
         window_size: Number of recent embeddings to compare against
         min_chars: Minimum characters for embedding (shorter texts are skipped)
     """
+
     # Core switch
     enable_semantic: bool = False
 
@@ -66,6 +68,7 @@ class StuckDetectionResult:
         consecutive_count: Current consecutive similar count
         details: Additional diagnostic information
     """
+
     is_stuck: bool
     reason: str
     similarity: float | None = None
@@ -76,6 +79,7 @@ class StuckDetectionResult:
 # =============================================================================
 # Utility Functions
 # =============================================================================
+
 
 def _normalize_text(s: str) -> str:
     """Normalize text for embedding."""
@@ -101,6 +105,7 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 # =============================================================================
 # StuckDetector
 # =============================================================================
+
 
 class StuckDetector:
     """
@@ -191,11 +196,11 @@ class StuckDetector:
             loop = asyncio.get_running_loop()
             if self._executor is None:
                 from concurrent.futures import ThreadPoolExecutor
+
                 self._executor = ThreadPoolExecutor(max_workers=1)
 
             embeddings = await loop.run_in_executor(
-                self._executor,
-                lambda: self._model.encode([text], convert_to_numpy=True)
+                self._executor, lambda: self._model.encode([text], convert_to_numpy=True)
             )
 
             emb = np.asarray(embeddings[0], dtype=np.float32)
@@ -283,10 +288,7 @@ class StuckDetector:
             )
 
         # Get or create window
-        window = self._windows.setdefault(
-            session_id,
-            deque(maxlen=self.config.window_size)
-        )
+        window = self._windows.setdefault(session_id, deque(maxlen=self.config.window_size))
 
         # Calculate max similarity against window
         max_sim = 0.0
