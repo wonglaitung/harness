@@ -150,7 +150,42 @@
 
 ## 2026-09-05 提取
 
+## 2026-09-06 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股Alpha信号全景-2026-09-06-四重左侧共振-FOMC前黄金布局窗口**
+
+### 港股分析
+- **希音-W(00625) 暴跌9%累计25%+纳入综指倒计时8天 — 最强左侧逆向套利**
+
+### 港股分析
+- **美债10Y 4.78% T+16连续持平 — 反弹暂停，4.80%天花板确认**
+
+### 港股分析
+- **百度纳入港股通-南向通道打开-智能驾驶产业双左侧共振-2026-09-05** - http://finance.eastmoney.com/a/202609043865582837.html
+
+### 港股分析
+- **希音-W(00625) 左侧逆向机会三度升级 — 累计暴跌25%+，纳入综指倒计时8个交易日** - http://finance.eastmoney.com/a/202609043865398785.html
+
+### 新范式/工具
+- **Magnitude — Agent-First 硬件感知本地推理新范式** - https://github.com/trending/typescript (2026-09-06 daily)
+
+### 新范式/工具
+- **Multi-Agent Autoformalization — DAG 驱动数学证明新范式** - https://www.anthropic.com/research/formalizing-fermats-last-theorem
+
+### 新范式/工具
+- **@huggingface/kernels — WebGPU Kernel-as-a-Package** - https://huggingface.co/blog/webgpu-kernels
+
+### 新范式/工具
+- **NeoMME：单一 Transformer 多模态编码器新范式** - https://huggingface.co/blog/Hcompany/neomme
+
+### 新范式/工具
+- **Slotstream — MoE Expert Slot Streaming：小内存跑超大模型新范式** - https://github.com/carloslfu/slotstream
+
+### 新范式/工具
+- **BenchMIRT：LLM 基准测试的多维能力解耦新范式** - https://huggingface.co/blog/allenai/benchmirt
 
 ### 港股分析
 - **港股通54股调入-百度南向通道打开-智能驾驶双左侧信号**
