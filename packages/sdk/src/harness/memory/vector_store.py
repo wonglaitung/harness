@@ -2,7 +2,7 @@
 Vector Memory Store - Semantic search for conversations, skills, and documents.
 
 This is an optional feature that requires additional dependencies.
-Install with: pip install harness-ai[vector]
+Install with: pip install harness-sdk[vector]
 
 Provides:
 - Semantic search over conversation history

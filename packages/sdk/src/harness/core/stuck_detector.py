@@ -157,7 +157,7 @@ class StuckDetector:
         except ImportError:
             logger.warning(
                 "StuckDetector: sentence-transformers not installed. "
-                "Install with: pip install harness-ai[stuck]"
+                "Install with: pip install harness-sdk[stuck]"
             )
             self._model_unavailable = True
             return False

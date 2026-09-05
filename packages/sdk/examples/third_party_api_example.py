@@ -3259,7 +3259,7 @@ async def demo_semantic_stuck_detection():
     print("""
     语义检测需要安装可选依赖：
 
-    pip install harness-ai[stuck]
+    pip install harness-sdk[stuck]
 
     这会安装：
     - sentence-transformers: 嵌入模型库
@@ -3486,7 +3486,7 @@ async def demo_guardrails():
     print("\n--- 7. 安装依赖 ---")
     print("""
     # 方式一：安装可选依赖（推荐）
-    pip install harness-ai[guardrails]
+    pip install harness-sdk[guardrails]
 
     # 方式二：手动安装
     pip install presidio-analyzer>=2.2.0

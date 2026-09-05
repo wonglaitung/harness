@@ -460,7 +460,7 @@ config = LoopConfig(
 语义检测需要安装可选依赖：
 
 ```bash
-pip install harness-ai[stuck]
+pip install harness-sdk[stuck]
 ```
 
 默认使用 `bge-small-zh-v1.5` 模型（中文优化，约 100MB）。

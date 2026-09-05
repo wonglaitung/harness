@@ -150,7 +150,7 @@ manager.clear()
 
 ## VectorMemoryStore（向量检索）
 
-向量检索提供语义搜索能力，可以搜索历史对话、技能和文档。这是一个可选功能，需要安装额外依赖：`pip install harness-ai[vector]`。
+向量检索提供语义搜索能力，可以搜索历史对话、技能和文档。这是一个可选功能，需要安装额外依赖：`pip install harness-sdk[vector]`。
 
 ### 核心协议
 

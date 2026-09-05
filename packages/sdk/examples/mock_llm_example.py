@@ -32,7 +32,7 @@ async def main():
     )
     mock_llm.add_response(
         MockLLMClient.MockResponse(
-            content="Based on the pyproject.toml, this is a Python SDK for AI agents called 'harness-ai'. It provides an embeddable framework for building AI agents with tools, memory, and skills.",
+            content="Based on the pyproject.toml, this is a Python SDK for AI agents called 'harness-sdk'. It provides an embeddable framework for building AI agents with tools, memory, and skills.",
             stop_reason="end_turn",
         )
     )
