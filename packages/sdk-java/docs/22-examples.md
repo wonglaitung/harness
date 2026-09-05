@@ -294,16 +294,20 @@ for r in results:
 
 ### 使用技能
 
-```python
-from harness import AgentHarness
+```java
+import com.harness.skills.SkillLoader;
+import com.harness.skills.SkillRegistry;
+import java.nio.file.Path;
 
-agent = AgentHarness(skill_dirs=[".harness/skills"])
+// 加载技能目录
+SkillLoader loader = new SkillLoader();
+SkillRegistry registry = new SkillRegistry();
+registry.addSkillDir(Path.of(".harness/skills"));
 
-# 指定技能
-result = await agent.run("审查这段代码", skills=["code-review"])
-
-# 自动选择技能
-result = await agent.run("检查安全漏洞")
+// 列出可用技能
+registry.listSkills().forEach(skill ->
+    System.out.println(skill.name() + ": " + skill.description())
+);
 ```
 
 ### 创建技能文件
@@ -448,16 +452,22 @@ agent = AgentHarness(
 
 ### 成本控制
 
-```python
-from harness import AgentHarness, HarnessConfig
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.CostControlConfig;
 
-agent = AgentHarness(
-    config=HarnessConfig(
-        max_cost_per_run=5.0,
-        max_tokens_per_run=500000,
-        max_iterations=30,
-    ),
-)
+// 使用 CostControlConfig 进行成本控制
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(30)
+    .costControl(CostControlConfig.builder()
+        .maxTokensPerSession(500000)
+        .globalDailyBudgetUsd(5.0)
+        .build())
+    .build();
+
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .build();
 ```
 
 ## FastAPI 集成
@@ -484,21 +494,23 @@ async def ai_stream_endpoint(message: str):
 
 ## 测试
 
-```python
-from harness.testing import MockHarness, MockResponse
+```java
+import com.harness.core.MockHarness;
+import com.harness.core.MockResponse;
+import java.util.Map;
 
-# 简单 mock
-mock = MockHarness(responses=[
-    MockResponse(content="分析完成"),
-])
-result = await mock.run("分析代码")
-assert result.content == "分析完成"
+// 简单 mock
+MockHarness mock = new MockHarness();
+mock.addResponse(MockResponse.text("分析完成"));
+MockHarness.MockLoopResult result = mock.run("分析代码").join();
+assert result.finalResponse().equals("分析完成");
 
-# 期望-响应模式
-mock = MockHarness()
-mock.expect("分析代码").respond("代码质量良好")
-result = await mock.run("分析代码")
-assert result.content == "代码质量良好"
+// 多步工具调用
+mock.reset();
+mock.addResponse(MockResponse.toolUse("call_1", "read", Map.of("path", "src/Main.java")));
+mock.addResponse(MockResponse.text("代码质量良好"));
+result = mock.run("分析代码").join();
+assert result.finalResponse().equals("代码质量良好");
 ```
 
 ## 全局记忆

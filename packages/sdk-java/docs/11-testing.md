@@ -8,154 +8,204 @@ Harness SDK 提供完整的测试支持，包括 MockHarness 用于单元测试�
 
 MockHarness 是 AgentHarness 的测试替身，无需调用真实 LLM 即可验证 Agent 行为。
 
-```python
-from harness.testing import MockHarness, MockResponse
+### Java MockHarness
 
-# 创建 MockHarness
-mock = MockHarness(responses=[
-    MockResponse(content="模拟响应内容"),
-])
+```java
+import com.harness.core.MockHarness;
+import com.harness.core.MockResponse;
+
+// 创建 MockHarness 并添加预定义响应
+MockHarness mock = new MockHarness();
+mock.addResponse(MockResponse.text("Hello!"));
+
+// 运行
+MockHarness.MockLoopResult result = mock.run("Say hello").join();
+assert result.finalResponse().equals("Hello!");
 ```
 
 ### MockResponse
 
-```python
-@dataclass
-class MockResponse:
-    content: str | None = None              # 文本响应
-    tool_calls: list[dict] | None = None    # 工具调用响应
-    stop_reason: str = "end_turn"           # 停止原因
+```java
+import com.harness.core.MockResponse;
+import com.harness.types.ToolCall;
+import java.util.Map;
 
-    # 使用 tool_calls 模拟 LLM 返回工具调用
-    # tool_calls 格式: [{"name": "read", "arguments": {"file_path": "test.py"}}]
+// 文本响应
+MockResponse textResponse = MockResponse.text("分析完成");
+
+// 带 token 统计的文本响应
+MockResponse textResponse2 = MockResponse.text("OK", 100, 50);
+
+// 工具调用响应
+MockResponse toolResponse = MockResponse.toolUse(
+    "call_123", "read", Map.of("path", "src/Main.java")
+);
+
+// 使用 Builder
+MockResponse response = MockResponse.builder()
+    .content("分析完成")
+    .inputTokens(100)
+    .outputTokens(50)
+    .build();
 ```
 
 ### 基本使用
 
-```python
-from harness.testing import MockHarness, MockResponse
+```java
+import com.harness.core.MockHarness;
+import com.harness.core.MockResponse;
 
-# 简单文本响应
-mock = MockHarness(responses=[
-    MockResponse(content="分析完成：代码质量良好"),
-])
+// 简单文本响应
+MockHarness mock = new MockHarness();
+mock.addResponse(MockResponse.text("分析完成：代码质量良好"));
+MockHarness.MockLoopResult result = mock.run("分析代码").join();
+assert result.finalResponse().equals("分析完成：代码质量良好");
 
-result = await mock.run("分析代码")
-assert result.content == "分析完成：代码质量良好"
-
-# 多步工具调用模拟
-mock = MockHarness(responses=[
-    MockResponse(tool_calls=[{"name": "read", "arguments": {"file_path": "main.py"}}]),
-    MockResponse(content="文件已读取并分析完成"),
-])
-
-result = await mock.run("读取并分析 main.py")
+// 多步工具调用模拟
+mock.reset();
+mock.addResponse(MockResponse.toolUse("call_1", "read", Map.of("path", "main.py")));
+mock.addResponse(MockResponse.text("文件已读取并分析完成"));
+result = mock.run("读取并分析 main.py").join();
 ```
 
-### 期望-响应模式
+### 自动工具结果
 
-```python
-mock = MockHarness()
+```java
+MockHarness mock = new MockHarness();
 
-# 设置期望和响应
-mock.expect("分析代码").respond("分析结果：代码质量良好")
-mock.expect("修复 bug").respond("Bug 已修复")
+// 为特定工具设置自动返回结果
+mock.addToolResult("read", "文件内容...");
+mock.addToolResult("grep", "找到 3 个匹配");
 
-result1 = await mock.run("分析代码")
-result2 = await mock.run("修复 bug")
+// 配合 MockResponse 使用
+mock.addResponse(MockResponse.toolUse("call_1", "read", Map.of("path", "test.py")));
+mock.addResponse(MockResponse.text("已分析完成"));
 
-assert result1.content == "分析结果：代码质量良好"
-assert result2.content == "Bug 已修复"
+MockHarness.MockLoopResult result = mock.run("读取并分析 test.py").join();
 ```
 
 ## 工具测试
 
 ### 自定义工具测试
 
-```python
-from harness import AgentHarness
-from harness.tools.base import Tool, ToolResult, ToolContext
+**Java SDK**:
 
-class CalculatorTool(Tool):
-    @property
-    def name(self) -> str:
-        return "calculator"
+```java
+import com.harness.core.Tool;
+import com.harness.types.ToolResult;
+import com.harness.core.ToolContext;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-    @property
-    def description(self) -> str:
-        return "计算数学表达式"
+public class CalculatorTool implements Tool {
+    @Override
+    public String name() { return "calculator"; }
 
-    @property
-    def input_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "expression": {"type": "string"},
-            },
-            "required": ["expression"],
+    @Override
+    public String description() { return "计算数学表达式"; }
+
+    @Override
+    public Map<String, Object> inputSchema() {
+        return Map.of(
+            "type", "object",
+            "properties", Map.of("expression", Map.of("type", "string")),
+            "required", List.of("expression")
+        );
+    }
+
+    @Override
+    public CompletableFuture<ToolResult> execute(Map<String, Object> args, ToolContext ctx) {
+        try {
+            String expr = (String) args.get("expression");
+            // 简单实现：仅用于演示
+            return CompletableFuture.completedFuture(
+                ToolResult.success(ctx.sessionId(), "4")
+            );
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(
+                ToolResult.failure(ctx.sessionId(), e.getMessage())
+            );
         }
+    }
+}
 
-    async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
-        try:
-            result = eval(args["expression"])  # 仅用于演示，生产环境不推荐
-            return ToolResult(output=str(result))
-        except Exception as e:
-            return ToolResult(output="", error=str(e))
-
-# 直接测试工具
-tool = CalculatorTool()
-ctx = ToolContext(working_dir=".", sandbox=None, permissions=None, session_id="test")
-result = await tool.execute({"expression": "2 + 2"}, ctx)
-assert result.output == "4"
-assert not result.is_error
+// 测试工具
+CalculatorTool tool = new CalculatorTool();
+ToolContext ctx = ToolContext.of(".", "test-session");
+ToolResult result = tool.execute(Map.of("expression", "2 + 2"), ctx).join();
+assert result.content().equals("4");
+assert result.success();
 ```
 
 ### 在 MockHarness 中测试工具
 
-```python
-from harness.testing import MockHarness, MockResponse
+```java
+import com.harness.core.MockHarness;
+import com.harness.core.MockResponse;
+import java.util.Map;
 
-mock = MockHarness()
-mock.register_tool(CalculatorTool())
+MockHarness mock = new MockHarness();
 
-# 模拟 LLM 调用工具
-mock.expect("计算 2+2").respond_with_tool("calculator", {"expression": "2+2"})
+// 设置工具自动返回
+mock.addToolResult("calculator", "4");
+
+// 模拟 LLM 调用工具
+mock.addResponse(MockResponse.toolUse("call_1", "calculator", Map.of("expression", "2+2")));
+mock.addResponse(MockResponse.text("计算结果是 4"));
+
+MockHarness.MockLoopResult result = mock.run("计算 2+2").join();
+assert result.finalResponse().contains("4");
 ```
 
 ## 钩子测试
 
-```python
-from harness.testing import MockHarness
-from harness.core.hooks import HookPoint, HookContext
+**Java SDK**:
 
-mock = MockHarness()
+```java
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import com.harness.core.LifecycleHook;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-# 记录钩子调用
-hook_calls = []
+// 自定义钩子用于测试
+public class TrackingHook implements LifecycleHook {
+    final List<String> hookCalls = new ArrayList<>();
 
-@mock.hook(HookPoint.BEFORE_TOOL_EXECUTE)
-async def track_tool_calls(ctx: HookContext):
-    hook_calls.append(ctx.tool_call)
-    return ctx
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.BEFORE_TOOL_EXECUTE);
+    }
 
-result = await mock.run("读取文件")
-assert len(hook_calls) > 0
+    @Override
+    public HookResult execute(HookContext context) {
+        hookCalls.add(context.toolName());
+        return HookResult.continue_();
+    }
+}
+
+// 测试钩子
+TrackingHook hook = new TrackingHook();
+MockHarness mock = new MockHarness();
+// 在实际 AgentHarness 中注册 hook 并验证 hookCalls
 ```
 
 ## 配置测试
 
-```python
-from harness import AgentHarness, HarnessConfig
+```java
+import com.harness.core.HarnessConfig;
 
-# 测试特定配置
-config = HarnessConfig(
-    max_iterations=5,
-    max_cost_per_run=0.5,
-)
+// 测试特定配置
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(5)
+    .toolTimeout(60.0)
+    .build();
 
-agent = AgentHarness(config=config)
-assert agent.config.max_iterations == 5
-assert agent.config.max_cost_per_run == 0.5
+// 验证配置值
+assert config.getMaxIterations() == 5;
+assert config.getToolTimeout() == 60.0;
 ```
 
 ## 集成测试
@@ -206,46 +256,57 @@ async def test_full_workflow():
 
 ### 1. 使用 MockHarness 进行单元测试
 
-```python
-# 单元测试不需要真实 LLM
-mock = MockHarness(responses=[MockResponse(content="OK")])
-result = await mock.run("test")
+```java
+// 单元测试不需要真实 LLM
+MockHarness mock = new MockHarness();
+mock.addResponse(MockResponse.text("OK"));
+MockHarness.MockLoopResult result = mock.run("test").join();
+assert result.success();
 ```
 
 ### 2. 隔离外部依赖
 
-```python
-# Mock 外部服务 - 使用 MCPManager 模拟
-from harness.mcp.manager import MCPManager, MCPServerConfig
+```java
+// 使用 MockHarness 模拟工具行为
+MockHarness mock = new MockHarness();
 
-mock = MockHarness()
+// 直接模拟工具返回
+mock.addToolResult("mcp_github_search_issues", "模拟的 issue 列表");
+mock.addResponse(MockResponse.toolUse("call_1", "mcp_github_search_issues", Map.of()));
+mock.addResponse(MockResponse.text("已获取 issue 列表"));
 
-# 如果需要测试 MCP 集成，可以创建 MCPManager 模拟
-# 但通常测试中不需要真实 MCP 连接
-# 可以直接模拟工具行为
-mock.add_tool_result("mcp_github_search_issues", "模拟的 issue 列表")
+MockHarness.MockLoopResult result = mock.run("查看 GitHub issues").join();
 ```
 
 ### 3. 测试钩子逻辑
 
-```python
-# 测试钩子的拦截行为
-@mock.hook(HookPoint.BEFORE_TOOL_EXECUTE)
-async def block_dangerous(ctx: HookContext):
-    if ctx.tool_call and ctx.tool_call["name"] == "bash":
-        return None  # 阻止执行
-    return ctx
+```java
+// 测试钩子的拦截行为
+public class DangerousToolBlocker implements LifecycleHook {
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.BEFORE_TOOL_EXECUTE);
+    }
+
+    @Override
+    public HookResult execute(HookContext context) {
+        if ("bash".equals(context.toolName())) {
+            return HookResult.abort("Bash blocked in test");
+        }
+        return HookResult.continue_();
+    }
+}
 ```
 
 ### 4. 测试错误处理
 
-```python
-# 模拟工具错误
-mock = MockHarness(responses=[
-    MockResponse(tool_calls=[{"name": "bash", "arguments": {"command": "invalid"}}]),
-    MockResponse(content="命令执行失败，已尝试替代方案"),
-])
+```java
+// 模拟工具错误
+MockHarness mock = new MockHarness();
+mock.addToolResult("bash", "Command failed: exit code 1");
+mock.addResponse(MockResponse.toolUse("call_1", "bash", Map.of("command", "invalid")));
+mock.addResponse(MockResponse.text("命令执行失败，已尝试替代方案"));
 
-result = await mock.run("执行无效命令")
-assert result.content
+MockHarness.MockLoopResult result = mock.run("执行无效命令").join();
+assert result.finalResponse().contains("失败");
 ```

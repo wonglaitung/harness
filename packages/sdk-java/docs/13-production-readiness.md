@@ -58,44 +58,43 @@ agent = AgentHarness(
 
 ### 2. 成本控制
 
-```python
-from harness import AgentHarness, HarnessConfig
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.CostControlConfig;
 
-agent = AgentHarness(
-    config=HarnessConfig(
-        max_cost_per_run=5.0,      # 单次运行最多 $5
-        max_tokens_per_run=500000, # 单次运行最多 500K tokens
-        max_iterations=50,         # 最多 50 步
-    ),
-)
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(50)
+    .costControl(CostControlConfig.builder()
+        .globalDailyBudgetUsd(5.0)
+        .maxTokensPerSession(500000)
+        .build())
+    .build();
 ```
 
 ### 3. 安全配置
 
-```python
-from harness import AgentHarness, HarnessConfig
-from harness.security.sandbox import PermissionSet, PermissionLevel
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.SecurityConfig;
 
-agent = AgentHarness(
-    config=HarnessConfig(
-        sandbox_enabled=True,
-        bash_timeout=60000,
-        bash_blacklist=["rm -rf /", "sudo", "mkfs"],
-    ),
-    permissions=PermissionSet(
-        max_permission=PermissionLevel.EXECUTE,
-        denied_tools={"bash"},  # 按需禁用
-    ),
-)
+HarnessConfig config = HarnessConfig.builder()
+    .security(SecurityConfig.builder()
+        .enableSandbox(true)
+        .enableInputValidation(true)
+        .checkPromptInjection(true)
+        .enableAuditLog(true)
+        .build())
+    .build();
 ```
 
 ### 4. 记忆管理
 
-```python
-agent = AgentHarness(
-    memory_dir="/secure/harness/memory",  # 指定安全目录
-    vector_store=True,                     # 启用向量检索
-)
+```java
+import com.harness.core.HarnessConfig;
+
+HarnessConfig config = HarnessConfig.builder()
+    .memoryDir("/secure/harness/memory")
+    .build();
 ```
 
 ### 5. 集成到 Web 服务
@@ -117,24 +116,33 @@ async def ai_endpoint(message: str):
 
 ### 成本监控
 
-```python
-from harness import AgentHarness
-from harness.core.hooks import HookPoint, HookContext
+```java
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import com.harness.core.LifecycleHook;
+import java.util.List;
 
-agent = AgentHarness()
+// 自定义钩子追踪成本
+public class CostTrackingHook implements LifecycleHook {
+    double totalCost = 0.0;
 
-cost_tracker = {"total": 0.0}
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.AFTER_LLM_CALL);
+    }
 
-@agent.hook(HookPoint.AFTER_LLM_CALL)
-async def track_cost(ctx: HookContext):
-    if ctx.response and ctx.response.usage:
-        input_cost = ctx.response.usage.input_tokens * 0.000003
-        output_cost = ctx.response.usage.output_tokens * 0.000015
-        cost_tracker["total"] += input_cost + output_cost
-    return ctx
-
-result = await agent.run("分析代码")
-print(f"本次运行成本: ${cost_tracker['total']:.4f}")
+    @Override
+    public HookResult execute(HookContext context) {
+        if (context.llmResponse() != null && context.llmResponse().usage() != null) {
+            var usage = context.llmResponse().usage();
+            double inputCost = usage.inputTokens() * 0.000003;
+            double outputCost = usage.outputTokens() * 0.000015;
+            totalCost += inputCost + outputCost;
+        }
+        return HookResult.continue_();
+    }
+}
 ```
 
 ### 审计日志

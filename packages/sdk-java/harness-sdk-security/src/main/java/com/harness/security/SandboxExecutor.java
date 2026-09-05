@@ -25,7 +25,9 @@ public class SandboxExecutor {
         "sudo",
         "chmod -R 777",
         "mkfs",
-        "dd if="
+        "dd if=",
+        "> /dev/",
+        ":(){ :|:& };:"
     );
 
     /**

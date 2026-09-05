@@ -571,11 +571,17 @@ agent = AgentHarness(
 
 ### 2. 沙箱隔离
 
-```python
-# 始终启用沙箱（默认启用）
-agent = AgentHarness(
-    config=HarnessConfig(sandbox_enabled=True),
-)
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.SecurityConfig;
+
+// 始终启用沙箱（默认启用）
+HarnessConfig config = HarnessConfig.builder()
+    .security(SecurityConfig.builder()
+        .enableSandbox(true)
+        .sandboxMaxExecutionTime(30.0)
+        .build())
+    .build();
 ```
 
 ### 3. 输入验证
@@ -594,14 +600,18 @@ agent = AgentHarness(
 
 ### 5. 成本控制
 
-```python
-# 设置成本上限，防止意外高额费用
-agent = AgentHarness(
-    config=HarnessConfig(
-        max_cost_per_run=5.0,  # 单次运行最多 $5
-        max_tokens_per_run=500000,
-    ),
-)
+```java
+import com.harness.core.HarnessConfig;
+import com.harness.core.HarnessConfig.CostControlConfig;
+
+// 设置成本上限，防止意外高额费用
+HarnessConfig config = HarnessConfig.builder()
+    .maxIterations(50)
+    .costControl(CostControlConfig.builder()
+        .globalDailyBudgetUsd(5.0)
+        .maxTokensPerSession(500000)
+        .build())
+    .build();
 ```
 
 ## 危险操作确认（ConfirmationHook）

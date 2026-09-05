@@ -81,6 +81,7 @@ class LoopState(Enum):
     ERROR = "error"  # 错误状态
     INTERRUPTED = "interrupted"  # 被中断
     STUCK = "stuck"  # 陷入停滞
+    MAX_ITERATIONS = "max_iterations"  # 达到最大迭代次数
 
 
 class StopReason(Enum):

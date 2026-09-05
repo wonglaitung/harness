@@ -1,6 +1,8 @@
 package com.harness.core;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -406,6 +408,11 @@ public class HarnessConfig {
         private final int auditRetentionDays;
         private final boolean enableSandbox;
         private final double sandboxMaxExecutionTime;
+        private final int sandboxMaxOutputSize;
+        private final List<String> sandboxBlockedCommands;
+        private final List<String> sandboxBlockedPatterns;
+        private final List<String> sandboxAllowedCommands;
+        private final List<String> sandboxAllowedEnvVars;
 
         private SecurityConfig(Builder builder) {
             this.enableInputValidation = builder.enableInputValidation;
@@ -418,6 +425,12 @@ public class HarnessConfig {
             this.auditRetentionDays = builder.auditRetentionDays;
             this.enableSandbox = builder.enableSandbox;
             this.sandboxMaxExecutionTime = builder.sandboxMaxExecutionTime;
+            this.sandboxMaxOutputSize = builder.sandboxMaxOutputSize;
+            this.sandboxBlockedCommands = List.copyOf(builder.sandboxBlockedCommands);
+            this.sandboxBlockedPatterns = List.copyOf(builder.sandboxBlockedPatterns);
+            this.sandboxAllowedCommands = builder.sandboxAllowedCommands != null
+                ? List.copyOf(builder.sandboxAllowedCommands) : null;
+            this.sandboxAllowedEnvVars = List.copyOf(builder.sandboxAllowedEnvVars);
         }
 
         public static Builder builder() { return new Builder(); }
@@ -432,6 +445,11 @@ public class HarnessConfig {
         public int getAuditRetentionDays() { return auditRetentionDays; }
         public boolean isEnableSandbox() { return enableSandbox; }
         public double getSandboxMaxExecutionTime() { return sandboxMaxExecutionTime; }
+        public int getSandboxMaxOutputSize() { return sandboxMaxOutputSize; }
+        public List<String> getSandboxBlockedCommands() { return sandboxBlockedCommands; }
+        public List<String> getSandboxBlockedPatterns() { return sandboxBlockedPatterns; }
+        public List<String> getSandboxAllowedCommands() { return sandboxAllowedCommands; }
+        public List<String> getSandboxAllowedEnvVars() { return sandboxAllowedEnvVars; }
 
         public static class Builder {
             private boolean enableInputValidation = true;
@@ -444,6 +462,36 @@ public class HarnessConfig {
             private int auditRetentionDays = 30;
             private boolean enableSandbox = true;
             private double sandboxMaxExecutionTime = 30.0;
+            private int sandboxMaxOutputSize = 1_000_000;
+            private List<String> sandboxBlockedCommands = Arrays.asList(
+                "rm -rf /",
+                "rm -rf ~",
+                "sudo",
+                "chmod -R 777",
+                "mkfs",
+                "dd if=",
+                "> /dev/",
+                ":(){ :|:& };:"
+            );
+            private List<String> sandboxBlockedPatterns = Arrays.asList(
+                "rm -rf",
+                "sudo",
+                "chmod",
+                "chown",
+                "mkfs",
+                "dd if=",
+                "curl | bash",
+                "wget | bash"
+            );
+            private List<String> sandboxAllowedCommands = null;
+            private List<String> sandboxAllowedEnvVars = Arrays.asList(
+                "PATH",
+                "HOME",
+                "USER",
+                "LANG",
+                "LC_ALL",
+                "TERM"
+            );
 
             public Builder enableInputValidation(boolean v) { this.enableInputValidation = v; return this; }
             public Builder maxInputLength(int v) { this.maxInputLength = v; return this; }
@@ -455,6 +503,11 @@ public class HarnessConfig {
             public Builder auditRetentionDays(int v) { this.auditRetentionDays = v; return this; }
             public Builder enableSandbox(boolean v) { this.enableSandbox = v; return this; }
             public Builder sandboxMaxExecutionTime(double v) { this.sandboxMaxExecutionTime = v; return this; }
+            public Builder sandboxMaxOutputSize(int v) { this.sandboxMaxOutputSize = v; return this; }
+            public Builder sandboxBlockedCommands(List<String> v) { this.sandboxBlockedCommands = v; return this; }
+            public Builder sandboxBlockedPatterns(List<String> v) { this.sandboxBlockedPatterns = v; return this; }
+            public Builder sandboxAllowedCommands(List<String> v) { this.sandboxAllowedCommands = v; return this; }
+            public Builder sandboxAllowedEnvVars(List<String> v) { this.sandboxAllowedEnvVars = v; return this; }
 
             public SecurityConfig build() { return new SecurityConfig(this); }
         }
@@ -644,6 +697,7 @@ public class HarnessConfig {
         private final String defaultRoute;
         private final double routerTimeout;
         private final int historyWindow;
+        private final String routePromptTemplate;
 
         private RoutingConfig(Builder builder) {
             this.highModel = builder.highModel;
@@ -662,6 +716,7 @@ public class HarnessConfig {
             this.defaultRoute = builder.defaultRoute;
             this.routerTimeout = builder.routerTimeout;
             this.historyWindow = builder.historyWindow;
+            this.routePromptTemplate = builder.routePromptTemplate;
         }
 
         public static Builder builder() { return new Builder(); }
@@ -682,6 +737,7 @@ public class HarnessConfig {
         public String getDefaultRoute() { return defaultRoute; }
         public double getRouterTimeout() { return routerTimeout; }
         public int getHistoryWindow() { return historyWindow; }
+        public String getRoutePromptTemplate() { return routePromptTemplate; }
 
         public static class Builder {
             private String highModel = "";
@@ -700,6 +756,7 @@ public class HarnessConfig {
             private String defaultRoute = "high";
             private double routerTimeout = 0.2;
             private int historyWindow = 5;
+            private String routePromptTemplate = null;
 
             public Builder highModel(String v) { this.highModel = v; return this; }
             public Builder highProvider(String v) { this.highProvider = v; return this; }
@@ -717,6 +774,7 @@ public class HarnessConfig {
             public Builder defaultRoute(String v) { this.defaultRoute = v; return this; }
             public Builder routerTimeout(double v) { this.routerTimeout = v; return this; }
             public Builder historyWindow(int v) { this.historyWindow = v; return this; }
+            public Builder routePromptTemplate(String v) { this.routePromptTemplate = v; return this; }
 
             public RoutingConfig build() { return new RoutingConfig(this); }
         }

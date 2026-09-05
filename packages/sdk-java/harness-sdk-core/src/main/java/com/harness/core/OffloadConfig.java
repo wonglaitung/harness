@@ -6,6 +6,7 @@ import java.nio.file.Path;
  * Configuration for tool output offloading.
  */
 public record OffloadConfig(
+    boolean enabled,
     int sizeThresholdChars,
     int maxOutputsPerSession,
     boolean cleanupOnSessionEnd,
@@ -14,7 +15,7 @@ public record OffloadConfig(
 ) {
 
     public OffloadConfig() {
-        this(5000, 50, false, 200, null);
+        this(true, 50000, 50, false, 500, null);
     }
 
     /**
@@ -32,11 +33,17 @@ public record OffloadConfig(
     }
 
     public static class Builder {
-        private int sizeThresholdChars = 5000;
+        private boolean enabled = true;
+        private int sizeThresholdChars = 50000;
         private int maxOutputsPerSession = 50;
         private boolean cleanupOnSessionEnd = false;
-        private int previewLength = 200;
+        private int previewLength = 500;
         private Path tempDir = null;
+
+        public Builder enabled(boolean value) {
+            this.enabled = value;
+            return this;
+        }
 
         public Builder sizeThresholdChars(int value) {
             this.sizeThresholdChars = value;
@@ -65,6 +72,7 @@ public record OffloadConfig(
 
         public OffloadConfig build() {
             return new OffloadConfig(
+                enabled,
                 sizeThresholdChars,
                 maxOutputsPerSession,
                 cleanupOnSessionEnd,

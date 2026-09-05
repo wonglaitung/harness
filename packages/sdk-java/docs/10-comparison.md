@@ -196,15 +196,16 @@ agent.permissions = MyPermissionSet()
 
 ### 4. 测试友好
 
-```python
-# 内嵌测试，无需启动服务
-from harness.testing import MockHarness
+```java
+// 内嵌测试，无需启动服务
+import com.harness.core.MockHarness;
+import com.harness.core.MockResponse;
 
-agent = MockHarness()
-agent.expect("分析代码").respond("分析结果")
+MockHarness mock = new MockHarness();
+mock.addResponse(MockResponse.text("分析结果"));
 
-result = await agent.run("分析代码")
-assert result.content == "分析结果"
+MockHarness.MockLoopResult result = mock.run("分析代码").join();
+assert result.finalResponse().equals("分析结果");
 ```
 
 ### 5. 部署简单

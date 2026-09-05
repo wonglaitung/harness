@@ -635,50 +635,72 @@ def from_env(cls) -> AgentHarness:
 
 ## HarnessConfig
 
-```python
-from harness.sdk.config import HarnessConfig
+```java
+import com.harness.core.HarnessConfig;
 
-class HarnessConfig:
-    # LLM 配置
-    model: str = "claude-sonnet-4-6"
-    provider: str | None = None      # 自动检测
-    api_key: str | None = None
-    base_url: str | None = None
-    context_window: int = 200000     # 模型上下文窗口大小
-    max_tokens: int = 4096           # 最大输出 token（0 = 自动）
+// Java HarnessConfig uses Builder pattern:
+HarnessConfig config = HarnessConfig.builder()
+    // LLM 配置
+    .model("claude-sonnet-4-6")
+    .apiKey("sk-ant-...")
+    .provider("auto")            // "auto", "anthropic", "openai"
+    .baseUrl(null)               // 自定义 API 端点
+    .contextWindow(200000)       // 模型上下文窗口大小（默认 200000）
+    .maxTokens(4096)             // 最大输出 token（默认 4096）
+    .temperature(1.0)            // 生成温度
 
-    # 兼容性配置
-    tool_result_role: str = "tool"   # 工具结果角色："tool" (原生) 或 "user" (兼容模式)
+    // Agent Loop 配置
+    .maxIterations(10)           // 最大迭代次数
+    .toolTimeout(30.0)           // 工具超时（秒）
 
-    # Agent Loop 配置
-    max_iterations: int = 10         # 最大迭代次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15）
-    max_input_tokens: int = 100000
+    // 兼容性配置
+    .toolResultRole("tool")      // "tool" (原生) 或 "user" (兼容模式)
 
-    # 成本控制
-    max_cost_per_run: float = 10.0   # USD
-    max_tokens_per_run: int = 1000000
+    // 记忆配置
+    .memoryDir(".harness/memory")
+    .memoryMdPath(null)          // 全局 MEMORY.md 文件路径
+    .sessionWindow(100)          // 会话滑动窗口大小
 
-    # 步骤预算控制（限制迭代和工具调用次数）
-    step_budget: StepBudgetConfig | None = None
+    // 工具配置
+    .sandboxWorkspace(null)      // 沙箱工作区
+    .enableNetwork(false)        // 是否启用网络
 
-    # 记忆配置
-    memory_dir: str = ".harness/memory"
-    memory_md_path: Path | None = None  # 全局 MEMORY.md 文件路径
-    vector_store: bool = False
+    // 系统提示
+    .systemPrompt("")            // 基础系统提示
 
-    # 技能配置
-    skill_dirs: list[str] = field(default_factory=list)
+    // 文档大小检查
+    .maxDocumentSize(10 * 1024 * 1024)          // 10MB
+    .maxTotalDocumentsSize(20 * 1024 * 1024)    // 20MB
+    .documentSizeAction(HarnessConfig.DocumentSizeAction.WARN)
+    .documentTokenWarningRatio(0.5)
 
-    # 安全配置
-    sandbox_enabled: bool = True
-    bash_timeout: int = 30000        # 毫秒
-    bash_blacklist: list[str] = field(default_factory=lambda: [
-        "rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:",
-    ])
-
-    # 模型预设
-    model_presets: dict[str, dict] = field(default_factory=dict)
+    // 子配置
+    .security(HarnessConfig.SecurityConfig.builder().build())
+    .costControl(HarnessConfig.CostControlConfig.builder().build())
+    .observability(HarnessConfig.ObservabilityConfig.builder().build())
+    .storage(HarnessConfig.StorageConfig.builder().build())
+    .routing(HarnessConfig.RoutingConfig.builder().build())
+    .build();
 ```
+
+### 默认值
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `model` | String | `claude-sonnet-4-6` | 模型名称 |
+| `provider` | String | `auto` | 提供商 |
+| `apiKey` | String | `null` | API 密钥 |
+| `baseUrl` | String | `null` | 自定义 API 端点 |
+| `contextWindow` | int | `200000` | 模型上下文窗口大小 |
+| `maxTokens` | int | `4096` | 最大输出 token |
+| `temperature` | double | `1.0` | 生成温度 |
+| `maxIterations` | int | `10` | 最大迭代次数 |
+| `toolTimeout` | double | `30.0` | 工具超时（秒） |
+| `toolResultRole` | String | `tool` | 工具结果角色 |
+| `memoryDir` | String | `.harness/memory` | 记忆目录 |
+| `sessionWindow` | int | `100` | 会话滑动窗口大小 |
+| `enableNetwork` | boolean | `false` | 是否启用网络 |
+| `systemPrompt` | String | `""` | 基础系统提示 |
 
 ### step_budget 步骤预算控制
 
@@ -774,47 +796,40 @@ agent = AgentHarness(config=config)
 
 ### 模型预设
 
-```python
-config = HarnessConfig(
-    model_presets={
-        "fast": {"model": "claude-haiku-4-5", "max_tokens": 2048},
-        "standard": {"model": "claude-sonnet-4-6", "max_tokens": 4096},
-        "powerful": {"model": "claude-opus-4-6", "max_tokens": 8192},
-    }
-)
+Java SDK 不包含内置模型预设。请在 `HarnessConfig.Builder` 中显式指定模型参数：
 
-agent = AgentHarness(config=config)
+```java
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-sonnet-4-6")
+    .contextWindow(200000)
+    .maxTokens(4096)
+    .build();
 ```
 
-### max_tokens 自动模式
+### max_tokens 配置
 
-当 `max_tokens = 0` 时，SDK 根据模型自动设置：
+Java SDK 使用固定的默认值 `maxTokens = 4096`，不支持自动模式。可根据模型需要手动调整：
 
-| 模型 | max_tokens |
-|------|------------|
-| claude-opus-4-6 | 8192 |
-| claude-sonnet-4-6 | 8192 |
-| claude-haiku-4-5 | 8192 |
-| gpt-4o | 4096 |
-| gpt-4o-mini | 4096 |
-| 其他 | 4096 |
-
-### 从 YAML 加载
-
-```yaml
-# harness.yaml
-model: claude-sonnet-4-6
-max_iterations: 100
-memory_dir: .harness/memory
-vector_store: true
-skill_dirs:
-  - .harness/skills
-sandbox_enabled: true
-bash_timeout: 60000
+```java
+HarnessConfig config = HarnessConfig.builder()
+    .model("claude-opus-4-6")
+    .maxTokens(8192)  // Opus 支持更大的输出
+    .build();
 ```
 
-```python
-agent = AgentHarness.from_config("harness.yaml")
+### 从环境变量加载
+
+```java
+// Java SDK 支持从环境变量创建配置
+HarnessConfig config = HarnessConfig.fromEnv();
+AgentHarness agent = AgentHarness.builder()
+    .config(config)
+    .build();
+
+// 支持的环境变量:
+// ANTHROPIC_API_KEY / OPENAI_API_KEY
+// HARNESS_MODEL, HARNESS_PROVIDER, HARNESS_BASE_URL
+// HARNESS_MAX_ITERATIONS, HARNESS_SYSTEM_PROMPT, HARNESS_MEMORY_DIR
 ```
 
 ## Java SDK 配置类
@@ -1505,42 +1520,60 @@ class MessageRole(Enum):
     TOOL = "tool"
 ```
 
-### LoopStatus
+### LoopState
 
-```python
-class LoopStatus(Enum):
-    RUNNING = "running"
-    COMPLETED = "completed"
-    STOPPED_MAX_ITERATIONS = "stopped_max_iterations"
-    STOPPED_COST_LIMIT = "stopped_cost_limit"
-    STOPPED_ERROR = "stopped_error"
-    STOPPED_STUCK = "stopped_stuck"
-    STOPPED_BY_HOOK = "stopped_by_hook"
+```java
+import com.harness.types.LoopState;
+
+public enum LoopState {
+    IDLE("idle"),
+    BUILDING_CONTEXT("building"),
+    CALLING_LLM("calling"),
+    PARSING_RESPONSE("parsing"),
+    EXECUTING_TOOLS("executing"),
+    COMPLETED("completed"),
+    ERROR("error"),
+    INTERRUPTED("interrupted"),
+    STUCK("stuck"),
+    MAX_ITERATIONS("max_iterations");
+}
 ```
 
 ### LoopResult
 
-```python
-@dataclass
-class LoopResult:
-    content: str                      # 最终文本内容
-    tool_calls: list[ToolCallRecord]  # 工具调用记录
-    total_tokens: int                 # 总 token 使用量
-    total_cost: float                 # 总成本（USD）
-    iterations: int                   # 实际循环次数
-    stopped_reason: str               # 停止原因（LoopStatus 值）
+```java
+import com.harness.types.LoopResult;
+import com.harness.types.LoopState;
+import com.harness.types.TokenUsage;
+
+// Java LoopResult record fields:
+// - LoopState status            // 循环状态
+// - Session session             // 当前会话
+// - List<Message> messages      // 消息列表
+// - String finalResponse        // 最终响应内容
+// - int iterations              // 实际循环次数
+// - String error                // 错误信息（如果有）
+// - TokenUsage tokenUsage       // token 使用统计
+
+LoopResult result = harness.run("分析代码").join();
+if (result.isSuccess()) {
+    System.out.println(result.content());
+    System.out.println("Iterations: " + result.iterations());
+}
 ```
 
-### ToolCallRecord
+### ToolCall
 
-```python
-@dataclass
-class ToolCallRecord:
-    name: str               # 工具名称
-    arguments: dict         # 调用参数
-    result: str             # 执行结果
-    error: str | None       # 错误信息
-    duration_ms: int        # 执行耗时
+```java
+import com.harness.types.ToolCall;
+import java.util.Map;
+
+// Java ToolCall record fields:
+// - String id                    // 工具调用 ID
+// - String name                  // 工具名称
+// - Map<String, Object> arguments // 调用参数
+
+ToolCall call = new ToolCall("call_123", "read", Map.of("path", "test.txt"));
 ```
 
 ### GoalStatus

@@ -10,6 +10,8 @@ public class UserUsage {
     private final String userId;
     private int dailyTokens = 0;
     private int hourlyRequests = 0;
+    private String date = "";
+    private int hour = 0;
 
     public UserUsage(String userId) {
         this.userId = userId;
@@ -25,6 +27,14 @@ public class UserUsage {
 
     public int getHourlyRequests() {
         return hourlyRequests;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public int getHour() {
+        return hour;
     }
 
     public void addTokens(int tokens) {

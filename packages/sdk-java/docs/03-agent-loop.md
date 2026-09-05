@@ -295,6 +295,8 @@ class HookPoint(Enum):
 
 ### HookContext
 
+**Python SDK**:
+
 ```python
 from harness.types import HookContext
 
@@ -312,9 +314,38 @@ class HookContext:
     metadata: dict[str, Any] = field(default_factory=dict)  # 附加元数据
 ```
 
+**Java SDK**:
+
+```java
+import com.harness.core.HookContext;
+import com.harness.core.HookPoint;
+
+// Java HookContext record fields:
+// - HookPoint hookPoint
+// - String sessionId
+// - int iteration
+// - String toolName
+// - Map<String, Object> toolArgs
+// - ToolResult toolResult
+// - LLMResponse llmResponse
+// - Exception error
+// - List<Message> messages
+// - Map<String, Object> metadata
+
+HookContext context = HookContext.builder()
+    .hookPoint(HookPoint.BEFORE_TOOL_EXECUTE)
+    .sessionId("my-session")
+    .iteration(1)
+    .toolName("read")
+    .toolArgs(Map.of("path", "src/Main.java"))
+    .build();
+```
+
 ### 注册钩子
 
 钩子通过继承 `LifecycleHook` 类并实现 `hook_points` 和 `execute` 方法来创建，然后通过 `agent.add_hook()` 注册。
+
+**Python SDK**:
 
 ```python
 from harness import AgentHarness
@@ -357,6 +388,51 @@ agent.add_hook(AbortOnDangerousToolHook())
 
 # 添加最大工具调用限制钩子
 agent.add_hook(MaxToolCallsHook(tool_name="bash", max_calls=10))
+```
+
+**Java SDK**:
+
+```java
+import com.harness.integration.AgentHarness;
+import com.harness.core.LifecycleHook;
+import com.harness.core.HookPoint;
+import com.harness.core.HookContext;
+import com.harness.core.HookResult;
+import java.util.List;
+import java.util.Map;
+
+// 创建自定义钩子
+public class MyPermissionHook implements LifecycleHook {
+    @Override
+    public List<HookPoint> hookPoints() {
+        return List.of(HookPoint.BEFORE_TOOL_EXECUTE);
+    }
+
+    @Override
+    public HookResult execute(HookContext context) {
+        if ("bash".equals(context.toolName())) {
+            Map<String, Object> args = context.toolArgs();
+            if (args != null) {
+                String command = (String) args.get("command");
+                if (command != null && (command.contains("rm -rf") || command.contains("sudo"))) {
+                    return HookResult.abort("Dangerous command blocked");
+                }
+            }
+        }
+        return HookResult.continue_();
+    }
+}
+
+// 注册钩子
+AgentHarness agent = AgentHarness.builder()
+    .model("claude-sonnet-4-6")
+    .build();
+agent.addHook(new MyPermissionHook());
+
+// 使用内置钩子
+agent.addHook(new com.harness.hooks.LoggingHook());
+agent.addHook(new com.harness.hooks.AbortOnDangerousToolHook());
+agent.addHook(new com.harness.hooks.MaxToolCallsHook("bash", 10));
 ```
 
 ### 钩子执行顺序

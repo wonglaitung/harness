@@ -62,6 +62,10 @@ public class OutputOffloader {
      * Check if content should be offloaded.
      */
     public boolean shouldOffload(String content, String sessionId) {
+        if (!config.enabled()) {
+            return false;
+        }
+
         if (content == null || content.isEmpty()) {
             return false;
         }

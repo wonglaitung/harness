@@ -112,10 +112,10 @@ packages/sdk-java/
 |------|------------|----------|------|
 | Anthropic Client | ✅ 完整 | ⚠️ 仅接口定义 | **Python 更完善** |
 | OpenAI Client | ✅ 完整（支持第三方兼容API） | ⚠️ 仅接口定义 | **Python 更完善** |
-| Mock Client | ✅ MockHarness | ✅ MockResponse | 同步 |
+| Mock Client | ✅ MockHarness | ✅ MockHarness | 同步 |
 | CPU Router | ✅ RoutingLLMClient + llama_cpp | ❌ 不存在 | **Python 独有** |
-| model_presets | ✅ 完整（自动检测 provider、context_window） | ❌ 不存在 | **Python 独有** |
-| tool_result_role | ✅ 支持 "tool"/"user" 兼容模式 | ❌ 不存在 | **Python 独有** |
+| model_presets | ✅ 完整（自动检测 provider、context_window） | ✅ ModelPresets 类 | 同步 |
+| tool_result_role | ✅ 支持 "tool"/"user" 兼容模式 | ✅ 支持 "tool"/"user" 兼容模式 | 同步 |
 
 ### 2.3 配置系统
 
@@ -269,7 +269,7 @@ MODEL_PRESETS = {
 }
 ```
 
-**Java SDK 需要**: 创建 `ModelPresets` 类，支持同样的自动检测逻辑。
+**Java SDK 已实现**: `ModelPresets` 类已创建，支持同样的自动检测逻辑。
 
 ### 3.3 tool_result_role 兼容模式
 **位置**: `packages/sdk/src/harness/sdk/config.py` + `llm/anthropic.py`
@@ -282,7 +282,7 @@ class HarnessConfig:
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
 ```
 
-**Java SDK 需要**: 在 `HarnessConfig` 和 `LLMClient` 中添加 `toolResultRole` 支持。
+**Java SDK 已实现**: `HarnessConfig.toolResultRole` 已支持 "tool"/"user" 兼容模式。
 
 ### 3.4 Memory Scoring (Retrieval Strength)
 **位置**: `packages/sdk/src/harness/memory/memory_file.py`
