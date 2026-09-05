@@ -37,6 +37,10 @@ from harness.core import (
     get_trust_key,
     setup_observability,
 )
+
+# Streaming with backpressure
+from harness.core.streaming import StreamingConfig, StreamingHandler, StreamingStats
+
 from harness.llm import (
     AnthropicClient,
     EmbeddedLlamaClient,
@@ -129,6 +133,7 @@ from harness.security import (
     SandboxExecutor,
     SanitizationRule,
 )
+
 from harness.skills import (
     InjectionConfig,
     LoadingLevel,
@@ -148,11 +153,28 @@ from harness.tools.builtins import (
     GlobTool,
     GrepTool,
     ReadTool,
+    UpdateCoreMemoryTool,
     WebFetchTool,
     WebSearchTool,
     WebToMarkdownTool,
     WriteTool,
 )
+
+# Browser tools (optional: requires playwright)
+from harness.tools.browser import (
+    BrowserCloseTool,
+    BrowserExtractTool,
+    BrowserClickTool,
+    BrowserManager,
+    BrowserNavigateTool,
+    BrowserScreenshotTool,
+    BrowserTypeTool,
+    BrowserWaitTool,
+    get_browser_tools,
+)
+
+# Permission system
+from harness.tools.permissions import PermissionSet
 
 # Trigger System (P0 - Phase 2)
 from harness.triggers import (
@@ -228,6 +250,23 @@ __all__ = [
     "WebSearchTool",
     "WebFetchTool",
     "WebToMarkdownTool",
+    "UpdateCoreMemoryTool",
+    # Browser tools (optional: requires playwright)
+    "BrowserManager",
+    "BrowserNavigateTool",
+    "BrowserClickTool",
+    "BrowserTypeTool",
+    "BrowserScreenshotTool",
+    "BrowserExtractTool",
+    "BrowserWaitTool",
+    "BrowserCloseTool",
+    "get_browser_tools",
+    # Permission system
+    "PermissionSet",
+    # Streaming
+    "StreamingConfig",
+    "StreamingHandler",
+    "StreamingStats",
     # Core types
     "Message",
     "Session",
