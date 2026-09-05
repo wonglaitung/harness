@@ -67,11 +67,13 @@ harness-scraper goal [OPTIONS] [GOAL]
 
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
-| `--skill` | 技能名称 | `ai-intelligence` |
+| `--skill` | 技能名称（全局选项，需放在子命令前） | `ai-intelligence` |
 | `--max-iterations` | 最大迭代次数 | `20` |
-| `--timeout` | 超时时间（秒） | `300` |
-| `-v, --verbose` | 详细输出 | `False` |
+| `--timeout` | 超时时间（秒） | `1800` |
+| `-v, --verbose` | 详细输出（全局选项，需放在子命令前） | `False` |
 | `GOAL` | 目标描述 | 技能默认目标 |
+
+> 注意：`--skill` 和 `-v/--verbose` 是**全局选项**，必须放在子命令（如 `goal`、`agent`）之前。例如 `harness-scraper --skill hk-stocks-alpha goal`、`harness-scraper -v agent`。
 
 **示例**：
 
@@ -79,8 +81,8 @@ harness-scraper goal [OPTIONS] [GOAL]
 # 默认运行（AI 情报）
 harness-scraper goal
 
-# 港股信号
-harness-scraper goal --skill hk-stocks-alpha
+# 港股信号（全局 --skill 放在子命令前）
+harness-scraper --skill hk-stocks-alpha goal
 
 # 自定义目标
 harness-scraper goal "提取 5 个 MCP 相关项目"
@@ -120,8 +122,8 @@ harness-scraper agent [OPTIONS] [PROMPT]
 
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
-| `--skill` | 技能名称 | `ai-intelligence` |
-| `-v, --verbose` | 详细输出 | `False` |
+| `--skill` | 技能名称（全局选项，需放在子命令前） | `ai-intelligence` |
+| `-v, --verbose` | 详细输出（全局选项，需放在子命令前） | `False` |
 | `PROMPT` | 自定义提示词 | 默认提示词 |
 
 **示例**：
@@ -130,14 +132,14 @@ harness-scraper agent [OPTIONS] [PROMPT]
 # 默认运行
 harness-scraper agent
 
-# 股票分析
-harness-scraper agent --skill stock-analysis
+# 港股分析（全局 --skill 放在子命令前）
+harness-scraper --skill hk-stocks-alpha agent
 
 # 自定义提示词
 harness-scraper agent "这次关注 Rust 生态的新项目"
 
-# 详细模式
-harness-scraper agent -v
+# 详细模式（全局 -v 放在子命令前）
+harness-scraper -v agent
 ```
 
 ### config 命令
@@ -166,7 +168,7 @@ harness-scraper config --show
 # 输出:
 # LLM: openai @ https://api.openai.com/v1
 # Model: gpt-4o-mini
-# Output: ~/.harness/scraper
+# Output: packages/scraper/output
 ```
 
 ### skills 命令
@@ -180,13 +182,13 @@ harness-scraper skills
 **输出**：
 
 ```
-Available skills in ~/.harness/skills:
+Available skills in packages/scraper/skills:
 
   --skill ai-intelligence
-  --skill stock-analysis
+  --skill hk-stocks-alpha
 
 Usage:
-  harness-scraper --skill stock-analysis
+  harness-scraper --skill hk-stocks-alpha
 ```
 
 ## 输出说明
@@ -198,7 +200,7 @@ Usage:
 21:03:14 [INFO] harness_scraper.agent: Running IntelAgent with prompt: ...
 21:03:15 [INFO] harness_scraper.tools.fetch_rss: Fetched 10 articles from ...
 21:03:20 [INFO] harness_scraper.tools.fetch_hn: Fetched 15 posts with score >= 150
-21:03:25 [INFO] harness_scraper.tools.save_one_pager: Saved: ~/.harness/scraper/2026-06-13/project.md
+21:03:25 [INFO] harness_scraper.tools.save_one_pager: Saved: packages/scraper/output/2026-06-13/project.md
 
 === Agent Result ===
 [Agent 输出内容]
@@ -207,7 +209,7 @@ Usage:
 ### 生成文件
 
 ```
-~/.harness/scraper/
+packages/scraper/output/
 ├── 2026-06-13/
 │   ├── project1.md
 │   ├── project2.md
@@ -228,7 +230,7 @@ export HARNESS_LLM_BASE_URL=https://api.openai.com/v1
 export HARNESS_LLM_API_KEY=sk-xxx
 export HARNESS_LLM_MODEL=gpt-4o-mini
 export HARNESS_LLM_TEMPERATURE=0.1
-export HARNESS_LLM_MAX_TOKENS=2000
+export HARNESS_LLM_MAX_TOKENS=8192
 
 # 运行
 harness-scraper
@@ -254,7 +256,7 @@ llm:
   api_key: ""  # Or set via HARNESS_LLM_API_KEY env var
   model: "gpt-4o-mini"
   temperature: 0.1
-  max_tokens: 2000
+  max_tokens: 8192
 
   # Alternative: DeepSeek
   # provider: "openai"
@@ -284,7 +286,7 @@ sources:
 
 # Output
 output:
-  directory: "~/.harness/scraper"
+  directory: "packages/scraper/output"
 ```
 
 ## 使用场景
@@ -296,24 +298,25 @@ output:
 harness-scraper
 
 # 查看生成的 One-Pagers
-ls ~/.harness/scraper/$(date +%Y-%m-%d)/
+ls packages/scraper/output/$(date +%Y-%m-%d)/
 ```
 
 ### 股票市场监控
 
 ```bash
 # 运行股票分析
-harness-scraper --skill stock-analysis
+harness-scraper --skill hk-stocks-alpha
 
 # 查看分析结果
-cat ~/.harness/scraper/$(date +%Y-%m-%d)/*.md
+cat packages/scraper/output/$(date +%Y-%m-%d)/*.md
 ```
 
 ### 自定义领域
 
 ```bash
-# 创建自定义技能
-cat > ~/.harness/skills/crypto-analysis.md << 'EOF'
+# 创建自定义技能（注意：当前仅从 packages/scraper/skills/ 加载，
+# 用户目录 ~/.harness/skills/ 的覆盖尚未实现，请放在仓库技能目录）
+cat > packages/scraper/skills/crypto-analysis.md << 'EOF'
 # Crypto Intelligence
 
 Extract crypto/blockchain intelligence.
@@ -387,7 +390,8 @@ vLLM, LangChain, Ollama, ...
 
 ```python
 import asyncio
-from harness_scraper import IntelAgent, load_config
+from harness_scraper import IntelAgent
+from harness_scraper.config import load_config
 
 async def main():
     # 加载配置
@@ -397,7 +401,7 @@ async def main():
     agent = IntelAgent(
         config,
         skill="ai-intelligence",
-        memory_path="~/.harness/scraper/MEMORY.md",
+        memory_path="packages/scraper/output/MEMORY.md",
     )
 
     # 运行
@@ -469,7 +473,7 @@ uv run python scripts/send_intelligence_email.py --dry-run # 预览
 ### 输出目录结构
 
 ```
-~/.harness/scraper/
+packages/scraper/output/
 ├── 2026-06-13/
 │   ├── ai/              # AI 情报 (domain="ai")
 │   │   ├── mcp.md

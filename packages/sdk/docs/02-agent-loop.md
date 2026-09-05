@@ -1254,5 +1254,5 @@ LoopResult
 
 - [03-tool-system.md](./03-tool-system.md) - 了解工具系统
 - [04-memory-system.md](./04-memory-system.md) - 了解记忆系统
-- [15-loop-engineering.md](./15-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
+- [10-loop-engineering.md](./10-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

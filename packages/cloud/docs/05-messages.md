@@ -474,6 +474,7 @@ class MessageType(str, Enum):
     # 请求类
     RUN_REQUEST = "run_request"
     INTERRUPT = "interrupt"
+    PING = "ping"              # 心跳请求
 
     # 响应类
     ACK = "ack"
@@ -484,6 +485,7 @@ class MessageType(str, Enum):
     PROGRESS = "progress"
     ERROR = "error"
     INTERRUPTED = "interrupted"
+    PONG = "pong"              # 心跳响应
 
 
 class MessageEnvelope(BaseModel):
@@ -569,6 +571,19 @@ class ToolResultEvent(BaseModel):
     success: bool
     result: str
     error: Optional[str] = None
+
+
+class ProgressEventData(BaseModel):
+    """进度事件数据"""
+    event_type: str
+    message: str
+    data: dict[str, Any] = {}
+
+
+class ErrorEvent(BaseModel):
+    """错误事件"""
+    error: str
+    error_code: Optional[str] = None
 ```
 
 ## 验证测试

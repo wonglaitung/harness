@@ -54,10 +54,17 @@
   "max_iterations": 10,
   "temperature": 0.3,
   "tool_result_role": "tool",
-  "system_prompt": "你是一个有帮助的 AI 助手...",
-  "stream_enabled": true,
+  "stream": true,
+  "auto_save": true,
   "auto_update_memory": true,
-  "theme_mode": "auto"
+  "work_dir": "",
+  "remember_dir": true,
+  "theme_mode": "auto",
+  "enable_routing": false,
+  "high_model": "",
+  "low_model": "",
+  "router_model_path": "",
+  "router_url": ""
 }
 ```
 
@@ -73,10 +80,17 @@
 | `max_iterations` | int | `10` | 最大迭代次数 |
 | `temperature` | float | `0.3` | 温度参数 |
 | `tool_result_role` | string | `"tool"` | 工具结果角色 |
-| `system_prompt` | string | `""` | 系统提示 |
-| `stream_enabled` | bool | `true` | 是否启用流式输出 |
+| `stream` | bool | `true` | 是否启用流式输出 |
+| `auto_save` | bool | `true` | 自动保存会话 |
 | `auto_update_memory` | bool | `true` | 允许 Agent 自主更新 Core Memory |
+| `work_dir` | string | `""` | 工作目录（空 = 当前目录） |
+| `remember_dir` | bool | `true` | 记住上次工作目录 |
 | `theme_mode` | string | `"auto"` | 主题模式：`auto`/`light`/`dark` |
+| `enable_routing` | bool | `false` | 是否启用智能路由（按复杂度选模型） |
+| `high_model` | string | `""` | 高能力模型（路由用） |
+| `low_model` | string | `""` | 低成本模型（路由用） |
+| `router_model_path` | string | `""` | 路由器模型路径（GGUF 文件） |
+| `router_url` | string | `""` | HTTP 路由服务 URL |
 | `input_cost_per_1m` | float | `3.0` | 每 1M 输入 token 成本（美元） |
 | `output_cost_per_1m` | float | `15.0` | 每 1M 输出 token 成本（美元） |
 
@@ -174,35 +188,37 @@ if self.config.auto_update_memory:
 
 ### 配置格式
 
+`~/.harness/mcp.json` 使用 `mcpServers` 对象，按服务器名称（name）作为键存储配置：
+
 ```json
 {
-  "servers": [
-    {
-      "name": "filesystem",
+  "mcpServers": {
+    "filesystem": {
       "transport": "stdio",
       "command": "mcp-filesystem",
       "args": ["--root", "/path/to/workspace"],
-      "env": {}
+      "env": {},
+      "enabled": true
     },
-    {
-      "name": "github",
+    "github": {
       "transport": "stdio",
       "command": "mcp-github",
       "args": [],
       "env": {
         "GITHUB_TOKEN": "ghp_xxx"
-      }
+      },
+      "enabled": true
     },
-    {
-      "name": "brave-search",
-      "transport": "stdio",
-      "command": "mcp-brave-search",
-      "args": [],
-      "env": {
+    "brave-search": {
+      "transport": "http",
+      "url": "https://mcp.brave.com/sse",
+      "headers": {
         "BRAVE_API_KEY": "your-key"
-      }
+      },
+      "timeout": 30,
+      "enabled": true
     }
-  ]
+  }
 }
 ```
 
@@ -210,11 +226,14 @@ if self.config.auto_update_memory:
 
 | 配置项 | 类型 | 说明 |
 |--------|------|------|
-| `name` | string | 服务器名称（唯一标识） |
 | `transport` | string | 传输方式：`"stdio"` 或 `"http"` |
 | `command` | string | 启动命令（stdio 传输） |
 | `args` | array | 命令参数 |
-| `env` | object | 环境变量 |
+| `env` | object | 环境变量（stdio 传输） |
+| `url` | string | 服务器 URL（http 传输） |
+| `headers` | object | 请求头（http 传输） |
+| `timeout` | number | 超时时间（秒，默认 30） |
+| `enabled` | bool | 是否启用（默认 true） |
 
 ## schedules.json
 

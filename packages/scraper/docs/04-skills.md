@@ -10,24 +10,17 @@
 
 ## 技能文件位置
 
-技能文件按以下优先级加载：
-
-1. **仓库内置技能** (`packages/scraper/skills/`) - CI/CD 和首次运行使用
-2. **用户技能目录** (`~/.harness/skills/`) - 自定义技能
+技能文件从**仓库内置目录**加载（当前仅此一处）：
 
 ```
-# 仓库内置（优先）
+# 仓库内置（唯一加载位置）
 packages/scraper/skills/
-├── ai-intelligence.md    # AI 情报抽取
-├── hk-stocks-alpha.md    # 港股 Alpha 监控
+├── ai-intelligence.md    # AI 情报抽取（内置）
+├── hk-stocks-alpha.md    # 港股 Alpha 监控（内置）
 └── ...
-
-# 用户目录（备选）
-~/.harness/skills/
-├── ai-intelligence.md    # 用户自定义版本
-├── stock-analysis.md     # 其他技能
-└── custom.md             # 自定义技能
 ```
+
+> ⚠️ 文档早期版本提到用户目录 `~/.harness/skills/` 可用于覆盖或自定义技能，但**当前 `load_skill()` 只检查 `REPO_SKILL_DIR`（`packages/scraper/skills/`），并不加载用户目录**。自定义技能请直接放在 `packages/scraper/skills/` 下，或等待该功能实现。
 
 ### 加载逻辑
 
@@ -35,7 +28,7 @@ packages/scraper/skills/
 from harness.skills.base import Skill
 
 def load_skill(skill_name: str) -> Skill | None:
-    """使用 SDK 的 Skill.from_file() 解析技能文件"""
+    """使用 SDK 的 Skill.from_file() 解析技能文件（仅仓库目录）"""
     repo_skill_path = REPO_SKILL_DIR / f"{skill_name}.md"
     if repo_skill_path.exists():
         return Skill.from_file(repo_skill_path)  # 解析 frontmatter
@@ -44,7 +37,7 @@ def load_skill(skill_name: str) -> Skill | None:
 
 **设计原因**：
 - CI/CD 环境需要稳定的内置技能
-- 用户可以在 `~/.harness/skills/` 覆盖或自定义技能
+- 所有技能集中在仓库内，便于版本管理（用户目录覆盖功能尚未实现）
 
 ## 技能文件格式
 
@@ -241,9 +234,9 @@ AI 行业情报抽取技能。
 **使用示例**：
 
 ```bash
-# 创建技能文件
-mkdir -p ~/.harness/skills
-cat > ~/.harness/skills/hk-stocks-alpha.md << 'EOF'
+# 创建技能文件（放在仓库技能目录；用户目录 ~/.harness/skills/ 当前不加载）
+mkdir -p packages/scraper/skills
+cat > packages/scraper/skills/hk-stocks-alpha.md << 'EOF'
 # HK Stocks Alpha Event Capture
 
 Monitor HK stock market for alpha events: major moves, corporate actions, policy changes.
@@ -317,7 +310,9 @@ EOF
 harness-scraper --skill hk-stocks-alpha
 ```
 
-### stock-analysis.md
+### stock-analysis.md（非内置，仅作示例/模板）
+
+> ⚠️ `stock-analysis.md` **不是**内置技能。仓库 `packages/scraper/skills/` 当前仅含 `ai-intelligence.md` 与 `hk-stocks-alpha.md`。以下是编写自定义股票分析技能的**参考模板**，需自行创建为 `.md` 文件并放入技能目录后才能使用。
 
 股票市场分析技能。
 
@@ -394,7 +389,8 @@ AgentHarness(tools=tools, system_prompt=prompt)
 ### 步骤 1：创建文件
 
 ```bash
-touch ~/.harness/skills/my-domain.md
+# 注意：当前仅从 packages/scraper/skills/ 加载（用户目录尚未支持）
+touch packages/scraper/skills/my-domain.md
 ```
 
 ### 步骤 2：编写内容
@@ -442,6 +438,7 @@ Extract intelligence from my domain.
 ### 步骤 3：使用技能
 
 ```bash
+# 确保文件在 packages/scraper/skills/my-domain.md
 harness-scraper --skill my-domain
 ```
 

@@ -356,4 +356,4 @@ class MyThread(QThread):
 
 - [02-ui-components.md](./02-ui-components.md) - 了解 UI 组件
 - [03-controllers.md](./03-controllers.md) - 了解控制器
-- [05-client-lessons.md](./05-client-lessons.md) - 开发经验总结
+- [development_guide.md](./development_guide.md) - 开发经验总结

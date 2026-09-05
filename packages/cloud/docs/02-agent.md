@@ -24,8 +24,21 @@ src/harness_cloud/agent/
 ### 类定义
 
 ```python
-from harness import AgentHarness, HarnessConfig, ProgressEvent, ProgressEventType
-from harness.tools.builtins import ReadTool, WriteTool, GlobTool, GrepTool, BashTool
+from harness import (
+    AgentHarness,
+    HarnessConfig,
+    ProgressEvent,
+    ProgressEventType,
+    ReadTool,
+    WriteTool,
+    GlobTool,
+    GrepTool,
+    BashTool,
+    WebSearchTool,
+    WebFetchTool,
+    WebToMarkdownTool,
+)
+from harness_cloud.agent.config import AgentConfig
 
 
 class SDKBridge:
@@ -39,8 +52,9 @@ class SDKBridge:
     4. 将事件转换为 WebSocket 消息返回
     """
     
-    def __init__(self, workspace: str = "/workspace"):
-        self.workspace = Path(workspace)
+    def __init__(self, config: AgentConfig | None = None):
+        self.config = config or AgentConfig()
+        self.workspace = Path(self.config.workspace)
         self.agent: AgentHarness | None = None
         self._interrupt_flag = False
         self._current_session_id: str | None = None
@@ -69,6 +83,9 @@ def _create_agent(self, request: MergedRequest) -> AgentHarness:
         GlobTool(),
         GrepTool(),
         BashTool(),
+        WebSearchTool(),
+        WebFetchTool(),
+        WebToMarkdownTool(),
     ]
 
     return AgentHarness(config=config, tools=tools)
@@ -205,15 +222,20 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 import asyncio
 
+from harness_cloud.agent.config import AgentConfig
 from harness_cloud.agent.sdk_bridge import SDKBridge
 from harness_cloud.common.messages import (
-    MessageEnvelope,
-    MessageType,
+    AuthFailed,
     AuthRequest,
     AuthSuccess,
-    AuthFailed,
+    MessageEnvelope,
+    MessageType,
     RunRequest,
+    create_message,
 )
+
+
+config = AgentConfig()
 
 
 @asynccontextmanager
@@ -243,14 +265,14 @@ async def websocket_run(websocket: WebSocket):
     - 检测超时断线
     """
     await websocket.accept()
-    bridge = SDKBridge()
+    bridge = SDKBridge(config)
     session_id = None
     authenticated = False
     auth_config: AuthRequest | None = None
 
     # 心跳检测
     last_ping = asyncio.get_event_loop().time()
-    HEARTBEAT_TIMEOUT = 90.0
+    HEARTBEAT_TIMEOUT = config.heartbeat_timeout
     _closed = False
 
     async def heartbeat_monitor():
@@ -274,10 +296,10 @@ async def websocket_run(websocket: WebSocket):
     try:
         while True:
             raw_data = await websocket.receive_text()
-            envelope = MessageEnvelope.parse_raw(raw_data)
+            envelope = MessageEnvelope.model_validate_json(raw_data)
 
             # 处理心跳
-            if envelope.type == "ping":
+            if envelope.type == MessageType.PING:
                 last_ping = asyncio.get_event_loop().time()
                 await websocket.send_json({"type": "pong"})
                 continue
@@ -289,65 +311,69 @@ async def websocket_run(websocket: WebSocket):
                     continue
 
                 try:
-                    auth_request = AuthRequest.parse_obj(envelope.payload)
+                    auth_request = AuthRequest.model_validate(envelope.payload)
                     if not auth_request.api_key:
-                        await websocket.send_json({
-                            "type": MessageType.AUTH_FAILED.value,
-                            "payload": {
-                                "error": "API key is required",
-                                "error_code": "INVALID_API_KEY",
-                            },
-                        })
+                        await websocket.send_json(
+                            create_message(
+                                MessageType.AUTH_FAILED,
+                                AuthFailed(
+                                    error="API key is required",
+                                    error_code="INVALID_API_KEY",
+                                ),
+                            )
+                        )
                         continue
 
                     # 存储 auth 配置
                     auth_config = auth_request
                     authenticated = True
 
-                    await websocket.send_json({
-                        "type": MessageType.AUTH_SUCCESS.value,
-                        "payload": {
-                            "provider": auth_config.provider,
-                            "model": auth_config.model,
-                        },
-                    })
+                    await websocket.send_json(
+                        create_message(
+                            MessageType.AUTH_SUCCESS,
+                            AuthSuccess(
+                                provider=auth_config.provider,
+                                model=auth_config.model,
+                            ),
+                        )
+                    )
                     logger.info(f"Authenticated: provider={auth_config.provider}")
 
                 except Exception as e:
                     logger.error(f"Auth validation error: {e}")
-                    await websocket.send_json({
-                        "type": MessageType.AUTH_FAILED.value,
-                        "payload": {
-                            "error": str(e),
-                            "error_code": "INVALID_AUTH_PAYLOAD",
-                        },
-                    })
+                    await websocket.send_json(
+                        create_message(
+                            MessageType.AUTH_FAILED,
+                            AuthFailed(
+                                error=str(e),
+                                error_code="INVALID_AUTH_PAYLOAD",
+                            ),
+                        )
+                    )
                 continue
 
             # 处理 run_request（需要先认证）
             if envelope.type == MessageType.RUN_REQUEST:
                 if not authenticated or not auth_config:
-                    await websocket.send_json({
-                        "type": MessageType.ERROR.value,
-                        "payload": {
-                            "error": "Not authenticated. Send auth message first.",
-                            "error_code": "NOT_AUTHENTICATED",
-                        },
-                    })
+                    await websocket.send_json(
+                        create_message(
+                            MessageType.ERROR,
+                            {"error": "Not authenticated. Send auth message first.", "error_code": "NOT_AUTHENTICATED"},
+                        )
+                    )
                     continue
 
                 try:
-                    request = RunRequest.parse_obj(envelope.payload)
+                    request = RunRequest.model_validate(envelope.payload)
                     session_id = request.session_id
 
                     # 合并 auth 配置与 run request
                     merged_request = auth_config.merge_with_request(request)
 
                     # 发送确认
-                    await websocket.send_json({
-                        "type": MessageType.ACK.value,
-                        "payload": {"session_id": session_id},
-                    })
+                    await websocket.send_json(
+                        create_message(MessageType.ACK, {"session_id": session_id})
+                    )
 
                     # 流式执行
                     async for event in bridge.run_stream(merged_request):
@@ -355,33 +381,28 @@ async def websocket_run(websocket: WebSocket):
 
                 except Exception as e:
                     logger.error(f"Run request error: {e}")
-                    await websocket.send_json({
-                        "type": MessageType.ERROR.value,
-                        "payload": {
-                            "error": str(e),
-                            "error_code": "INVALID_RUN_REQUEST",
-                        },
-                    })
+                    await websocket.send_json(
+                        create_message(
+                            MessageType.ERROR,
+                            {"error": str(e), "error_code": "INVALID_RUN_REQUEST"},
+                        )
+                    )
                 continue
 
             # 处理中断
             if envelope.type == MessageType.INTERRUPT:
                 bridge.interrupt()
-                await websocket.send_json({
-                    "type": MessageType.INTERRUPTED.value,
-                    "payload": {},
-                })
+                await websocket.send_json(create_message(MessageType.INTERRUPTED, {}))
                 continue
 
             # 未知消息类型
             logger.warning(f"Unknown message type: {envelope.type}")
-            await websocket.send_json({
-                "type": MessageType.ERROR.value,
-                "payload": {
-                    "error": f"Unknown message type: {envelope.type}",
-                    "error_code": "UNKNOWN_MESSAGE_TYPE",
-                },
-            })
+            await websocket.send_json(
+                create_message(
+                    MessageType.ERROR,
+                    {"error": f"Unknown message type: {envelope.type}", "error_code": "UNKNOWN_MESSAGE_TYPE"},
+                )
+            )
 
     except WebSocketDisconnect:
         logger.info(f"Client disconnected, session: {session_id}")
@@ -452,7 +473,7 @@ async def lifespan(app: FastAPI):
 ```python
 # 在 SDKBridge.run_stream 中捕获 MemoryError
 
-async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+async def run_stream(self, request: MergedRequest) -> AsyncIterator[dict]:
     try:
         # ... agent 执行逻辑
     except MemoryError:
@@ -516,7 +537,7 @@ Agent 的设计参考了桌面客户端的 `ChatController`：
 ## 错误处理
 
 ```python
-async def run_stream(self, request: RunRequest) -> AsyncIterator[dict]:
+async def run_stream(self, request: MergedRequest) -> AsyncIterator[dict]:
     try:
         # ... agent execution
     except ValueError as e:

@@ -48,7 +48,7 @@
 │  │  └──────────────────────────────────────────────────────┘  │ │
 │  │                              ↓                              │ │
 │  │  ┌──────────────────────────────────────────────────────┐  │ │
-│  │  │                   Tools (6)                           │  │ │
+│  │  │                   Tools (10)                          │  │ │
 │  │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐               │  │ │
 │  │  │  │fetch_rss│  │fetch_hn │  │fetch_url│               │  │ │
 │  │  │  └─────────┘  └─────────┘  └─────────┘               │  │ │
@@ -95,7 +95,7 @@
 │  ┌─────────────────────────────────────────────┐   │
 │  │              AgentHarness (SDK)              │   │
 │  │  - System Prompt: BASE + Skill              │   │
-│  │  - Tools: 8 intel + financial tools         │   │
+│  │  - Tools: 10 tools (6 intel + 4 financial/output) │   │
 │  │  - Memory: MEMORY.md (auto-managed)         │   │
 │  └─────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
@@ -164,6 +164,10 @@ vLLM, LangChain, Ollama, LLaMA, Mistral...
 | `fetch_github_trending` | GitHub Trending | 热门开源项目 |
 | `fetch_url` | GitHub/Jina Reader | 深度抓取 README |
 | `save_one_pager` | 文件系统 | 保存 Markdown |
+| `fetch_hkex` | AkShare (东方财富) | 港股实时行情、异动监控 |
+| `fetch_financial_news` | AkShare + yfinance | 财经快讯、美国国债收益率 |
+| `read_history_report` | 文件系统 | 读取历史 One-Pager 报告 |
+| `update_memory` | 文件系统 | 记录已处理项目到 MEMORY.md |
 
 ### 记忆系统
 
@@ -181,8 +185,8 @@ MEMORY.md 记录已处理内容，**由 SaveOnePagerTool 自动维护**：
 ```
 
 **自动管理机制**：
-- 每次保存 One-Pager 时自动更新 MEMORY.md
-- 超过 30 天的条目自动归档到 `archive/MEMORY-YYYY-MM.md`
+- 每次保存 One-Pager 时（`SaveOnePagerTool`）自动追加记录到 MEMORY.md
+- 超过 30 天的条目自动归档到 `archive/MEMORY-YYYY-MM.md` 由 `UpdateMemoryTool` 负责；只有该工具被加入 skill 的 `tools.allowed` 时才会触发（默认技能未包含 `update_memory`，因此默认流程下只追加、不归档）
 - SDK 加载 MEMORY.md 注入系统提示，避免重复提取
 
 ## 数据流
@@ -317,7 +321,6 @@ Scraper **不重复实现** SDK 已有的功能：
 ## 参考资源
 
 - [Harness SDK 文档](../../sdk/docs/)
-- [plan.md](./plan.md) - 原始设计计划
 - [AgentHarness 架构](../../sdk/docs/02-agent-loop.md)
 
 ## 下一步

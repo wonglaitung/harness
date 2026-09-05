@@ -204,82 +204,50 @@ class MainWindow(QMainWindow):
 
 ## 左侧栏 (SidebarPanel)
 
-左侧栏提供会话列表和新建会话功能。
+左侧栏提供会话列表和新建会话功能。它是固定宽度的面板（不可折叠）。
 
 ### 功能
 
-- 显示会话列表（最近使用在前）
+- 显示会话列表（当前会话在前，支持右键删除）
 - 新建会话按钮
 - 切换会话
 - 删除会话
 - 打开设置
-- 启动/关闭浏览器
-
-### 浏览器按钮
-
-侧边栏底部有浏览器控制按钮，支持一键启动/关闭浏览器：
-
-```python
-class SidebarPanel(QWidget):
-    # 信号定义
-    browser_toggle_requested = pyqtSignal()  # 切换浏览器状态
-
-    def update_browser_status(self, is_active: bool, browser_type: str = ""):
-        """更新浏览器按钮状态"""
-        theme = get_theme()
-        if is_active:
-            # 绿色圆点 + accent 背景
-            self.browser_btn.setText(f"● 浏览器")
-            self.browser_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {theme.ACCENT};
-                    color: white;
-                }}
-            """)
-        else:
-            # 无圆点 + 透明背景
-            self.browser_btn.setText("  浏览器")
-```
-
-**状态指示**：
-
-| 状态 | 显示 | 样式 |
-|------|------|------|
-| 已停止 | `  浏览器` | 透明背景 |
-| 运行中 | `● 浏览器` | Accent 背景 + 绿色圆点 |
 
 ### 尺寸
 
 ```python
-COLLAPSED_WIDTH = 56   # 折叠宽度（仅图标）
-EXPANDED_WIDTH = 220   # 展开宽度（图标 + 文字）
+FIXED_WIDTH = 180   # 固定宽度（不可折叠）
 ```
 
 ### 信号
 
 ```python
-class SidebarPanel(QWidget):
+class SidebarPanel(ThemeAwareWidget):
     # 信号定义
-    session_new_requested = pyqtSignal()           # 新建会话
-    session_switch_requested = pyqtSignal(str)     # 切换会话
-    session_delete_requested = pyqtSignal(str)     # 删除会话
-    settings_requested = pyqtSignal()               # 打开设置
+    work_dir_changed = pyqtSignal(Path)               # 工作目录已变更
+    mcp_connect_requested = pyqtSignal(str)           # 请求连接 MCP 服务器（名称）
+    skill_load_requested = pyqtSignal(Path)           # 请求加载技能（路径）
+    session_delete_requested = pyqtSignal(str)        # 删除会话（id）
+    session_switch_requested = pyqtSignal(str)        # 切换会话（id）
+    session_new_requested = pyqtSignal()              # 新建会话
+    settings_requested = pyqtSignal()                 # 打开设置
 ```
 
 ### 数据更新
 
 ```python
-def update_sessions(self, sessions: list, current_id: str | None):
+def update_sessions(self, current_session, history_sessions: list):
     """
     更新会话列表显示。
     
     Args:
-        sessions: 会话信息列表 [{"id": str, "name": str}, ...]
-        current_id: 当前会话 ID
+        current_session: 当前 ClientSession 对象（或 None）
+        history_sessions: 历史 ClientSession 对象列表
     """
     # 清空现有列表
-    # 重新创建会话按钮
-    # 高亮当前会话
+    # 当前会话排在第一项（带 ● 高亮）
+    # 历史会话项支持右键菜单删除
 ```
 
 ## 中央对话面板 (ChatPanel)
@@ -680,59 +648,66 @@ def _build_multimodal_content(self, text: str, attachments: list) -> list[dict]:
 
 ## 右侧面板 (RightPanel)
 
-右侧面板是可折叠的多功能面板，包含四个区块。
+右侧面板是可折叠的多功能面板，包含记忆、文件树和"更多工具"三个区块。
 
 ### 区块结构
 
 ```
 RightPanel
-├── MemorySection (记忆)
+├── MemorySection (记忆，默认展开)
 │   ├── CategoryList
 │   └── EntryList
-├── SkillsSection (技能)
-│   ├── SkillList
-│   └── AddButton
-├── MCPSection (MCP 服务器)
-│   ├── ServerList
-│   └── AddButton
-└── FileTreeSection (文件树)
-    └── QTreeView
+├── FileTreeSection (文件树，默认折叠)
+│   └── QTreeView
+└── MoreToolsSection (更多工具，默认折叠)
+    ├── SkillsSection (技能)
+    │   ├── SkillList
+    │   └── AddButton
+    ├── MCPServersSection (MCP 服务器)
+    │   ├── ServerList
+    │   └── AddButton
+    ├── MonitoringSection (监控)
+    ├── ExecutionLogSection (执行日志)
+    ├── ScheduleButton (排程)
+    └── BrowserButton (浏览器)
 ```
 
 ### 折叠状态
 
-默认折叠所有区块：
+记忆区块默认展开，文件树与"更多工具"区块默认折叠：
 
 ```python
-# 初始状态
-self._sections_expanded = {
-    "memory": False,
-    "skills": False,
-    "mcp": False,
-    "files": True,
-}
+# MemorySection 默认展开
+# FileTreeSection: set_collapsed(True)  # 折叠
+# MoreToolsSection: set_collapsed(True)  # 折叠（含技能/MCP/监控/排程/浏览器）
 ```
 
 ### 信号
 
 ```python
-class RightPanel(QWidget):
+class RightPanel(ThemeAwareWidget):
     # 记忆相关
-    memory_add_requested = pyqtSignal()
-    memory_edit_requested = pyqtSignal(str, int)  # category, index
+    memory_add_requested = pyqtSignal(str)          # category
+    memory_edit_requested = pyqtSignal(str, int)   # category, index
     memory_remove_requested = pyqtSignal(str, int)  # category, index
-    
+    memory_importance_changed = pyqtSignal(str, int, float)  # category, index, importance
+
     # 技能相关
     add_skill_requested = pyqtSignal()
-    skill_double_clicked = pyqtSignal(str)  # skill_name
-    
+    skill_double_clicked = pyqtSignal(str)          # skill_name
+
     # MCP 相关
     add_mcp_server_requested = pyqtSignal()
-    toggle_mcp_server_requested = pyqtSignal(str)  # server_name
-    server_double_clicked = pyqtSignal(str)  # server_name
-    
+    toggle_mcp_server_requested = pyqtSignal(str)   # server_name
+    server_double_clicked = pyqtSignal(str)         # server_name
+
     # 文件树相关
-    work_dir_changed = pyqtSignal(str)  # path
+    file_clicked = pyqtSignal(Path)                 # 双击文件
+    work_dir_changed = pyqtSignal(Path)             # 工作目录已变更
+
+    # 更多工具
+    schedule_requested = pyqtSignal()               # 打开排程
+    browser_toggle_requested = pyqtSignal()         # 切换浏览器状态
 ```
 
 ## 记忆面板 (MemoryPanel)
@@ -746,6 +721,17 @@ class RightPanel(QWidget):
 - 编辑现有条目
 - 删除条目
 - 清空所有记忆
+- 调整记忆条目重要性（ImportanceSlider，0.0–1.0）
+
+### 记忆重要性
+
+每条记忆条目都带有一个重要性分数（importance，0.0–1.0），用于智能归档与显示：
+
+- **高 (≥ 0.8)**：核心偏好（绿色标记）
+- **中 (0.5–0.8)**：有用模式（橙色标记）
+- **低 (< 0.5)**：临时信息（灰色标记）
+
+重要性可通过 `MemoryPanel` 中的 `ImportanceSlider` 拖动调整，对应 `MemoryController.update_importance(category, index, importance)`，并通过 `RightPanel.memory_importance_changed(str, int, float)` 信号通知上层。
 
 ### 类别映射
 
@@ -1575,4 +1561,4 @@ class FileTreeSection(CollapsibleSection):
 - [01-overview.md](./01-overview.md) - 了解客户端整体架构
 - [03-controllers.md](./03-controllers.md) - 了解控制器层设计（BrowserController、ScheduleController）
 - [04-configuration.md](./04-configuration.md) - 了解配置管理（浏览器配置、schedules.json）
-- [05-client-lessons.md](./05-client-lessons.md) - 了解客户端开发经验教训（QSizePolicy、布局陷阱等）
+- [development_guide.md](./development_guide.md) - 了解客户端开发经验教训（QSizePolicy、布局陷阱等）

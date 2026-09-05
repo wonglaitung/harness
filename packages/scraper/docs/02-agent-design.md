@@ -88,6 +88,7 @@ BASE_SYSTEM_PROMPT = """# 信息提取代理
 1. **宁缺毋滥**：宁可漏掉也不要误报
 2. **时效性**：关注首次出现时间
 3. **可操作性**：读者能从情报中获得价值
+4. **区分热度与创新**：高热度 ≠ 高价值
 """
 ```
 
@@ -155,7 +156,7 @@ agent = IntelAgent(config, skill="ai-intelligence")
 # 自动加载: fetch_rss, fetch_hn, fetch_show_hn, fetch_github_trending, fetch_url, save_one_pager
 
 agent = IntelAgent(config, skill="hk-stocks-alpha")
-# 自动加载: fetch_hkex, fetch_financial_news, fetch_url, save_one_pager
+# 自动加载: fetch_hkex, fetch_financial_news, fetch_url, save_one_pager, read_history_report
 ```
 
 **skill 文件示例**：
@@ -237,7 +238,8 @@ def clear_session(self, session_id: str) -> None:
 ### 基本使用（工具自动选择）
 
 ```python
-from harness_scraper import IntelAgent, load_config
+from harness_scraper import IntelAgent
+from harness_scraper.config import load_config
 
 # 加载配置
 config = load_config()
@@ -256,7 +258,7 @@ print(result.content)
 # AI 情报（自动选择 6 个工具）
 agent = IntelAgent(config, skill="ai-intelligence")
 
-# 港股 Alpha（自动选择 4 个工具）
+# 港股 Alpha（自动选择 5 个工具）
 agent = IntelAgent(config, skill="hk-stocks-alpha")
 
 # 无技能（通用模式，只有 fetch_url）
@@ -346,7 +348,7 @@ class GoalAgent:
         self,
         goal: str,
         max_iterations: int = 20,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = 1800.0,
         custom_verifier: Callable | None = None,
     ) -> GoalResult:
         """

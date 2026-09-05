@@ -63,6 +63,7 @@ frontend/
  */
 export enum MessageType {
   // 请求类
+  AUTH = "auth",
   RUN_REQUEST = "run_request",
   INTERRUPT = "interrupt",
   PING = "ping",
@@ -77,6 +78,7 @@ export enum MessageType {
   TOOL_RESULT = "tool_result",
   PROGRESS = "progress",
   ERROR = "error",
+  INTERRUPTED = "interrupted",
   PONG = "pong",
 }
 
@@ -95,9 +97,9 @@ export interface MessageEnvelope {
 export interface RunRequest {
   prompt: string;
   session_id?: string;
-  model: string;
-  max_iterations: number;
-  temperature: number;
+  model?: string;
+  max_iterations?: number;
+  temperature?: number;
   system_prompt?: string;
 }
 

@@ -224,8 +224,8 @@ if perms.is_command_allowed("ls -la"):
 # tools: [read, grep, glob]
 # ---
 
-# 权限集合：进一步限制为只读
-agent = AgentHarness(permissions=PermissionSet.read_only())
+# 权限集合：通过 ToolContext.permissions 在工具中校验，而非作为 AgentHarness 构造参数
+permissions = PermissionSet.read_only()
 ```
 
 ## InputValidator（输入验证）
@@ -603,25 +603,29 @@ print(f"日志文件数: {stats['total_files']}, 总大小: {stats['total_size_m
 from harness.tools.permissions import PermissionSet
 
 # 只授予完成任务所需的最小权限
-agent = AgentHarness(
-    permissions=PermissionSet.read_only(paths=["/workspace/project"]),  # 只读权限
-)
+# 权限通过 ToolContext.permissions 在工具执行时校验，而非作为 AgentHarness 构造参数
+read_only = PermissionSet.read_only(paths=["/workspace/project"])  # 只读权限
 
 # 或使用沙箱权限
-agent = AgentHarness(
-    permissions=PermissionSet.sandbox(
-        workspace="/workspace",
-        allow_network=False,  # 禁用网络访问
-    )
+sandbox_perms = PermissionSet.sandbox(
+    workspace="/workspace",
+    allow_network=False,  # 禁用网络访问
 )
 ```
 
 ### 2. 沙箱隔离
 
 ```python
-# 始终启用沙箱（默认启用）
+# 始终启用沙箱（SecurityConfig，默认启用）
+from harness import HarnessConfig, SecurityConfig
+
 agent = AgentHarness(
-    config=HarnessConfig(sandbox_enabled=True),
+    config=HarnessConfig(
+        security=SecurityConfig(
+            enable_sandbox=True,
+            sandbox_blocked_commands=["rm -rf /", "sudo", "mkfs"],
+        ),
+    ),
 )
 ```
 
@@ -643,10 +647,14 @@ agent = AgentHarness(
 
 ```python
 # 设置成本上限，防止意外高额费用
+from harness import HarnessConfig, CostControlConfig
+
 agent = AgentHarness(
     config=HarnessConfig(
-        max_cost_per_run=5.0,  # 单次运行最多 $5
-        max_tokens_per_run=500000,
+        cost_control=CostControlConfig(
+            max_tokens_per_session=500000,
+            global_daily_budget_usd=5.0,
+        ),
     ),
 )
 ```

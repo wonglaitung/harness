@@ -502,10 +502,14 @@ from harness import AgentHarness
 # 默认文件系统后端
 agent = AgentHarness(memory_dir=".harness/memory")
 
-# 启用向量检索
+# 启用向量检索（通过 MemoryScoringConfig 配置，无需 vector_store 字段）
+from harness import HarnessConfig, MemoryScoringConfig
+
 agent = AgentHarness(
-    memory_dir=".harness/memory",
-    vector_store=True,  # 自动创建 VectorMemoryStore
+    config=HarnessConfig(
+        memory_dir=".harness/memory",
+        memory_scoring=MemoryScoringConfig(),  # 启用记忆评分与向量检索
+    )
 )
 ```
 
@@ -519,12 +523,12 @@ agent = AgentHarness(
 4. 原始消息仍可通过向量检索访问
 
 ```python
-# 在 AgentHarness 中配置压缩阈值
+# 在 AgentHarness 中配置上下文窗口（压缩阈值基于上下文窗口）
 from harness import AgentHarness, HarnessConfig
 
 config = HarnessConfig(
-    max_input_tokens=100000,  # 最大输入 token 数
-    # 当 token 数超过此阈值时自动触发压缩
+    context_window=100000,  # 上下文窗口大小，超出时触发压缩/降级
+    # 当 token 数接近上下文窗口时自动触发压缩
 )
 agent = AgentHarness(config=config)
 
@@ -545,35 +549,42 @@ agent = AgentHarness(config=config)
 from harness.memory.memory_file import MemoryFileManager, MemoryEntry, MemoryCategory, MemorySource
 from harness.memory.vector_store import VectorMemoryStore
 from harness.types import HookPoint, HookContext
+from harness.core.hooks import LifecycleHook, HookResult
 
 # 技能经验保存为记忆
-@agent.hook(HookPoint.AFTER_TOOL_EXECUTE)
-async def save_skill_experience(ctx: HookContext):
-    if ctx.tool_result and ctx.tool_result.is_error:
-        # 将错误经验保存到 MEMORY.md
-        manager = MemoryFileManager()
-        entry = MemoryEntry(
-            category=MemoryCategory.LEARNED_PATTERNS,
-            content=f"Avoid {ctx.tool_name} when {ctx.tool_result.error} occurs",
-            source=MemorySource.AGENT_OBSERVATION,
-            metadata={
-                "skill": "code-review",
-                "error": ctx.tool_result.error,
-                "tool": ctx.tool_name,
-            }
-        )
-        manager.add_entry(entry)
-    
-    # 向量检索技能内容
-    if ctx.tool_name == "code_review":
-        vector_store = VectorMemoryStore()
-        await vector_store.add_skill(
-            skill_name="code_review_pattern",
-            content=f"Code review pattern: {ctx.tool_result.content[:100]}...",
-            metadata={"session_id": ctx.session_id}
-        )
-    
-    return ctx
+class SaveSkillExperienceHook(LifecycleHook):
+    @property
+    def hook_points(self):
+        return [HookPoint.AFTER_TOOL_EXECUTE]
+
+    async def execute(self, ctx: HookContext) -> HookResult:
+        if ctx.tool_result and ctx.tool_result.is_error:
+            # 将错误经验保存到 MEMORY.md
+            manager = MemoryFileManager()
+            entry = MemoryEntry(
+                category=MemoryCategory.LEARNED_PATTERNS,
+                content=f"Avoid {ctx.tool_name} when {ctx.tool_result.error} occurs",
+                source=MemorySource.AGENT_OBSERVATION,
+                metadata={
+                    "skill": "code-review",
+                    "error": ctx.tool_result.error,
+                    "tool": ctx.tool_name,
+                }
+            )
+            manager.add_entry(entry)
+
+        # 向量检索技能内容
+        if ctx.tool_name == "code_review":
+            vector_store = VectorMemoryStore()
+            await vector_store.add_skill(
+                skill_name="code_review_pattern",
+                content=f"Code review pattern: {ctx.tool_result.content[:100]}...",
+                metadata={"session_id": ctx.session_id}
+            )
+
+        return HookResult.continue_()
+
+agent.add_hook(SaveSkillExperienceHook())
 ```
 
 ## 全局记忆配置

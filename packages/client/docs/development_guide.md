@@ -517,21 +517,32 @@ class MCPToolWrapper:
 from harness.tools.builtins import (
     ReadTool,
     WriteTool,
-    EditTool,
     GlobTool,
     GrepTool,
-    BashTool,  # 必须
+    BashTool,  # 必须（技能执行必需）
+    WebFetchTool,
+    WebSearchTool,
+    WebToMarkdownTool,
+    UpdateCoreMemoryTool,
 )
 
-def _init_tools(self) -> list[Tool]:
-    return [
+async def initialize(self, mcp_tools: list = None):
+    tools = [
         ReadTool(),
         WriteTool(),
-        EditTool(),
         GlobTool(),
         GrepTool(),
         BashTool(),  # 技能执行必需
+        WebSearchTool(),
+        WebFetchTool(),
+        WebToMarkdownTool(),
     ]
+    # auto_update_memory 启用时附加
+    if self.config.auto_update_memory:
+        tools.append(UpdateCoreMemoryTool())
+    # 浏览器已启动时附加浏览器工具
+    if self.browser_controller.is_active():
+        tools.extend(self.browser_controller.get_browser_tools())
 ```
 
 ### 4. 技能文档规范
@@ -638,18 +649,31 @@ packages/client/src/harness_client/
 │   ├── main_window.py            # 主窗口（协调器）
 │   ├── sidebar.py                # 左侧导航
 │   ├── chat_panel.py             # 对话面板
-│   ├── right_panel.py            # 右侧面板
+│   ├── right_panel.py            # 右侧面板（含 MoreToolsSection）
 │   ├── settings_dialog.py        # 设置对话框
 │   ├── mcp_panel.py              # MCP 管理面板
 │   ├── memory_panel.py           # 记忆管理面板
+│   ├── monitoring_panel.py       # 监控面板
+│   ├── schedule_panel.py         # 排程面板
+│   ├── attachment_preview.py     # 附件预览
+│   ├── dialog_styles.py          # 对话框统一样式
+│   ├── file_completer.py         # 文件名自动补全
+│   ├── icons.py                  # 图标绘制
+│   ├── interactive.py            # 交互组件
+│   ├── skill_completer.py        # 技能自动补全
+│   ├── skill_dialog.py           # 技能对话框
+│   ├── toggle_switch.py          # 开关组件
 │   └── theme_aware.py            # 主题感知基类
 │
 ├── controllers/                  # 控制器（业务逻辑）
 │   ├── chat_controller.py        # 对话控制
 │   ├── session_manager.py        # 会话管理（单一数据源）
 │   ├── mcp_controller.py         # MCP 控制
-│   ├── skill_controller.py       # 技能控制
-│   └── memory_controller.py      # 记忆控制
+│   ├── skill_controller.py        # 技能控制
+│   ├── memory_controller.py       # 记忆控制
+│   ├── browser_controller.py     # 浏览器控制
+│   ├── monitoring_controller.py  # 监控控制
+│   └── schedule_controller.py    # 排程控制
 │
 ├── themes/                       # 主题系统
 │   ├── __init__.py               # 监听器机制

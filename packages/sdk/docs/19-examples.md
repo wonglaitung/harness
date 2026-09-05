@@ -223,6 +223,7 @@ agent.add_hook(PreventEarlyExitHook())
 from harness import AgentHarness
 from harness.core.hooks import HookPoint
 from harness.core.self_verification import SelfVerificationHook
+from harness.core.hooks import LifecycleHook, HookResult
 
 agent = AgentHarness()
 verification = SelfVerificationHook(
@@ -231,17 +232,23 @@ verification = SelfVerificationHook(
     max_retries=3,
 )
 
-@agent.hook(HookPoint.AFTER_TOOL_EXECUTE)
-async def auto_verify(ctx: HookContext):
-    """写文件后自动运行测试"""
-    if ctx.tool_call and ctx.tool_call.get("name") == "write":
-        result = await verification.verify(ctx)
-        if not result.passed:
-            ctx.messages.append({
-                "role": "user",
-                "content": f"测试失败，请修复：\n{result.output}"
-            })
-    return ctx
+class AutoVerifyHook(LifecycleHook):
+    @property
+    def hook_points(self):
+        return [HookPoint.AFTER_TOOL_EXECUTE]
+
+    async def execute(self, ctx: HookContext) -> HookResult:
+        """写文件后自动运行测试"""
+        if ctx.tool_name == "write" and ctx.tool_result is not None:
+            result = await verification.verify(ctx)
+            if not result.passed and ctx.messages is not None:
+                ctx.messages.append({
+                    "role": "user",
+                    "content": f"测试失败，请修复：\n{result.output}"
+                })
+        return HookResult.continue_()
+
+agent.add_hook(AutoVerifyHook())
 
 result = await agent.run("实现一个计算器类并确保测试通过")
 ```
@@ -264,7 +271,7 @@ ralph = RalphLoop(
 
 result = await ralph.run("重构整个认证模块，添加 OAuth2 支持，确保所有测试通过")
 print(f"完成步数: {result.iterations}")
-print(f"总成本: ${result.total_cost:.4f}")
+print(f"Token 使用: 输入 {result.token_usage.input_tokens}, 输出 {result.token_usage.output_tokens}")
 ```
 
 ## Sub-Agent
@@ -295,9 +302,12 @@ for r in results:
 ### 使用技能
 
 ```python
+from pathlib import Path
 from harness import AgentHarness
 
-agent = AgentHarness(skill_dirs=[".harness/skills"])
+agent = AgentHarness()
+# 从指定目录发现技能（自动加载元数据，匹配时注入 system prompt）
+agent.load_skills_from_dir(Path(".harness/skills"))
 
 # 指定技能
 result = await agent.run("审查这段代码", skills=["code-review"])
@@ -438,24 +448,28 @@ agent.triggers.register(github)
 from harness import AgentHarness
 from harness.security.sandbox import PermissionSet, PermissionLevel
 
-agent = AgentHarness(
-    permissions=PermissionSet(
-        max_permission=PermissionLevel.READ,
-        denied_tools={"bash"},
-    ),
+# 权限通过 ToolContext.permissions 在工具执行时校验，
+# 可在自定义工具中根据 PermissionSet 判断，而非作为 AgentHarness 构造参数
+from harness.security.sandbox import PermissionSet, PermissionLevel
+
+permissions = PermissionSet(
+    max_permission=PermissionLevel.READ,
+    denied_tools={"bash"},
 )
 ```
 
 ### 成本控制
 
 ```python
-from harness import AgentHarness, HarnessConfig
+from harness import AgentHarness, HarnessConfig, CostControlConfig
 
 agent = AgentHarness(
     config=HarnessConfig(
-        max_cost_per_run=5.0,
-        max_tokens_per_run=500000,
         max_iterations=30,
+        cost_control=CostControlConfig(
+            max_tokens_per_session=500000,
+            global_daily_budget_usd=5.0,
+        ),
     ),
 )
 ```
@@ -494,9 +508,9 @@ mock = MockHarness(responses=[
 result = await mock.run("分析代码")
 assert result.content == "分析完成"
 
-# 期望-响应模式
+# 使用 add_response 设置响应（MockHarness 没有 expect/respond API）
 mock = MockHarness()
-mock.expect("分析代码").respond("代码质量良好")
+mock.add_response(MockResponse(content="代码质量良好"))
 result = await mock.run("分析代码")
 assert result.content == "代码质量良好"
 ```
@@ -770,7 +784,7 @@ result = await agent.run_goal(
 print(f"状态: {result.status.value}")
 print(f"迭代次数: {result.total_iterations}")
 print(f"上下文重置: {result.context_resets}")
-print(f"Token 使用: {result.total_tokens}")
+print(f"Token 使用: 输入 {result.total_tokens.input_tokens}, 输出 {result.total_tokens.output_tokens}")
 print(f"执行时长: {result.duration_seconds:.1f}秒")
 
 # 验证日志

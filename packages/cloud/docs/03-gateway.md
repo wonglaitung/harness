@@ -10,13 +10,11 @@ Gateway 是 Harness Cloud 的统一入口，负责容器调度、消息路由和
 src/harness_cloud/gateway/
 ├── __init__.py
 ├── main.py              # Gateway FastAPI 入口
-├── container_manager.py # 容器管理抽象接口（新增）
+├── container_manager.py # 容器管理抽象接口
 ├── docker_manager.py    # Docker 实现
-├── k8s_manager.py       # Kubernetes 实现（新增）
 ├── tunnel.py            # WebSocket 隧道
 ├── auth.py              # JWT 认证
-├── rate_limiter.py      # Redis 限流器（修订）
-├── file_storage.py      # MinIO 文件存储（新增）
+├── rate_limiter.py      # Redis 限流器
 └── config.py            # Gateway 配置
 ```
 
@@ -77,7 +75,7 @@ class ContainerManager(ABC):
 
 ```python
 @dataclass
-class ContainerConfig:
+class DockerContainerConfig:
     """容器资源配置"""
     
     image: str = "harness-agent:latest"
@@ -85,6 +83,10 @@ class ContainerConfig:
     memory_limit: str = "4g"
     memory_swap: str = "4g"
     timeout_seconds: int = 600   # 10 分钟超时
+    pids_limit: int = 100        # 进程数限制
+    internal_network: str = "harness-net"
+    read_only_root_fs: bool = True
+    cap_drop: list[str] = ["ALL"]
 ```
 
 ### 容器信息
@@ -116,11 +118,12 @@ class DockerManager:
     - 超时清理
     """
     
-    def __init__(self, config: ContainerConfig = None):
-        self.config = config or ContainerConfig()
+    def __init__(self, gateway_config: GatewayConfig | None = None):
+        self.gateway_config = gateway_config or GatewayConfig()
+        self.config = self.gateway_config.container_config
         self.client = docker.from_env()
         self._containers: dict[str, ContainerInfo] = {}
-        self._cleanup_task: asyncio.Task = None
+        self._cleanup_task: asyncio.Task | None = None
     
     async def start(self):
         """启动后台清理任务"""
@@ -322,44 +325,64 @@ async def _forward_to_frontend(self):
 ```python
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+from pydantic import BaseModel
+
+from harness_cloud.gateway.config import GatewayConfig
 
 
-@dataclass
-class User:
+class User(BaseModel):
+    """JWT 中的用户信息（注意：是 pydantic BaseModel，不是 dataclass）"""
     id: str
-    username: str
-    roles: list[str]
+    username: str = ""
+    roles: list[str] = []
 
 
-async def get_current_user(token: str) -> User:
-    """验证 JWT Token"""
+def verify_token(token: str, config: GatewayConfig) -> User:
+    """验证 JWT Token 并返回 User
+
+    注意：测试模式下若 jwt_secret 为默认值，任意非空 token 都会被接受并返回匿名用户。
+    """
+    # 测试模式：默认 secret 下接受任意非空 token
+    if config.jwt_secret == "change-me-in-production" and token:
+        return User(id="anonymous", username="test-user", roles=["user"])
+
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm],
+            config.jwt_secret,
+            algorithms=[config.jwt_algorithm],
         )
-        
         return User(
             id=payload["sub"],
             username=payload.get("username", ""),
             roles=payload.get("roles", []),
         )
-    except JWTError:
-        raise HTTPException(401, "Invalid token")
+    except JWTError as e:
+        raise ValueError(f"Invalid token: {e}") from e
 ```
 
 ### 创建 Token
 
 ```python
-def create_token(user_id: str, expires_hours: int = 24) -> str:
-    """创建 JWT Token"""
+def create_token(
+    user_id: str,
+    config: GatewayConfig,
+    expires_minutes: int | None = None,
+) -> str:
+    """创建 JWT Token
+
+    Args:
+        user_id: 用户标识
+        config: Gateway 配置（提供 jwt_secret / jwt_algorithm / jwt_expire_minutes）
+        expires_minutes: Token 过期时间（默认取 config.jwt_expire_minutes）
+    """
+    expires = expires_minutes or config.jwt_expire_minutes
     payload = {
         "sub": user_id,
-        "exp": datetime.utcnow() + timedelta(hours=expires_hours),
+        "exp": datetime.utcnow() + timedelta(minutes=expires),
         "iat": datetime.utcnow(),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, config.jwt_secret, algorithm=config.jwt_algorithm)
 ```
 
 ## Gateway FastAPI 入口
@@ -371,22 +394,33 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPExcept
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from harness_cloud.gateway.docker_manager import DockerManager, ContainerConfig
+from harness_cloud.gateway.config import GatewayConfig, Settings
+from harness_cloud.gateway.docker_manager import DockerManager
+from harness_cloud.gateway.container_manager import ContainerManager
+from harness_cloud.gateway.rate_limiter import RedisRateLimiter
 from harness_cloud.gateway.tunnel import WebSocketTunnel
-from harness_cloud.gateway.auth import get_current_user, User
+from harness_cloud.gateway.auth import User, verify_token
 
+
+# 配置
+settings = Settings.from_env()
+config = GatewayConfig(
+    jwt_secret=settings.jwt_secret or config.jwt_secret,
+    redis_url=settings.redis_url or config.redis_url,
+    environment=settings.environment or config.environment,
+)
 
 # 全局管理器
-docker_manager: DockerManager = None
+container_manager: ContainerManager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global docker_manager
-    docker_manager = DockerManager()
-    await docker_manager.start()
+    global container_manager
+    container_manager = DockerManager(gateway_config=config)
+    await container_manager.start()
     yield
-    await docker_manager.stop()
+    await container_manager.stop()
 
 
 app = FastAPI(title="Harness Gateway", lifespan=lifespan)
@@ -408,20 +442,22 @@ async def health_check():
     """健康检查"""
     return {
         "status": "healthy",
-        "containers": len(docker_manager._containers),
+        "containers": len(container_manager._containers),
     }
 
 
 @app.post("/api/sessions")
-async def create_session(user: User = Depends(get_current_user)):
-    """创建会话"""
+async def create_session(user: User = Depends(lambda: None)):  # 占位鉴权
+    """创建会话（MVP 阶段无鉴权）"""
+    user_id = user.id if user else "anonymous"
+
     session_id = str(uuid.uuid4())[:8]
-    
-    info = await docker_manager.create_container(
+
+    info = await container_manager.create_container(
         session_id=session_id,
-        user_id=user.id,
+        user_id=user_id,
     )
-    
+
     return {
         "session_id": session_id,
         "container_id": info.container_id[:12],
@@ -431,17 +467,18 @@ async def create_session(user: User = Depends(get_current_user)):
 @app.delete("/api/sessions/{session_id}")
 async def destroy_session(
     session_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(lambda: None),
 ):
     """销毁会话"""
-    info = docker_manager.get_container(session_id)
+    user_id = user.id if user else "anonymous"
+    info = container_manager.get_container(session_id)
     if not info:
         raise HTTPException(404, "Session not found")
-    
-    if info.user_id != user.id:
+
+    if info.user_id != user_id and user_id != "anonymous":
         raise HTTPException(403, "Not authorized")
-    
-    await docker_manager.destroy_container(session_id)
+
+    await container_manager.destroy_container(session_id)
     return {"status": "destroyed"}
 ```
 
@@ -449,51 +486,65 @@ async def destroy_session(
 
 ```python
 @app.websocket("/ws/session/{session_id}")
-async def session_websocket(
-    websocket: WebSocket,
-    session_id: str,
-    token: str,
-):
+async def session_websocket(websocket: WebSocket, session_id: str):
     """
     会话 WebSocket 端点
-    
+
     流程：
-    1. 验证 token
-    2. 获取容器
-    3. 建立隧道
+    1. 接受连接
+    2. 等待首条 auth 消息（token 在消息体内，不在 URL）
+    3. 验证 token（JWT）
+    4. 验证会话所有权
+    5. 建立隧道
     """
     await websocket.accept()
-    
+
+    # 网关层：等待首条 JWT 鉴权消息
+    try:
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+        auth_data = json.loads(auth_msg)
+        if auth_data.get("type") != "auth":
+            await websocket.close(code=4001, reason="Expected auth message")
+            return
+        token = auth_data.get("token", "")
+    except asyncio.TimeoutError:
+        await websocket.close(code=4001, reason="Auth timeout")
+        return
+    except json.JSONDecodeError:
+        await websocket.close(code=4001, reason="Invalid auth message")
+        return
+
     # 认证
     try:
-        user = await get_current_user(token)
-    except Exception:
+        user = verify_token(token, config)
+    except ValueError:
         await websocket.close(code=4001, reason="Authentication failed")
         return
-    
+
     # 获取容器
-    info = docker_manager.get_container(session_id)
+    info = container_manager.get_container(session_id)
     if not info:
         await websocket.close(code=4004, reason="Session not found")
         return
-    
-    if info.user_id != user.id:
+
+    if info.user_id != user.id and user.id != "anonymous":
         await websocket.close(code=4003, reason="Not authorized")
         return
-    
+
     # 更新活动时间
     info.last_activity = datetime.now()
-    
+
     # 建立隧道
-    container_url = docker_manager.get_container_url(session_id)
+    container_url = container_manager.get_container_url(session_id)
     tunnel = WebSocketTunnel(container_url)
-    
+
     try:
         await tunnel.connect(websocket)
     except WebSocketDisconnect:
         pass
     finally:
-        info.last_activity = datetime.now()
+        # WebSocket 断开后标记容器为 draining
+        await container_manager.mark_draining(session_id)
 ```
 
 ## 配置
@@ -501,29 +552,34 @@ async def session_websocket(
 ### config.py
 
 ```python
-from pydantic_settings import BaseSettings
+import os
+from dataclasses import dataclass
 
 
-class Settings(BaseSettings):
-    """Gateway 配置"""
-    
-    # JWT
-    jwt_secret: str = "your-secret-key"
-    jwt_algorithm: str = "HS256"
-    
-    # Docker
-    container_image: str = "harness-agent:latest"
-    container_timeout: int = 600
-    
-    # 服务
-    host: str = "0.0.0.0"
-    port: int = 8080
-    
-    class Config:
-        env_prefix = "HARNESS_"
+@dataclass
+class Settings:
+    """
+    从环境变量读取配置（HARNESS_ 前缀）
+
+    - HARNESS_JWT_SECRET
+    - HARNESS_REDIS_URL
+    - HARNESS_ENVIRONMENT
+    """
+
+    jwt_secret: str | None = None
+    redis_url: str | None = None
+    environment: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            jwt_secret=os.getenv("HARNESS_JWT_SECRET"),
+            redis_url=os.getenv("HARNESS_REDIS_URL"),
+            environment=os.getenv("HARNESS_ENVIRONMENT"),
+        )
 
 
-settings = Settings()
+settings = Settings.from_env()
 ```
 
 ## 启动命令
@@ -605,7 +661,7 @@ uid=1000(marcowong) gid=1000(marcowong) groups=1001(docker)
 
 ```python
 @dataclass
-class ContainerConfig:
+class DockerContainerConfig:
     """容器资源配置（含安全加固）"""
     
     image: str = "harness-agent:latest"
@@ -616,6 +672,7 @@ class ContainerConfig:
     
     # 安全加固
     pids_limit: int = 100           # 进程数限制
+    internal_network: str = "harness-net"
     read_only_root_fs: bool = True  # 只读文件系统
     cap_drop: list[str] = ["ALL"]   # 移除所有能力
 ```
@@ -646,16 +703,17 @@ async def create_container(
             "USER_ID": user_id,
         },
         volumes=volumes,
-        
+
         # 资源限制
         cpu_quota=self.config.cpu_quota,
         mem_limit=self.config.memory_limit,
         memswap_limit=self.config.memory_swap,
         pids_limit=self.config.pids_limit,  # 进程数限制
-        
-        # 网络隔离
-        network_mode="none",
-        
+
+        # 网络隔离（ADR-008）：使用内部 bridge 网络 harness-net
+        # 注意：不使用 internal=True，因为 Agent 需要访问外部 LLM API
+        network=self.config.internal_network,
+
         # 安全加固
         security_opt=[
             "no-new-privileges",           # 禁止提权
@@ -663,7 +721,7 @@ async def create_container(
         ],
         cap_drop=self.config.cap_drop,       # 移除能力
         read_only=self.config.read_only_root_fs,
-        
+
         remove=False,
     )
     ...
@@ -724,7 +782,7 @@ rate_limiter = RedisRateLimiter(
 )
 
 @app.post("/api/sessions")
-async def create_session(user: User = Depends(get_current_user)):
+async def create_session(user: User = Depends(lambda: None)):  # 占位鉴权
     if not rate_limiter.check(user.id):
         raise HTTPException(429, "Rate limit exceeded")
     ...
@@ -733,24 +791,29 @@ async def create_session(user: User = Depends(get_current_user)):
 ## 创建 Token（短期有效）
 
 ```python
-def create_token(user_id: str, expires_minutes: int = 15) -> str:
+def create_token(
+    user_id: str,
+    config: GatewayConfig,
+    expires_minutes: int | None = None,
+) -> str:
     """
     创建 JWT Token
-    
-    推荐：短期 Token（15分钟）+ 刷新机制
+
+    推荐：短期 Token（默认 config.jwt_expire_minutes=15分钟）+ 刷新机制
     """
+    expires = expires_minutes or config.jwt_expire_minutes
     payload = {
         "sub": user_id,
-        "exp": datetime.utcnow() + timedelta(minutes=expires_minutes),
+        "exp": datetime.utcnow() + timedelta(minutes=expires),
         "iat": datetime.utcnow(),
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, config.jwt_secret, algorithm=config.jwt_algorithm)
 
 
-def refresh_token(token: str) -> str:
+def refresh_token(token: str, config: GatewayConfig) -> str:
     """刷新 Token"""
-    user = get_current_user_sync(token)
-    return create_token(user.id)
+    user = verify_token(token, config)
+    return create_token(user.id, config)
 ```
 
 ## 安全检查清单（修订版）
@@ -775,9 +838,11 @@ def refresh_token(token: str) -> str:
 - [ ] Docker Rootless 模式
 - [ ] Output Filtering（敏感数据过滤）
 
-## K8sPodManager - Kubernetes 实现（新增）
+## K8sPodManager - Kubernetes 实现（设计提案，未实现）
 
-> 用于标准 K8s 集群，无需 docker.sock。
+> ⚠️ **NOT IMPLEMENTED (设计提案)**：`gateway/k8s_manager.py` 当前不存在，Gateway 仅提供 `DockerManager`（Docker 环境）。环境选择通过 `GatewayConfig.environment`（来自 `HARNESS_ENVIRONMENT`）完成，但代码中尚未实现 K8s 分支。
+>
+> 以下是参考设计，用于标准 K8s 集群，无需 docker.sock。
 
 ```python
 # gateway/k8s_manager.py
@@ -855,9 +920,9 @@ class K8sPodManager(ContainerManager):
         return f"ws://harness-{session_id}.{self.namespace}.svc.cluster.local:8000/ws/run"
 ```
 
-## MinIO 文件存储（修订版）
+## MinIO 文件存储（设计提案，未实现）
 
-> ⚠️ **修订**：使用预签名 URL，前端直传 MinIO，避免大文件经过 Gateway 内存。
+> ⚠️ **NOT IMPLEMENTED (设计提案)**：`gateway/file_storage.py` 当前不存在，MinIO 文件存储尚未实现。以下是参考设计，使用预签名 URL，前端直传 MinIO，避免大文件经过 Gateway 内存。
 
 ```python
 # gateway/file_storage.py
@@ -886,16 +951,18 @@ class FileStorage:
 
 ```python
 @app.post("/api/files/presign-upload")
-async def get_upload_url(filename: str, user: User = Depends(get_current_user)):
-    """获取预签名上传 URL"""
-    object_name = f"{user.id}/{uuid.uuid4().hex[:8]}_{filename}"
+async def get_upload_url(filename: str, user: User = Depends(lambda: None)):  # 占位鉴权
+    """获取预签名上传 URL（设计提案）"""
+    user_id = user.id if user else "anonymous"
+    object_name = f"{user_id}/{uuid.uuid4().hex[:8]}_{filename}"
     upload_url = file_storage.get_presigned_put_url(object_name)
     return {"upload_url": upload_url, "object_name": object_name}
 
 @app.post("/api/files/presign-download")
-async def get_download_url(object_name: str, user: User = Depends(get_current_user)):
-    """获取预签名下载 URL"""
-    if not object_name.startswith(f"{user.id}/"):
+async def get_download_url(object_name: str, user: User = Depends(lambda: None)):  # 占位鉴权
+    """获取预签名下载 URL（设计提案）"""
+    user_id = user.id if user else "anonymous"
+    if not object_name.startswith(f"{user_id}/"):
         raise HTTPException(403, "Access denied")
     download_url = await file_storage.get_download_url(object_name)
     return {"download_url": download_url}
@@ -920,30 +987,37 @@ async def session_websocket(websocket: WebSocket, session_id: str):
 
     # Gateway 层：等待首条 JWT 鉴权消息
     try:
-        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
         auth_data = json.loads(auth_msg)
-        if auth_data.get("type") != "gateway_auth":
-            await websocket.close(code=4001, reason="Expected gateway_auth message")
+        if auth_data.get("type") != "auth":
+            await websocket.close(code=4001, reason="Expected auth message")
             return
-        token = auth_data.get("token")
-    except Exception:
+        token = auth_data.get("token", "")
+    except asyncio.TimeoutError:
         await websocket.close(code=4001, reason="Auth timeout")
         return
+    except json.JSONDecodeError:
+        await websocket.close(code=4001, reason="Invalid auth message")
+        return
 
+    # 验证 JWT
     try:
-        user = await get_current_user(token)
-    except Exception:
+        user = verify_token(token, config)
+    except ValueError:
         await websocket.close(code=4001, reason="Authentication failed")
         return
 
     # 验证会话所有权
-    info = docker_manager.get_container(session_id)
-    if not info or info.user_id != user.id:
+    info = container_manager.get_container(session_id)
+    if not info:
+        await websocket.close(code=4004, reason="Session not found")
+        return
+    if info.user_id != user.id and user.id != "anonymous":
         await websocket.close(code=4003, reason="Not authorized")
         return
 
     # 建立隧道，透传所有后续消息（包括 Agent 的 auth 消息）
-    container_url = docker_manager.get_container_url(session_id)
+    container_url = container_manager.get_container_url(session_id)
     tunnel = WebSocketTunnel(container_url)
     await tunnel.connect(websocket)
 ```
@@ -952,22 +1026,22 @@ async def session_websocket(websocket: WebSocket, session_id: str):
 
 ### 创建会话
 
-```bash
-# 获取 JWT token
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "test", "password": "test"}' | jq -r '.token')
+> ⚠️ **注意**：Gateway 没有 `/api/auth/login` 路由。MVP 阶段 `/api/sessions` 使用占位鉴权（`Depends(lambda: None)`，无需 token），且 `verify_token` 在默认 `jwt_secret` 下接受任意非空 token 并返回匿名用户。
 
-# 创建会话
-curl -X POST http://localhost:8080/api/sessions \
-  -H "Authorization: Bearer $TOKEN"
+```bash
+# 创建会话（MVP 阶段无需鉴权）
+curl -X POST http://localhost:8080/api/sessions
 # Response: {"session_id": "abc123", "container_id": "a1b2c3d4"}
 
-# 连接 WebSocket（Gateway 鉴权）
+# 健康检查
+curl http://localhost:8080/health
+# Response: {"status": "healthy", "containers": 1}
+
+# 连接 WebSocket（Gateway 鉴权：首条消息携带 JWT）
 wscat -c "ws://localhost:8080/ws/session/abc123"
 
-# Gateway 鉴权（首条消息）
-> {"type": "gateway_auth", "token": "$TOKEN"}
+# Gateway 鉴权（首条消息，type 必须为 "auth"）
+> {"type": "auth", "token": "$TOKEN"}
 
 # Agent 鉴权（API Key）
 > {"type": "auth", "payload": {"api_key": "sk-ant-xxx", "provider": "anthropic"}}
@@ -995,13 +1069,12 @@ docker exec harness-abc123 cat /sys/fs/cgroup/pids/max
 ### Rate Limit 验证
 
 ```bash
-# 连续请求直到触发限制
+# 连续请求直到触发限制（MVP 阶段匿名用户不触发限流）
 for i in {1..110}; do
-  curl -X POST http://localhost:8080/api/sessions \
-    -H "Authorization: Bearer $TOKEN"
+  curl -X POST http://localhost:8080/api/sessions
 done
 
-# 预期：第 101 次返回 429 Too Many Requests
+# 预期：第 101 次返回 429 Too Many Requests（已鉴权用户）
 ```
 
 ## 下一步

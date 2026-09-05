@@ -223,7 +223,17 @@ class AgentHarness:
 
 ### Provider 自动检测
 
-如果不指定 `provider`，SDK 根据 `model` 名称自动检测：
+`HarnessConfig.provider` 默认为 `"auto"`，此时 SDK 根据 `model` 名称自动检测提供商。
+但 `AgentHarness.__init__` 的 `provider` 参数默认值为 `"anthropic"`——这意味着在直接构造
+`AgentHarness` 时，自动检测**不会发生**，SDK 会按 `provider="anthropic"` 创建客户端。
+
+因此：
+
+- `AgentHarness(model="claude-sonnet-4-6")` → 正常（anthropic 默认匹配）
+- `AgentHarness(model="gpt-4o")` → **错误**，会被当作 Anthropic 客户端调用。请显式设置
+  `provider="openai"`（或 `AgentHarness(config=HarnessConfig(model="gpt-4o"))`，此时 `provider="auto"` 会正确检测）
+- 想对任何模型启用自动检测：`AgentHarness(model="gpt-4o", provider="auto")` 或
+  `AgentHarness(config=HarnessConfig(model="gpt-4o", provider="auto"))`
 
 | model 前缀 | provider |
 |------------|----------|
@@ -238,7 +248,7 @@ class AgentHarness:
 ```python
 async def run(
     self,
-    prompt: str,                     # 用户输入
+    prompt: str | list[dict[str, Any]],  # 用户输入（支持多模态 list[dict]）
     session_id: str | None = None,   # 会话 ID（用于对话连续性）
     on_progress: ProgressCallback | None = None, # 进度事件回调
     verbose: bool = False,           # 如果为 True，在控制台打印进度
@@ -300,8 +310,9 @@ async def stream(
 ```python
 async def run_goal(
     self,
-    goal: str | GoalConfig,          # 目标描述或配置
+    goal: str,                        # 目标描述
     session_id: str | None = None,   # 会话 ID（用于对话连续性）
+    success_criteria: str | None = None,  # 成功标准
     custom_verifier: Callable | None = None,  # 自定义验证函数
     max_iterations: int = 50,        # 最大迭代次数
     max_context_resets: int = 5,     # 最大上下文重置次数
@@ -678,50 +689,73 @@ from harness.sdk.config import HarnessConfig
 class HarnessConfig:
     # LLM 配置
     model: str = "claude-sonnet-4-6"
-    provider: str | None = None      # 自动检测
     api_key: str | None = None
-    base_url: str | None = None
-    context_window: int = 200000     # 模型上下文窗口大小
-    max_tokens: int = 4096           # 最大输出 token（0 = 自动）
+    provider: str = "auto"           # "anthropic", "openai", "auto" 自动检测（见下方说明）
+    base_url: str | None = None      # 自定义 API 端点（本地 LLM、Azure 等）
 
     # 兼容性配置
     tool_result_role: str = "tool"   # 工具结果角色："tool" (原生) 或 "user" (兼容模式)
 
-    # Agent Loop 配置
-    max_iterations: int = 10         # 最大迭代次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15）
-    max_input_tokens: int = 100000
-
-    # 成本控制
-    max_cost_per_run: float = 10.0   # USD
-    max_tokens_per_run: int = 1000000
-
-    # 步骤预算控制（限制迭代和工具调用次数）
-    step_budget: StepBudgetConfig | None = None
+    # 上下文配置（新）
+    context_window: int | str = "auto"  # "auto", "32k", "64k", "128k", "200k", 或 int
+    max_tokens: int | str = "auto"       # 输出 token："auto" 或 int
+    temperature: float = 1.0
 
     # 记忆配置
     memory_dir: str = ".harness/memory"
+    session_window: int = 100        # 保留的消息数
     memory_md_path: Path | None = None  # 全局 MEMORY.md 文件路径
-    vector_store: bool = False
 
-    # 技能配置
-    skill_dirs: list[str] = field(default_factory=list)
+    # 工具配置
+    sandbox_workspace: str | None = None
+    enable_network: bool = False
 
-    # 安全配置
-    sandbox_enabled: bool = True
-    bash_timeout: int = 30000        # 毫秒
-    bash_blacklist: list[str] = field(default_factory=lambda: [
-        "rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:",
-    ])
+    # Agent Loop 配置
+    max_iterations: int = 10         # 最大迭代次数（业界标准：OpenAI Agents SDK: 10, LangChain: 10-15）
+    tool_timeout: float = 30.0       # 单工具超时（秒）
 
-    # 模型预设
-    model_presets: dict[str, dict] = field(default_factory=dict)
+    # 可选配置
+    system_prompt: str = ""          # 为空则不发送系统提示
+    extra_config: dict[str, Any] = field(default_factory=dict)
 
     # 文档大小检查
     max_document_size: int = 10 * 1024 * 1024  # 10MB, 单个文档解码后大小限制
     max_total_documents_size: int = 20 * 1024 * 1024  # 20MB, 所有文档总大小限制
     document_size_action: Literal["warn", "error", "truncate"] = "warn"  # 超限时的行为
     document_token_warning_ratio: float = 0.5  # 文档占用上下文窗口比例警告阈值
+
+    # 安全配置
+    security: SecurityConfig | None = None
+
+    # 成本控制
+    cost_control: CostControlConfig | None = None
+
+    # 可观测性
+    observability: ObservabilityConfig | None = None
+
+    # 存储
+    storage: StorageConfig | None = None
+
+    # 输出卸载
+    offload: OffloadConfig | None = None
+
+    # 步骤预算控制（限制迭代和工具调用次数）
+    step_budget: StepBudgetConfig | None = None
+
+    # Guardrails（PII 检测和内容安全）
+    guardrails: Any = None  # GuardrailConfig from harness.guardrails
+
+    # 路由（CPU Router 成本优化）
+    routing: RoutingConfig | None = None
+
+    # 记忆评分（Retrieval Strength 和 Archive）
+    memory_scoring: MemoryScoringConfig | None = None
 ```
+
+> **注意**：`HarnessConfig` 没有提供以下虚构字段，传入会抛出 `TypeError`：
+> `max_input_tokens`、`max_cost_per_run`、`max_tokens_per_run`、`vector_store`、
+> `skill_dirs`、`sandbox_enabled`、`bash_timeout`、`bash_blacklist`、`model_presets`。
+> 沙箱相关配置请使用 `SecurityConfig`（见下文），成本限制请使用 `CostControlConfig`。
 
 ### step_budget 步骤预算控制
 
@@ -870,21 +904,27 @@ agent = AgentHarness(config=config)
 
 ### 模型预设
 
+`HarnessConfig` **没有** `model_presets` 字段。模型预设通过 `harness.model_presets` 模块
+统一管理，并在 `provider="auto"` 时自动用于提供商检测和上下文窗口推断：
+
 ```python
-config = HarnessConfig(
-    model_presets={
-        "fast": {"model": "claude-haiku-4-5", "max_tokens": 2048},
-        "standard": {"model": "claude-sonnet-4-6", "max_tokens": 4096},
-        "powerful": {"model": "claude-opus-4-6", "max_tokens": 8192},
-    }
+from harness.model_presets import (
+    MODEL_PRESETS,
+    DEFAULT_PRESET,
+    get_model_preset,
+    parse_context_window,
+    get_default_output_tokens,
 )
 
-agent = AgentHarness(config=config)
+preset = get_model_preset("claude-sonnet-4-6")
+print(preset.provider)              # "anthropic"
+print(preset.context_window)        # 200000
+print(get_default_output_tokens("gpt-4o"))  # 4096
 ```
 
 ### max_tokens 自动模式
 
-当 `max_tokens = 0` 时，SDK 根据模型自动设置：
+当 `max_tokens = "auto"` 时（默认值），SDK 根据模型自动设置：
 
 | 模型 | max_tokens |
 |------|------------|
@@ -902,11 +942,16 @@ agent = AgentHarness(config=config)
 model: claude-sonnet-4-6
 max_iterations: 100
 memory_dir: .harness/memory
-vector_store: true
-skill_dirs:
-  - .harness/skills
-sandbox_enabled: true
-bash_timeout: 60000
+context_window: auto        # "auto" / "32k" / "64k" / "128k" / "200k" / int
+max_tokens: auto            # "auto" 或 int
+temperature: 1.0
+enable_network: false
+# 安全配置（嵌套对象，而非 sandbox_enabled/bash_timeout/bash_blacklist）
+security:
+  enable_sandbox: true
+  sandbox_blocked_commands:
+    - "rm -rf /"
+    - "sudo"
 ```
 
 ```python
@@ -929,13 +974,12 @@ class LLMClient(ABC):
     @abstractmethod
     async def call(
         self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
         system: str | None = None,
-        max_tokens: int | None = None,
-        temperature: float | None = None,
+        **kwargs,
     ) -> LLMResponse:
-        """调用 LLM"""
+        """调用 LLM（额外的 provider 特定参数通过 **kwargs 传递）"""
 ```
 
 ### LLMResponse
@@ -943,11 +987,11 @@ class LLMClient(ABC):
 ```python
 @dataclass
 class LLMResponse:
-    content: str | None             # 文本内容
-    tool_calls: list[dict] | None   # 工具调用列表
-    usage: TokenUsage               # token 使用统计
-    stop_reason: str                # 停止原因
-    raw: dict | None = None         # 原始响应
+    content: str                         # 文本内容
+    tool_calls: list[ToolCall]           # 工具调用列表（ToolCall 对象）
+    stop_reason: StopReason              # 停止原因（StopReason 枚举）
+    usage: TokenUsage                    # token 使用统计
+    raw_response: dict[str, Any] | None = None  # 原始响应
 ```
 
 ### TokenUsage
@@ -955,10 +999,16 @@ class LLMResponse:
 ```python
 @dataclass
 class TokenUsage:
-    input_tokens: int
-    output_tokens: int
-    cache_creation_input_tokens: int = 0
-    cache_read_input_tokens: int = 0
+    input_tokens: int = 0               # 输入 token
+    output_tokens: int = 0              # 输出 token
+    cache_read_tokens: int = 0          # 缓存读取 token
+    cache_write_tokens: int = 0         # 缓存写入 token
+    tool_calls: int = 0                 # 工具调用次数
+
+    # 计算属性
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
 ```
 
 ### AnthropicClient
@@ -1291,17 +1341,21 @@ class MessageRole(Enum):
     TOOL = "tool"
 ```
 
-### LoopStatus
+### LoopState
+
+Agent 循环状态机（`harness.types.LoopState`）：
 
 ```python
-class LoopStatus(Enum):
-    RUNNING = "running"
-    COMPLETED = "completed"
-    STOPPED_MAX_ITERATIONS = "stopped_max_iterations"
-    STOPPED_COST_LIMIT = "stopped_cost_limit"
-    STOPPED_ERROR = "stopped_error"
-    STOPPED_STUCK = "stopped_stuck"
-    STOPPED_BY_HOOK = "stopped_by_hook"
+class LoopState(Enum):
+    IDLE = "idle"                   # 空闲，等待输入
+    BUILDING_CONTEXT = "building"  # 构建上下文
+    CALLING_LLM = "calling"        # 调用 LLM
+    PARSING_RESPONSE = "parsing"   # 解析响应
+    EXECUTING_TOOLS = "executing"  # 执行工具
+    COMPLETED = "completed"        # 完成
+    ERROR = "error"                # 错误状态
+    INTERRUPTED = "interrupted"    # 被中断
+    STUCK = "stuck"                # 陷入停滞
 ```
 
 ### LoopResult
@@ -1309,24 +1363,30 @@ class LoopStatus(Enum):
 ```python
 @dataclass
 class LoopResult:
-    content: str                      # 最终文本内容
-    tool_calls: list[ToolCallRecord]  # 工具调用记录
-    total_tokens: int                 # 总 token 使用量
-    total_cost: float                 # 总成本（USD）
-    iterations: int                   # 实际循环次数
-    stopped_reason: str               # 停止原因（LoopStatus 值）
+    status: LoopState                       # 最终状态（LoopState 值）
+    session: Session                        # 会话对象
+    messages: list[Message] = field(default_factory=list)  # 消息列表
+    final_response: str | None = None       # 最终文本内容
+    iterations: int = 0                     # 实际循环次数
+    error: str | None = None                # 错误信息
+    token_usage: TokenUsage = field(default_factory=TokenUsage)  # token 使用统计
+
+    # 计算属性
+    @property
+    def content(self) -> str:
+        return self.final_response or ""    # 最终响应内容
 ```
 
-### ToolCallRecord
+### ToolCall
+
+LLM 返回的工具调用（`harness.types.ToolCall`，注意没有独立的 `ToolCallRecord`）：
 
 ```python
 @dataclass
-class ToolCallRecord:
+class ToolCall:
+    id: str                 # 工具调用 ID
     name: str               # 工具名称
-    arguments: dict         # 调用参数
-    result: str             # 执行结果
-    error: str | None       # 错误信息
-    duration_ms: int        # 执行耗时
+    arguments: dict[str, Any]  # 调用参数
 ```
 
 ### GoalStatus
@@ -1688,7 +1748,7 @@ app.add_middleware(TracingMiddleware)
 Prometheus 指标收集器：
 
 ```python
-from harness.service import MetricsCollector, MetricsConfig, get_metrics_collector
+from harness.service.metrics import MetricsCollector, MetricsConfig, get_metrics_collector
 
 # 使用全局收集器
 collector = get_metrics_collector()
@@ -1718,7 +1778,7 @@ metrics_data = collector.export()
 分布式会话存储：
 
 ```python
-from harness.service import RedisSessionStore, RedisSessionConfig
+from harness.service.store_redis import RedisSessionStore, RedisSessionConfig
 
 # 创建存储
 store = RedisSessionStore("redis://localhost:6379")
@@ -1747,7 +1807,7 @@ await store.delete("session-123")
 分布式锁：
 
 ```python
-from harness.service import RedisDistributedLock
+from harness.service.store_redis import RedisDistributedLock
 
 lock = RedisDistributedLock("redis://localhost:6379")
 
@@ -1764,7 +1824,7 @@ if token:
 ### 服务发现
 
 ```python
-from harness.service import (
+from harness.service.discovery import (
     NacosServiceRegistry,
     EurekaServiceRegistry,
     ServiceInstance,
@@ -1790,7 +1850,7 @@ await registry.register(instance)
 统一错误响应格式：
 
 ```python
-from harness.service import ErrorCode, create_error_response
+from harness.service.error_handler import ErrorCode, create_error_response
 
 # 创建错误响应
 error = create_error_response(
@@ -1831,6 +1891,8 @@ error = create_error_response(
 from harness.service import (
     PROMETHEUS_AVAILABLE,  # prometheus-client
     REDIS_AVAILABLE,       # redis
+)
+from harness.service.discovery import (
     NACOS_AVAILABLE,       # nacos-sdk-python
     EUREKA_AVAILABLE,      # 始终 True (HTTP API)
 )
@@ -1842,4 +1904,4 @@ from harness.service import (
 - [06-triggers.md](./06-triggers.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
-- [15-loop-engineering.md](./15-loop-engineering.md) - Loop Engineering 完整指南
+- [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 完整指南

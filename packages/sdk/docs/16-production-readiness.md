@@ -59,13 +59,16 @@ agent = AgentHarness(
 ### 2. 成本控制
 
 ```python
-from harness import AgentHarness, HarnessConfig
+from harness import AgentHarness, HarnessConfig, CostControlConfig
 
 agent = AgentHarness(
     config=HarnessConfig(
-        max_cost_per_run=5.0,      # 单次运行最多 $5
-        max_tokens_per_run=500000, # 单次运行最多 500K tokens
         max_iterations=50,         # 最多 50 步
+        cost_control=CostControlConfig(
+            max_tokens_per_session=500000,   # 单次会话最多 500K tokens
+            global_daily_budget_usd=5.0,     # 单日预算上限 $5
+            action_on_exceed="stop",         # 超限动作：stop/compress/warn/downgrade
+        ),
     ),
 )
 ```
@@ -73,18 +76,16 @@ agent = AgentHarness(
 ### 3. 安全配置
 
 ```python
-from harness import AgentHarness, HarnessConfig
-from harness.security.sandbox import PermissionSet, PermissionLevel
+from harness import AgentHarness, HarnessConfig, SecurityConfig
 
 agent = AgentHarness(
     config=HarnessConfig(
-        sandbox_enabled=True,
-        bash_timeout=60000,
-        bash_blacklist=["rm -rf /", "sudo", "mkfs"],
-    ),
-    permissions=PermissionSet(
-        max_permission=PermissionLevel.EXECUTE,
-        denied_tools={"bash"},  # 按需禁用
+        security=SecurityConfig(
+            enable_sandbox=True,
+            sandbox_max_execution_time=60.0,
+            sandbox_blocked_commands=["rm -rf /", "sudo", "mkfs"],
+            sandbox_blocked_patterns=["rm -rf", "sudo", "chmod", "curl | bash"],
+        ),
     ),
 )
 ```
@@ -94,7 +95,7 @@ agent = AgentHarness(
 ```python
 agent = AgentHarness(
     memory_dir="/secure/harness/memory",  # 指定安全目录
-    vector_store=True,                     # 启用向量检索
+    # 向量检索通过 MemoryScoringConfig / 内存向量存储自动启用，无需 vector_store 字段
 )
 ```
 
@@ -119,19 +120,25 @@ async def ai_endpoint(message: str):
 
 ```python
 from harness import AgentHarness
-from harness.core.hooks import HookPoint, HookContext
+from harness.core.hooks import HookPoint, HookContext, LifecycleHook, HookResult
 
 agent = AgentHarness()
 
 cost_tracker = {"total": 0.0}
 
-@agent.hook(HookPoint.AFTER_LLM_CALL)
-async def track_cost(ctx: HookContext):
-    if ctx.response and ctx.response.usage:
-        input_cost = ctx.response.usage.input_tokens * 0.000003
-        output_cost = ctx.response.usage.output_tokens * 0.000015
-        cost_tracker["total"] += input_cost + output_cost
-    return ctx
+class CostTrackerHook(LifecycleHook):
+    @property
+    def hook_points(self):
+        return [HookPoint.AFTER_LLM_CALL]
+
+    async def execute(self, ctx: HookContext) -> HookResult:
+        if ctx.llm_response and ctx.llm_response.usage:
+            input_cost = ctx.llm_response.usage.input_tokens * 0.000003
+            output_cost = ctx.llm_response.usage.output_tokens * 0.000015
+            cost_tracker["total"] += input_cost + output_cost
+        return HookResult.continue_()
+
+agent.add_hook(CostTrackerHook())
 
 result = await agent.run("分析代码")
 print(f"本次运行成本: ${cost_tracker['total']:.4f}")
@@ -192,8 +199,9 @@ agent = AgentHarness(llm_client=CustomLLM())
 ### 自定义记忆后端
 
 ```python
-# 使用向量检索
-agent = AgentHarness(vector_store=True)
+# 启用向量检索（通过 MemoryScoringConfig，无需 vector_store 字段）
+from harness import HarnessConfig, MemoryScoringConfig
+agent = AgentHarness(config=HarnessConfig(memory_scoring=MemoryScoringConfig()))
 
 # 自定义记忆目录
 agent = AgentHarness(memory_dir="/data/harness/memory")
@@ -219,7 +227,7 @@ def my_tool(param: str) -> str:
 
 ## 与行业标准对比
 
-详细对比见 [10-comparison.md](./10-comparison.md#production-harness-组件对比)。
+详细对比见 [17-comparison.md](./17-comparison.md#production-harness-组件对比)。
 
 | 组件 | Harness SDK | Claude Code | LangGraph |
 |------|-------------|-------------|-----------|

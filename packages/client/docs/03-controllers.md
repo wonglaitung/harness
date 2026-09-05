@@ -62,7 +62,7 @@
 @dataclass
 class ChatConfig:
     """聊天配置"""
-    
+
     provider: str = "anthropic"
     api_key: str = ""
     base_url: str = ""
@@ -71,7 +71,16 @@ class ChatConfig:
     max_iterations: int = 10
     temperature: float = 0.3
     tool_result_role: str = "tool"  # "tool" 或 "user"
-    system_prompt: str = "..."
+    auto_update_memory: bool = True  # 允许 Agent 自主更新 Core Memory
+
+    # 路由配置（智能路由，按请求复杂度选择模型）
+    enable_routing: bool = False
+    high_model: str = ""  # 高能力模型
+    low_model: str = ""  # 低成本模型
+    router_model_path: str = ""  # 路由器模型路径（GGUF 文件）
+    router_url: str = ""  # HTTP 路由服务 URL
+
+    system_prompt: str = "..."  # 注意：此字段仅用于 ChatConfig，不会从 settings.json 读取
 ```
 
 ### 核心方法
@@ -106,7 +115,18 @@ async def initialize(self, mcp_tools: list = None):
         GlobTool(),
         GrepTool(),
         BashTool(),
+        WebSearchTool(),
+        WebFetchTool(),
+        WebToMarkdownTool(),
     ]
+
+    # 添加 UpdateCoreMemoryTool（当 auto_update_memory 启用时）
+    if self.config.auto_update_memory:
+        tools.append(UpdateCoreMemoryTool())
+
+    # 添加浏览器工具（当浏览器已启动时）
+    if self.browser_controller.is_active():
+        tools.extend(self.browser_controller.get_browser_tools())
     
     # 添加 MCP 工具
     if mcp_tools:
@@ -118,12 +138,17 @@ async def initialize(self, mcp_tools: list = None):
 #### 发送消息
 
 ```python
-async def send_message(self, message: str) -> AsyncIterator[str]:
+async def send_message(
+    self,
+    message: str | list[dict[str, Any]],
+    goal_mode: bool = False,
+) -> AsyncIterator[str]:
     """
     发送消息并返回流式响应。
 
     Args:
-        message: 用户消息（文本或多模态内容）
+        message: 用户消息（文本或 list[dict] 多模态内容）
+        goal_mode: 为 True 时调用 run_goal() 进行多轮自主执行
 
     Yields:
         响应文本块
@@ -245,8 +270,11 @@ def set_tool_call_callback(self, callback: Callable[[str, dict], None]):
     """设置工具调用回调"""
     self._on_tool_call = callback
 
-def set_tool_result_callback(self, callback: Callable[[str, str, bool], None]):
-    """设置工具结果回调"""
+def set_tool_result_callback(self, callback: Callable[[str, str, bool, dict], None]):
+    """设置工具结果回调
+
+    回调签名: (tool_name, result, success, metadata)
+    """
     self._on_tool_result = callback
 
 def set_thinking_callback(self, callback: Callable[[str], None]):
@@ -504,51 +532,64 @@ class MCPServerInfo:
 ```python
 class MCPController:
     def __init__(self):
-        self.manager = MCPManager()  # SDK 组件
-        self.servers: dict[str, MCPServerInfo] = {}
-    
+        self.manager = MCPManager()  # SDK 组件（agent 可用时）
+        self.servers: dict[str, MCPServerInfo] = {}  # 兼容性属性
+
+    def add_server_config(self, config: MCPServerConfig):
+        """添加服务器配置"""
+
     async def connect_server(self, name: str) -> bool:
         """连接服务器"""
-        
+
     async def disconnect_server(self, name: str) -> bool:
         """断开服务器"""
-        
-    async def connect_all(self) -> dict[str, bool]:
-        """连接所有服务器"""
-        
-    def get_tools(self) -> list:
+
+    def remove_server(self, name: str) -> bool:
+        """移除服务器配置"""
+
+    def update_server_config(self, old_name: str, new_config: dict) -> bool:
+        """更新服务器配置"""
+
+    def get_all_tools(self) -> list:
         """获取所有已连接服务器的工具"""
-        
-    def load_config(self, path: Path) -> list[MCPServerConfig]:
-        """从文件加载配置"""
-        
-    def save_config(self, path: Path):
+
+    def get_server_list(self) -> list[MCPServerInfo]:
+        """获取所有服务器信息"""
+
+    def list_server_configs(self) -> list[MCPServerConfig]:
+        """列出所有服务器配置"""
+
+    def get_server_config(self, name: str) -> MCPServerConfig | None:
+        """获取指定服务器配置"""
+
+    def load_from_file(self, path: Path) -> int:
+        """从文件加载配置（返回加载数量）"""
+
+    def save_to_file(self, path: Path):
         """保存配置到文件"""
 ```
 
 ### 配置文件格式
 
-`~/.harness/mcp.json`:
+`~/.harness/mcp.json` 使用 `mcpServers` 对象，按服务器名称作为键：
 
 ```json
 {
-  "servers": [
-    {
-      "name": "filesystem",
+  "mcpServers": {
+    "filesystem": {
       "transport": "stdio",
       "command": "mcp-filesystem",
       "args": ["/path/to/workspace"],
       "env": {}
     },
-    {
-      "name": "github",
+    "github": {
       "transport": "stdio",
       "command": "mcp-github",
       "env": {
         "GITHUB_TOKEN": "your-token"
       }
     }
-  ]
+  }
 }
 ```
 
@@ -617,25 +658,40 @@ class SkillController:
 ```python
 class SkillController:
     def __init__(self):
-        self._skills: list[Skill] = []
-    
-    def load_skills(self, directory: Path) -> int:
-        """从目录加载技能"""
-        
-    def get_skills(self) -> list[dict]:
-        """获取技能列表（用于 UI 显示）"""
-        
-    def get_skill(self, name: str) -> Skill | None:
+        self._cached_skills: dict[str, SkillInfo] = {}  # 用户级技能缓存
+
+    def load_from_file(self, path: Path) -> bool:
+        """从单个技能文件加载"""
+
+    def load_from_dir(self, path: Path) -> int:
+        """从目录加载所有技能（返回数量）"""
+
+    def load_defaults(self) -> int:
+        """加载默认目录 ~/.harness/skills 的技能（返回数量）"""
+
+    def get_skill_list(self) -> list[SkillInfo]:
+        """获取技能列表（始终返回文件系统缓存）"""
+
+    def get_skill(self, name: str) -> SkillInfo | None:
         """获取指定技能"""
-        
-    def create_skill(self, name: str, description: str, content: str) -> bool:
-        """创建新技能"""
-        
-    def update_skill(self, name: str, content: str) -> bool:
-        """更新技能内容"""
-        
-    def delete_skill(self, name: str) -> bool:
-        """删除技能"""
+
+    def create_skill(
+        self,
+        path: Path,
+        name: str,
+        description: str,
+        content: str,
+        keywords: list[str] = None,
+        patterns: list[str] = None,
+        enabled: bool = True,
+    ) -> bool:
+        """创建新技能（path 为必填，保存路径）"""
+
+    def update_skill(self, name: str, **kwargs) -> bool:
+        """更新技能属性"""
+
+    def remove_skill(self, name: str):
+        """移除技能（标记为禁用）"""
 ```
 
 ## MemoryController
@@ -664,15 +720,18 @@ class MemoryController(QObject):
     def get_entries(self, category: MemoryCategory) -> list[str]:
         """获取指定类别的条目"""
         
-    def add_entry(self, category: MemoryCategory, content: str):
-        """添加新条目"""
-        
-    def update_entry(self, category: MemoryCategory, index: int, content: str) -> bool:
-        """更新条目"""
-        
+    def add_entry(self, category: MemoryCategory, content: str, importance: float = 1.0):
+        """添加新条目（importance: 0.0–1.0，默认 1.0）"""
+
+    def update_entry(self, category: MemoryCategory, index: int, content: str, importance: float | None = None) -> bool:
+        """更新条目（可选更新 importance）"""
+
+    def update_importance(self, category: MemoryCategory, index: int, importance: float) -> bool:
+        """更新条目重要性"""
+
     def remove_entry(self, category: MemoryCategory, index: int) -> bool:
         """删除条目"""
-        
+
     def clear_all(self):
         """清空所有记忆"""
         
@@ -799,20 +858,22 @@ def validate_cron(self, expression: str) -> tuple[bool, str]:
         return False, f"无效的 Cron 表达式: {str(e)}"
 ```
 
-### 与 TriggerManager 集成（未来）
+### 与 TriggerManager 集成
+
+`ScheduleController` 通过 SDK 的 `TriggerManager` 实际管理定时触发（`CronTrigger` / `IntervalTrigger`）：
 
 ```python
 async def start(self):
-    """启动 TriggerManager"""
+    """启动 TriggerManager，注册所有启用的排程"""
     from harness import TriggerManager
-    
+    from harness import CronTrigger, IntervalTrigger
+
     self._trigger_manager = TriggerManager(self._agent)
-    await self._trigger_manager.start()
-    
-    # 注册所有启用的排程
+    # 注册所有启用的排程（cron / interval）
     for config in self._schedules.values():
         if config.enabled:
             self._register_trigger(config)
+    await self._trigger_manager.start()
 
 async def stop(self):
     """停止 TriggerManager"""
@@ -894,9 +955,10 @@ class LogEntry:
     """执行日志条目"""
 
     timestamp: datetime
-    type: str  # "llm_call", "tool_call", "tool_result", "iteration", "error"
+    event_type: str  # "llm_call", "tool_call", "tool_result", "iteration", "error"
     message: str
-    details: dict = field(default_factory=dict)
+    duration_ms: float | None = None
+    data: dict = field(default_factory=dict)
 ```
 
 ### 核心方法
@@ -1001,7 +1063,8 @@ def update_cost(self, input_cost_per_1m: float = 3.0, output_cost_per_1m: float 
     """
     self.cost_usd = (
         self.input_tokens * input_cost_per_1m / 1_000_000 +
-        self.output_tokens * output_cost_per_1m / 1_000_000
+        self.output_tokens * output_cost_per_1m / 1_000_000 +
+        self.cache_read_tokens * (input_cost_per_1m * 0.1) / 1_000_000
     )
 ```
 

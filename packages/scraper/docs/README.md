@@ -57,7 +57,8 @@ harness-scraper agent "只关注 Rust 项目"
 ### Python API
 
 ```python
-from harness_scraper import GoalAgent, IntelAgent, load_config
+from harness_scraper import GoalAgent, IntelAgent
+from harness_scraper.config import load_config
 from harness import GoalStatus
 
 # 方式 1：目标驱动（推荐）

@@ -19,13 +19,13 @@ AI 情报抽取系统 - 自动化抓取和分析 AI 行业趋势、港股市场�
 ## 快速开始
 
 ```bash
-# 安装（需要 openai 依赖）
+# 安装（LLM 客户端由 harness SDK 提供，无需额外 openai 依赖）
 cd packages/scraper
-uv sync --extra openai
+uv sync
 
 # 或从项目根目录安装所有包
 cd /data/harness
-uv sync --all-packages --extra openai
+uv sync --all-packages
 
 # 创建配置文件
 uv run harness-scraper config
@@ -110,6 +110,8 @@ uv run harness-scraper --skill my-custom
 | 工具 | 名称 | 用途 |
 |------|------|------|
 | SaveOnePagerTool | `save_one_pager` | 保存 Markdown One-Pager |
+| UpdateMemoryTool | `update_memory` | 记录已处理项目到 MEMORY.md |
+| ReadHistoryReportTool | `read_history_report` | 读取历史 One-Pager 报告 |
 
 ## 输出示例
 

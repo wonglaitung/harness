@@ -33,11 +33,13 @@ npm run dev
 
 ### 环境变量
 
+> ⚠️ `Settings.from_env()` 仅读取以下三个名称（前缀 `HARNESS_`）：`HARNESS_JWT_SECRET`、`HARNESS_REDIS_URL`、`HARNESS_ENVIRONMENT`。其余名称（如 `JWT_SECRET`、`REDIS_URL`、`ANTHROPIC_API_KEY`）不会被读取。注意 Agent 的 API Key 通过 WebSocket `auth` 消息传递，不需要环境变量。
+
 ```bash
 # .env
-ANTHROPIC_API_KEY=your-api-key
-JWT_SECRET=your-secret-key
-REDIS_URL=redis://redis:6379
+HARNESS_JWT_SECRET=your-secret-key
+HARNESS_REDIS_URL=redis://redis:6379
+HARNESS_ENVIRONMENT=docker   # "docker" 或 "k8s"
 ```
 
 ## 网络架构
@@ -81,66 +83,47 @@ networks:
 
 ### docker-compose.yml
 
-```yaml
-version: '3.8'
+> 与仓库根目录的 `packages/cloud/docker-compose.yml` 保持一致。该文件只定义两个网络（`cloud-net`、`agent-net` 命名为 `harness-net`），且不含 frontend / minio 服务（MinIO 文件存储尚未实现）。
 
+```yaml
 services:
   gateway:
+    image: harness-gateway:latest
     build:
-      context: .
-      dockerfile: docker/gateway.Dockerfile
+      context: ../..
+      dockerfile: packages/cloud/docker/gateway.Dockerfile
     ports:
       - "8080:8080"
     environment:
-      - JWT_SECRET=${JWT_SECRET}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - REDIS_URL=redis://redis:6379
+      - HARNESS_JWT_SECRET=${HARNESS_JWT_SECRET:-change-me-in-production}
+      - HARNESS_REDIS_URL=redis://redis:6379
+      - HARNESS_ENVIRONMENT=docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # 只读挂载
     depends_on:
       - redis
-      - minio
     networks:
-      - harness-net
-
-  frontend:
-    build:
-      context: frontend
-      dockerfile: Dockerfile
-    ports:
-      - "80:80"
-    depends_on:
-      - gateway
-    networks:
-      - harness-net
+      - cloud-net
+      - agent-net
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     networks:
-      - harness-net
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    volumes:
-      - minio-data:/data
-    networks:
-      - harness-net
+      - cloud-net
+    restart: unless-stopped
 
 networks:
-  harness-net:
+  # Gateway-Redis 通信
+  cloud-net:
     driver: bridge
 
-volumes:
-  minio-data:
+  # Gateway-Agent 通信（非 internal，允许出站访问 LLM API）
+  agent-net:
+    name: harness-net
+    driver: bridge
 ```
 
 ### 构建镜像
@@ -254,16 +237,15 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: JWT_SECRET
+            - name: HARNESS_JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: harness-secrets
                   key: jwt-secret
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: harness-secrets
-                  key: anthropic-api-key
+            - name: HARNESS_REDIS_URL
+              value: redis://redis:6379
+            - name: HARNESS_ENVIRONMENT
+              value: k8s
           volumeMounts:
             - name: docker-socket
               mountPath: /var/run/docker.sock
@@ -303,7 +285,6 @@ metadata:
 type: Opaque
 stringData:
   jwt-secret: your-jwt-secret
-  anthropic-api-key: your-api-key
 ```
 
 ### 部署命令
@@ -465,13 +446,13 @@ spec:
    ```
 
 4. **认证失败**
-   ```bash
-   # 检查 JWT Secret
-   echo $JWT_SECRET
-   
-   # 验证 token
-   jwt decode <your-token>
-   ```
+    ```bash
+    # 检查 JWT Secret（实际环境变量名为 HARNESS_JWT_SECRET）
+    echo $HARNESS_JWT_SECRET
+
+    # 验证 token
+    jwt decode <your-token>
+    ```
 
 ### 日志查看
 
@@ -631,25 +612,34 @@ spec:
         - port: 8000
   egress: []  # 明确拒绝所有出站流量（空数组 = 拒绝所有）
 ```
-
 ### 环境选择
 
-```python
-# gateway/main.py
-import os
+> ⚠️ **NOT IMPLEMENTED (设计提案)**：`K8sPodManager` 当前不存在，Gateway 仅提供 `DockerManager`。环境选择通过 `GatewayConfig.environment`（来自环境变量 `HARNESS_ENVIRONMENT`）完成，但代码中尚未实现 K8s 分支。
 
-def get_container_manager() -> ContainerManager:
-    """根据环境选择容器管理器"""
-    environment = os.getenv("HARNESS_ENV", "docker")
+```python
+# gateway/main.py（设计参考）
+from harness_cloud.gateway.config import GatewayConfig, Settings
+
+
+def get_container_manager(config: GatewayConfig) -> ContainerManager:
+    """根据环境选择容器管理器（目前仅 docker 已实现）"""
+    environment = config.environment  # 来自 HARNESS_ENVIRONMENT
 
     if environment == "k8s":
-        return K8sPodManager(namespace="harness-cloud")
+        # TODO: 实现 K8sPodManager
+        raise NotImplementedError("K8s 容器管理器尚未实现")
     else:
-        return DockerManager()
+        return DockerManager(gateway_config=config)
 
 
 # 使用
-container_manager = get_container_manager()
+settings = Settings.from_env()
+config = GatewayConfig(
+    jwt_secret=settings.jwt_secret or config.jwt_secret,
+    redis_url=settings.redis_url or config.redis_url,
+    environment=settings.environment or config.environment,
+)
+container_manager = get_container_manager(config)
 ```
 
 ## 下一步

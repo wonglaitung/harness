@@ -198,10 +198,10 @@ agent.permissions = MyPermissionSet()
 
 ```python
 # 内嵌测试，无需启动服务
-from harness.testing import MockHarness
+from harness.testing import MockHarness, MockResponse
 
 agent = MockHarness()
-agent.expect("分析代码").respond("分析结果")
+agent.add_response(MockResponse(content="分析结果"))
 
 result = await agent.run("分析代码")
 assert result.content == "分析结果"

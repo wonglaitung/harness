@@ -32,6 +32,7 @@ from harness.types import ToolResult
 | 工具 | 名称 | 数据源 | 用途 |
 |------|------|--------|------|
 | SaveOnePagerTool | `save_one_pager` | 文件系统 | 保存 Markdown One-Pager |
+| UpdateMemoryTool | `update_memory` | 文件系统 | 记录已处理项目到 MEMORY.md（含 30 天自动归档） |
 
 ## 工具注册表
 
@@ -105,9 +106,9 @@ class MyTool(Tool):
 
         try:
             data = await fetch_data(url, limit)
-            return ToolResult_success(content=format_output(data))
+            return ToolResult(tool_call_id="", success=True, content=format_output(data))
         except Exception as e:
-            return ToolResult_error(content=str(e))
+            return ToolResult(tool_call_id="", success=False, content="", error=str(e))
 ```
 
 ### 输入验证
@@ -133,7 +134,7 @@ def validate_arguments(self, arguments: dict) -> tuple[bool, str | None]:
   "type": "object",
   "properties": {
     "url": {"type": "string", "description": "RSS feed URL"},
-    "limit": {"type": "integer", "description": "Max articles to fetch (default 10)"}
+    "limit": {"type": "integer", "description": "Max articles to fetch (default 30)"}
   },
   "required": ["url"]
 }
@@ -154,9 +155,13 @@ import feedparser
 
 async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     url = arguments["url"]
-    limit = arguments.get("limit", 10)
+    limit = arguments.get("limit", 30)
 
-    # 使用 feedparser 解析 RSS
+    # 使用 aiohttp 抓取，再用 feedparser 解析（示意，实际实现为异步）：
+    # async with aiohttp.ClientSession() as session:
+    #     async with session.get(url) as resp:
+    #         content = await resp.text()
+    # feed = feedparser.parse(content)
     feed = feedparser.parse(url)
 
     # 格式化输出
@@ -169,7 +174,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
             "summary": entry.summary[:500] if "summary" in entry else "",
         })
 
-    return ToolResult_success(content=format_articles(articles))
+    return ToolResult(tool_call_id="", success=True, content=format_articles(articles))
 ```
 
 ## FetchHNTool
@@ -220,7 +225,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
         if len(posts) >= limit:
             break
 
-    return ToolResult_success(content=format_posts(posts))
+    return ToolResult(tool_call_id="", success=True, content=format_posts(posts))
 ```
 
 ## FetchShowHNTool
@@ -261,7 +266,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
         if len(posts) >= limit:
             break
 
-    return ToolResult_success(content=format_posts(posts, "Show HN"))
+    return ToolResult(tool_call_id="", success=True, content=format_posts(posts, "Show HN"))
 ```
 
 ## FetchGitHubTrendingTool
@@ -278,7 +283,8 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
   "properties": {
     "language": {"type": "string", "description": "Language filter (default python)"},
     "since": {"type": "string", "description": "Time range: daily/weekly/monthly (default daily)"},
-    "limit": {"type": "integer", "description": "Max repos to fetch (default 10)"}
+    "filter_ai": {"type": "boolean", "description": "Only return AI-related repos (default true)"},
+    "limit": {"type": "integer", "description": "Max repos to fetch (default 15)"}
   },
   "required": []
 }
@@ -288,7 +294,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
 
 ```json
 {
-  "content": "## GitHub Trending (Python, daily)\n\n### Repo 1\nName: ...\nURL: ...\nDescription: ...\nStars: ...\nLanguage: ...\n\n### Repo 2\n..."
+  "content": "## GitHub Trending (Python, daily)\n\n### Repo 1\nName: ...\nURL: ...\nDescription: ...\nStars today: ...\nLanguage: ...\n\n### Repo 2\n..."
 }
 ```
 
@@ -300,7 +306,8 @@ GITHUB_TRENDING = "https://github.com/trending"
 async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     language = arguments.get("language", "python")
     since = arguments.get("since", "daily")
-    limit = arguments.get("limit", 10)
+    filter_ai = arguments.get("filter_ai", True)
+    limit = arguments.get("limit", 15)
 
     # 构建 URL
     url = f"{GITHUB_TRENDING}/{language}?since={since}"
@@ -308,10 +315,10 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     # 使用 aiohttp 抓取 HTML
     html = await fetch_html(url)
 
-    # 解析 HTML
-    repos = parse_trending_html(html, limit)
+    # 解析 HTML（默认只保留 AI 相关仓库）
+    repos = self._parse_trending_html(html, filter_ai)
 
-    return ToolResult_success(content=format_repos(repos))
+    return ToolResult(tool_call_id="", success=True, content=format_repos(repos))
 ```
 
 ## FetchURLTool
@@ -350,12 +357,12 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     if "github.com" in url:
         readme_url = convert_to_raw_readme_url(url)
         content = await fetch_text(readme_url)
-        return ToolResult_success(content=f"## GitHub README\n\n{content}")
+        return ToolResult(tool_call_id="", success=True, content=f"## GitHub README\n\n{content}")
 
     # 其他 URL → Jina Reader
     jina_url = f"https://r.jina.ai/{url}"
     content = await fetch_text(jina_url)
-    return ToolResult_success(content=f"## Article Content\n\n{content}")
+    return ToolResult(tool_call_id="", success=True, content=f"## Article Content\n\n{content}")
 
 def convert_to_raw_readme_url(github_url: str) -> str:
     """github.com/owner/repo → raw.githubusercontent.com/owner/repo/main/README.md"""
@@ -378,9 +385,8 @@ def convert_to_raw_readme_url(github_url: str) -> str:
 - **Structured mode**：使用 AI 情报字段生成标准 One-Pager
 
 **自动记忆管理**：
-- 保存后自动记录到 MEMORY.md
-- 超过 30 天的条目自动归档到 `archive/MEMORY-YYYY-MM.md`
-- SDK 下次运行时加载 MEMORY.md 避免重复提取
+- 保存后自动记录到 MEMORY.md（`SaveOnePagerTool._update_memory`）
+- 注意：超过 30 天的条目**自动归档**由 `UpdateMemoryTool` 负责；只有在该工具被加入 skill 的 `tools.allowed` 时才会触发（默认技能未包含 `update_memory`，因此默认流程下不会自动归档，仅追加记录）
 
 ### 输入 Schema
 
@@ -480,7 +486,7 @@ async def _execute_simple(self, arguments: dict, domain: str) -> ToolResult:
     # 自动更新 MEMORY.md
     self._update_memory(title, domain, source_url)
 
-    return ToolResult_success(content=f"One-Pager saved to: {file_path}")
+    return ToolResult(tool_call_id="", success=True, content=f"One-Pager saved to: {file_path}")
 
 def _update_memory(self, name: str, domain: str, source_url: str) -> None:
     """自动更新 MEMORY.md，记录已处理项目"""
@@ -510,9 +516,78 @@ packages/scraper/output/
 ```
 
 **自动归档机制**：
-- MEMORY.md 只保留最近 30 天的记录
-- 超过 30 天的条目自动移至 `archive/MEMORY-YYYY-MM.md`
+- `SaveOnePagerTool` 每次保存时都会把项目追加记录到 MEMORY.md
+- 超过 30 天的条目归档到 `archive/MEMORY-YYYY-MM.md` 由 `UpdateMemoryTool` 完成（见下文）；默认技能未启用该工具，因此默认流程只追加、不归档
 - 保持 MEMORY.md 文件大小可控，便于快速加载
+
+## UpdateMemoryTool
+
+### 用途
+
+将已处理的项目/文章记录到 `MEMORY.md`，避免后续运行重复提取。可选调用，需显式加入 skill 的 `tools.allowed`。
+
+### 输入 Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "项目/条目名称"},
+          "category": {"type": "string", "description": "分类 (如 '新范式/工具', '港股分析')"},
+          "source_url": {"type": "string", "description": "发现来源 URL"}
+        },
+        "required": ["name"]
+      },
+      "description": "要记录的已处理条目列表"
+    },
+    "date": {"type": "string", "description": "条目日期 (默认今天, 格式 YYYY-MM-DD)"}
+  },
+  "required": ["items"]
+}
+```
+
+### 输出格式
+
+```markdown
+Recorded 2 items to MEMORY.md:
+- agent-skills-anthropic
+- headroom
+```
+
+### 实现要点
+
+```python
+async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
+    items = arguments.get("items", [])
+    date_str = arguments.get("date", datetime.now().strftime("%Y-%m-%d"))
+
+    if not items:
+        return ToolResult(
+            tool_call_id="",
+            success=False,
+            content="",
+            error="No items provided to record",
+        )
+
+    # 加载或创建 MEMORY.md，追加新条目
+    content = self._add_items(existing, items, date_str)
+
+    # 自动归档超过 30 天的条目到 archive/MEMORY-YYYY-MM.md
+    content = self._archive_old_entries(content)
+
+    return ToolResult(
+        tool_call_id="",
+        success=True,
+        content=f"Recorded {len(items)} items to MEMORY.md:\n" + "\n".join(f"- {item['name']}" for item in items),
+    )
+```
+
+**注意**：`_archive_old_entries` 按 `RETENTION_DAYS = 30` 将旧日期分区归档到 `output/archive/MEMORY-YYYY-MM.md`。若技能未将 `update_memory` 列入 `tools.allowed`，该归档不会在默认流程中触发。
 
 ## FetchHKEXTool
 
@@ -579,7 +654,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
     # 按成交额排序
     df = df.sort_values('成交额', ascending=False).head(limit)
 
-    return ToolResult_success(content=format_stocks(df))
+    return ToolResult(tool_call_id="", success=True, content=format_stocks(df))
 ```
 
 ### 数据源说明
@@ -713,7 +788,7 @@ class ReadHistoryReportTool(Tool):
                     "content": content,
                 })
 
-        return ToolResult_success(content=format_reports(reports))
+        return ToolResult(tool_call_id="", success=True, content=format_reports(reports))
 ```
 
 ### 目录结构
@@ -800,7 +875,7 @@ async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
             'irx': irx.history(period="1d")['Close'].iloc[-1],
         }
 
-    return ToolResult_success(content=format_news(news_items, rates))
+    return ToolResult(tool_call_id="", success=True, content=format_news(news_items, rates))
 ```
 
 ### 数据源说明
@@ -844,14 +919,17 @@ from harness.types import ToolResult
 
 # 成功
 return ToolResult(
-    content="...",
+    tool_call_id="",
     success=True,
+    content="...",
 )
 
 # 失败
 return ToolResult(
-    content=f"Error: {str(e)}",
+    tool_call_id="",
     success=False,
+    content="",
+    error=f"Error: {str(e)}",
 )
 ```
 
@@ -906,7 +984,7 @@ class FetchRedditTool(Tool):
         # Reddit API 调用
         posts = await fetch_reddit_posts(subreddit, limit)
 
-        return ToolResult(content=format_posts(posts))
+        return ToolResult(tool_call_id="", success=True, content=format_posts(posts))
 ```
 
 ```python

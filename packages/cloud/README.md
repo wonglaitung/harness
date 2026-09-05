@@ -332,16 +332,20 @@ Containers are automatically cleaned up using a three-layer strategy:
 ```
 
 **Configuration** (environment variables):
+
+> ⚠️ `Settings.from_env()` 当前**仅**读取 `HARNESS_JWT_SECRET`、`HARNESS_REDIS_URL`、`HARNESS_ENVIRONMENT` 三个变量。以下超时/限制参数定义在 `GatewayConfig` 中（默认值：闲置 900s、优雅关闭 30s、每用户最多 3 个容器），但**暂未**从环境变量读取，设置这些 `HARNESS_*` 变量目前不生效（TODO：在 `Settings.from_env` 中接入）。
+
 ```bash
-HARNESS_CONTAINER_IDLE_TIMEOUT=900    # 15 minutes
-HARNESS_GRACEFUL_SHUTDOWN_TIMEOUT=30  # seconds
-HARNESS_MAX_CONTAINERS_PER_USER=3
+# 以下变量目前尚未被 Settings.from_env 读取（仅默认值生效，TODO）
+HARNESS_CONTAINER_IDLE_TIMEOUT=900    # 15 minutes (未生效)
+HARNESS_GRACEFUL_SHUTDOWN_TIMEOUT=30  # seconds (未生效)
+HARNESS_MAX_CONTAINERS_PER_USER=3     # (未生效)
 ```
 
 ### Container Isolation (ADR-004)
 
 - `pids_limit`: 100 (prevent fork bombs)
-- `internal_network`: No external internet access
+- `internal_network`: Docker bridge network (`harness-net`) — **not** `internal=True`; the Agent container retains outbound access so it can reach external LLM APIs
 - `read_only_root_fs`: Read-only filesystem
 - `cap_drop`: ALL (drop all capabilities)
 

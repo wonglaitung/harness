@@ -22,18 +22,21 @@ mock = MockHarness(responses=[
 ```python
 @dataclass
 class MockResponse:
-    content: str | None = None              # 文本响应
-    tool_calls: list[dict] | None = None    # 工具调用响应
-    stop_reason: str = "end_turn"           # 停止原因
+    content: str = ""                          # 文本响应
+    tool_calls: list[ToolCall] = field(default_factory=list)  # 工具调用（ToolCall 对象）
+    stop_reason: StopReason = StopReason.END_TURN  # 停止原因（StopReason 枚举）
+    input_tokens: int = 100                    # 模拟输入 token
+    output_tokens: int = 50                     # 模拟输出 token
 
     # 使用 tool_calls 模拟 LLM 返回工具调用
-    # tool_calls 格式: [{"name": "read", "arguments": {"file_path": "test.py"}}]
+    # ToolCall 格式: ToolCall(id="1", name="read", arguments={"path": "test.py"})
 ```
 
 ### 基本使用
 
 ```python
 from harness.testing import MockHarness, MockResponse
+from harness.types import ToolCall, StopReason
 
 # 简单文本响应
 mock = MockHarness(responses=[
@@ -45,21 +48,46 @@ assert result.content == "分析完成：代码质量良好"
 
 # 多步工具调用模拟
 mock = MockHarness(responses=[
-    MockResponse(tool_calls=[{"name": "read", "arguments": {"file_path": "main.py"}}]),
+    MockResponse(
+        tool_calls=[ToolCall(id="1", name="read", arguments={"path": "main.py"})],
+        stop_reason=StopReason.TOOL_USE,
+    ),
     MockResponse(content="文件已读取并分析完成"),
 ])
 
+# 提供工具调用的模拟结果
+mock.add_tool_result("read", "main.py 的内容")
+
 result = await mock.run("读取并分析 main.py")
+assert result.content == "文件已读取并分析完成"
 ```
 
-### 期望-响应模式
+### 添加响应与工具结果（替代 expect/respond）
+
+MockHarness **没有** `expect()` / `respond()` / `register_tool()` 方法。请使用以下真实 API：
 
 ```python
+from harness.testing import MockHarness, MockResponse
+from harness.types import ToolCall, StopReason
+
 mock = MockHarness()
 
-# 设置期望和响应
-mock.expect("分析代码").respond("分析结果：代码质量良好")
-mock.expect("修复 bug").respond("Bug 已修复")
+# 预置多个响应
+mock.add_response(MockResponse(content="分析结果：代码质量良好"))
+mock.add_response(MockResponse(content="Bug 已修复"))
+
+# 也可以一次性设置（清空已有响应）
+mock.set_responses([
+    MockResponse(content="分析结果：代码质量良好"),
+    MockResponse(content="Bug 已修复"),
+])
+
+# 对于工具调用，提供自动工具结果
+mock.add_response(MockResponse(
+    tool_calls=[ToolCall(id="1", name="bash", arguments={"command": "echo hi"})],
+    stop_reason=StopReason.TOOL_USE,
+))
+mock.add_tool_result("bash", "hi")
 
 result1 = await mock.run("分析代码")
 result2 = await mock.run("修复 bug")
@@ -68,6 +96,21 @@ assert result1.content == "分析结果：代码质量良好"
 assert result2.content == "Bug 已修复"
 ```
 
+### MockHarness 公开 API
+
+| 方法 | 说明 |
+|------|------|
+| `add_response(response: MockResponse)` | 追加一个模拟响应 |
+| `add_tool_result(tool_name, result)` | 为指定工具名提供自动返回结果 |
+| `set_responses(responses)` | 覆盖所有响应并重置索引 |
+| `run(prompt, session_id=None, max_iterations=10)` | 运行，返回 `LoopResult` |
+| `run_goal(goal, **kwargs)` | 目标模式运行，返回 `GoalResult` |
+| `activate_skill(skill_name)` | 激活技能（测试替身，无副作用） |
+| `get_recordings()` | 获取录制列表 |
+| `save_recording(path)` | 保存录制到文件 |
+| `load_recording(path)` | 从文件加载录制并回放 |
+| `reset()` | 重置所有状态 |
+
 ## 工具测试
 
 ### 自定义工具测试
@@ -75,6 +118,7 @@ assert result2.content == "Bug 已修复"
 ```python
 from harness import AgentHarness
 from harness.tools.base import Tool, ToolResult, ToolContext
+from pathlib import Path
 
 class CalculatorTool(Tool):
     @property
@@ -95,51 +139,82 @@ class CalculatorTool(Tool):
             "required": ["expression"],
         }
 
-    async def execute(self, args: dict, ctx: ToolContext) -> ToolResult:
+    async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
         try:
-            result = eval(args["expression"])  # 仅用于演示，生产环境不推荐
-            return ToolResult(output=str(result))
+            result = eval(arguments["expression"])  # 仅用于演示，生产环境不推荐
+            return ToolResult(
+                tool_call_id="",
+                success=True,
+                content=str(result),
+            )
         except Exception as e:
-            return ToolResult(output="", error=str(e))
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=str(e),
+            )
 
 # 直接测试工具
 tool = CalculatorTool()
-ctx = ToolContext(working_dir=".", sandbox=None, permissions=None, session_id="test")
+ctx = ToolContext(
+    session_id="test",
+    working_directory=Path("."),
+    permissions=None,  # PermissionSet 实例
+)
 result = await tool.execute({"expression": "2 + 2"}, ctx)
-assert result.output == "4"
-assert not result.is_error
+assert result.content == "4"
+assert result.success
 ```
 
 ### 在 MockHarness 中测试工具
 
+MockHarness 不执行真实工具，而是在收到匹配的工具调用时返回通过
+`add_tool_result(tool_name, result)` 注册的模拟结果：
+
 ```python
 from harness.testing import MockHarness, MockResponse
+from harness.types import ToolCall, StopReason
 
 mock = MockHarness()
-mock.register_tool(CalculatorTool())
 
-# 模拟 LLM 调用工具
-mock.expect("计算 2+2").respond_with_tool("calculator", {"expression": "2+2"})
+# 模拟 LLM 调用工具，并提供模拟结果
+mock.add_response(MockResponse(
+    tool_calls=[ToolCall(id="1", name="calculator", arguments={"expression": "2+2"})],
+    stop_reason=StopReason.TOOL_USE,
+))
+mock.add_tool_result("calculator", "4")
+
+result = await mock.run("计算 2+2")
+assert result.content == "4"
 ```
 
 ## 钩子测试
 
-```python
-from harness.testing import MockHarness
-from harness.core.hooks import HookPoint, HookContext
+`HookContext` 的字段为 `tool_name` / `tool_args` / `tool_result`（**没有** `tool_call` 属性）。
+MockHarness 不提供 `hook` 装饰器；钩子通过 `AgentHarness.add_hook()` 注册：
 
-mock = MockHarness()
+```python
+from harness import AgentHarness
+from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
 
 # 记录钩子调用
 hook_calls = []
 
-@mock.hook(HookPoint.BEFORE_TOOL_EXECUTE)
-async def track_tool_calls(ctx: HookContext):
-    hook_calls.append(ctx.tool_call)
-    return ctx
+class TrackToolHook(LifecycleHook):
+    @property
+    def hook_points(self):
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
 
-result = await mock.run("读取文件")
-assert len(hook_calls) > 0
+    async def execute(self, ctx: HookContext) -> HookResult:
+        hook_calls.append(ctx.tool_name)
+        return HookResult.continue_()
+
+agent = AgentHarness()
+agent.add_hook(TrackToolHook())
+
+result = await agent.run("读取文件")
+assert len(hook_calls) > 0  # 记录了被调用的工具名
 ```
 
 ## 配置测试
@@ -150,12 +225,12 @@ from harness import AgentHarness, HarnessConfig
 # 测试特定配置
 config = HarnessConfig(
     max_iterations=5,
-    max_cost_per_run=0.5,
+    enable_network=False,
 )
 
 agent = AgentHarness(config=config)
 assert agent.config.max_iterations == 5
-assert agent.config.max_cost_per_run == 0.5
+assert agent.config.provider == "auto"  # HarnessConfig 默认 provider 为 "auto"
 ```
 
 ## 集成测试
@@ -182,8 +257,9 @@ async def test_basic_conversation(agent):
 @pytest.mark.asyncio
 async def test_tool_usage(agent):
     result = await agent.run("读取 README.md 的内容")
-    assert len(result.tool_calls) > 0
-    assert any(tc.name == "read" for tc in result.tool_calls)
+    # LoopResult 没有 tool_calls 字段；工具调用体现在 messages 中
+    tool_messages = [m for m in result.messages if m.role == "tool"]
+    assert len(tool_messages) > 0
 ```
 
 ### 端到端测试
@@ -300,6 +376,7 @@ Path path = recorder.saveRecording("my_test_fixture");
 # 单元测试不需要真实 LLM
 mock = MockHarness(responses=[MockResponse(content="OK")])
 result = await mock.run("test")
+assert result.content == "OK"
 ```
 
 ### 2. 隔离外部依赖
@@ -320,21 +397,39 @@ mock.add_tool_result("mcp_github_search_issues", "模拟的 issue 列表")
 
 ```python
 # 测试钩子的拦截行为
-@mock.hook(HookPoint.BEFORE_TOOL_EXECUTE)
-async def block_dangerous(ctx: HookContext):
-    if ctx.tool_call and ctx.tool_call["name"] == "bash":
-        return None  # 阻止执行
-    return ctx
+from harness.core.hooks import LifecycleHook, HookPoint, HookContext, HookResult
+
+class BlockBashHook(LifecycleHook):
+    @property
+    def hook_points(self):
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+    async def execute(self, ctx: HookContext) -> HookResult:
+        if ctx.tool_name == "bash":
+            return HookResult.abort("blocked")
+        return HookResult.continue_()
+
+agent = AgentHarness()
+agent.add_hook(BlockBashHook())
 ```
 
 ### 4. 测试错误处理
 
 ```python
 # 模拟工具错误
+from harness.testing import MockHarness, MockResponse
+from harness.types import ToolCall, StopReason
+
 mock = MockHarness(responses=[
-    MockResponse(tool_calls=[{"name": "bash", "arguments": {"command": "invalid"}}]),
+    MockResponse(
+        tool_calls=[ToolCall(id="1", name="bash", arguments={"command": "invalid"})],
+        stop_reason=StopReason.TOOL_USE,
+    ),
     MockResponse(content="命令执行失败，已尝试替代方案"),
 ])
+
+# 提供导致错误的工具结果
+mock.add_tool_result("bash", "command not found: invalid")
 
 result = await mock.run("执行无效命令")
 assert result.content

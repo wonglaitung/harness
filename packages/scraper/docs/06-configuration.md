@@ -35,7 +35,7 @@ llm:
   api_key: ""  # Or set via HARNESS_LLM_API_KEY env var
   model: "gpt-4o-mini"
   temperature: 0.1
-  max_tokens: 2000
+  max_tokens: 8192
 
 # Data Sources (for reference, skill may override)
 sources:
@@ -54,7 +54,7 @@ sources:
 
 # Output
 output:
-  directory: "~/.harness/scraper"
+  directory: "packages/scraper/output"
 ```
 
 ## LLM 配置
@@ -362,7 +362,7 @@ export HARNESS_LLM_MODEL="gpt-4o"
 ```yaml
 llm:
   temperature: 0.1   # 低温度，减少随机性
-  max_tokens: 2000   # 限制输出长度
+  max_tokens: 8192   # 默认 8K 输出 token
   model: "gpt-4o-mini"  # 使用更便宜的模型
 ```
 

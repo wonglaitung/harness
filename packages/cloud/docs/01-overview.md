@@ -313,7 +313,7 @@ def create_token(user_id: str) -> str:
 
 ### ADR-006: WebSocket 心跳检测
 
-**决策**: 客户端每 30 秒发送心跳，60 秒无响应视为断线。
+**决策**: 客户端每 30 秒发送心跳，90 秒无响应视为断线。
 
 **原因**:
 1. **检测僵尸连接**: 网络中断后 TCP 可能不会立即感知
@@ -324,7 +324,7 @@ def create_token(user_id: str) -> str:
 | 参数 | 值 | 说明 |
 |------|---|------|
 | HEARTBEAT_INTERVAL | 30秒 | 心跳间隔 |
-| HEARTBEAT_TIMEOUT | 60秒 | 超时阈值 |
+| HEARTBEAT_TIMEOUT | 90秒 | 超时阈值（`AgentConfig.heartbeat_timeout`，默认 90.0） |
 | MAX_RECONNECT | 5 | 最大重连次数 |
 | 重连策略 | 指数退避 | 1s, 2s, 4s, 8s, 16s |
 
@@ -383,12 +383,12 @@ marcowong  → uid=1000     →   marcowong uid=1000
 
 **背景**: 原设计使用 `network_mode="none"` 完全隔离网络，但这会导致网关无法通过 WebSocket 连接容器内的 FastAPI。
 
-**决策**: 使用 Docker 内部桥接网络 + iptables 出站限制
+**决策**: 使用 Docker 内部桥接网络（不配置 `internal=True`，保留出站访问，因为 Agent 需要访问外部 LLM API）
 
 **实现方案**：
 ```python
-# 1. 创建专用内部网络
-network = client.networks.create("harness-net", driver="bridge", internal=True)
+# 1. 创建专用内部网络（注意：不使用 internal=True，Agent 需要访问 LLM API）
+network = client.networks.create("harness-net", driver="bridge")
 
 # 2. 容器加入内部网络
 container = client.containers.run(image, network="harness-net", ...)
@@ -433,7 +433,7 @@ class RedisRateLimiter:
 
 ## 参考资源
 
-- [Harness SDK 文档](../sdk/docs/)
+- [Harness SDK 文档](../../sdk/docs/)
 - [FastAPI 文档](https://fastapi.tiangolo.com/)
 - [Vue 3 文档](https://cn.vuejs.org/)
 - [Docker SDK for Python](https://docker-py.readthedocs.io/)

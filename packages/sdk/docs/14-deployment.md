@@ -74,7 +74,7 @@ store = RedisSessionStore("redis://localhost:6379")
 agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
 
 # 或使用 harness.service 完整服务
-# 见 14-spring-cloud-integration.md
+# 见 15-spring-cloud-integration.md
 ```
 
 **关键问题及解决方案**：
@@ -338,4 +338,4 @@ SDK 已有 `ProgressEvent` 机制，天然支持 WebSocket 推送。
 
 完整的实施指南（含 Java 客户端示例、K8s 配置、安全设计等）见：
 
-**👉 [14-spring-cloud-integration.md](./14-spring-cloud-integration.md)**
+**👉 [15-spring-cloud-integration.md](./15-spring-cloud-integration.md)**
