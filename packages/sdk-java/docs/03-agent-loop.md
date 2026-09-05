@@ -1055,11 +1055,11 @@ import java.nio.file.Path;
 
 // OffloadConfig 使用 Builder 模式
 OffloadConfig config = OffloadConfig.builder()
-    .sizeThresholdChars(5000)          // 触发卸载的最小输出大小（字符数）
-    .sizeThresholdTokens(1250)         // Token 阈值（~4 chars/token）
+    .enabled(true)                     // 是否启用卸载（默认 true）
+    .sizeThresholdChars(50000)         // 触发卸载的最小输出大小（字符数，默认 50000）
     .maxOutputsPerSession(50)          // 每会话最大卸载数量
     .cleanupOnSessionEnd(false)        // 会话结束时是否清理文件
-    .previewLength(200)                // 上下文中保留的预览长度
+    .previewLength(500)                // 上下文中保留的预览长度（默认 500）
     .tempDir(Path.of(".harness/offload")) // 卸载文件存储目录
     .build();
 ```

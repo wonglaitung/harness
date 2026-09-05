@@ -163,9 +163,16 @@ import java.util.List;
 // PermissionSet 在 Java SDK 中通过 HarnessConfig.SecurityConfig 配置
 SecurityConfig security = SecurityConfig.builder()
     .enableSandbox(true)
-    .sandboxBlockedCommands(List.of("rm -rf", "sudo"))  // 阻止的命令
-    .sandboxAllowedCommands(List.of("ls", "cat", "grep")) // 允许的命令（可选）
-    .sandboxAllowedEnvVars(List.of("PATH", "HOME"))      // 允许的环境变量
+    .sandboxMaxOutputSize(1_000_000)                     // 沙箱最大输出大小（字节，默认 1,000,000）
+    .sandboxBlockedCommands(List.of(                     // 阻止的命令（默认 8 项）
+        "rm -rf /", "rm -rf ~", "sudo", "chmod -R 777",
+        "mkfs", "dd if=", "> /dev/", ":(){ :|:& };:"))
+    .sandboxBlockedPatterns(List.of(                     // 阻止的命令模式（默认 8 项）
+        "rm -rf", "sudo", "chmod", "chown",
+        "mkfs", "dd if=", "curl | bash", "wget | bash"))
+    .sandboxAllowedCommands(null)                        // 允许的命令白名单（默认 null，不限制）
+    .sandboxAllowedEnvVars(List.of(                      // 允许的环境变量（默认 6 项）
+        "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM"))
     .build();
 
 HarnessConfig config = HarnessConfig.builder()
@@ -192,6 +199,7 @@ SecurityConfig readOnly = SecurityConfig.builder()
 SecurityConfig sandboxed = SecurityConfig.builder()
     .enableSandbox(true)
     .sandboxMaxExecutionTime(30.0)
+    .sandboxMaxOutputSize(1_000_000)
     .build();
 ```
 
@@ -238,6 +246,26 @@ AgentHarness agent = AgentHarness.builder()
     .securityConfig(security)
     .build();
 ```
+
+### SecurityConfig 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| `enableInputValidation` | boolean | `true` | 启用输入验证 |
+| `maxInputLength` | int | `100000` | 最大输入长度 |
+| `checkPromptInjection` | boolean | `true` | 检查提示注入 |
+| `enableOutputSanitization` | boolean | `true` | 启用输出清洗 |
+| `maxOutputLength` | int | `100000` | 最大输出长度 |
+| `enableAuditLog` | boolean | `true` | 启用审计日志 |
+| `auditLogDir` | String | `~/.harness/audit` | 审计日志目录 |
+| `auditRetentionDays` | int | `30` | 审计日志保留天数 |
+| `enableSandbox` | boolean | `true` | 启用沙箱 |
+| `sandboxMaxExecutionTime` | double | `30.0` | 沙箱最大执行时间（秒） |
+| `sandboxMaxOutputSize` | int | `1000000` | 沙箱最大输出大小（字节） |
+| `sandboxBlockedCommands` | List\<String\> | 8 项 | 阻止的命令列表 |
+| `sandboxBlockedPatterns` | List\<String\> | 8 项 | 阻止的命令模式列表 |
+| `sandboxAllowedCommands` | List\<String\> | `null` | 允许的命令白名单（null 表示不限制） |
+| `sandboxAllowedEnvVars` | List\<String\> | 6 项 | 允许的环境变量列表 |
 
 ## InputValidator（输入验证）
 

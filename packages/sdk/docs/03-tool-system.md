@@ -25,10 +25,10 @@
 │  └─────────────────────────────────────────┘    │
 │                                                  │
 │  ┌─────────────────────────────────────────┐    │
-│  │          Built-in Tools (16)             │    │
+│  │          Built-in Tools (17)             │    │
 │  │  Read │ Write │ Edit │ Glob │ Grep      │    │
 │  │  Bash │ WebSearch │ WebFetch            │    │
-│  │  WebToMarkdown                           │    │
+│  │  WebToMarkdown │ UpdateCoreMemory       │    │
 │  │  BrowserNavigate │ BrowserClick         │    │
 │  │  BrowserType │ BrowserExtract           │    │
 │  │  BrowserScreenshot │ BrowserWait        │    │
@@ -250,6 +250,76 @@ class WebToMarkdownTool(Tool):
     #   - 支持 BeautifulSoup 解析
 ```
 
+### UpdateCoreMemoryTool - 长期记忆更新
+
+更新 MEMORY.md 中的结构化条目，将用户偏好、项目约定等持久化到长期记忆。
+
+```python
+from harness.tools.builtins import UpdateCoreMemoryTool
+
+tool = UpdateCoreMemoryTool()
+
+# 添加记忆
+result = await tool.execute({
+    "category": "user_profile",
+    "content": "Shell：使用 cmd（不使用 PowerShell）",
+    "action": "add",
+}, context)
+
+# 移除记忆
+result = await tool.execute({
+    "category": "learned_patterns",
+    "content": "回复风格：简洁",
+    "action": "remove",
+}, context)
+```
+
+#### 输入参数
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `category` | enum | 是 | 记忆类别：`user_profile`、`key_decisions`、`learned_patterns`、`project_context` |
+| `content` | string | 是 | 记忆内容（应为提炼后的简洁陈述） |
+| `action` | enum | 是 | 操作：`add`（添加）或 `remove`（移除） |
+
+#### 记忆类别
+
+| 类别 | 用途 | 示例 |
+|------|------|------|
+| `user_profile` | 用户偏好和环境信息 | "操作系统：Windows"、"主题偏好：深色" |
+| `key_decisions` | 重要决策记录 | "框架选择：Next.js"、"数据库：PostgreSQL" |
+| `learned_patterns` | 交互习惯 | "回复风格：简洁"、"语言：中文" |
+| `project_context` | 项目约定 | "分支策略：GitFlow"、"部署方式：Docker" |
+
+#### 内容提炼规则
+
+- 不要存储用户原话，要提炼成简洁陈述
+- 用户说「使用 cmd，不要用 powershell」→ 存储「Shell：使用 cmd（不使用 PowerShell）」
+- 用户说「我使用 Windows」→ 存储「操作系统：Windows」
+- 添加前先检查是否已有类似记忆，避免重复
+
+#### 与 MemoryFileManager 集成
+
+工具内部通过 `MemoryFileManager` 管理 MEMORY.md 文件：
+
+```python
+# 工具自动处理路径解析
+# 优先级：context.metadata["memory_md_path"] → ~/.harness/
+from harness.memory.memory_file import MemoryFileManager, MemoryEntry, MemoryCategory
+
+manager = MemoryFileManager(project_root=Path("~/.harness"))
+entry = MemoryEntry(
+    category=MemoryCategory.USER_PROFILE,
+    content="主题偏好：深色",
+    source=MemorySource.USER_INPUT,
+)
+manager.add_entry(entry)  # 自动去重
+```
+
+添加成功后返回 `metadata={"refresh_memory": True}`，UI 可据此刷新记忆显示。
+
+> **下一步**：了解记忆系统的完整架构，参见 [04-memory-system.md](./04-memory-system.md)。
+
 ## 浏览器自动化工具
 
 基于 Playwright 的确定性浏览器自动化工具集，专为需要精确控制的场景设计（如金融/银行操作）。
@@ -448,12 +518,23 @@ tool = BrowserCloseTool()
 result = await tool.execute({}, context)
 ```
 
-### 快速获取所有浏览器工具
+### get_browser_tools() 工厂函数
+
+返回所有浏览器工具的列表，方便一次性注册：
 
 ```python
 from harness.tools.browser import get_browser_tools
 
-# 获取所有 7 个浏览器工具
+# 返回 7 个工具实例:
+# [
+#   BrowserNavigateTool(),
+#   BrowserClickTool(),
+#   BrowserTypeTool(),
+#   BrowserExtractTool(),
+#   BrowserScreenshotTool(),
+#   BrowserWaitTool(),
+#   BrowserCloseTool(),
+# ]
 tools = get_browser_tools()
 
 # 直接用于 AgentHarness
@@ -470,6 +551,19 @@ result = await agent.run("""
 3. 点击登录
 4. 截取结果页面
 """)
+```
+
+### 安装
+
+```bash
+# 安装 Playwright 库
+pip install harness-sdk[browser]
+
+# 下载浏览器（如使用内置 Chromium/Firefox/WebKit）
+playwright install
+
+# 使用系统浏览器则无需 playwright install
+# BrowserManager.use_system_browser() 会自动检测
 ```
 
 ### 内网环境部署

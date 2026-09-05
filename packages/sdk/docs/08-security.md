@@ -185,6 +185,44 @@ sandboxed = PermissionSet.sandbox(
 )
 ```
 
+### merge() 合并权限
+
+合并两个 PermissionSet，返回新的合并结果：
+
+```python
+from harness.tools.permissions import PermissionSet
+
+base = PermissionSet.read_only(paths=["/workspace"])
+extra = PermissionSet(
+    allowed_write_paths={Path("/workspace/output")},
+    network_enabled=True,
+)
+
+merged = base.merge(extra)
+# merged 包含: 读取 /workspace + 写入 /workspace/output + 网络访问
+```
+
+### 与 ToolContext 集成
+
+权限通过 `ToolContext.permissions` 在工具执行时校验：
+
+```python
+from harness.tools.base import ToolContext
+from harness.tools.permissions import PermissionSet
+
+ctx = ToolContext(
+    session_id="session_123",
+    working_directory=Path("/workspace"),
+    permissions=PermissionSet.sandbox(workspace="/workspace"),
+    metadata={},
+)
+
+# 工具内部通过 ctx.permissions 检查权限
+if ctx.permissions.is_path_allowed("/workspace/file.txt", mode="read"):
+    # 允许读取
+    pass
+```
+
 ### 使用示例
 
 ```python
@@ -211,7 +249,13 @@ if perms.is_path_allowed("/workspace/project/output.log", mode="write"):
 if perms.is_command_allowed("ls -la"):
     # 允许执行
     pass
+
+# 合并权限
+sandbox_perms = PermissionSet.sandbox(workspace="/workspace")
+with_network = sandbox_perms.merge(PermissionSet(network_enabled=True))
 ```
+
+> **下一步**：了解沙箱执行隔离，参见上方 [Sandbox（沙箱）](#sandbox沙箱) 章节；了解权限在工具执行中的使用，参见 [03-tool-system.md](./03-tool-system.md)。
 
 ### 与技能集成
 

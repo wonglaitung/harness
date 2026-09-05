@@ -490,6 +490,7 @@ HarnessConfig config = HarnessConfig.builder()
     .costControl(HarnessConfig.CostControlConfig.builder().build())
     .observability(HarnessConfig.ObservabilityConfig.builder().build())
     .storage(HarnessConfig.StorageConfig.builder().build())
+    .offload(OffloadConfig.builder().build())
     .routing(HarnessConfig.RoutingConfig.builder().build())
     .build();
 ```
@@ -1415,6 +1416,28 @@ import java.util.Map;
 // - Map<String, Object> arguments // 调用参数
 
 ToolCall call = new ToolCall("call_123", "read", Map.of("path", "test.txt"));
+```
+
+### UserUsage
+
+```java
+import com.harness.core.UserUsage;
+
+// Java UserUsage fields:
+// - String userId              // 用户 ID
+// - int dailyTokens            // 当日 token 使用量（默认 0）
+// - int hourlyRequests         // 当前小时请求数（默认 0）
+// - String date                // 当前日期（默认 ""）
+// - int hour                   // 当前小时（默认 0）
+
+UserUsage usage = new UserUsage("user-123");
+usage.addTokens(500);
+usage.addRequest();
+
+// 检查预算
+Object[] result = usage.checkBudget(costConfig);
+boolean withinBudget = (Boolean) result[0];
+String warning = (String) result[1];
 ```
 
 ### GoalStatus

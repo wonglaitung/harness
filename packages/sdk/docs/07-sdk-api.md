@@ -44,6 +44,26 @@ from harness import (
     BashTool,
     WebSearchTool,
     WebFetchTool,
+    UpdateCoreMemoryTool,  # 核心记忆更新工具
+
+    # 浏览器工具（可选：需要 playwright）
+    BrowserManager,
+    BrowserNavigateTool,
+    BrowserClickTool,
+    BrowserTypeTool,
+    BrowserScreenshotTool,
+    BrowserExtractTool,
+    BrowserWaitTool,
+    BrowserCloseTool,
+    get_browser_tools,
+
+    # 权限系统
+    PermissionSet,
+
+    # 流式处理
+    StreamingConfig,
+    StreamingHandler,
+    StreamingStats,
 
     # 核心类型
     Message,
@@ -1328,6 +1348,318 @@ CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
 # Linux (CUDA)
 CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
 ```
+
+## UpdateCoreMemoryTool
+
+`UpdateCoreMemoryTool` 允许 Agent 将用户偏好、项目约定和重要决策持久化到长期记忆（MEMORY.md）。
+
+### 基本信息
+
+| 属性 | 值 |
+|------|-----|
+| 工具名称 | `update_core_memory` |
+| 描述 | 更新用户偏好或项目约定到长期记忆 |
+| 导入 | `from harness import UpdateCoreMemoryTool` |
+
+### 输入 Schema
+
+```python
+{
+    "type": "object",
+    "properties": {
+        "category": {
+            "type": "string",
+            "enum": [
+                "user_profile",      # 用户偏好
+                "key_decisions",     # 关键决策
+                "learned_patterns",  # 学习到的模式
+                "project_context",   # 项目上下文
+            ],
+            "description": "记忆类别",
+        },
+        "content": {
+            "type": "string",
+            "description": "记忆内容",
+        },
+        "action": {
+            "type": "string",
+            "enum": ["add", "remove"],
+            "description": "操作类型",
+        },
+    },
+    "required": ["category", "content", "action"],
+}
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness, UpdateCoreMemoryTool
+
+agent = AgentHarness(
+    tools=[UpdateCoreMemoryTool()],
+)
+
+# Agent 会自动在适当时机调用工具存储记忆
+# 例如用户说「我习惯用深色主题」
+# → category=user_profile, content="主题偏好：深色"
+
+# 用户说「以后回复简短一点」
+# → category=learned_patterns, content="回复风格：简洁"
+```
+
+### 重要规则
+
+1. **提炼内容**：不要存储用户原话，要提炼成简洁的陈述
+   - 用户说「使用 cmd，不要用 powershell」 → 存储「Shell：使用 cmd（不使用 PowerShell）」
+2. **避免重复**：添加前先检查是否已有类似记忆，如有则不要重复添加
+3. **适用场景**：用户提到长期偏好、工作环境、项目约束等
+
+下一步 → [内置工具](#内置工具) | [权限系统](#权限系统)
+
+---
+
+## PermissionSet
+
+`PermissionSet` 定义工具执行的权限控制，管理路径、命令和网络访问权限。
+
+### 基本信息
+
+| 属性 | 值 |
+|------|-----|
+| 导入 | `from harness import PermissionSet` |
+
+### 字段
+
+```python
+@dataclass
+class PermissionSet:
+    # 路径权限
+    allowed_read_paths: set[Path]     # 允许读取的路径
+    allowed_write_paths: set[Path]    # 允许写入的路径
+
+    # 命令权限
+    allowed_commands: set[str]        # 允许执行的命令
+    blocked_commands: set[str]        # 禁止执行的命令
+
+    # 网络权限
+    allowed_hosts: set[str]           # 允许访问的主机
+    network_enabled: bool = False     # 是否启用网络
+```
+
+### 工厂方法
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `full_access()` | 完全访问权限 | 启用网络，所有路径和命令可访问 |
+| `read_only(paths)` | 只读权限 | 指定路径可读，不可写 |
+| `sandbox(workspace, allow_network)` | 沙箱权限 | 工作目录可读写，系统临时目录可读写 |
+
+### 检查方法
+
+| 方法 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `is_path_allowed(path, mode)` | path: 路径, mode: "read"/"write" | bool | 检查路径是否可访问 |
+| `is_command_allowed(command)` | command: 命令 | bool | 检查命令是否允许执行 |
+| `is_host_allowed(host)` | host: 主机名 | bool | 检查主机是否可访问 |
+| `merge(other)` | other: PermissionSet | PermissionSet | 合并两个权限集 |
+
+### 使用示例
+
+```python
+from harness import PermissionSet
+
+# 沙箱模式：仅允许访问工作目录
+permissions = PermissionSet.sandbox(
+    workspace="/workspace",
+    allow_network=False,
+)
+
+# 完全访问
+permissions = PermissionSet.full_access()
+
+# 只读模式
+permissions = PermissionSet.read_only(
+    paths=["/workspace", "/data"]
+)
+
+# 合并权限
+combined = permissions.merge(PermissionSet(
+    allowed_hosts={"api.example.com"},
+    network_enabled=True,
+))
+```
+
+下一步 → [流式处理](#流式处理) | [浏览器工具](#浏览器工具)
+
+---
+
+## Streaming
+
+`Streaming` 模块提供流式输出处理，支持缓冲区管理和背压控制。
+
+### 基本信息
+
+| 导入 | `from harness import StreamingConfig, StreamingHandler, StreamingStats` |
+
+### StreamingConfig
+
+```python
+@dataclass
+class StreamingConfig:
+    buffer_size: int = 8192              # 缓冲区最大块数
+    backpressure_threshold: float = 0.9  # 背压触发阈值（90% 容量）
+    pause_on_backpressure: bool = True   # 背压时暂停上游
+    max_pause_duration: float = 5.0      # 最大暂停时长（秒）
+```
+
+### StreamingStats
+
+```python
+@dataclass
+class StreamingStats:
+    chunks_received: int = 0         # 接收的块数
+    chunks_processed: int = 0        # 处理的块数
+    backpressure_events: int = 0     # 背压事件次数
+    total_pause_time: float = 0.0    # 总暂停时间
+    buffer_high_watermark: int = 0   # 缓冲区高水位
+
+    @property
+    def is_healthy(self) -> bool:
+        """检查流是否健康（无过多背压）"""
+        return self.backpressure_events < 10
+```
+
+### StreamingHandler
+
+```python
+handler = StreamingHandler(
+    config=StreamingConfig(buffer_size=4096),
+    on_progress=my_callback,
+    on_chunk=my_chunk_handler,
+)
+
+# 使用示例
+async for chunk in llm.stream(messages):
+    await handler.handle(chunk)
+    if handler.should_pause:
+        await asyncio.sleep(0.1)
+
+content = handler.get_full_content()
+tool_calls = handler.get_tool_calls()
+```
+
+### 属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `buffer_size` | int | 当前缓冲区大小 |
+| `buffer_usage` | float | 缓冲区使用率 (0.0-1.0) |
+| `should_pause` | bool | 是否应暂停上游 |
+| `stats` | StreamingStats | 流式统计信息 |
+
+### 方法
+
+| 方法 | 说明 |
+|------|------|
+| `handle(chunk)` | 处理传入的块 |
+| `get_full_content()` | 获取累积的文本内容 |
+| `get_tool_calls()` | 获取累积的工具调用 |
+| `clear()` | 清空缓冲区和累积内容 |
+
+下一步 → [浏览器工具](#浏览器工具) | [权限系统](#权限系统)
+
+---
+
+## Browser Tools
+
+`Browser Tools` 提供基于 Playwright 的浏览器自动化功能，适用于需要精确控制的场景（如金融/银行操作）。
+
+### 基本信息
+
+| 导入 | `from harness import BrowserManager, get_browser_tools, BrowserNavigateTool, BrowserClickTool, BrowserTypeTool, BrowserExtractTool, BrowserScreenshotTool, BrowserWaitTool, BrowserCloseTool` |
+
+### 安装依赖
+
+```bash
+pip install harness-sdk[browser]
+# 或
+pip install playwright && playwright install
+```
+
+### BrowserManager（单例）
+
+`BrowserManager` 管理 Playwright 浏览器实例的生命周期。
+
+```python
+from harness import BrowserManager
+
+# 获取页面（自动启动浏览器）
+page = await BrowserManager.get_page()
+
+# 配置浏览器
+BrowserManager.configure(
+    headless=True,              # 无头模式
+    browser_type="chromium",    # 浏览器类型
+    default_timeout=30000,      # 默认超时（毫秒）
+    auto_screenshot=True,       # 自动截图
+)
+
+# 使用系统浏览器（无需下载）
+BrowserManager.use_system_browser()
+
+# 关闭浏览器
+await BrowserManager.close()
+```
+
+### 浏览器类型
+
+| 类型 | 说明 | 依赖 |
+|------|------|------|
+| `chromium` | Playwright 内置 Chromium | 需要 `playwright install` |
+| `firefox` | Playwright 内置 Firefox | 需要 `playwright install` |
+| `webkit` | Playwright 内置 WebKit | 需要 `playwright install` |
+| `msedge` | 系统 Microsoft Edge | 无需下载，适合内网环境 |
+| `chrome` | 系统 Google Chrome | 无需下载 |
+
+### 工具列表
+
+| 工具 | 名称 | 说明 |
+|------|------|------|
+| `BrowserNavigateTool` | `browser_navigate` | 导航到 URL，等待页面加载 |
+| `BrowserClickTool` | `browser_click` | 点击元素，自动等待元素可见 |
+| `BrowserTypeTool` | `browser_type` | 在输入框中输入文本 |
+| `BrowserExtractTool` | `browser_extract` | 从页面提取文本或数据 |
+| `BrowserScreenshotTool` | `browser_screenshot` | 截图（全页面或特定元素） |
+| `BrowserWaitTool` | `browser_wait` | 等待条件（元素、URL、超时） |
+| `BrowserCloseTool` | `browser_close` | 关闭浏览器，释放资源 |
+
+### 工厂函数
+
+```python
+from harness import get_browser_tools
+
+# 获取所有浏览器工具
+tools = get_browser_tools()
+
+# 使用
+agent = AgentHarness(tools=tools)
+```
+
+### 使用示例
+
+```python
+from harness import AgentHarness, get_browser_tools
+
+agent = AgentHarness(tools=get_browser_tools())
+
+# Agent 会自动使用浏览器工具完成任务
+result = await agent.run("访问 example.com 并提取页面标题")
+```
+
+下一步 → [类型定义](#类型定义) | [UpdateCoreMemoryTool](#updatecorememorytool)
+
+---
 
 ## 类型定义
 
