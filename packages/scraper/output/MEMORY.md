@@ -152,7 +152,27 @@
 
 ## 2026-09-06 提取
 
+## 2026-09-07 提取
+
 ## 注意事项
+
+### 港股分析
+- **腾讯14日回购+千亿回购潮 — 四重左侧共振信号全面升级 🔥🔥🔥🔥🔥** - http://finance.eastmoney.com/a/202609043864760032.html
+
+### 港股分析
+- **港交所00388-港股IPO募资3558亿-含科量飙升-制度红利超级左侧信号**
+
+### 港股分析
+- **美债10Y-T17-连续三日478-480天花板三连确认-FOMC前黄金布局窗口**
+
+### 新范式/工具
+- **Magnitude — Agent-First 本地推理新范式** - https://github.com/magnitudedev/magnitude
+
+### 新范式/工具
+- **BenchMIRT — 多维IRT解耦LLM基准测试**
+
+### 新范式/工具
+- **QAH — 4-bit 模型超越全精度：量化感知修复新范式** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
 
 ### 港股分析
 - **港股Alpha信号全景-2026-09-06-四重左侧共振-FOMC前黄金布局窗口**
