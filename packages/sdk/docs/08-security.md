@@ -39,6 +39,15 @@
 
 > **声明**：监管/金融场景**必须** `strict=True`；基础边界常开不构成金融级合规，治理层全开才对标防翻车清单 A–H。
 
+### 部署侧强制校验（环境变量）
+
+为防止合规场景漏开治理层，提供进程级兜底开关（非 `HarnessConfig` 字段，运行时读取）：
+
+- `HARNESS_REQUIRE_STRICT=1`：当 `AgentHarness` 以 `strict=False` 构造时**直接抛 `RuntimeError`**（fail-fast），强制要求金融/监管场景显式 `strict=True`。
+- 仅 `== "1"` 触发；未设置或其它取值均不触发。
+- 仅作用于 `AgentHarness.__init__`（`packages/sdk/src/harness/sdk/harness.py` 的 `_require_strict_if_env`），多 Agent 编排经 `config.state_store`/`review_queue` 间接获得治理，不单独读此变量。
+- 运维/CI 在启动前 `export HARNESS_REQUIRE_STRICT=1` 即可统一兜底；非合规应用不应设置该变量。
+
 ### 共享状态治理（SharedStateStore）
 
 多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writer_id`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。禁用点对点文本传纸条。后端：`memory`(测试) / `file`(worktree，开发) / `redis` / `db`(生产，optional extras)。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。

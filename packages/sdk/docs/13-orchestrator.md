@@ -463,7 +463,7 @@ asyncio.run(main())
 - `False`（默认）：gate/state/review/retry/PII/全沙箱均 `None`/直通 → **存量应用零迁移**，仅韧性层在线。
 - `True`：治理层全开 → 金融级对标防翻车清单 A–H。
 
-风险分级：Low（研究/内部工具）可 `False`；High（金融/监管/安全关键）**必须 `True`**（README/概述须醒目声明，可选部署校验 `HARNESS_REQUIRE_STRICT=1`）。
+风险分级：Low（研究/内部工具）可 `False`；High（金融/监管/安全关键）**必须 `True`**（README/概述须醒目声明，可选部署校验 `HARNESS_REQUIRE_STRICT=1`，详见 [08-security.md](./08-security.md#部署侧强制校验环境变量)）。
 
 ### 与现有编排的关系（改造点）
 

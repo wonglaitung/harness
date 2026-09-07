@@ -275,7 +275,7 @@ Harness 的可信度来自**确定性安全/问责层**，与模型能力解耦�
 | Moderate | 内容生成/数据分析/客服 | `False`→可开 | 韧性层 | 韧性+可选治理 |
 | High | 金融/监管/安全关键 | **`True`** | 韧性+治理 | **A–H 全对齐** |
 
-> **声明**：监管/金融场景**必须** `strict=True`；可选部署校验 `HARNESS_REQUIRE_STRICT=1` 在 `strict=False` 时直接报错。
+> **声明**：监管/金融场景**必须** `strict=True`；可选部署校验 `HARNESS_REQUIRE_STRICT=1` 在 `strict=False` 时直接报错（详见 [08-security.md](./08-security.md#部署侧强制校验环境变量)）。
 
 ## Production Harness 组件实现状态
 
