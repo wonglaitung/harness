@@ -284,6 +284,11 @@ class GoalResult:
     # Error info
     error: str | None = None
 
+    # Deterministic gate verdict (set when strict governance is enabled).
+    gate_verdict: Any = None
+    delivered_content: str | None = None
+    reconciliation_report: Any = None
+
     @property
     def achieved(self) -> bool:
         """Check if the goal was achieved."""

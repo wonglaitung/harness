@@ -224,6 +224,48 @@ class StorageConfig:
 
 
 @dataclass
+class GateConfig:
+    """
+    Deterministic gate configuration (governance layer).
+
+    The gate is only built when ``HarnessConfig.strict=True`` or when an
+    explicit ``gate`` is supplied. It performs 100%-deterministic format/fact/
+    logic checks + delivery reconciliation before a result is handed off.
+    """
+
+    enable: bool = True
+    block_on_unsourced: bool = True  # FactGrounder: no-source factual claim -> ERROR
+    min_content_len: int = 200  # below this, fact grounding is skipped
+
+
+@dataclass
+class StateConfig:
+    """
+    Shared-state (Blackboard) configuration for multi-agent coordination.
+
+    backend: memory (tests) | file (worktree/dev) | redis | db (prod, extras).
+    Multi-agent roles coordinate through structured shared state, never via
+    point-to-point text notes.
+    """
+
+    backend: Literal["memory", "file", "redis", "db"] = "memory"
+    path: str | None = None  # file / db path
+    url: str | None = None  # redis URL
+
+
+@dataclass
+class ReviewConfig:
+    """
+    Human-in-the-loop review queue configuration (governance layer).
+
+    Isolated deliveries / exhausted retries are submitted here for human
+    resolution (confirm / correct / exempt) and audited.
+    """
+
+    enabled: bool = True
+
+
+@dataclass
 class HarnessConfig:
     """
     Main configuration for AgentHarness.
@@ -292,6 +334,14 @@ class HarnessConfig:
 
     # Routing settings (CPU router for cost optimization)
     routing: RoutingConfig | None = None
+
+    # Deterministic gate / shared state / review (governance layer).
+    # strict=True turns the whole governance layer on (financial-grade).
+    # Default False => governance off, resilience layer on, zero migration.
+    strict: bool = False
+    gate: GateConfig | None = None
+    state: StateConfig | None = None
+    review: ReviewConfig | None = None
 
     # Memory scoring settings (Retrieval Strength and Archive)
     memory_scoring: MemoryScoringConfig | None = None

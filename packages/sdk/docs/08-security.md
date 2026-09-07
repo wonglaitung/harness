@@ -30,6 +30,19 @@
 └─────────────────────────────────────────────────┘
 ```
 
+## 风险分级与 strict 预设
+
+安全分两层，**风险分级**启停（详见 [01-overview.md](./01-overview.md#确定性闸门与风险分级) 与 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)）：
+
+- **韧性层（始终在线）**：`CircuitBreaker`、`CostController`、OTel 可观测、以及 `agent_loop` 默认的**基础输入校验与提示注入检测**（`InputValidator`/`ResultSanitizer`/`AuditLogger` 默认开启）。存量应用零迁移即具备底线安全。
+- **治理层（由 `strict` 控制）**：`HarnessConfig(strict=True)` 一键开启完整治理——`DeterministicGate` 三维校验 + 交付对账、`SharedStateStore` 共享状态治理、完整权限沙箱 + PII 护栏、`RetryPolicy`、`ReviewQueue`。
+
+> **声明**：监管/金融场景**必须** `strict=True`；基础边界常开不构成金融级合规，治理层全开才对标防翻车清单 A–H。
+
+### 共享状态治理（SharedStateStore）
+
+多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writer_id`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。禁用点对点文本传纸条。后端：`memory`(测试) / `file`(worktree，开发) / `redis` / `db`(生产，optional extras)。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。
+
 ## Sandbox（沙箱）
 
 沙箱为工具执行提供隔离环境，限制命令执行和文件访问。

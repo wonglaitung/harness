@@ -20,7 +20,13 @@ from harness.memory.context_builder import ContextBuilder, ContextConfig
 from harness.memory.session import SessionManager
 from harness.memory.store import FileSessionStore, SQLiteSessionStore
 from harness.progress import create_progress_handler
-from harness.sdk.config import HarnessConfig, RoutingConfig
+from harness.sdk.config import (
+    GateConfig,
+    HarnessConfig,
+    ReviewConfig,
+    RoutingConfig,
+    StateConfig,
+)
 from harness.skills import (
     ProgressiveSkillLoader,
     Skill,
@@ -201,6 +207,14 @@ class AgentHarness:
 
         # Initialize guardrails if configured
         self._init_guardrails()
+
+        # Build governance layer (deterministic gate / shared state / review).
+        # strict=True turns it on; off by default => zero migration for existing apps.
+        # Order matters: review queue must exist before the gate references it.
+        self._require_strict_if_env()
+        self._review_queue = self._build_review_queue()
+        self._gate = self._build_gate()
+        self._state_store = self._build_state_store()
 
     def _create_session_store(self):
         """Create session store based on storage config."""
@@ -504,6 +518,83 @@ class AgentHarness:
         Kept for backward compatibility with explicit loading scenarios.
         """
         self._skill_loader.load_defaults()
+
+    def _require_strict_if_env(self) -> None:
+        """Fail fast when ops require governance but it is off."""
+        import os
+
+        if os.getenv("HARNESS_REQUIRE_STRICT") == "1" and not self.config.strict:
+            raise RuntimeError(
+                "HARNESS_REQUIRE_STRICT=1 but HarnessConfig.strict=False. "
+                "Regulated/financial scenarios must enable the governance layer "
+                "(strict=True)."
+            )
+
+    def _build_gate(self) -> Any | None:
+        """Build the deterministic gate when governance is enabled."""
+        if not self.config.strict and self.config.gate is None:
+            return None
+        from harness.gate import DeterministicGate, FactGrounder, FormatValidator, LogicReconciler
+        from harness.gate.reconciliation import Reconciler
+
+        gc = self.config.gate or GateConfig()
+        if not gc.enable:
+            return None
+        return DeterministicGate(
+            validators=[
+                FormatValidator(),
+                FactGrounder(
+                    block_on_unsourced=gc.block_on_unsourced,
+                    min_content_len=gc.min_content_len,
+                ),
+                LogicReconciler(),
+            ],
+            reconciler=Reconciler(),
+            review_queue=self._review_queue,
+        )
+
+    def _build_state_store(self) -> Any | None:
+        """Build shared state when governance is enabled."""
+        if not self.config.strict and self.config.state is None:
+            return None
+        from harness.state import create_state_store
+
+        sc = self.config.state or StateConfig()
+        return create_state_store(sc.backend, path=sc.path, url=sc.url)
+
+    def _build_review_queue(self) -> Any | None:
+        """Build the human-in-the-loop review queue when governance is enabled."""
+        if not self.config.strict and self.config.review is None:
+            return None
+        from harness.review import ReviewQueue
+
+        rc = self.config.review or ReviewConfig()
+        if not rc.enabled:
+            return None
+        return ReviewQueue()
+
+    def _apply_gate(self, content: str | None, session: Any = None) -> Any | None:
+        """Run the deterministic gate over a candidate delivery.
+
+        Provenance is auto-collected from tool messages (dual-channel sourcing);
+        explicit `sources=` would take precedence in a direct gate call.
+        """
+        if self._gate is None or not content:
+            return None
+        provenance: list[str] = []
+        if session is not None:
+            for m in getattr(session, "messages", []):
+                if getattr(m, "role", None) == "tool" and getattr(m, "content", None):
+                    provenance.append(m.content)
+        return self._gate.check(content, sources=provenance)
+
+    @property
+    def shared_state(self) -> Any | None:
+        """Shared state store (Blackboard), or None when governance is off.
+
+        Multi-agent roles coordinate through this instead of passing text.
+        """
+        return self._state_store
 
     def _init_guardrails(self) -> None:
         """Initialize guardrails hook if configured."""
@@ -926,6 +1017,13 @@ class AgentHarness:
         # Save session
         self._session_manager.update_session(result.session)
 
+        # Run deterministic gate (governance) if enabled — attaches verdict.
+        verdict = self._apply_gate(result.final_response, result.session)
+        if verdict is not None:
+            result.gate_verdict = verdict
+            result.delivered_content = verdict.delivered_content
+            result.reconciliation_report = verdict.reconciliation_report
+
         return result
 
     async def stream(
@@ -1091,7 +1189,16 @@ class AgentHarness:
 
         # Create and run GoalLoop
         loop = GoalLoop(agent=self, config=config, on_progress=on_progress)
-        return await loop.run()
+        goal_result = await loop.run()
+
+        # Run deterministic gate (governance) on the final goal delivery.
+        verdict = self._apply_gate(goal_result.final_response)
+        if verdict is not None:
+            goal_result.gate_verdict = verdict
+            goal_result.delivered_content = verdict.delivered_content
+            goal_result.reconciliation_report = verdict.reconciliation_report
+
+        return goal_result
 
     def register_tool(
         self,

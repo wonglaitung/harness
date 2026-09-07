@@ -128,6 +128,7 @@ class TeamOrchestrator:
         agent = AgentHarness(
             llm_client=self.orchestrator.agent._llm_client,
             config=config,
+            tools=role.tools or None,
         )
 
         # Activate skills
@@ -227,7 +228,7 @@ class TeamOrchestrator:
         Returns:
             Worktree path
         """
-        task_hash = hashlib.md5(
+        task_hash = hashlib.sha256(
             f"{team_name}_{task}_{datetime.now().isoformat()}".encode()
         ).hexdigest()[:8]
         branch_name = f"team/{team_name}/{task_hash}"
@@ -318,11 +319,9 @@ class TeamOrchestrator:
             result = await self._run_agent(agent, current_task, worktree_path)
             results[role.name] = result
 
-            # Pass result to next agent
+            # Persist to shared state (governance) and compose next task.
             if result.achieved:
-                current_task = (
-                    f"{task}\n\nPrevious agent ({role.name}) output:\n{result.final_response}"
-                )
+                current_task = await self._record_agent_result(config, role, result, task)
 
         return results
 
@@ -371,6 +370,7 @@ Provide your allocation in the following format:
 
         allocation_result = await self._run_agent(leader_agent, allocation_prompt, worktree_path)
         results = {leader_role.name: allocation_result}
+        await self._record_agent_result(config, leader_role, allocation_result, task)
 
         # Workers execute assigned tasks
         for role in config.roles[1:]:
@@ -378,6 +378,7 @@ Provide your allocation in the following format:
             subtask = f"Complete your assigned part of: {task}"
             result = await self._run_agent(agent, subtask, worktree_path)
             results[role.name] = result
+            await self._record_agent_result(config, role, result, task)
 
         return results
 
@@ -412,6 +413,56 @@ Provide your allocation in the following format:
             workspace_dir=worktree_path or agent.config.workspace_dir,
         )
         return await agent.run_goal(config)
+
+    async def _record_agent_result(
+        self,
+        config: TeamConfig,
+        role: AgentRole,
+        result: GoalResult,
+        task: str,
+    ) -> str:
+        """
+        Persist a sub-agent result to the Blackboard (governance) and escalate
+        gate-isolated deliveries to human review.
+
+        Returns the next task string. When ``config.state_store`` is set, the
+        next agent is instructed to read from shared state instead of receiving
+        a raw text note (防翻车清单 H: 禁止点对点文本传纸条). Otherwise the
+        legacy raw-text passing is used (backward compatible).
+        """
+        if config.state_store is None:
+            return (
+                f"{task}\n\nPrevious agent ({role.name}) output:\n"
+                f"{getattr(result, 'final_response', '')}"
+            )
+
+        content = getattr(result, "delivered_content", None) or getattr(
+            result, "final_response", ""
+        )
+        await config.state_store.put_authoritative(
+            role.name, content, source_agent=role.name
+        )
+
+        verdict = getattr(result, "gate_verdict", None)
+        if (
+            verdict is not None
+            and not verdict.passed
+            and config.review_queue is not None
+        ):
+            from harness.review.queue import ReviewItem
+
+            config.review_queue.submit(
+                ReviewItem(
+                    gate_findings=getattr(verdict, "findings", []),
+                    content=str(content),
+                    source=f"team:{config.name}:{role.name}",
+                )
+            )
+
+        return (
+            f"{task}\n\n请基于共享状态中角色 {role.name} 的结论继续"
+            f"（不重复传递原始文本）。"
+        )
 
     def _get_role_worktree(
         self,

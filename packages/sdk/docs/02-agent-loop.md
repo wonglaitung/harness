@@ -411,6 +411,47 @@ agent = AgentHarness()
 agent.add_hook(PreventEarlyExitHook())
 ```
 
+## 确定性闸门与交付对账
+
+> 设计详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。`strict=True` 时自动启用；默认关闭，存量应用零迁移。
+
+`agent_loop` 在**交付结果前**插入一道确定性校验管线 `DeterministicGate`：
+
+1. **三维校验**（100% 代码裁决，LLM 不参与）
+   - 格式维：`FormatValidator`（结构合法性）
+   - 事实维：`FactGrounder`（关键结论须带溯源引用；双通道可信源：工具溯源自动采集 ∪ 调用时 `sources=`）
+   - 逻辑维：`LogicReconciler`（跨字段勾稽 / 业务规则）
+2. **交付前对账** `Reconciliation`：结论 ↔ 可信源字段反向核对，无来源/自相矛盾项删除或标「存疑」，绝不静默交付。
+3. **隔离升级**：被拦截/标疑项进入 `ReviewQueue`，人工三选一（确认/修正/豁免）并沉淀 KB；失败经 `RetryPolicy`（指数退避+上限）局部自愈。
+
+### 用法
+
+```python
+from harness import AgentHarness, HarnessConfig
+from harness.gate import DeterministicGate, FormatValidator, FactGrounder, LogicReconciler
+from harness.gate.reconciliation import Reconciler
+
+# 方式 A：显式装配
+agent = AgentHarness(model="...", gate=DeterministicGate(
+    validators=[FormatValidator(output_model=Report),
+                FactGrounder(), LogicReconciler(rules=[...])],
+    reconciler=Reconciler()))
+
+# 方式 B：严格预设（治理层一键全开，与边界护栏一致）
+agent = AgentHarness(model="...", config=HarnessConfig(strict=True))
+
+result = await agent.run("生成财报分析")
+print(result.gate_verdict.passed)        # 是否通过
+print(result.delivered_content)          # 对账后内容（无来源段已删/标存疑）
+print(result.reconciliation_report)       # 每条结论 ↔ 可信源字段
+```
+
+### Verifier 与 Gate 的职责边界
+
+- **Verifier**（`run_goal` 的目标达成校验 / `custom_verifier`）：回答"**目标是否达成**"——控制循环是否结束。
+- **DeterministicGate**：回答"**交付内容是否可信**"——在结果交付前做格式/事实/逻辑校验与对账。
+- 二者互补不冲突：目标达成 ≠ 内容可信；Gate 不改变 `achieved` 语义，仅附加 `gate_verdict` / `delivered_content`。
+
 ## Stuck Detection（卡住检测）
 
 Agent Loop 内置卡住检测机制，采用两级检测策略：

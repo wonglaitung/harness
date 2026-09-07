@@ -27,6 +27,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from harness.loop.types import GoalResult
+    from harness.review import ReviewQueue
+    from harness.state import SharedStateStore
+    from harness.tools.base import Tool
 
 
 class WorkflowStatus(Enum):
@@ -318,6 +321,7 @@ class AgentRole:
     # Skills and tools
     skills: list[str] = field(default_factory=list)
     allowed_tools: list[str] | None = None
+    tools: list[Tool] | None = None  # 角色最小工具集（最小权限）
 
     # Behavior configuration
     system_prompt: str | None = None
@@ -373,6 +377,12 @@ class TeamConfig:
     # Communication configuration
     shared_memory: bool = True
     message_bus: str = "internal"  # "internal" | "redis" | "eventbus"
+
+    # Governance (deterministic gate abstraction layer)
+    # When set, sub-agent results are persisted to the Blackboard instead of
+    # being passed as raw text, and isolated deliveries are escalated to review.
+    state_store: SharedStateStore | None = None
+    review_queue: ReviewQueue | None = None
 
     def __post_init__(self):
         """Validate configuration."""

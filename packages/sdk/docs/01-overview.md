@@ -253,6 +253,30 @@ You are a code reviewer. Your task is to:
 | FileWatch | 文件变化触发 | 配置文件更新 | ⚠️ 计划功能 |
 | SkillTrigger | 技能触发 | 根据技能条件触发 | ✅ 已实现 |
 
+## 确定性闸门与风险分级
+
+Harness 的可信度来自**确定性安全/问责层**，与模型能力解耦。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction) 的设计。
+
+### 两层抽象
+
+- **单 Agent 内核**：`AgentHarness` / `agent_loop` 内承载 `DeterministicGate`（格式/事实/逻辑三维校验 + 交付前对账）、`SharedStateStore`（Blackboard 级共享状态）、`ReviewQueue`、`RetryPolicy`，以及常开的 `CircuitBreaker` / `CostController` / OTel / 基础注入校验。
+- **编排抽象层（薄）**：`TeamOrchestrator` / `WorkflowEngine` 组合单 Agent 实例，复用同一套闸门，不平行重写校验逻辑。
+
+### 统一 `strict` 开关与风险分级
+
+`HarnessConfig.strict: bool = False`：
+
+- `False`（默认）：治理层关、韧性层常开 → **存量应用零迁移**。
+- `True`：治理层全开 → 金融级对标防翻车清单 A–H。
+
+| 风险级 | 典型场景 | `strict` | 在线层 | 达标 |
+|--------|----------|----------|--------|------|
+| Low | 头脑风暴/研究/内部小工具 | `False` | 韧性层 | 基础不崩 |
+| Moderate | 内容生成/数据分析/客服 | `False`→可开 | 韧性层 | 韧性+可选治理 |
+| High | 金融/监管/安全关键 | **`True`** | 韧性+治理 | **A–H 全对齐** |
+
+> **声明**：监管/金融场景**必须** `strict=True`；可选部署校验 `HARNESS_REQUIRE_STRICT=1` 在 `strict=False` 时直接报错。
+
 ## Production Harness 组件实现状态
 
 基于行业最佳实践（LangChain、Anthropic、Stanford IRIS Lab），一个生产级 Harness 需要 12 个核心组件。
@@ -429,6 +453,17 @@ You are a code reviewer. Your task is to:
 - 后续提供 TypeScript SDK
 - 核心 Agent Loop 可考虑 Rust 重写以提升性能
 
+### ADR-004: 单 Agent 优先 + 多 Agent 经抽象层 + 风险分级
+
+**决策**: 项目定位单 Agent SDK；多 Agent 能力经"确定性安全/问责内核（在单 Agent）+ 薄编排层"两层抽象实现；治理层由统一 `strict` 开关按风险分级启停。
+
+**原因**:
+1. **行业共识**: Anthropic 明确"先单 Agent、为演化预留接口"；多 Agent 成功率来自组合单 Agent 原语 + 编排，而非平行重写。
+2. **防翻车清单要求**: LLM 输出不可信，关键决策须确定性 gate 把关；多 Agent 须结构化共享状态（Blackboard），禁点对点文本传纸条。
+3. **风险比例**: 非金融应用无需承担校验/对账/人工兜底的延迟与成本；金融级场景必须全开治理。默认关保证存量零迁移，开即金融级合规。
+
+**取舍**: 默认不强制治理（避免伤 DX 与过度工程）；代价是金融用户须显式开 `strict`——以文档醒目声明 + 可选部署校验缓解虚假安全感。
+
 ## 参考资源
 
 - [Harness Engineering - Martin Fowler](https://martinfowler.com/articles/harness-engineering.html)
@@ -444,5 +479,7 @@ You are a code reviewer. Your task is to:
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop 核心循环
 - [03-tool-system.md](./03-tool-system.md) - 了解工具系统
+- [08-security.md](./08-security.md) - 安全系统详解（strict 预设与共享状态治理）
+- [13-orchestrator.md](./13-orchestrator.md) - 确定性闸门抽象层设计（多 Agent 编排）
 - [10-loop-engineering.md](./10-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
 - [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API

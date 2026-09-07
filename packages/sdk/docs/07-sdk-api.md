@@ -2230,10 +2230,61 @@ from harness.service.discovery import (
 )
 ```
 
+## 确定性闸门 / 共享状态 / 人工兜底 API
+
+> 设计详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。`strict=True` 时自动装配；默认关闭，存量零迁移。
+
+### DeterministicGate
+
+```python
+from harness.gate import DeterministicGate, FormatValidator, FactGrounder, LogicReconciler
+from harness.gate.reconciliation import Reconciler
+from harness.gate.models import GateVerdict
+
+gate = DeterministicGate(
+    validators=[FormatValidator(output_model=Report),
+                FactGrounder(),
+                LogicReconciler(rules=[...])],
+    reconciler=Reconciler(),
+)
+verdict: GateVerdict = gate.check(content, sources=<工具记录/调用时sources=)
+# verdict.passed / verdict.findings / verdict.delivered_content
+```
+
+- 三维校验（格式/事实/逻辑）100% 代码裁决；`FactGrounder` 双通道可信源（工具溯源 ∪ `sources=`），冲突以 `sources=` 优先，并集为空 → 标存疑/拦截。
+- 交付前对账：结论 ↔ 可信源字段反向核对。
+
+### SharedStateStore
+
+```python
+from harness.state import SharedStateStore, MemoryBackend, FileBackend, RedisBackend, DBBackend
+
+store = SharedStateStore(backend=FileBackend(path=".worktree/state.db"))
+await store.put(BlackboardItem(type="decision", content=..., source_agent="planner",
+                                confidence=0.9, base_version=0))
+await store.write_if_version("id", new_content, base_version=1)   # CAS 乐观并发
+```
+
+- 后端：`memory`(测试) / `file`(worktree，开发) / `redis` / `db`(生产，optional extras)。
+- 写分层 additive/authoritative；冲突集显性化，禁静默覆写。
+
+### RetryPolicy 与 ReviewQueue
+
+```python
+from harness.gate.retry import RetryPolicy
+from harness.review import ReviewQueue, ReviewItem, ReviewDecision
+
+retry = RetryPolicy(max_retries=3, backoff=Backoff.exponential(cap=30))
+queue = ReviewQueue()
+item = await queue.submit(ReviewItem(gate_findings=..., run_id=...))
+decision: ReviewDecision = await queue.resolve(item.id, actor="human")  # 确认/修正/豁免
+```
+
 ## 下一步
 
 - [02-agent-loop.md](./02-agent-loop.md) - 了解 Agent Loop
 - [06-trigger-system.md](./06-trigger-system.md) - 了解 Trigger System
 - [08-security.md](./08-security.md) - 了解安全设计
+- [13-orchestrator.md](./13-orchestrator.md) - 确定性闸门抽象层设计（多 Agent 编排）
 - [09-mcp-integration.md](./09-mcp-integration.md) - MCP 协议集成
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 完整指南

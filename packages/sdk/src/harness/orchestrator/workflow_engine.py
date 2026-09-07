@@ -53,14 +53,17 @@ class WorkflowEngine:
     5. Track and propagate skip states
     """
 
-    def __init__(self, orchestrator: LoopOrchestrator):
+    def __init__(self, orchestrator: LoopOrchestrator, review_queue: Any | None = None):
         """
         Initialize the workflow engine.
 
         Args:
             orchestrator: Parent LoopOrchestrator instance
+            review_queue: Optional human-in-the-loop queue; gate-isolated step
+                deliveries are submitted here when the governance layer is on.
         """
         self.orchestrator = orchestrator
+        self.review_queue = review_queue
         self._active_workflows: dict[str, asyncio.Task] = {}
 
     async def run(
@@ -242,9 +245,11 @@ class WorkflowEngine:
             for skill_name in step.skills:
                 self.orchestrator.agent.activate_skill(skill_name)
 
-            # Execute goal
+            # Execute goal with local self-healing retry (deterministic policy).
+            # Retries only on execution exceptions; a completed-but-unachieved
+            # goal is a verifier outcome, not retried here (it terminates/downgrades).
             logger.info(f"Executing step '{step.name}': {rendered_goal[:100]}...")
-            goal_result = await self.orchestrator.agent.run_goal(goal_config)
+            goal_result = await self._run_goal_with_retry(step, goal_config)
 
             step_result.goal_result = goal_result
             step_result.status = StepStatus.SUCCESS if goal_result.achieved else StepStatus.FAILED
@@ -252,6 +257,20 @@ class WorkflowEngine:
             # Extract exports
             if step.exports and goal_result:
                 step_result.exports = self._extract_exports(goal_result, step.exports)
+
+            # Escalate gate-isolated deliveries to human review when governance on.
+            verdict = getattr(goal_result, "gate_verdict", None)
+            if verdict is not None and not verdict.passed and self.review_queue is not None:
+                from harness.review.queue import ReviewItem
+
+                self.review_queue.submit(
+                    ReviewItem(
+                        gate_findings=getattr(verdict, "findings", []),
+                        content=getattr(verdict, "delivered_content", "")
+                        or getattr(goal_result, "final_response", ""),
+                        source=f"workflow:{step.name}",
+                    )
+                )
 
             # Update graph state
             graph.mark_completed(step.name)
@@ -266,6 +285,31 @@ class WorkflowEngine:
 
         step_result.completed_at = datetime.now()
         return step_result
+
+    async def _run_goal_with_retry(self, step: WorkflowStep, goal_config: Any) -> Any:
+        """Run a step's goal, retrying execution failures per ``max_retries``.
+
+        Uses a deterministic :class:`RetryPolicy` (linear backoff = step.retry_delay)
+        so retries are observable and bounded. On exhaustion the last error
+        propagates and the step is marked FAILED by the caller.
+        """
+        from harness.gate.models import Backoff, RetryPolicy
+        from harness.gate.retry import with_retry
+
+        if step.max_retries <= 0:
+            return await self.orchestrator.agent.run_goal(goal_config)
+
+        policy = RetryPolicy(
+            max_retries=step.max_retries,
+            backoff=Backoff.LINEAR,
+            backoff_base=step.retry_delay,
+            backoff_cap=max(step.retry_delay, 0.0) * step.max_retries,
+        )
+
+        async def _once() -> Any:
+            return await self.orchestrator.agent.run_goal(goal_config)
+
+        return await with_retry(policy, _once, error_label=f"workflow-step:{step.name}")
 
     def _build_goal_config(
         self,

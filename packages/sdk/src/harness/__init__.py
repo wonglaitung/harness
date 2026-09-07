@@ -123,6 +123,11 @@ from harness.sdk.config import (
     StorageConfig,
 )
 from harness.sdk.harness import AgentHarness
+from harness.sdk.config import (
+    GateConfig,
+    ReviewConfig,
+    StateConfig,
+)
 from harness.security import (
     AuditLogEntry,
     AuditLogger,
@@ -175,6 +180,28 @@ from harness.tools.browser import (
 
 # Permission system
 from harness.tools.permissions import PermissionSet
+
+# Deterministic gate / shared state / review (governance layer)
+from harness.gate import (
+    Backoff,
+    DeterministicGate,
+    FactGrounder,
+    FormatValidator,
+    GateVerdict,
+    LogicReconciler,
+    Reconciler,
+    RetryPolicy,
+    with_retry,
+)
+from harness.review import ReviewDecision, ReviewItem, ReviewQueue, ReviewResolution
+from harness.state import (
+    BlackboardItem,
+    ConflictSet,
+    create_state_store,
+    SharedStateStore,
+    StateBackend,
+    WriteKind,
+)
 
 # Trigger System (P0 - Phase 2)
 from harness.triggers import (

@@ -398,6 +398,107 @@ asyncio.run(main())
     Triggers      Worktrees     Connectors
 ```
 
+## 确定性闸门抽象层（Deterministic Gate Abstraction）
+
+> **状态**: 🚧 设计中（规划落地，详见「实施路线」）
+> **设计稿自检**: 见文末「技术规范符合性自检」小节
+> **原则来源**: [AI应用开发通用防翻车原则与检查清单.md](../../convention/AI应用开发通用防翻车原则与检查清单.md)
+
+本项目定位为**单 Agent SDK**；多 Agent 能力须经**抽象层**实现，而非平行重写。核心决策：**两层抽象**——① 确定性安全/问责内核（gate / 共享状态 / 重试 / 人工兜底）落在**单 Agent 内核**，多 Agent 继承；② 编排层（TeamOrchestrator / WorkflowEngine）为架其上的**薄组合层**。
+
+### 设计原则
+
+1. **单 Agent 优先**：先完整单 Agent 内核能力，再多 Agent 经抽象层复用。
+2. **LLM 输出不可信**：所有关键决策由确定性代码（deterministic gate）把关，LLM 不参与裁决。
+3. **Blackboard 级共享状态**：多 Agent 协作经结构化共享状态（分级 `type/confidence/ttl` + `version+writer_id` + additive/authoritative 写分层 + 乐观并发 CAS + 冲突集显性化），**禁止点对点文本传纸条**。
+4. **风险分级治理**：韧性层（熔断/预算/可观测/基础注入校验）始终在线；治理层（C/D/G/H + 完整边界）由统一 `strict` 开关控制。
+5. **闭环**：失败 → `RetryPolicy` 局部自愈 → 终止/降级 → `ReviewQueue` 人工兜底。
+
+### 分层架构
+
+```
+┌─ 单 Agent 内核 (AgentHarness / agent_loop) ───────────────┐
+│  [常开] CircuitBreaker·CostController·OTel·基础注入校验     │
+│  [strict] DeterministicGate(格式/事实/逻辑 + 交付对账)      │
+│  [strict] SharedStateStore(Blackboard: mem/file/redis/db)  │
+│  [strict] ReviewQueue · RetryPolicy · 完整权限沙箱 + PII    │
+└───────────────▲ strict 传播 ───────────────────────────────┘
+┌─ 编排抽象层 (薄) ──────────────────────────────────────────┐
+│  TeamOrchestrator : 组合 AgentHarness，角色最小工具集        │
+│  WorkflowEngine    : DAG 调度(含死锁检测)，步骤过同一 gate    │
+│  经 SharedStateStore 协作(strict 下强制，替代文本传纸条)     │
+└────────────────────────────────────────────────────────────┘
+```
+
+### DeterministicGate（确定性闸门）
+
+单 Agent 与多 Agent 共用的一道**交付前**确定性校验管线，100% 代码裁决：
+
+- **三维校验**
+  - 格式维：`FormatValidator`（pydantic/dataclass 结构合法性）
+  - 事实维：`FactGrounder`（关键结论须带溯源引用）
+  - 逻辑维：`LogicReconciler`（跨字段勾稽 / 业务规则）
+- **交付前对账** `Reconciliation`：结论 ↔ 可信源字段反向核对，无来源/自相矛盾项删除或标「存疑」，绝不静默交付。
+
+`FactGrounder` 可信源**双通道**：① 工具溯源自动采集（从 `session` 工具调用记录抽取确定性证据）；② 调用时显式 `sources=` 传入。判定取二者并集；冲突以 `sources=` 优先；并集为空 → 结论标存疑/拦截。
+
+### SharedStateStore（Blackboard 级共享状态）
+
+多 Agent 协作的"病例本"，替代 `TeamOrchestrator` 当前的 `final_response` 文本传递：
+
+- 记录模型 `BlackboardItem`：`id / type / content / source_agent / confidence / created_at / base_version / ttl / status`
+- 写分层：`additive`（观测/提议，任意 Agent）vs `authoritative`（decision 落定，仅控制层经 verifier）
+- 乐观并发：`write_if_version(base_version)` CAS，版本已前进则拒覆盖 / 存为并行提案
+- 冲突集显性化：矛盾事实进冲突队列，不静默覆写
+- 可插拔后端 `StateBackend`：`memory`(测试) / `file`(worktree 内，开发) / `redis`(生产) / `db`(SQLite/Postgres，生产)；redis/db 作 optional extras（pin 版本，不进核心依赖）
+
+### RetryPolicy 与 ReviewQueue
+
+- `RetryPolicy(max_retries, backoff)`：指数退避 + 上限 + 区分可重试/不可重试错误；用于目标级与 `WorkflowStep.max_retries`（当前 `types.py` 已声明未用）。
+- `ReviewQueue`：gate 隔离项入队，人工三选一（确认/修正/豁免），决策写审计日志并沉淀 KB 供复用（G 节）。
+
+### 统一 `strict` 开关
+
+`HarnessConfig.strict: bool = False`：
+- `False`（默认）：gate/state/review/retry/PII/全沙箱均 `None`/直通 → **存量应用零迁移**，仅韧性层在线。
+- `True`：治理层全开 → 金融级对标防翻车清单 A–H。
+
+风险分级：Low（研究/内部工具）可 `False`；High（金融/监管/安全关键）**必须 `True`**（README/概述须醒目声明，可选部署校验 `HARNESS_REQUIRE_STRICT=1`）。
+
+### 与现有编排的关系（改造点）
+
+- `TeamOrchestrator._run_sequential/_run_hierarchical`：当前把 `result.final_response` 文本塞入下一 prompt（`team_orchestrator.py:322-380`），改为经 `SharedStateStore` 结构化字段读写；每个子 Agent 结果过同一 `DeterministicGate`（strict 传播）。
+- `WorkflowEngine._execute_step`：落实 `WorkflowStep.max_retries` 经 `RetryPolicy`；步骤产物过 gate + 对账；超限升级 `ReviewQueue`。
+- `WorktreeOrchestrator`：merge 冲突升级 `ReviewQueue`（保留 abort）。
+- `AgentRole` 增 `tools`（角色最小工具集）；`TeamConfig`/`WorkflowStep` 增 `state_store/gate/retry` 引用。
+
+### 实施路线
+
+- **Phase 1（单 Agent 内核）**：新增 `harness/gate/*`、`harness/state/*`、`harness/review/queue.py`；接线 `agent_loop`/`config`/`harness`；`tests/unit/`。
+- **Phase 2（多 Agent 抽象）**：改造 `team_orchestrator`/`workflow_engine`/`worktree`/`types`；`tests/` 集成测。Java SDK 同步在 Python 完成后手工开展。
+
+### 技术规范符合性自检
+
+> 依 `convention/02-安全规约-设计.md` / `03-日志与可观测性.md` / `04-并发·资源·幂等.md` 要求，design 阶段确认。
+
+| 维度 | 结论 | 说明 / 风险+缓解 |
+|------|------|------------------|
+| 02-设计·凭证与密钥 | 满足 | 各后端连接串/路径走 `StateConfig`/环境变量，不硬编码 |
+| 02-设计·输入校验与防注入 | 满足 | gate 复用既有 `InputValidator`/`ResultSanitizer`；网络工具走 `PermissionSet` 白名单防 SSRF |
+| 02-设计·最小权限 | 满足 | `AgentRole.tools` 角色最小工具集；`PermissionSet` 路径/命令受限 |
+| 02-设计·依赖安全 | 部分满足 | redis/db 驱动作 optional extras（pin 版本）；风险：第三方 CVE → 缓解：锁版本+定期审计 |
+| 02-设计·输出编码 | 满足 | 既有 guardrails PII 编码；`ResultSanitizer` 已存在 |
+| 02-设计·密码学原语 | 满足 | 改造 `team_orchestrator.py:230` 的 `md5` → `sha256`；不引入弱算法 |
+| 03-日志·不打敏感信息 | 满足 | gate/state/review 审计日志掩码 PII/密钥，不明文落盘 |
+| 03-日志·结构化与级别 | 满足 | 复用 OTel span + 结构化日志，带 trace/run ID 贯穿 |
+| 03-日志·适量 | 满足 | 仅关键路径记审计/隔离事件 |
+| 04-并发·资源释放 | 满足 | 后端连接/锁用后释放（file=SQLite 连接管理；redis=连接池） |
+| 04-并发·避免竞态 | 满足 | `memory`=asyncio.Lock；`file`=SQLite 事务原子；`redis`=原子命令；CAS 防覆盖；临界区不做重 IO |
+| 04-并发·写幂等 | 满足 | 写操作幂等（CAS `base_version`），重试安全 |
+| 04-并发·重试带退避 | 满足 | `RetryPolicy` 指数退避+上限+区分可/不可重试错误 |
+
+---
+
 ## Java SDK 示例
 
 Java SDK 提供完整的 Orchestrator 实现，支持工作流编排和多 Agent 协调。
@@ -551,3 +652,6 @@ public enum StepStatus {
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览
 - [11-worktrees.md](./11-worktrees.md) - 并行隔离执行
 - [12-connectors.md](./12-connectors.md) - 外部系统集成
+- [01-overview.md](./01-overview.md) - 项目概述与架构总览（含风险分级矩阵）
+- [08-security.md](./08-security.md) - 安全系统详解（strict 预设与共享状态治理）
+- [../../convention/AI应用开发通用防翻车原则与检查清单.md](../../convention/AI应用开发通用防翻车原则与检查清单.md) - 防翻车原则与清单（H 节多 Agent 专属）

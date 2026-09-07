@@ -426,6 +426,12 @@ class LoopResult:
     error: str | None = None
     token_usage: TokenUsage = field(default_factory=TokenUsage)
 
+    # Deterministic gate verdict (set when strict governance is enabled).
+    # ``Any`` avoids a hard import cycle with harness.gate.
+    gate_verdict: Any = None
+    delivered_content: str | None = None
+    reconciliation_report: Any = None
+
     @property
     def is_success(self) -> bool:
         """Check if loop completed successfully."""

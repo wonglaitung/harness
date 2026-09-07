@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from harness.loop.parallel_executor import ParallelGoalExecutor
 from harness.loop.worktree_manager import WorktreeManager
@@ -85,6 +85,7 @@ class WorktreeOrchestrator:
         self,
         agent: AgentHarness,
         repo_root: str = ".",
+        review_queue: Any | None = None,
     ):
         """
         Initialize WorktreeOrchestrator.
@@ -92,9 +93,13 @@ class WorktreeOrchestrator:
         Args:
             agent: AgentHarness instance for goal execution
             repo_root: Path to git repository root (default: current directory)
+            review_queue: Optional human-in-the-loop queue; merge conflicts are
+                escalated here (governance layer on) while still aborting to keep
+                the repo clean.
         """
         self.agent = agent
         self.repo_root = repo_root
+        self.review_queue = review_queue
 
         # Initialize components
         self.worktree_manager = WorktreeManager(repo_root)
@@ -253,6 +258,20 @@ class WorktreeOrchestrator:
             else:
                 conflicts.append(result.branch_name)
                 logger.warning(f"Merge conflict in: {result.branch_name}")
+
+                # Escalate to human review (governance on) while keeping repo clean.
+                if self.review_queue is not None:
+                    from harness.review.queue import ReviewItem
+
+                    self.review_queue.submit(
+                        ReviewItem(
+                            content=(
+                                f"Merge conflict merging branch "
+                                f"{result.branch_name} into {target_branch}"
+                            ),
+                            source=f"worktree:{result.branch_name}",
+                        )
+                    )
 
                 # Abort the merge to keep repo clean
                 abort_proc = await asyncio.create_subprocess_exec(
