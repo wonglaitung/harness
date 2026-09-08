@@ -156,7 +156,36 @@
 
 ## 2026-09-08 提取
 
+## 2026-09-09 提取
+
 ## 注意事项
+
+### 港股分析
+- **江波龙09976港股IPO破发 — 千亿存储龙头左侧逆向机会**
+
+### 港股分析
+- **港股生物技术板块爆发 — 剂泰科技涨13%，政策松绑右侧超强确认 🔥🔥🔥**
+
+### 港股分析
+- **智谱MiniMax再暴跌 — AI大模型双雄二次探底，左侧逆向机会升级 🔥🔥🔥**
+
+### 港股分析
+- **美债10Y 4.81%突破天花板 — 降息窗口彻底关闭，科网股防御模式最高级别 🔴🔴🔴**
+
+### 新范式/工具
+- **Experiential — 流量驱动模型路由：Agent 推理基础设施新范式** - https://news.ycombinator.com/show — Show HN 220 points
+
+### 新范式/工具
+- **i-have-adhd — Agent 输出协议新范式** - https://news.ycombinator.com/item?id=47193064
+
+### 新范式/工具
+- **Engrim — Universal Cross-Agent Episodic Memory: Agent 记忆即基础设施** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **HyperFrames — HTML→Video Agent-Native Rendering** - https://github.com/heygen-com/hyperframes
+
+### 新范式/工具
+- **Context Mode — Think-in-Code + 工具输出沙箱化：Agent 上下文管理的操作系统级方案** - https://github.com/mksglu/context-mode
 
 ### 港股分析
 - **港股IPO质量分化-麦科田暴跌43-vs-群核涨30-市场选择性的含科量验证** - http://finance.eastmoney.com/a/202609073866807631.html
