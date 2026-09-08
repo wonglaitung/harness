@@ -9,8 +9,8 @@ real RDBMS. Conflicts/versioning semantics mirror the other backends.
 
 from __future__ import annotations
 
+import asyncio
 import json
-import threading
 from typing import Any
 
 from harness.state.base import (
@@ -38,39 +38,52 @@ class DBBackend(StateBackend):
 
     def __init__(self, path: str = ".harness/state.db") -> None:
         self._path = path
-        self._lock = threading.Lock()
+        # asyncio.Lock (not threading.Lock): the methods await while holding it,
+        # so a threading.Lock would deadlock the event loop under concurrency.
+        self._lock = asyncio.Lock()
         self._conn: Any = None
 
     async def _ensure(self) -> Any:
         aiosqlite = _require_aiosqlite()
         if self._conn is None:
             self._conn = await aiosqlite.connect(self._path)
+            # Autocommit: transactions are managed explicitly (BEGIN IMMEDIATE) so
+            # write_if_version's read-modify-write is one serialized unit. Rollback
+            # journal (not WAL): cross-process readers must see the latest committed
+            # state, and WAL only advances its read-mark on checkpoint — which broke
+            # the compare-and-swap under contention. busy_timeout queues contenders.
+            self._conn.isolation_level = None
+            await self._conn.execute("PRAGMA busy_timeout=5000")
             await self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS blackboard (id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
             )
-            await self._conn.commit()
         return self._conn
 
     @staticmethod
+    def _serialize(item: BlackboardItem) -> str:
+        return json.dumps(item.as_dict() | {"content": item.content})
+
+    @staticmethod
     def _row_to_item(row: tuple[Any, ...]) -> BlackboardItem:
-        data = json.loads(row[0])
+        data = json.loads(str(row[0]))
+        # Rehydrate enums that were serialized as their string values.
         data["status"] = ItemStatus(data.get("status", "proposed"))
         data["kind"] = WriteKind(data.get("kind", "additive"))
         return BlackboardItem(**data)
 
     async def put(self, item: BlackboardItem) -> BlackboardItem:
         db = await self._ensure()
-        with self._lock:
+        async with self._lock:
             await db.execute(
                 "INSERT OR REPLACE INTO blackboard (id, payload) VALUES (?, ?)",
-                (item.id, json.dumps(item.__dict__)),
+                (item.id, self._serialize(item)),
             )
             await db.commit()
         return item
 
     async def get(self, item_id: str) -> BlackboardItem | None:
         db = await self._ensure()
-        with self._lock:
+        async with self._lock:
             cur = await db.execute("SELECT payload FROM blackboard WHERE id=?", (item_id,))
             row = await cur.fetchone()
         if row is None:
@@ -80,32 +93,57 @@ class DBBackend(StateBackend):
     async def write_if_version(
         self, item_id: str, content: Any, base_version: int, **meta: Any
     ) -> tuple[bool, BlackboardItem | None]:
-        db = await self._ensure()
-        with self._lock:
-            cur = await db.execute("SELECT payload FROM blackboard WHERE id=?", (item_id,))
-            row = await cur.fetchone()
-            cur_item = self._row_to_item(row) if row else None
-            if cur_item is not None and cur_item.version != base_version:
-                return False, cur_item
-            new_item = cur_item or BlackboardItem(id=item_id)
-            new_item.content = content
-            new_item.base_version = base_version
-            new_item.version = base_version + 1
-            for k, v in meta.items():
-                if hasattr(new_item, k):
-                    setattr(new_item, k, v)
-            await db.execute(
-                "INSERT OR REPLACE INTO blackboard (id, payload) VALUES (?, ?)",
-                (item_id, json.dumps(new_item.__dict__)),
-            )
-            await db.commit()
-        return True, new_item
+        await self._ensure()
+        new_item = BlackboardItem(id=item_id)
+        new_item.content = content
+        new_item.base_version = base_version
+        new_item.version = base_version + 1
+        for k, v in meta.items():
+            if hasattr(new_item, k):
+                setattr(new_item, k, v)
+        payload = self._serialize(new_item)
+        async with self._lock:
+            # BEGIN IMMEDIATE takes the exclusive write lock up front so the whole
+            # read-modify-write is serialized across processes. We RE-READ the current
+            # version INSIDE this transaction and compare it to base_version: a stale
+            # caller-side get() (rollback journal has no read-mark caching) cannot slip
+            # a phantom version past the conditional UPDATE. busy_timeout makes
+            # contending workers queue instead of raising "database is locked".
+            # NOTE: the fetched payload is materialized to a real str immediately,
+            # because the row buffer is reused/clobbered on later access.
+            await self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = await (
+                    await self._conn.execute(
+                        "SELECT payload FROM blackboard WHERE id=?", (item_id,)
+                    )
+                ).fetchone()
+                cur = self._row_to_item(row) if row is not None else None
+                if cur is not None and cur.version != base_version:
+                    await self._conn.execute("ROLLBACK")
+                    return False, cur
+                if cur is None:
+                    await self._conn.execute(
+                        "INSERT INTO blackboard (id, payload) VALUES (?, ?)",
+                        (item_id, payload),
+                    )
+                else:
+                    await self._conn.execute(
+                        "UPDATE blackboard SET payload=? "
+                        "WHERE id=? AND json_extract(payload,'$.version')=?",
+                        (payload, item_id, base_version),
+                    )
+                await self._conn.execute("COMMIT")
+                return True, new_item
+            except Exception:
+                await self._conn.execute("ROLLBACK")
+                raise
 
     async def list_items(
         self, type: str | None = None, status: ItemStatus | None = None
     ) -> list[BlackboardItem]:
         db = await self._ensure()
-        with self._lock:
+        async with self._lock:
             cur = await db.execute("SELECT payload FROM blackboard")
             rows = await cur.fetchall()
         items = [self._row_to_item(r) for r in rows]
