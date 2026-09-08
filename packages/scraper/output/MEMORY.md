@@ -154,7 +154,42 @@
 
 ## 2026-09-07 提取
 
+## 2026-09-08 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股IPO质量分化-麦科田暴跌43-vs-群核涨30-市场选择性的含科量验证** - http://finance.eastmoney.com/a/202609073866807631.html
+
+### 港股分析
+- **群核科技(00068)纳入港股通飙涨30% — 港股通调入效应强力验证，五重共振升级 🔥🔥🔥**
+
+### 港股分析
+- **腾讯15日回购-回购价区间上移-五重左侧共振-FOMC前最后5天 🔥🔥🔥🔥🔥**
+
+### 港股分析
+- **美债10Y 4.78% T+18 — 连续四日！天花板最终确认，FOMC前最后5天黄金布局窗口 🔥🔥🔥🔥**
+
+### 新范式/工具
+- **Context Mode — Think-in-Code + 工具输出沙箱化：Agent 上下文管理的操作系统级方案** - https://news.ycombinator.com/item?id=47193064
+
+### 新范式/工具
+- **Apache Maka — Log-is-the-Runtime Agent 事件溯源运行时** - https://github.com/apache/maka
+
+### 新范式/工具
+- **FrontierHarness — Harness-as-Variable Agent 评测新范式** - https://frontierharness.org/
+
+### 新范式/工具
+- **Context Mode — Think-in-Code + 工具输出沙箱化** - https://news.ycombinator.com/item?id=47193064
+
+### 新范式/工具
+- **Soup / Layer Streaming** - https://github.com/trending/python
+
+### 新范式/工具
+- **FrontierHarness — Harness-as-Variable Agent 评测新范式** - https://frontierharness.org
+
+### 新范式/工具
+- **AI-DLC Workflows 2.0 — Harness-Neutral Agent Methodology 新范式** - https://github.com/awslabs/aidlc-workflows
 
 ### 港股分析
 - **腾讯14日回购+千亿回购潮 — 四重左侧共振信号全面升级 🔥🔥🔥🔥🔥** - http://finance.eastmoney.com/a/202609043864760032.html
