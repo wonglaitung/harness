@@ -275,6 +275,8 @@ Harness 的可信度来自**确定性安全/问责层**，与模型能力解耦�
 | Moderate | 内容生成/数据分析/客服 | `False`→可开 | 韧性层 | 韧性+可选治理 |
 | High | 金融/监管/安全关键 | **`True`** | 韧性+治理 | **A–H 全对齐** |
 
+治理层开启后不再只是格式/事实校验：业务不变量（如资产负债表勾稽 A≈L+E）可通过 `GateConfig.rules`（可调用）/ `rule_specs`（声明式 `numeric_sum` 等）注入自动闸门；被隔离的交付经 `ReviewQueue` 持久化（`ReviewConfig.backend="file"/"redis"/"db"`）可跨进程复核。详见 [07-sdk-api.md](./07-sdk-api.md#注入业务勾稽规则gatewayconfigrules--rule_specs) 与 [13-orchestrator.md](./13-orchestrator.md#实施路线)。
+
 > **声明**：监管/金融场景**必须** `strict=True`；可选部署校验 `HARNESS_REQUIRE_STRICT=1` 在 `strict=False` 时直接报错（详见 [08-security.md](./08-security.md#部署侧强制校验环境变量)）。
 
 ## Production Harness 组件实现状态
