@@ -424,6 +424,8 @@ agent.add_hook(PreventEarlyExitHook())
 2. **交付前对账** `Reconciliation`：结论 ↔ 可信源字段反向核对，无来源/自相矛盾项删除或标「存疑」，绝不静默交付。
 3. **隔离升级**：被拦截/标疑项进入 `ReviewQueue`，人工三选一（确认/修正/豁免）并沉淀 KB；失败经 `RetryPolicy`（指数退避+上限）局部自愈。
 
+> **业务规则注入**：勾稽规则默认经 `GateConfig.rules`（可调用）/ `rule_specs`（声明式 `numeric_sum`/`equality`/`range`/`regex_present`）声明，由 `_build_gate` 自动汇入 `LogicReconciler`——`strict=True` 即跑领域勾稽，无需手驱 `DeterministicGate`（详见 [07-sdk-api.md](./07-sdk-api.md#注入业务勾稽规则gatewayconfigrules--rule_specs)）。被隔离项经 `ReviewQueue` 持久化（`ReviewConfig.backend`）可跨进程复核。
+
 ### 用法
 
 ```python
