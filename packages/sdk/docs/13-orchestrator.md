@@ -477,6 +477,11 @@ asyncio.run(main())
 - **Phase 1（单 Agent 内核）**：新增 `harness/gate/*`、`harness/state/*`、`harness/review/queue.py`；接线 `agent_loop`/`config`/`harness`；`tests/unit/`。
 - **Phase 2（多 Agent 抽象）**：改造 `team_orchestrator`/`workflow_engine`/`worktree`/`types`；`tests/` 集成测。Java SDK 同步在 Python 完成后手工开展。
 
+> **三块缝隙已闭合（SDK 侧）**
+> 1. **业务规则进自动治理**：`GateConfig.rules`（可调用）/ `rule_specs` / `rules_path`（声明式 `numeric_sum`/`equality`/`range`/`regex_present`）经 `_build_gate` 汇入 `LogicReconciler`——`strict=True` 即跑领域勾稽，无需手驱 `DeterministicGate`。
+> 2. **ReviewQueue 持久化桥**：`ReviewQueue(store=SharedStateStore(...))` 同步落盘；`ReviewConfig(backend="file"|"redis"|"db")` 经 `_build_review_queue` 自动接线；`FileBackend` 开 WAL + `busy_timeout` 支持多进程。
+> 3. **工具落盘产物（Gap 3，消费方集成）**：auto-gate 只校验 `final_response`，不校验经工具落盘的 spec。消费方应在 `submit_spec` 工具内手动 `gate.check(spec_json)` 并升级 `ReviewQueue`（示例 `examples/spec_submit_governance.py`）。仍属「尽可能用 SDK」。
+
 ### 技术规范符合性自检
 
 > 依 `convention/02-安全规约-设计.md` / `03-日志与可观测性.md` / `04-并发·资源·幂等.md` 要求，design 阶段确认。

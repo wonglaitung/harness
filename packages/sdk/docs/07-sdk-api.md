@@ -2275,10 +2275,71 @@ from harness.gate.retry import RetryPolicy
 from harness.review import ReviewQueue, ReviewItem, ReviewDecision
 
 retry = RetryPolicy(max_retries=3, backoff=Backoff.exponential(cap=30))
-queue = ReviewQueue()
-item = await queue.submit(ReviewItem(gate_findings=..., run_id=...))
-decision: ReviewDecision = await queue.resolve(item.id, actor="human")  # 确认/修正/豁免
+queue = ReviewQueue()                                   # 内存（单进程）
+item = queue.submit(ReviewItem(gate_findings=[...]))   # submit 是同步的
+decision = await queue.resolve(item, ReviewDecision.CONFIRM, actor="human")  # 确认/修正/豁免
 ```
+
+`ReviewQueue` 默认内存；传 `store=SharedStateStore(...)` 即变持久化（见下）。
+
+### 注入业务勾稽规则（GateConfig.rules / rule_specs）
+
+`strict=True` 的自动治理层默认只跑 格式/事实/溯源 校验；业务不变量（如资产负债表
+勾稽 A≈L+E）通过 `GateConfig` 注入，由 `_build_gate` 塞进 `LogicReconciler`：
+
+```python
+from harness import AgentHarness, GateConfig
+
+# (a) 自定义可调用规则：可访问外部确定性主源，推荐用于 spec/ctx 合并场景
+def _tie_out(content, sources): ...        # GateRule 契约 (content, sources) -> list[GateFinding]
+gate_cfg = GateConfig(rules=[_tie_out])
+
+# (b) 声明式（仅看交付文本，无法访问 ctx）
+gate_cfg = GateConfig(rule_specs=[{
+    "kind": "numeric_sum", "id": "balance", "left": "assets",
+    "rights": ["liabilities", "equity"], "tolerance": 0.02, "severity": "error",
+}])
+# (c) 也可从文件加载：rule_specs = load_rule_specs("rules.yaml")
+
+harness = AgentHarness(model=..., strict=True, gate=gate_cfg)
+```
+
+声明式 `kind`：`numeric_sum` / `equality` / `range` / `regex_present`；算子只抽取
+交付文本里的标签数字。**需要合并外部主源（如 `ctx["values"]`）的勾稽必须用
+`rules=可调用`**——声明式引擎看不到该上下文。三者最终都汇入同一个
+`LogicReconciler(rules=...)`。
+
+### ReviewQueue 持久化（多进程安全）
+
+```python
+from harness import AgentHarness, ReviewConfig
+harness = AgentHarness(..., strict=True,
+    review=ReviewConfig(backend="file", path=".harness/review.db"))
+# backend="file" -> SQLite+WAL，跨 ProcessPoolExecutor 子进程共享复核项；
+# 不需持久化时默认 "memory"（纯内存，向后兼容）
+```
+
+`backend="redis"` 为高并发生产推荐。`submit` 同步落盘（线程内 `asyncio.run`），
+即便 gate 在事件循环内同步调用也安全；`FileBackend` 已开 WAL + `busy_timeout` 防
+`database is locked`。
+
+### Gap 3：工具落盘产物的闸门
+
+auto-gate 只校验 `goal_result.final_response`（见 `harness.py` 的 `_apply_gate`），
+**不会**校验经工具落盘的 spec/文件。若交付经工具写出，请在工具内**手动驱动**闸门：
+
+```python
+from harness.gate import DeterministicGate, LogicReconciler
+from harness.review import ReviewQueue
+
+gate = DeterministicGate(validators=[LogicReconciler(rules=[_tie_out])], review_queue=review_queue)
+verdict = gate.check(spec_json)            # 校验的是 spec，不是收尾文本
+if not verdict.passed:
+    review_queue.submit(ReviewItem(gate_findings=[f.as_dict() for f in verdict.findings],
+                                   content=spec_json, source="submit_spec"))
+```
+
+完整可运行示例见 `examples/spec_submit_governance.py`。
 
 ## 下一步
 

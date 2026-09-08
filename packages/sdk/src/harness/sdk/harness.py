@@ -540,6 +540,13 @@ class AgentHarness:
         gc = self.config.gate or GateConfig()
         if not gc.enable:
             return None
+        from harness.gate.declarative import compile_rule_specs, load_rule_specs
+
+        rules: list[Any] = list(gc.rules or [])
+        if gc.rule_specs:
+            rules.extend(compile_rule_specs(gc.rule_specs))
+        if gc.rules_path:
+            rules.extend(compile_rule_specs(load_rule_specs(gc.rules_path)))
         return DeterministicGate(
             validators=[
                 FormatValidator(),
@@ -547,7 +554,7 @@ class AgentHarness:
                     block_on_unsourced=gc.block_on_unsourced,
                     min_content_len=gc.min_content_len,
                 ),
-                LogicReconciler(),
+                LogicReconciler(rules=rules),
             ],
             reconciler=Reconciler(),
             review_queue=self._review_queue,
@@ -567,11 +574,16 @@ class AgentHarness:
         if not self.config.strict and self.config.review is None:
             return None
         from harness.review import ReviewQueue
+        from harness.state import create_state_store
 
         rc = self.config.review or ReviewConfig()
         if not rc.enabled:
             return None
-        return ReviewQueue()
+        if rc.backend == "memory":
+            return ReviewQueue()
+        # Durable + cross-process: back the queue with a SharedStateStore.
+        store = create_state_store(rc.backend, path=rc.path, url=rc.url)
+        return ReviewQueue(store=store)
 
     def _apply_gate(self, content: str | None, session: Any = None) -> Any | None:
         """Run the deterministic gate over a candidate delivery.

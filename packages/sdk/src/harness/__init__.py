@@ -184,10 +184,13 @@ from harness.tools.permissions import PermissionSet
 # Deterministic gate / shared state / review (governance layer)
 from harness.gate import (
     Backoff,
+    compile_rule_specs,
     DeterministicGate,
     FactGrounder,
     FormatValidator,
+    GateRule,
     GateVerdict,
+    load_rule_specs,
     LogicReconciler,
     Reconciler,
     RetryPolicy,

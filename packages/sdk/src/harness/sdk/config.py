@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from harness.gate.models import GateRule
 
 from harness.core.step_budget import StepBudgetConfig
 from harness.memory.memory_file import MemoryScoringConfig
@@ -231,11 +234,31 @@ class GateConfig:
     The gate is only built when ``HarnessConfig.strict=True`` or when an
     explicit ``gate`` is supplied. It performs 100%-deterministic format/fact/
     logic checks + delivery reconciliation before a result is handed off.
+
+    Business invariants (e.g. a balance-sheet tie-out A≈L+E) are injected via
+    ``rules`` (callables, recommended for spec/context-aware checks) and/or
+    ``rule_specs`` / ``rules_path`` (declarative specs compiled to the same
+    ``GateRule`` contract by :func:`harness.gate.declarative.compile_rule_specs`).
     """
 
     enable: bool = True
     block_on_unsourced: bool = True  # FactGrounder: no-source factual claim -> ERROR
     min_content_len: int = 200  # below this, fact grounding is skipped
+
+    # User-supplied deterministic business rules. Each is a pure
+    # ``(content, sources) -> list[GateFinding]`` callable (GateRule). These are
+    # merged into LogicReconciler so the gate enforces domain invariants. Use
+    # this for checks that need external context (e.g. a deterministic master
+    # source merged with the agent's spec) — declarative specs cannot see that.
+    rules: list[GateRule] | None = None
+
+    # Declarative rule specs (list of dicts) compiled to GateRule by the SDK.
+    # Suitable for self-contained invariants expressed over the delivery text
+    # (numeric_sum / equality / range / regex_present). See gate/declarative.py.
+    rule_specs: list[dict[str, Any]] | None = None
+
+    # Optional path to a YAML/JSON file holding the same declarative specs.
+    rules_path: str | None = None
 
 
 @dataclass
@@ -260,9 +283,23 @@ class ReviewConfig:
 
     Isolated deliveries / exhausted retries are submitted here for human
     resolution (confirm / correct / exempt) and audited.
+
+    When ``backend != "memory"`` the queue is backed by a
+    :class:`harness.state.SharedStateStore` (the same store family used for
+    shared state), so review items survive process death — required for
+    multi-process ingest (e.g. ProcessPoolExecutor workers). ``backend="file"``
+    (SQLite + WAL) is dependency-free; ``backend="redis"`` is recommended for
+    high-concurrency production.
     """
 
     enabled: bool = True
+
+    # Persistence backend for the review queue. "memory" = in-process only
+    # (default, backward compatible). Otherwise a SharedStateStore is created
+    # and the queue is durable + cross-process.
+    backend: Literal["memory", "file", "redis", "db"] = "memory"
+    path: str | None = None  # file / db path
+    url: str | None = None  # redis URL
 
 
 @dataclass

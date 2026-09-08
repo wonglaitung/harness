@@ -1,9 +1,11 @@
 """Deterministic gate public API."""
 
+from harness.gate.declarative import compile_rule_specs, load_rule_specs
 from harness.gate.gate import DeterministicGate
 from harness.gate.models import (
     Backoff,
     GateFinding,
+    GateRule,
     GateSeverity,
     GateVerdict,
     RetryPolicy,
@@ -25,7 +27,10 @@ __all__ = [
     "GateVerdict",
     "GateFinding",
     "GateSeverity",
+    "GateRule",
     "Backoff",
     "RetryPolicy",
     "with_retry",
+    "compile_rule_specs",
+    "load_rule_specs",
 ]

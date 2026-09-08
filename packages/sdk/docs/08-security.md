@@ -52,6 +52,8 @@
 
 多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writer_id`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。禁用点对点文本传纸条。后端：`memory`(测试) / `file`(worktree，开发) / `redis` / `db`(生产，optional extras)。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。
 
+> **多进程持久化**：`file` 后端使用 SQLite + WAL + `busy_timeout`（并发写不抛 `database is locked`），可安全用于 `ProcessPoolExecutor` 子进程共享同一状态/复核文件；高并发生产推荐 `redis`。`ReviewQueue` 经同一 `SharedStateStore` 持久化（见 [07-sdk-api.md](./07-sdk-api.md#reviewqueue-持久化多进程安全)）。
+
 ## Sandbox（沙箱）
 
 沙箱为工具执行提供隔离环境，限制命令执行和文件访问。

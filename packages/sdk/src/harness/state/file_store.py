@@ -39,6 +39,11 @@ class FileBackend(StateBackend):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(path, check_same_thread=False)
+        # Multi-process safety: WAL lets concurrent readers/writers coexist and
+        # busy_timeout retries instead of raising "database is locked" — required
+        # when ProcessPoolExecutor workers share the same state/review file.
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS blackboard (

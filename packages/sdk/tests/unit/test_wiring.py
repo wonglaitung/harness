@@ -6,10 +6,15 @@ with strict=True, and that HARNESS_REQUIRE_STRICT fails fast when off.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from harness.sdk.config import HarnessConfig
+from harness.gate.models import FindingType, GateFinding, GateSeverity
+from harness.review import ReviewItem, ReviewQueue
+from harness.sdk.config import GateConfig, HarnessConfig, ReviewConfig
 from harness.sdk.harness import AgentHarness
+from harness.state import create_state_store
 
 
 class _Probe:
@@ -60,3 +65,49 @@ def test_require_strict_env_ok_when_on(monkeypatch) -> None:
         p._require_strict_if_env()  # should not raise
     finally:
         monkeypatch.delenv("HARNESS_REQUIRE_STRICT", raising=False)
+
+
+def test_gate_rules_injected_into_auto_gate() -> None:
+    def _always_fail(content: str, sources: list[str]) -> list[GateFinding]:
+        return [
+            GateFinding(
+                id="x", type=FindingType.LOGIC, severity=GateSeverity.ERROR, message="boom"
+            )
+        ]
+
+    c = HarnessConfig(strict=True, gate=GateConfig(rules=[_always_fail]))
+    gate = _Probe(c)._build_gate()
+    assert gate is not None
+    verdict = gate.check("anything")
+    assert verdict.passed is False
+    assert verdict.errors
+
+
+def test_gate_rule_specs_compiled_into_auto_gate() -> None:
+    spec = {
+        "kind": "numeric_sum",
+        "id": "balance",
+        "left": "assets",
+        "rights": ["liabilities", "equity"],
+        "tolerance": 0.02,
+        "severity": "error",
+    }
+    c = HarnessConfig(strict=True, gate=GateConfig(rule_specs=[spec]))
+    gate = _Probe(c)._build_gate()
+    # 100 vs 60+50=110 -> deviation 10% > 2% -> must fail
+    verdict = gate.check(json.dumps({"assets": 100, "liabilities": 60, "equity": 50}))
+    assert verdict.passed is False
+    # 100 vs 60+40=100 -> pass
+    ok = gate.check(json.dumps({"assets": 100, "liabilities": 60, "equity": 40}))
+    assert ok.passed is True
+
+
+def test_review_queue_persisted(tmp_path) -> None:
+    db = str(tmp_path / "review.db")
+    c = HarnessConfig(strict=True, review=ReviewConfig(backend="file", path=db))
+    q = _Probe(c)._build_review_queue()
+    assert q is not None
+    q.submit(ReviewItem(content="x", source="t"))
+    # A fresh queue on the same file (simulating another process) sees the item.
+    reopened = ReviewQueue(store=create_state_store("file", path=db))
+    assert len(reopened.pending()) == 1
