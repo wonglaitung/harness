@@ -209,6 +209,23 @@ async def setup_scheduled_tasks():
     )
 ```
 
+## 本地開發與測試
+
+本 SDK 以 wheel 形式安裝到 `site-packages/harness`，因此直接改 `packages/sdk/src` 不會影響 `import harness`。修改 SDK 後要本地驗證，二選一：
+
+1. 用 `PYTHONPATH` 指向源碼（最快，不需重裝）：
+   ```bash
+   PYTHONPATH=packages/sdk/src python -m pytest packages/sdk/tests/unit -q
+   ```
+2. 重建並強制重裝 wheel（與正式安裝行為一致）：
+   ```bash
+   cd packages/sdk
+   python -m build --wheel --outdir /tmp/sdk_dist .
+   pip install --force-reinstall --no-deps /tmp/sdk_dist/harness_sdk-0.1.0-py3-none-any.whl
+   ```
+
+> 排錯：若測試一直「改了卻沒效果 / 行為不變」，先確認 `python -c "import harness; print(harness.__file__)"` 指向的是 `site-packages`（舊 wheel）還是 src（源碼）。指向 site-packages 就表示改的是源碼、跑的卻是舊 wheel。
+
 ## 设计原则
 
 1. **可内嵌优先**: 设计为库而非服务，可嵌入任何 Python 应用
