@@ -160,7 +160,51 @@
 
 ## 2026-09-10 提取
 
+## 2026-09-11 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股基本面出清拐点 — AI利润转移+资金再平衡中长期左侧信号**
+
+### 港股分析
+- **港股通连续净买入 — 南向逆势加仓右侧确认信号 🔥🔥🔥🔥**
+
+### 港股分析
+- **AI大模型概念股二次暴跌 — 智谱群核云知声跌超10%，左侧逆向机会升级 🔥🔥🔥🔥**
+
+### 港股分析
+- **美债10Y-4.94%-利率恐慌极致-科网股左侧逆向布局窗口**
+
+### 新范式/工具
+- **TeamAI — 跨Agent团队知识治理中枢** - https://github.com/Tencent/teamai-cli
+
+### 新范式/工具
+- **@huggingface/kernels — WebGPU Kernel-as-a-Package 浏览器推理新范式** - https://huggingface.co/blog/webgpu-kernels
+
+### 新范式/工具
+- **i-have-adhd — Agent输出协议新范式** - https://github.com/ayghri/i-have-adhd
+
+### 新范式/工具
+- **Agent-Native Hardware Design** - https://copperhead.sh/
+
+### 新范式/工具
+- **Narrow-Boundary Safety — 子集级安全对齐新范式** - https://huggingface.co/blog/MultiverseComputingCAI/safety-for-whom
+
+### 新范式/工具
+- **LLM Wiki — 持久化增量Wiki知识管理新范式** - https://news.ycombinator.com/
+
+### 新范式/工具
+- **TeamAI — 跨Agent团队知识治理新范式** - https://github.com/Tencent/teamai-cli
+
+### 新范式/工具
+- **i-have-adhd — Agent 输出协议新范式** - https://github.com/ayghri/i-have-adhd
+
+### 新范式/工具
+- **PI-Desktop — Agent-Native Desktop Workspace（Agent 原生桌面工作区新范式）** - https://github.com/vastsa/PI-Desktop
+
+### 新范式/工具
+- **OpenAI Agents API — Agent 基础设施即服务新范式** - https://openai.com/index/introducing-the-agents-api
 
 ### 港股分析
 - **AI利润硬件转云厂-互联网软科技左侧逆向布局信号**
