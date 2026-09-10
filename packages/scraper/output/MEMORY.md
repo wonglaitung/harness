@@ -158,7 +158,48 @@
 
 ## 2026-09-09 提取
 
+## 2026-09-10 提取
+
 ## 注意事项
+
+### 港股分析
+- **AI利润硬件转云厂-互联网软科技左侧逆向布局信号**
+
+### 港股分析
+- **港股硬科技板块-光通信PCB连续走强-AI基建右侧三连确认**
+
+### 港股分析
+- **美债10Y-484-T21连续两日持平-天花板最终确认-FOMC前黄金窗口最后冲刺**
+
+### 港股分析
+- **优地机器人-IPO首日暴涨153pct-机器人赛道最强右侧确认** - http://finance.eastmoney.com/a/202609093869456957.html
+
+### 港股分析
+- **港股通5股连续净买入+百度17.35亿 — 南向逆势加仓右侧最强确认** - http://finance.eastmoney.com/a/202609093869610614.html
+
+### 港股分析
+- **百度09888-南向单日净买入17.35亿-利率恐慌中最强左侧信号**
+
+### 港股分析
+- **美债10Y 4.84% T+20 — 天花板彻底击穿，防御模式最高级别 🔴🔴🔴** - https://finance.yahoo.com/bonds
+
+### 新范式/工具
+- **Engrim — Universal Cross-Agent Episodic Memory（通用跨Agent情节记忆引擎）** - https://news.ycombinator.com/show — Show HN 91 points
+
+### 新范式/工具
+- **NPC-Forge — Deterministic Dataset-Driven Agents（确定性数据集驱动 Agent）** - https://news.ycombinator.com/item?id=Show+HN%3A+TERMy
+
+### 新范式/工具
+- **Desert Ant Labs — On-Device "Little Brains" 端侧专用微模型** - https://desertant.com/blog/introducing-desert-ant-labs/
+
+### 新范式/工具
+- **Desert Ant Labs — 端侧专用微模型新范式** - https://desertant.com/blog/introducing-desert-ant-labs/
+
+### 新范式/工具
+- **HyperFrames — HTML→Video Agent 原生视频渲染新范式** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Context Mode — Agent 上下文操作系统级方案** - https://news.ycombinator.com/item?id=47193064
 
 ### 港股分析
 - **江波龙09976港股IPO破发 — 千亿存储龙头左侧逆向机会**
