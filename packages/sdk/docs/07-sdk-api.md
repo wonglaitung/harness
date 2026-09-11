@@ -2267,6 +2267,7 @@ await store.write_if_version("id", new_content, base_version=1)   # CAS 乐观�
 
 - 后端：`memory`(测试) / `file`(worktree，开发) / `redis` / `db`(生产，optional extras)。
 - 写分层 additive/authoritative；冲突集显性化，禁静默覆写。
+- `read_verifier_raise=True`（`strict` 下）对伪造/越权 `authoritative` 读做 **fail-loud**（抛 `ValueError`），用于零容忍误读场景（见 [08-security.md](./08-security.md#共享状态治理sharedstatestore)）。
 
 ### RetryPolicy 与 ReviewQueue
 
@@ -2280,7 +2281,19 @@ item = queue.submit(ReviewItem(gate_findings=[...]))   # submit 是同步的
 decision = await queue.resolve(item, ReviewDecision.CONFIRM, actor="human")  # 确认/修正/豁免
 ```
 
-`ReviewQueue` 默认内存；传 `store=SharedStateStore(...)` 即变持久化（见下）。
+`ReviewQueue` 默认内存；传 `store=SharedStateStore(...)` 即变持久化（见下）。决策出口可经 `ReviewSink` Protocol 沉淀进 KB：
+
+```python
+from harness.review import ReviewQueue, ReviewItem, ReviewSink, ReviewResolution
+
+class MyKBSink(ReviewSink):
+    def on_resolve(self, resolution: ReviewResolution, item: ReviewItem) -> None:
+        ...  # 落库 / 进知识库
+
+queue = ReviewQueue(human_actors={"human"}, sink=MyKBSink())
+```
+
+`resolve()` 只允许 `human_actors` 允许集内的身份（默认 `{"human"}`；可钉到具体身份）；`sink.on_resolve` 异常被吞，不阻断复核主流程（见 [08-security.md](./08-security.md#复核防绕过reviewqueue-与-reviewsink)）。
 
 ### 注入业务勾稽规则（GateConfig.rules / rule_specs）
 
@@ -2340,6 +2353,17 @@ if not verdict.passed:
 ```
 
 完整可运行示例见 `examples/spec_submit_governance.py`。
+
+## CLI（harness 命令行）— M6-dep
+
+SDK 随包提供一个极简 CLI（`[project.scripts] harness = "harness.cli:main"`），用于依赖安全审计。SDK **不内置 CVE 数据库**，而是委托平台审计器，使修复保持人工评审、部署侧负责的边界：
+
+```bash
+harness doctor --deps      # 审计已安装依赖的已知 CVE
+```
+
+- 优先调用 `uv pip audit`；无 `uv` 时回退 `pip-audit`；二者皆无则提示安装并返回退出码 1。
+- 仅做审计入口，实际修复需人工评审（部署侧）。属防翻车清单「依赖安全」的 SDK 侧闭环（见 [13-orchestrator.md](./13-orchestrator.md) 残余风险表）。
 
 ## 下一步
 
