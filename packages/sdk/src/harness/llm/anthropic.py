@@ -48,7 +48,11 @@ class AnthropicClient(LLMClient):
         if self._client is None:
             import anthropic
 
-            self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
+            self._client = anthropic.AsyncAnthropic(
+                api_key=self._api_key,
+                # Hard wall-clock limit on every request (E3: no soft-only timeout).
+                timeout=self.config.timeout,
+            )
         return self._client
 
     @property

@@ -511,6 +511,7 @@ class BashTool(Tool):
                 error=f"Command not allowed: {command.split()[0]}",
             )
 
+        process = None
         try:
             # Execute command with platform-appropriate shell
             if platform.system() == "Windows":
@@ -523,14 +524,17 @@ class BashTool(Tool):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=str(context.working_directory),
+                    start_new_session=True,
                 )
             else:
-                # Unix: Use default shell
+                # Unix: Use default shell; start_new_session lets us kill the
+                # whole process group on timeout instead of only the shell.
                 process = await asyncio.create_subprocess_shell(
                     command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=str(context.working_directory),
+                    start_new_session=True,
                 )
 
             stdout, stderr = await asyncio.wait_for(
@@ -563,12 +567,30 @@ class BashTool(Tool):
                 error=error_output if process.returncode != 0 else None,
             )
 
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
+            # Hard-kill the spawned process group so a slow/hung command cannot
+            # leak orphan processes and exhaust host resources (E3: not soft-only).
+            if process is not None:
+                import os
+                import signal
+
+                killed = False
+                try:
+                    pgid = os.getpgid(process.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                    killed = True
+                except (ProcessLookupError, PermissionError, OSError):
+                    pass
+                if not killed:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
             return ToolResult(
                 tool_call_id="",
                 success=False,
                 content="",
-                error=f"Command timed out after {timeout}s",
+                error=f"Command timed out after {timeout}s, process killed",
             )
 
         except Exception as e:

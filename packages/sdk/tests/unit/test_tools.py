@@ -1,10 +1,12 @@
 """Tests for tool system."""
 
 
+import time
+
 import pytest
 
 from harness.tools.base import ToolContext
-from harness.tools.builtins import GlobTool, ReadTool, WriteTool
+from harness.tools.builtins import BashTool, GlobTool, ReadTool, WriteTool
 from harness.tools.permissions import PermissionSet
 from harness.tools.registry import ToolRegistry
 
@@ -228,3 +230,28 @@ class TestGlobTool:
         assert "file1.txt" in result.content
         assert "file2.txt" in result.content
         assert "file3.py" not in result.content
+
+
+class TestBashToolHardKill:
+    """E3: timeout must hard-kill the spawned process group, not soft-timeout."""
+
+    @pytest.mark.asyncio
+    async def test_timeout_hard_kills_process(self):
+        tool = BashTool()
+        context = ToolContext(
+            session_id="test",
+            working_directory=".",
+            permissions=PermissionSet.full_access(),
+        )
+        start = time.time()
+        result = await tool.execute(
+            {"command": "sleep 30", "timeout": 1},
+            context,
+        )
+        elapsed = time.time() - start
+
+        assert result.success is False
+        assert "timed out" in result.error
+        assert "killed" in result.error
+        # Must not have waited the full 30s sleep.
+        assert elapsed < 15

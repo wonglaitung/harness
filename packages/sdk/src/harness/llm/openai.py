@@ -73,6 +73,8 @@ class OpenAIClient(LLMClient):
             client_kwargs = {"api_key": self._api_key}
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
+            # Hard wall-clock limit on every request (E3: no soft-only timeout).
+            client_kwargs["timeout"] = self.config.timeout
 
             # Use synchronous client to avoid issues with qasync on Windows
             self._client = openai.OpenAI(**client_kwargs)
