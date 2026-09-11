@@ -30,7 +30,7 @@ public class InputValidator {
      * Create validator with default settings (injection as warning).
      */
     public InputValidator() {
-        this(DEFAULT_MAX_LENGTH, true, null, false);
+        this(DEFAULT_MAX_LENGTH, true, null, true);
     }
 
     /**

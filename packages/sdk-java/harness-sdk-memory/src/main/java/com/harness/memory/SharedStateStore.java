@@ -236,4 +236,37 @@ public class SharedStateStore {
     public int size() {
         return items.size();
     }
+
+    /**
+     * Get conflicting authoritative items (same type, different content).
+     *
+     * @return list of conflict sets
+     */
+    public List<ConflictSet> getConflicts() {
+        List<BlackboardItem> allItems = listItems();
+        java.util.Map<String, ConflictSet> conflicts = new java.util.LinkedHashMap<>();
+
+        for (BlackboardItem item : allItems) {
+            if (!"authoritative".equals(item.type())) {
+                continue;
+            }
+            for (BlackboardItem other : allItems) {
+                if (other.getId().equals(item.getId()) || !other.type().equals(item.type())) {
+                    continue;
+                }
+                if ("authoritative".equals(other.type()) &&
+                    !other.content().equals(item.content())) {
+                    ConflictSet cs = conflicts.computeIfAbsent(
+                        item.type(), k -> new ConflictSet(k, new ArrayList<>(), java.time.Instant.now()));
+                    if (!cs.itemIds().contains(item.getId())) {
+                        cs.itemIds().add(item.getId());
+                    }
+                    if (!cs.itemIds().contains(other.getId())) {
+                        cs.itemIds().add(other.getId());
+                    }
+                }
+            }
+        }
+        return new java.util.ArrayList<>(conflicts.values());
+    }
 }

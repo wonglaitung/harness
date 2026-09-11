@@ -1235,6 +1235,42 @@ BlackboardItem got = store.get(item.getId());
 
 // 列表（过滤过期项 + readVerifier 校验）
 List<BlackboardItem> all = store.listItems();
+
+// 冲突检测：同类型 authoritative 项内容不同
+List<ConflictSet> conflicts = store.getConflicts();
+```
+
+### FileStateStore（SQLite 持久化后端）
+
+多进程部署使用 SQLite 持久化，rollback journal 保证跨进程 CAS 安全：
+
+```java
+import com.harness.memory.FileStateStore;
+import java.nio.file.Path;
+
+// 文件后端（SQLite）
+FileStateStore fileStore = new FileStateStore(Path.of(".harness/state.db"));
+fileStore.put(item);
+fileStore.writeIfVersion(item.getId(), newContent, 0);
+fileStore.close();  // 关闭连接
+```
+
+### StateStoreFactory（工厂方法）
+
+```java
+import com.harness.memory.StateStoreFactory;
+import com.harness.memory.StateStoreFactory.Backend;
+
+// 内存后端（默认）
+SharedStateStore memStore = StateStoreFactory.create();
+
+// 文件后端
+FileStateStore fileStore = (FileStateStore) StateStoreFactory.create(
+    Backend.FILE, Path.of(".harness/state.db"));
+
+// 带验证器
+SharedStateStore secureStore = (SharedStateStore) StateStoreFactory.create(
+    Backend.MEMORY, true, writeVerifier, readVerifier);
 ```
 
 ### CAS 语义

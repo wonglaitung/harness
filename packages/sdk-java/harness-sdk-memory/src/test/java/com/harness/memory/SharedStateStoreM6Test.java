@@ -2,6 +2,7 @@ package com.harness.memory;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.List;
 
@@ -150,5 +151,65 @@ class SharedStateStoreM6Test {
         // Additive should pass (verifier only checks authoritative)
         assertDoesNotThrow(() -> verifiedStore.put(BlackboardItem.create("additive",
             Map.of(), "a", 0.5f, "harness")));
+    }
+
+    // ---- getConflicts ----
+
+    @Test
+    void getConflictsDetectsConflictingAuthoritative() {
+        BlackboardItem itemA = new BlackboardItem(
+            "conflict-a", "decision", Map.of("verdict", "A"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+        BlackboardItem itemB = new BlackboardItem(
+            "conflict-b", "decision", Map.of("verdict", "B"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+
+        store.put(itemA);
+        store.put(itemB);
+
+        List<ConflictSet> conflicts = store.getConflicts();
+        assertEquals(1, conflicts.size());
+        ConflictSet cs = conflicts.get(0);
+        assertEquals("decision", cs.key());
+        assertTrue(cs.itemIds().contains("conflict-a"));
+        assertTrue(cs.itemIds().contains("conflict-b"));
+    }
+
+    @Test
+    void getConflictsNoConflictWhenSameContent() {
+        BlackboardItem itemA = new BlackboardItem(
+            "same-a", "decision", Map.of("verdict", "A"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+        BlackboardItem itemB = new BlackboardItem(
+            "same-b", "decision", Map.of("verdict", "A"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+
+        store.put(itemA);
+        store.put(itemB);
+
+        List<ConflictSet> conflicts = store.getConflicts();
+        assertTrue(conflicts.isEmpty());
+    }
+
+    @Test
+    void getConflictsIgnoresAdditive() {
+        BlackboardItem itemA = new BlackboardItem(
+            "add-a", "observation", Map.of("data", "X"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+        BlackboardItem itemB = new BlackboardItem(
+            "add-b", "observation", Map.of("data", "Y"),
+            "planner", 0.9f, 0, 3600,
+            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+
+        store.put(itemA);
+        store.put(itemB);
+
+        List<ConflictSet> conflicts = store.getConflicts();
+        assertTrue(conflicts.isEmpty());
     }
 }

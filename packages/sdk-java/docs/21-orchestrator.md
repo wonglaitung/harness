@@ -450,6 +450,47 @@ queue.resolve(id, ReviewDecision.CONFIRM, "human");
 - `verifyActor`：`null` 表示接受自报身份；配置后做真实身份校验（接 IdP）。
 - `sink`：`null` 表示不导出；异常被吞（不阻断复核主流）。
 
+### Critical-item 守卫（G3）
+
+当提交项的 `metadata.severity` 为 `"error"` 时，`ReviewQueue` 强制要求操作者属于 `humanActors`，非人类身份无法操作：
+
+```java
+// severity=error 的项只能由人类操作
+ReviewItem criticalItem = ReviewItem.of(
+    content, "deterministic_gate", findings, Map.of("severity", "error"));
+String id = queue.submit(criticalItem);
+
+// 机器身份操作会被拒绝
+queue.resolve(id, ReviewDecision.CONFIRM, "orchestrator"); // 抛出 SecurityException
+
+// 人类身份操作成功
+queue.resolve(id, ReviewDecision.CONFIRM, "human"); // OK
+```
+
+### ReviewResolution 结构
+
+`resolve()` 返回 `ReviewResolution` 记录，包含完整的操作审计信息：
+
+```java
+public record ReviewResolution(
+    String itemId,                    // 复核项 ID
+    ReviewDecision decision,          // CONFIRM / REVISE / EXEMPT
+    String resolvedBy,                // 操作者身份
+    String reason,                    // 操作原因（可选）
+    String correctedContent,          // 修正后内容（仅 REVISE 时）
+    Instant resolvedAt                // 操作时间
+) {}
+```
+
+### escalateFromVerdict
+
+便捷方法：根据闸门判定结果自动提交复核项：
+
+```java
+// verdictPassed=true → CONFIRM, verdictPassed=false → REVISE
+String id = queue.escalateFromVerdict(verdictPassed, findings, content);
+```
+
 ## 下一步
 
 - [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览
