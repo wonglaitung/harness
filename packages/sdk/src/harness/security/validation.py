@@ -29,37 +29,78 @@ class PromptInjectionDetector:
     """
     Prompt injection detector.
 
-    Detects common injection patterns in user input.
+    Detects common injection patterns in user input. Coverage is keyword /
+    phrase based (both English and Chinese) plus obfuscation normalization
+    (invisible / zero-width characters). It is a heuristic defense-in-depth
+    filter, not a semantic guarantee — see design note residual risk.
     """
 
+    # Invisible / zero-width characters used to break keyword matching.
+    # Stripped before pattern matching.
+    _ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
+
     INJECTION_PATTERNS = [
-        # Role playing
+        # Role playing (English)
         r"ignore (all )?(previous|above) instructions",
         r"disregard (all )?(previous|above) instructions",
         r"forget (all )?(previous|above) instructions",
-        # System prompt leakage
+        # System prompt leakage (English)
         r"what (is|are) your (system |initial )?instructions",
         r"repeat your (system |initial )?prompt",
         r"show me your (system |initial )?prompt",
-        # Jailbreak attempts
+        # Jailbreak attempts (English)
         r"you are now (a|an) \w+",
         r"pretend (to be|you are)",
         r"act as (if|though)",
+        r"developer mode",
+        r"\bDAN\b",
         # Encoding bypass
         r"base64",
         r"rot13",
         r"hex encode",
-        # Dangerous instructions
+        r"decode and (run|execute)",
+        # Dangerous instructions (English)
         r"sudo",
         r"chmod",
         r"rm -rf",
         r"delete all",
         r"format disk",
-        # Output manipulation
         r"output your prompt",
         r"print your instructions",
         r"reveal your system",
+        # ---- Chinese / multilingual coverage (M5-B) ----
+        # 指令覆盖：忽略/无视/忘掉之前的指令
+        r"忽略(以上|之前|前述|上面|先前|所有)?(的)?(所有)?(指令|指示|要求|提示|设定|設定|限制|规则|規則|约束|約束|安全|prompt)",
+        r"无视(以上|之前|前述|上面|先前)?(的)?(指令|指示|要求|提示|设定|設定|限制|规则|規則|约束|約束|安全)",
+        r"忘(记|掉|記|卻|却)(以上|之前|前述|上面|先前)?(的)?(指令|指示|要求|提示|设定|設定|限制|规则|規則|约束|約束)",
+        r"不要(理会|理睬|管|搭理)(以上|之前|前面|先前)?(的)?(指令|指示|要求|提示|限制|规则|規則)",
+        r"把(上面|之前|以上)(的)?(指令|指示|要求|提示)(全部)?(抛|丢|扔)到(一|脑)边",
+        # 系统提示泄露
+        r"(告诉|展示|显示|透露|念出|重复|说出|說出|拷贝|複製)(我)?(你的)?(系统|初始|system)?(提示|指令|prompt)",
+        r"你的(系统|初始|system)?(提示|指令|prompt)(是(什么|什麼|啥)|内容|內容|是什么|是什麼)",
+        r"(输出|打印|顯示|输出)(你(的)?(系统|初始|system)?(提示|指令|prompt))",
+        r"(泄露|泄漏|透露)(你(的)?)(系统|初始|system)(提示|指令|prompt)",
+        # 越狱 / 角色扮演（限定装扮句式，降低误报）
+        r"假装(你|我)是",
+        r"假设(你|我)是",
+        r"扮演(一个|一名|一种|一個|一種|a|an|成)",
+        # 「现在你是X」只在 X 指向「解除限制/规则/安全」时才视为越狱，
+        # 避免把「现在你是我的好朋友」这类正常表述误报。
+        r"(现在|現在)你(就)?(是|变成|變成).{0,10}(限制|约束|約束|规则|規則|安全)",
+        r"越(狱|獄)",
+        # 危险指令（中文）
+        r"删除(所有|全部|一切|全部)?(的)?(文件|数据|資料|记录|記錄|资料)",
+        r"格式化(磁盘|硬盘|磁碟|硬碟|系统|系統)",
+        r"(运行|执行|執行)(以下|下列|这个|這個|恶意|惡意)?(的)?(命令|指令|脚本|腳本)",
+        r"(解密|解碼|解码)(后|後)(运行|执行|執行)",
     ]
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        # Strip invisible characters (zero-width spaces, soft hyphen, BOM,
+        # word joiner) that attackers insert to defeat substring/keyword
+        # matching, e.g. "ign\u200bore".
+        return PromptInjectionDetector._ZERO_WIDTH.sub("", text)
 
     def __init__(self, custom_patterns: list[str] | None = None):
         """
@@ -93,6 +134,9 @@ class PromptInjectionDetector:
         if not text or not isinstance(text, str):
             return True, []  # Safe if no text content
 
+        # Normalize away invisible characters before pattern matching (M5-B).
+        text = self._normalize(text)
+
         detected = []
 
         for pattern in self.patterns:
@@ -120,7 +164,7 @@ class PromptInjectionDetector:
             for block in text:
                 if isinstance(block, dict) and block.get("type") == "text":
                     # Sanitize text blocks
-                    sanitized_text = block.get("text", "")
+                    sanitized_text = self._normalize(block.get("text", ""))
                     for pattern in self.patterns:
                         sanitized_text = pattern.sub("[FILTERED]", sanitized_text)
                     sanitized_list.append({"type": "text", "text": sanitized_text})
@@ -130,7 +174,7 @@ class PromptInjectionDetector:
             return sanitized_list
 
         # String input
-        sanitized = text
+        sanitized = self._normalize(text)
         for pattern in self.patterns:
             sanitized = pattern.sub("[FILTERED]", sanitized)
 
