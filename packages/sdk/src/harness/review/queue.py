@@ -209,14 +209,36 @@ class ReviewQueue:
         actor: str = "human",
         corrected_content: str | None = None,
         reason: str | None = None,
+        allow_auto_resolve: bool = False,
     ) -> ReviewResolution:
-        """Resolve an item. ``actor`` identifies the resolver (audit)."""
+        """Resolve an item. ``actor`` identifies the resolver (audit).
+
+        G3 guard: automated/non-human sign-off must never silently release a
+        critical isolation item. Items carrying ERROR-severity gate findings are
+        treated as critical and can ONLY be resolved by a human (``actor="human"``).
+        Non-critical items may be auto-resolved only when ``allow_auto_resolve=True``.
+        """
         async with self._lock:
             item = self._items.get(item_id) or self._load_item(item_id)
             if item is None:
                 raise KeyError(f"Review item not found: {item_id}")
             if item.resolved:
                 raise ValueError(f"Review item already resolved: {item_id}")
+
+            is_critical = any(
+                f.get("severity") == "error" for f in (item.gate_findings or [])
+            )
+            if is_critical and actor != "human":
+                raise PermissionError(
+                    "Critical isolation items (ERROR-level gate findings) can only be "
+                    "resolved by a human; automated sign-off is forbidden (G3)."
+                )
+            if not is_critical and actor != "human" and not allow_auto_resolve:
+                raise PermissionError(
+                    "Automated resolution of non-critical items requires "
+                    "allow_auto_resolve=True."
+                )
+
             item.resolved = True
             item.decision = decision
             item.resolved_by = actor
