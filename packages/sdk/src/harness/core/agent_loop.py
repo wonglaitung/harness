@@ -1159,6 +1159,30 @@ class AgentLoop:
             if self._sanitizer and result.success and result.content:
                 result.content = self._sanitizer.sanitize(result.content)
 
+            # B1: external content returned by tools can also carry injection
+            # attempts. The tool has already executed, so we cannot block it, but
+            # we neutralize any hijack patterns before the output is fed back to
+            # the model.
+            if (
+                self._input_validator
+                and self._input_validator.injection_detector
+                and result.success
+                and result.content
+            ):
+                is_safe, _ = self._input_validator.injection_detector.detect(
+                    result.content
+                )
+                if not is_safe:
+                    result.content = self._input_validator.injection_detector.sanitize(
+                        result.content
+                    )
+                    self._emit_progress(
+                        ProgressEventType.WARNING,
+                        f"Tool output from {tool_call.name} contained injection "
+                        f"patterns; sanitized before returning to model",
+                        {"tool": tool_call.name},
+                    )
+
             # Audit log
             if self._audit_logger:
                 self._audit_logger.log_tool_call(

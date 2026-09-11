@@ -149,6 +149,7 @@ class InputValidator:
         max_length: int = 100000,
         check_injection: bool = True,
         custom_patterns: list[str] | None = None,
+        block_injection: bool = True,
     ):
         """
         Initialize validator.
@@ -157,8 +158,12 @@ class InputValidator:
             max_length: Maximum input length
             check_injection: Whether to check for injection patterns
             custom_patterns: Custom injection patterns
+            block_injection: When True, detected injection is a hard error (input is
+                rejected). When False, it is only a warning and the sanitized text
+                can still be used.
         """
         self.max_length = max_length
+        self.block_injection = block_injection
         self.injection_detector = (
             PromptInjectionDetector(custom_patterns) if check_injection else None
         )
@@ -192,7 +197,12 @@ class InputValidator:
         if self.injection_detector:
             is_safe, patterns = self.injection_detector.detect(text)
             if not is_safe:
-                warnings.append(f"Potential injection patterns detected: {patterns}")
+                # B1: external/tool input that tries to hijack the agent must be a
+                # hard failure by default, not just an advisory warning.
+                if self.block_injection:
+                    errors.append(f"Potential injection patterns detected: {patterns}")
+                else:
+                    warnings.append(f"Potential injection patterns detected: {patterns}")
 
         # Sanitize text
         sanitized = self.injection_detector.sanitize(text) if self.injection_detector else text

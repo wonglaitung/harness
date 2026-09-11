@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from harness.gate.models import (
+    FindingType,
     GateFinding,
     GateSeverity,
     GateVerdict,
@@ -67,14 +68,30 @@ class DeterministicGate:
             findings.extend(v.check(content, src, tool_records))
 
         report = self.reconciler.reconcile(content, src, findings)
+
+        # D2/D3: surface reconciliation-level unsourced claims as findings so they
+        # are auditable, and always quarantine them from the delivered content
+        # (delete or flag — never silently keep them).
+        unsourced = report.get("unsourced_claims") or []
+        if unsourced:
+            findings.append(
+                GateFinding(
+                    id="recon:unsourced",
+                    type=FindingType.RECONCILIATION,
+                    severity=GateSeverity.WARNING,
+                    message=(
+                        f"交付含 {len(unsourced)} 条无溯源结论，已在交付内容中隔离/标注"
+                    ),
+                    evidence="; ".join(unsourced[:3]),
+                )
+            )
+
         passed = not any(f.severity == GateSeverity.ERROR for f in findings)
 
-        # Delivery-time enforcement: on failure, never hand back the raw content.
-        # Unsourced claims are quarantined; if nothing is redactable the whole
-        # delivery is held back so the raw result is not silently leaked.
-        delivered_content = (
-            content if passed else self.reconciler.redact(content, report)
-        )
+        # Delivery-time enforcement: never hand back the raw content. Unsourced
+        # claims are quarantined; if nothing is redactable the whole delivery is
+        # held back so the raw result is not silently leaked.
+        delivered_content = self.reconciler.redact(content, report)
 
         verdict = GateVerdict(
             passed=passed,

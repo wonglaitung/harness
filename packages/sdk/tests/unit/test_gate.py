@@ -105,3 +105,15 @@ def test_redact_quarantines_when_nothing_redactable() -> None:
     report = {"unsourced_claims": []}
     safe = Reconciler.redact("任意内容", report)
     assert "已隔离" in safe
+
+
+def test_unsourced_claim_quarantined_from_delivery() -> None:
+    # One claim grounded, one not: the unsupported one must be stripped/flagged
+    # from the delivered content (D2/D3: 无来源即删/存疑).
+    content = "营收5亿元，利润-3亿元。"
+    verdict = _gate().check(content, sources=["营收5亿元。"])
+    assert verdict.reconciliation_report["unsourced_claims"]
+    assert "已隔离" in verdict.delivered_content
+    assert "5亿元" in verdict.delivered_content  # grounded claim kept
+    assert "3亿元" not in verdict.delivered_content  # unsupported stripped
+    assert any(f.type.value == "reconciliation" for f in verdict.findings)
