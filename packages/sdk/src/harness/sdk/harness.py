@@ -579,12 +579,42 @@ class AgentHarness:
         if not self.config.strict and self.config.state is None:
             return None
         from harness.state import create_state_store
+        from harness.state.base import ItemStatus, WriteKind
 
         sc = self.config.state or StateConfig()
         # H3: under governance, authoritative (decision) writes are restricted to
-        # the control layer (source_agent="harness") via the verifier.
-        verifier = (lambda item: item.source_agent == "harness") if self.config.strict else None
-        return create_state_store(sc.backend, path=sc.path, url=sc.url, verifier=verifier)
+        # the control layer via the verifier. The allowlist covers the harness
+        # loop AND the review queue (both are the control/verifier layer); a
+        # sub-agent claiming source_agent="harness" is no longer sufficient on its
+        # own — the item must also be an AUTHORITATIVE/CONFIRMED write.
+        allowed_sources = {"harness", "review_queue"}
+        write_verifier = (
+            lambda item: (
+                getattr(item, "source_agent", None) in allowed_sources
+                and getattr(item, "kind", None) == WriteKind.AUTHORITATIVE
+                and getattr(item, "status", None) == ItemStatus.CONFIRMED
+            )
+            if self.config.strict
+            else None
+        )
+        # H: read-side guard. In strict mode, an authoritative item whose source is
+        # NOT in the allowlist (i.e. written around the write verifier) is dropped
+        # from reads, so other agents never consume a forged/stale decision.
+        read_verifier = (
+            lambda item: not (
+                getattr(item, "kind", None) == WriteKind.AUTHORITATIVE
+                and getattr(item, "source_agent", None) not in allowed_sources
+            )
+            if self.config.strict
+            else None
+        )
+        return create_state_store(
+            sc.backend,
+            path=sc.path,
+            url=sc.url,
+            verifier=write_verifier,
+            read_verifier=read_verifier,
+        )
 
     def _build_review_queue(self) -> Any | None:
         """Build the human-in-the-loop review queue when governance is enabled."""

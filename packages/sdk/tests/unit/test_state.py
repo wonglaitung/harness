@@ -246,6 +246,71 @@ async def test_authoritative_verifier_blocks_unauthorized() -> None:
     assert auth.kind == WriteKind.AUTHORITATIVE
 
 
+async def test_strict_write_verifier_allowlist() -> None:
+    """H: the governance verifier restricts authoritative writes to the control
+    layer (harness + review_queue), not merely to a literal source string."""
+    allowed = {"harness", "review_queue"}
+    write_v = (
+        lambda i: getattr(i, "source_agent", None) in allowed
+        and getattr(i, "kind", None) == WriteKind.AUTHORITATIVE
+        and getattr(i, "status", None) == ItemStatus.CONFIRMED
+    )
+    store = create_state_store("memory", verifier=write_v)
+    # Non-control actor (even claiming kind=AUTHORITATIVE) -> rejected.
+    with pytest.raises(PermissionError):
+        await store.put_authoritative("decision", "v", source_agent="agentX")
+    # Control-layer writers are accepted.
+    assert (await store.put_authoritative("decision", "v", source_agent="harness")).kind == WriteKind.AUTHORITATIVE
+    assert (await store.put_authoritative("decision", "v", source_agent="review_queue")) is not None
+
+
+async def test_read_verifier_drops_forged_authoritative() -> None:
+    """H: a forged/stale authoritative item written around the write verifier
+    must not be consumable on read."""
+    allowed = {"harness"}
+    read_v = lambda i: not (
+        getattr(i, "kind", None) == WriteKind.AUTHORITATIVE
+        and getattr(i, "source_agent", None) not in allowed
+    )
+    store = create_state_store("memory", read_verifier=read_v)
+    # Forged authoritative written directly to the backend (bypassing verifier).
+    forged = BlackboardItem(
+        id="fk", type="decision", content="x",
+        kind=WriteKind.AUTHORITATIVE, source_agent="evil", status=ItemStatus.CONFIRMED,
+    )
+    await store._backend.put(forged)
+    assert await store.get("fk") is None
+    # Legitimate authoritative is readable.
+    good = BlackboardItem(
+        id="gk", type="decision", content="y",
+        kind=WriteKind.AUTHORITATIVE, source_agent="harness", status=ItemStatus.CONFIRMED,
+    )
+    await store._backend.put(good)
+    assert (await store.get("gk")).source_agent == "harness"
+    # Additive observations from any agent remain readable.
+    add = await store.put_additive("obs", {"x": 1}, source_agent="agent1")
+    assert (await store.get(add.id)) is not None
+
+
+async def test_read_verifier_filters_list_items() -> None:
+    allowed = {"harness"}
+    read_v = lambda i: not (
+        getattr(i, "kind", None) == WriteKind.AUTHORITATIVE
+        and getattr(i, "source_agent", None) not in allowed
+    )
+    store = create_state_store("memory", read_verifier=read_v)
+    await store._backend.put(
+        BlackboardItem(id="a", type="t", content="1", kind=WriteKind.AUTHORITATIVE,
+                       source_agent="evil", status=ItemStatus.CONFIRMED)
+    )
+    await store._backend.put(
+        BlackboardItem(id="b", type="t", content="2", kind=WriteKind.AUTHORITATIVE,
+                       source_agent="harness", status=ItemStatus.CONFIRMED)
+    )
+    ids = {i.id for i in await store.list_items(type="t")}
+    assert ids == {"b"}
+
+
 @pytest.mark.redis
 async def test_redis_cas_atomic_when_available() -> None:
     # Only runs if a Redis server is reachable; otherwise skipped.

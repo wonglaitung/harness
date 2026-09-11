@@ -29,11 +29,22 @@ class SharedStateStore:
             :meth:`put_authoritative` rejects any item for which
             ``verifier(item)`` is falsy — enforcing "authoritative writes only
             via the control layer / verifier" (H3: 防幻觉覆写).
+        read_verifier: Optional gate applied on reads (:meth:`get` / :meth:`list_items`).
+            When set, an item for which ``read_verifier(item)`` is falsy is dropped
+            from read results (returned as ``None`` / filtered out). This closes the
+            read-side gap — a forged/stale authoritative item written around the
+            write verifier cannot be consumed by other agents (H: 无 read 校验).
     """
 
-    def __init__(self, backend: StateBackend, verifier: Any | None = None) -> None:
+    def __init__(
+        self,
+        backend: StateBackend,
+        verifier: Any | None = None,
+        read_verifier: Any | None = None,
+    ) -> None:
         self._backend = backend
         self._verifier = verifier
+        self._read_verifier = read_verifier
 
     async def put_additive(
         self, type: str, content: Any, source_agent: str, confidence: float = 0.5, **meta: Any
@@ -68,7 +79,10 @@ class SharedStateStore:
         return await self._backend.put(item)
 
     async def get(self, item_id: str) -> BlackboardItem | None:
-        return await self._backend.get(item_id)
+        item = await self._backend.get(item_id)
+        if item is not None and self._read_verifier is not None and not self._read_verifier(item):
+            return None
+        return item
 
     async def write_if_version(
         self, item_id: str, content: Any, base_version: int, **meta: Any
@@ -78,7 +92,10 @@ class SharedStateStore:
     async def list_items(
         self, type: str | None = None, status: ItemStatus | None = None
     ) -> list[BlackboardItem]:
-        return await self._backend.list_items(type=type, status=status)
+        items = await self._backend.list_items(type=type, status=status)
+        if self._read_verifier is not None:
+            items = [i for i in items if self._read_verifier(i)]
+        return items
 
     async def get_conflicts(self) -> list[ConflictSet]:
         return await self._backend.get_conflicts()
@@ -90,23 +107,32 @@ def create_state_store(
     path: str | None = None,
     url: str | None = None,
     verifier: Any | None = None,
+    read_verifier: Any | None = None,
 ) -> SharedStateStore:
     """Build a :class:`SharedStateStore` for the given backend name.
 
     backends: memory (tests) | file (worktree/dev) | redis | db (prod, extras).
     """
     if backend == "memory":
-        return SharedStateStore(InMemoryBackend(), verifier=verifier)
+        return SharedStateStore(InMemoryBackend(), verifier=verifier, read_verifier=read_verifier)
     if backend == "file":
-        return SharedStateStore(FileBackend(path or ".harness/state.db"), verifier=verifier)
+        return SharedStateStore(
+            FileBackend(path or ".harness/state.db"), verifier=verifier, read_verifier=read_verifier
+        )
     if backend == "redis":
         from harness.state.redis_store import RedisBackend
 
-        return SharedStateStore(RedisBackend(url or "redis://localhost:6379/0"), verifier=verifier)
+        return SharedStateStore(
+            RedisBackend(url or "redis://localhost:6379/0"),
+            verifier=verifier,
+            read_verifier=read_verifier,
+        )
     if backend == "db":
         from harness.state.db_store import DBBackend
 
-        return SharedStateStore(DBBackend(path or ".harness/state.db"), verifier=verifier)
+        return SharedStateStore(
+            DBBackend(path or ".harness/state.db"), verifier=verifier, read_verifier=read_verifier
+        )
     raise ValueError(f"Unknown state backend: {backend!r}")
 
 
