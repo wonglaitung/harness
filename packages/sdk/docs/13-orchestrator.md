@@ -400,7 +400,7 @@ asyncio.run(main())
 
 ## 确定性闸门抽象层（Deterministic Gate Abstraction）
 
-> **状态**: 🚧 设计中（规划落地，详见「实施路线」）
+> **状态**: ✅ 已落地（确定性治理层 M1–M3 已实作，详见「实施路线」与「防翻车清单 A–H 落地状态」）
 > **设计稿自检**: 见文末「技术规范符合性自检」小节
 > **原则来源**: [AI应用开发通用防翻车原则与检查清单.md](../../convention/AI应用开发通用防翻车原则与检查清单.md)
 
@@ -489,7 +489,7 @@ asyncio.run(main())
 | 维度 | 结论 | 说明 / 风险+缓解 |
 |------|------|------------------|
 | 02-设计·凭证与密钥 | 满足 | 各后端连接串/路径走 `StateConfig`/环境变量，不硬编码 |
-| 02-设计·输入校验与防注入 | 满足 | gate 复用既有 `InputValidator`/`ResultSanitizer`；网络工具走 `PermissionSet` 白名单防 SSRF |
+| 02-设计·输入校验与防注入 | 满足 | 注入现为硬阻断（`InputValidator(block_injection=True)`，命中即拒绝输入）；工具回传内容亦过 `PromptInjectionDetector` 并清洗后再回灌模型；网络工具走 `PermissionSet` 白名单防 SSRF |
 | 02-设计·最小权限 | 满足 | `AgentRole.tools` 角色最小工具集；`PermissionSet` 路径/命令受限 |
 | 02-设计·依赖安全 | 部分满足 | redis/db 驱动作 optional extras（pin 版本）；风险：第三方 CVE → 缓解：锁版本+定期审计 |
 | 02-设计·输出编码 | 满足 | 既有 guardrails PII 编码；`ResultSanitizer` 已存在 |
@@ -501,6 +501,21 @@ asyncio.run(main())
 | 04-并发·避免竞态 | 满足 | `memory`=asyncio.Lock；`file`=SQLite 事务原子；`redis`=原子命令；CAS 防覆盖；临界区不做重 IO |
 | 04-并发·写幂等 | 满足 | 写操作幂等（CAS `base_version`），重试安全 |
 | 04-并发·重试带退避 | 满足 | `RetryPolicy` 指数退避+上限+区分可/不可重试错误 |
+
+### 防翻车清单 A–H 落地状态
+
+> 依 `convention/AI应用开发通用防翻车原则与检查清单.md` 评估，M1–M3 已补齐。确定性闸门 100% 代码裁决；质量分仅可观测。
+
+| 清单节 | 落地控制 | 代码位置 |
+|--------|----------|----------|
+| A 确定性裁决 | 双通道溯源 + `DeterministicGate`（Format/Fact/Logic + Reconciler），100% 程序化裁决 | `gate/gate.py`、`gate/reconciliation.py` |
+| B 输入边界 | `InputValidator` 注入硬阻断（默认 `block_injection=True`）；工具回传亦过 `PromptInjectionDetector` 并清洗 | `security/validation.py`、`core/agent_loop.py` |
+| C 最小权限/沙箱 | 工具调用受 `PermissionSet` 白名单；副作用工具（write/edit/bash）前置闸门前才放行 | `core/agent_loop.py`（`_SIDE_EFFECT_TOOLS`） |
+| D 对账 | 双通道溯源；无来源结论在交付内容中强制隔离/标注（`Reconciler.redact`），并记 `recon:unsourced` finding | `gate/gate.py`、`gate/reconciliation.py` |
+| E 超时/熔断 | Bash 工具 `start_new_session` + 超时 `os.killpg` 硬杀；LLM 客户端接入 `config.timeout` | `tools/builtins.py`、`llm/openai.py`、`llm/anthropic.py` |
+| F 可观测 | `GateMetrics` 累计拦截率/失败分布，复用 `ReviewQueue.pending()` 暴露复核积压，`gate_metrics()` 可查询 | `gate/metrics.py`、`sdk/harness.py` |
+| G 复核防绕过 | `ReviewQueue.resolve()` 仅 human 可决 critical（`ERROR` 级发现）；非 critical 需显式 `allow_auto_resolve` | `review/queue.py` |
+| H 状态一致 | redis 后端 Lua 原子 CAS（`write_if_version`）；authoritative 写受 `verifier` 限制（`source_agent=="harness"`） | `state/redis_store.py`、`state/__init__.py` |
 
 ---
 

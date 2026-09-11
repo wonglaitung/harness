@@ -246,6 +246,7 @@ async def test_authoritative_verifier_blocks_unauthorized() -> None:
     assert auth.kind == WriteKind.AUTHORITATIVE
 
 
+@pytest.mark.redis
 async def test_redis_cas_atomic_when_available() -> None:
     # Only runs if a Redis server is reachable; otherwise skipped.
     redis_mod = pytest.importorskip("redis")

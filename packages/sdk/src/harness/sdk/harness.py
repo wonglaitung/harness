@@ -220,6 +220,12 @@ class AgentHarness:
         # (write/edit/bash) are gated before mutating state.
         self._loop.gate = self._gate
 
+        # F: observability — lightweight counters for governance outcomes so the
+        # interception rate, failure distribution and review backlog are queryable.
+        from harness.gate.metrics import GateMetrics
+
+        self._gate_metrics = GateMetrics()
+
     def _create_session_store(self):
         """Create session store based on storage config."""
         storage_config = self.config.storage
@@ -605,7 +611,9 @@ class AgentHarness:
             for m in getattr(session, "messages", []):
                 if getattr(m, "role", None) == "tool" and getattr(m, "content", None):
                     provenance.append(m.content)
-        return self._gate.check(content, sources=provenance)
+        verdict = self._gate.check(content, sources=provenance)
+        self._gate_metrics.record(verdict)
+        return verdict
 
     @property
     def shared_state(self) -> Any | None:
@@ -614,6 +622,18 @@ class AgentHarness:
         Multi-agent roles coordinate through this instead of passing text.
         """
         return self._state_store
+
+    def gate_metrics(self) -> dict[str, object]:
+        """F: queryable governance observability snapshot.
+
+        Returns interception counters plus the review-queue backlog so callers
+        (and a future UI) can observe 拦截率 / 闸失败分布 / 复核积压 without
+        scraping logs.
+        """
+        backlog = None
+        if self._review_queue is not None and hasattr(self._review_queue, "pending"):
+            backlog = len(self._review_queue.pending())
+        return self._gate_metrics.snapshot(review_backlog=backlog)  # type: ignore[attr-defined]
 
     def _init_guardrails(self) -> None:
         """Initialize guardrails hook if configured."""
