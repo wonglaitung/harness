@@ -707,3 +707,36 @@ public enum StepStatus {
 | A 确定性裁决 | 满足 | 中文结论现在进入溯源/隔离流程；仍为 100% 程序化裁决 |
 | D 对账 | 满足 | 无来源中文结论现在被强制隔离/标注（修复前漏检） |
 | 残余风险 | 部分满足 | 全角数字（２０２４）、数字间插空格（2 0 2 4）、HTML 实体（&#50;024）仍可能绕过抽取——后续可加归一化层（列入 M5 跟进项，非本次范围） |
+
+---
+
+## 治理層補強記錄（M5-C）：BashTool 命令危險度接 LightweightSandbox
+
+> 状态：✅ 已落地（设计稿 + 实现 + 单测）
+> 背景：M4 多角度分析中 C 项——`BashTool` 仅有 4 条 `BLOCKED_COMMANDS` +
+> `PermissionSet` 放行，对 `curl|bash`、`> /etc/...`、`chmod -R 777`、fork bomb
+> 等明显危险命令缺乏覆盖；既有的 `LightweightSandbox`（`security/sandbox.py`）已有
+> 更全的拦截规则却未被 BashTool 复用。
+
+### 修复方案
+- `tools/builtins.py::BashTool.execute`：在 `BLOCKED_COMMANDS` 与 `PermissionSet`
+  检查之后，新增一层 `LightweightSandbox().validate_command(command)` 校验
+  （懒导入，避免与 `security` 形成模块级循环依赖）。命中即返回
+  `ToolResult(success=False, error="Sandbox blocked command: <reason>")`。
+- `security/sandbox.py::LightweightSandbox.DEFAULT_BLOCKED_PATTERNS`：补强
+  pipe-to-shell 检测，新增 `| bash` / `|bash` / `| sh` / `|sh`（覆盖 URL 居中时的
+  `curl ... | bash` 场景，原 `curl | bash` 子串匹配对带参命令失效）。
+- 该层属于「韧性层」，始终开启，与 `strict` 开关无关（命令安全是基线要求）。
+
+### 技术规范符合性自检
+
+| 维度 | 结论 | 说明 / 风险+缓解 |
+|------|------|------------------|
+| 02-设计·输入校验与防注入 | 满足 | 危险命令为确定性子串/路径黑名单拦截，无 LLM 参与；懒导入不扩大攻击面 |
+| 02-代码·最小权限 | 满足 | 叠加 `BLOCKED_COMMANDS` + `PermissionSet` + Sandbox 三层防御；沙箱拦截优先级最高 |
+| 02-代码·命令执行 | 满足 | 仍走既有 `start_new_session` + `killpg` 硬杀路径（E3），与命令校验正交 |
+| 03-日志 | 满足 | 仅回传结构化 `error`，不打印命令输出敏感内容 |
+| 04-并发·资源释放 | 满足 | 校验为纯函数，失败即返回，不泄漏子进程 |
+| 04-并发·避免竞态 | 满足 | 每次调用独立校验，无共享可变状态 |
+| C 命令危險度 | 满足 | `curl\|bash`/`wget\|bash`/`> /etc/`/`chmod -R 777`/fork bomb/危险路径现被拦截 |
+| 残余风险 | 部分满足 | 拦截基于子串黑名单，变体（如 `cu\rl`、`curl$'\x20'`、base64 管道）仍可绕过；MCP 工具与 `update_core_memory` 写 MEMORY.md 的危險度不在此层（属工具权限治理，列 M5 跟进项） |

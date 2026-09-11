@@ -62,6 +62,13 @@ class LightweightSandbox:
         "> /dev/",
         "curl | bash",
         "wget | bash",
+        # Pipe-to-shell: a command piped straight into a shell is a classic
+        # remote-code-execution vector and must be caught even when the URL sits
+        # between the downloader and the pipe.
+        "| bash",
+        "|bash",
+        "| sh",
+        "|sh",
         ":(){ :|:& };:",  # Fork bomb
         "rm -rf /",
         "rm -rf ~",

@@ -511,6 +511,23 @@ class BashTool(Tool):
                 error=f"Command not allowed: {command.split()[0]}",
             )
 
+        # C / M5: hardened command-safety layer. Route through the lightweight
+        # sandbox so obviously dangerous commands (curl|bash, wget|bash,
+        # "> /etc/...", chmod -R 777, fork bombs, dangerous paths, ...) are
+        # blocked even when the permission set would otherwise allow them. This
+        # is defense-in-depth on top of the BLOCKED_COMMANDS + PermissionSet
+        # checks above; it is always on (part of the resilient layer).
+        from harness.security.sandbox import LightweightSandbox
+
+        sandbox_valid, sandbox_reason = LightweightSandbox().validate_command(command)
+        if not sandbox_valid:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=f"Sandbox blocked command: {sandbox_reason}",
+            )
+
         process = None
         try:
             # Execute command with platform-appropriate shell
