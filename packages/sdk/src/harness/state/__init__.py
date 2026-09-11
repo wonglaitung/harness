@@ -26,9 +26,10 @@ class SharedStateStore:
     Args:
         backend: Pluggable storage backend.
         verifier: Optional gate for authoritative (decision) writes. When set,
-            :meth:`put_authoritative` rejects any item for which
-            ``verifier(item)`` is falsy — enforcing "authoritative writes only
-            via the control layer / verifier" (H3: 防幻觉覆写).
+            :meth:`put_authoritative` and authoritative :meth:`write_if_version`
+            updates reject any item for which ``verifier(item)`` is falsy —
+            enforcing "authoritative writes only via the control layer /
+            verifier" (H3: 防幻觉覆写).
         read_verifier: Optional gate applied on reads (:meth:`get` / :meth:`list_items`).
             When set, an item for which ``read_verifier(item)`` is falsy is dropped
             from read results (returned as ``None`` / filtered out). This closes the
@@ -60,12 +61,28 @@ class SharedStateStore:
         return await self._backend.put(item)
 
     async def put_authoritative(
-        self, type: str, content: Any, source_agent: str, confidence: float = 0.9, **meta: Any
+        self,
+        type: str,
+        content: Any,
+        source_agent: str,
+        confidence: float = 0.9,
+        *,
+        writer_id: str | None = None,
+        **meta: Any,
     ) -> BlackboardItem:
+        """Write an authoritative (decision) item.
+
+        ``source_agent`` is the author of the content; ``writer_id`` is the
+        trusted channel performing the write (defaults to ``source_agent``). The
+        control layer may write on behalf of a role by passing its own
+        ``writer_id`` (e.g. ``"harness"``) while keeping ``source_agent=role``,
+        so authorization and attribution stay separate (H3).
+        """
         item = BlackboardItem(
             type=type,
             content=content,
             source_agent=source_agent,
+            writer_id=writer_id or source_agent,
             confidence=confidence,
             kind=WriteKind.AUTHORITATIVE,
             status=ItemStatus.CONFIRMED,
@@ -87,6 +104,33 @@ class SharedStateStore:
     async def write_if_version(
         self, item_id: str, content: Any, base_version: int, **meta: Any
     ) -> tuple[bool, BlackboardItem | None]:
+        """Optimistic compare-and-swap update.
+
+        When a verifier is attached, an update that would leave (or create) an
+        authoritative item must pass the same control-layer verifier as
+        :meth:`put_authoritative`. Without this, CAS was a bypass around H3.
+        """
+        if self._verifier is not None:
+            existing = await self._backend.get(item_id)
+            probe = existing or BlackboardItem(id=item_id)
+            # Effective kind/status/writer for the write: meta wins, else inherit.
+            kind = meta.get("kind", probe.kind)
+            status = meta.get("status", probe.status)
+            writer = meta.get("writer_id") or meta.get("source_agent") or probe.effective_writer
+            if kind == WriteKind.AUTHORITATIVE and not self._verifier(
+                BlackboardItem(
+                    id=item_id,
+                    type=meta.get("type", probe.type),
+                    source_agent=meta.get("source_agent", probe.source_agent),
+                    writer_id=writer,
+                    kind=kind,
+                    status=status,
+                )
+            ):
+                raise PermissionError(
+                    "Authoritative CAS writes require the control-layer verifier (H3). "
+                    "Rejecting unauthorized write_if_version."
+                )
         return await self._backend.write_if_version(item_id, content, base_version, **meta)
 
     async def list_items(
@@ -99,6 +143,14 @@ class SharedStateStore:
 
     async def get_conflicts(self) -> list[ConflictSet]:
         return await self._backend.get_conflicts()
+
+    async def aclose(self) -> None:
+        """Release the backend's resources (connections/threads).
+
+        Call before the event loop exits so file/db/redis workers do not
+        outlive it.
+        """
+        await self._backend.aclose()
 
 
 def create_state_store(

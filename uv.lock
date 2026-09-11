@@ -1884,6 +1884,19 @@ stuck = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sentence-transformers" },
 ]
+test = [
+    { name = "aiosqlite" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "mypy" },
+    { name = "prometheus-client" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "redis" },
+    { name = "ruff" },
+    { name = "uvicorn" },
+]
 vector = [
     { name = "tiktoken" },
 ]
@@ -1895,15 +1908,19 @@ web = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "aiosqlite", marker = "extra == 'sqlite'", specifier = ">=0.19.0" },
+    { name = "aiosqlite", marker = "extra == 'test'", specifier = ">=0.19.0" },
     { name = "anthropic", specifier = ">=0.18.0" },
     { name = "beautifulsoup4", marker = "extra == 'web'", specifier = ">=4.12.0" },
     { name = "cachetools", marker = "extra == 'guardrails'", specifier = ">=5.3.0" },
     { name = "croniter", specifier = ">=2.0.0" },
     { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.100.0" },
+    { name = "fastapi", marker = "extra == 'test'", specifier = ">=0.100.0" },
     { name = "httpx", marker = "extra == 'guardrails'", specifier = ">=0.24.0" },
+    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.24.0" },
     { name = "jsonschema", specifier = ">=4.0.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "mypy", marker = "extra == 'test'", specifier = ">=1.0.0" },
     { name = "nacos-sdk-python", marker = "extra == 'nacos'", specifier = ">=0.1.12" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "numpy", marker = "extra == 'stuck'", specifier = ">=1.24.0" },
@@ -1915,19 +1932,26 @@ requires-dist = [
     { name = "presidio-analyzer", marker = "extra == 'guardrails'", specifier = ">=2.2.0" },
     { name = "presidio-anonymizer", marker = "extra == 'guardrails'", specifier = ">=2.2.0" },
     { name = "prometheus-client", marker = "extra == 'prometheus'", specifier = ">=0.17.0" },
+    { name = "prometheus-client", marker = "extra == 'test'", specifier = ">=0.17.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=4.5.0" },
+    { name = "redis", marker = "extra == 'test'", specifier = ">=4.5.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "ruff", marker = "extra == 'test'", specifier = ">=0.1.0" },
     { name = "sentence-transformers", marker = "extra == 'stuck'", specifier = ">=2.2.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "tiktoken", marker = "extra == 'vector'", specifier = ">=0.5.0" },
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.23.0" },
+    { name = "uvicorn", marker = "extra == 'test'", specifier = ">=0.23.0" },
 ]
-provides-extras = ["dev", "vector", "observability", "sqlite", "web", "browser", "stuck", "guardrails", "service", "prometheus", "redis", "nacos"]
+provides-extras = ["dev", "test", "vector", "observability", "sqlite", "web", "browser", "stuck", "guardrails", "service", "prometheus", "redis", "nacos"]
 
 [[package]]
 name = "hf-xet"

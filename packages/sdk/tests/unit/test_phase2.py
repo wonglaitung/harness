@@ -13,6 +13,7 @@ from harness.orchestrator.types import AgentRole, TeamConfig
 from harness.orchestrator.workflow_engine import WorkflowEngine
 from harness.review import ReviewQueue
 from harness.state import create_state_store
+from harness.state.base import ItemStatus, WriteKind
 
 
 class _FakeAgent:
@@ -80,6 +81,68 @@ async def test_team_persists_to_shared_state() -> None:
     assert len(items) == 1
     assert items[0].content == "reconciled"
     assert items[0].source_agent == "researcher"
+    # Control layer wrote on the role's behalf: author vs write channel differ.
+    assert items[0].writer_id == "harness"
+
+
+def _strict_verifier() -> object:
+    """Mirror the strict harness write verifier (authorize on write channel)."""
+    allowed = {"harness", "review_queue"}
+    return lambda i: (
+        getattr(i, "effective_writer", None) in allowed
+        and getattr(i, "kind", None) == WriteKind.AUTHORITATIVE
+        and getattr(i, "status", None) == ItemStatus.CONFIRMED
+    )
+
+
+async def test_team_persists_under_strict_verifier() -> None:
+    """Gap 1: strict verifier must accept control-layer writes on a role's behalf."""
+    orch = SimpleNamespace(agent=SimpleNamespace())
+    to = TeamOrchestrator(orch)
+    store = create_state_store("memory", verifier=_strict_verifier())
+    role = AgentRole(name="researcher", description="research")
+    config = TeamConfig(name="team", roles=[role], state_store=store)
+
+    result = SimpleNamespace(
+        final_response="raw output", delivered_content="reconciled", gate_verdict=None
+    )
+    await to._record_agent_result(config, role, result, "task")
+
+    items = await store.list_items()
+    assert len(items) == 1
+    assert items[0].source_agent == "researcher"
+    assert items[0].writer_id == "harness"
+
+
+async def test_team_direct_role_write_rejected_by_strict_verifier() -> None:
+    """A role writing authoritative directly (no control-layer writer_id) is denied."""
+    store = create_state_store("memory", verifier=_strict_verifier())
+    import pytest
+
+    with pytest.raises(PermissionError):
+        await store.put_authoritative("decision", "v", source_agent="rogue_role")
+
+
+async def test_workflow_retry_exhaustion_escalates_to_review() -> None:
+    """Gap 3: retry exhaustion escalates the step to the human review queue."""
+    agent = _FakeAgent(failures=5, achieved=True)
+    orch = SimpleNamespace(agent=agent)
+    queue = ReviewQueue()
+    engine = WorkflowEngine(orch, review_queue=queue)
+
+    from harness.orchestrator.types import WorkflowConfig, WorkflowStep
+
+    step = WorkflowStep(name="s", goal="do", max_retries=1, retry_delay=0.0)
+    result = await engine.run(WorkflowConfig(name="w", steps=[step]))
+
+    assert agent._calls == 2
+    assert result.steps["s"].status.value == "failed"
+    pending = queue.pending()
+    assert len(pending) == 1
+    assert pending[0].source == "workflow:s"
+    # Critical (error severity) -> cannot be auto-resolved by a non-human actor.
+    assert pending[0].gate_findings[0]["severity"] == "error"
+
 
 
 async def test_team_escalates_gate_failure_to_review() -> None:

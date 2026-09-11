@@ -439,8 +439,11 @@ Provide your allocation in the following format:
         content = getattr(result, "delivered_content", None) or getattr(
             result, "final_response", ""
         )
+        # Control layer (harness/orchestrator) performs the write on the role's
+        # behalf: source_agent keeps author attribution, writer_id authorizes the
+        # control channel so the strict write verifier (H3) accepts it.
         await config.state_store.put_authoritative(
-            role.name, content, source_agent=role.name
+            role.name, content, source_agent=role.name, writer_id="harness"
         )
 
         verdict = getattr(result, "gate_verdict", None)

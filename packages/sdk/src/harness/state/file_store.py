@@ -102,13 +102,6 @@ class FileBackend(StateBackend):
     def _safe_write_if_version(
         self, item_id: str, content: Any, base_version: int, meta: dict[str, Any]
     ) -> tuple[bool, BlackboardItem | None]:
-        new_item = BlackboardItem(id=item_id)
-        new_item.content = content
-        new_item.base_version = base_version
-        new_item.version = base_version + 1
-        for k, v in meta.items():
-            if hasattr(new_item, k):
-                setattr(new_item, k, v)
         with self._lock:
             # BEGIN IMMEDIATE takes the exclusive write lock up front so the whole
             # read-modify-write is serialized across processes. We RE-READ the current
@@ -127,6 +120,15 @@ class FileBackend(StateBackend):
                 if cur is not None and cur.version != base_version:
                     self._conn.execute("ROLLBACK")
                     return False, cur
+                # Base the update on the current item so kind/status/writer_id
+                # (and other fields) are preserved rather than reset to defaults.
+                new_item = cur or BlackboardItem(id=item_id)
+                new_item.content = content
+                new_item.base_version = base_version
+                new_item.version = base_version + 1
+                for k, v in meta.items():
+                    if hasattr(new_item, k):
+                        setattr(new_item, k, v)
                 payload = self._serialize(new_item)
                 if cur is None:
                     self._conn.execute(
@@ -180,6 +182,10 @@ class FileBackend(StateBackend):
                         if iid not in cs.item_ids:
                             cs.item_ids.append(iid)
         return list(conflicts.values())
+
+    async def aclose(self) -> None:
+        """Close the SQLite connection (async lifecycle counterpart of close)."""
+        await asyncio.to_thread(self.close)
 
     def close(self) -> None:
         self._conn.close()

@@ -160,6 +160,8 @@ async def test_db_backend_cas_singleproc(tmp_path: Path) -> None:
     assert ok3 is True
     assert created is not None and created.version == 1
 
+    await backend.aclose()
+
 
 async def test_db_backend_cas_concurrent(tmp_path: Path) -> None:
     """Async concurrency must not lose updates (no gaps in base versions)."""
@@ -187,18 +189,23 @@ async def test_db_backend_cas_concurrent(tmp_path: Path) -> None:
     assert final is not None
     assert final.version == n_tasks * per + 1
 
+    await backend.aclose()
+
 
 def _db_cas_worker(path: str, item_id: str, target: int, q: multiprocessing.Queue[int]) -> None:
     async def run() -> int:
         backend = DBBackend(path)
-        done = 0
-        while done < target:
-            cur = await backend.get(item_id)
-            base = cur.version if cur is not None else 0
-            ok, _ = await backend.write_if_version(item_id, {"n": base + 1}, base_version=base)
-            if ok:
-                done += 1
-        return done
+        try:
+            done = 0
+            while done < target:
+                cur = await backend.get(item_id)
+                base = cur.version if cur is not None else 0
+                ok, _ = await backend.write_if_version(item_id, {"n": base + 1}, base_version=base)
+                if ok:
+                    done += 1
+            return done
+        finally:
+            await backend.aclose()
 
     q.put(asyncio.run(run()))
 
@@ -210,6 +217,7 @@ async def test_db_backend_cas_crossprocess(tmp_path: Path) -> None:
     await seed.put(
         BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE)
     )
+    await seed.aclose()
 
     n_procs = 4
     target = 25
@@ -226,7 +234,9 @@ async def test_db_backend_cas_crossprocess(tmp_path: Path) -> None:
         p.join(timeout=30)
 
     assert sum(results) == n_procs * target
-    final = await DBBackend(path).get("c")
+    final_backend = DBBackend(path)
+    final = await final_backend.get("c")
+    await final_backend.aclose()
     assert final is not None
     assert final.version == n_procs * target + 1
     assert final.content["n"] == n_procs * target + 1
@@ -314,11 +324,17 @@ async def test_read_verifier_filters_list_items() -> None:
 @pytest.mark.redis
 async def test_redis_cas_atomic_when_available() -> None:
     # Only runs if a Redis server is reachable; otherwise skipped.
-    redis_mod = pytest.importorskip("redis")
+    pytest.importorskip("redis")
+    import contextlib
+
     from harness.state.redis_store import RedisBackend
 
     try:
         backend = RedisBackend("redis://localhost:6379/0")
+    except Exception as e:  # redis not running in this environment
+        pytest.skip(f"Redis unavailable: {e}")
+
+    try:
         await backend.put(
             BlackboardItem(id="rk", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
         )
@@ -329,4 +345,7 @@ async def test_redis_cas_atomic_when_available() -> None:
         assert ok2 is False
     except Exception as e:  # redis not running in this environment
         pytest.skip(f"Redis unavailable: {e}")
+    finally:
+        with contextlib.suppress(Exception):
+            await backend.aclose()
 

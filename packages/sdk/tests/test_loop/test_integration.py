@@ -40,6 +40,7 @@ class TestRunGoalIntegration:
             result = MagicMock()
             result.content = f"Attempt {run_count}"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -70,6 +71,7 @@ class TestRunGoalIntegration:
             result = MagicMock()
             result.content = "Progress"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -96,6 +98,7 @@ class TestRunGoalIntegration:
             result = MagicMock()
             result.content = "Done"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -112,7 +115,7 @@ class TestRunGoalIntegration:
 
     @pytest.mark.asyncio
     async def test_run_goal_with_progress_callback(self):
-        """Test run_goal calls progress callback."""
+        """Test run_goal forwards progress events from the agent loop."""
         progress_events = []
 
         def on_progress(event):
@@ -123,10 +126,17 @@ class TestRunGoalIntegration:
 
         agent = AgentHarness(llm_client=mock_llm)
 
+        from harness.types import ProgressEvent, ProgressEventType
+
         async def mock_run(prompt, session_id=None, **kwargs):
+            # Simulate AgentLoop forwarding an ITERATION event to on_progress.
+            callback = kwargs.get("on_progress")
+            if callback is not None:
+                callback(ProgressEvent(type=ProgressEventType.ITERATION, message="step 1"))
             result = MagicMock()
             result.content = "Progress"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -139,7 +149,10 @@ class TestRunGoalIntegration:
         )
 
         assert result.achieved is True
-        # Should have at least iteration and verification events
+        event_types = {e.type for e in progress_events}
+        # AgentLoop ITERATION event forwarded + GoalLoop verification event.
+        assert ProgressEventType.ITERATION in event_types
+        assert ProgressEventType.STATE_CHANGE in event_types
         assert len(progress_events) >= 2
 
     @pytest.mark.asyncio
@@ -160,6 +173,7 @@ class TestRunGoalIntegration:
             result = MagicMock()
             result.content = "Progress"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -193,6 +207,7 @@ class TestRunGoalIntegration:
             result = MagicMock()
             result.content = "Progress"
             result.token_usage = MagicMock(input_tokens=100, output_tokens=50)
+            result.iterations = 1  # inner AgentLoop steps performed by this run
             return result
 
         agent.run = mock_run
@@ -205,3 +220,30 @@ class TestRunGoalIntegration:
 
         assert result.achieved is True
         assert result.total_iterations == 2
+
+    @pytest.mark.asyncio
+    async def test_total_iterations_accumulates_inner_agent_iterations(self):
+        """total_iterations counts actual AgentLoop steps, not goal-loop calls."""
+        mock_llm = MagicMock()
+        mock_llm.model_name = "test-model"
+
+        agent = AgentHarness(llm_client=mock_llm)
+
+        async def mock_run(prompt, session_id=None, **kwargs):
+            result = MagicMock()
+            result.content = "Progress"
+            result.token_usage = MagicMock(input_tokens=10, output_tokens=5)
+            result.iterations = 3  # each goal iteration ran 3 inner agent steps
+            return result
+
+        agent.run = mock_run
+
+        result = await agent.run_goal(
+            goal="Multi-step goal",
+            max_iterations=2,
+            custom_verifier=lambda r: False,
+        )
+
+        assert result.status == GoalStatus.MAX_ITERATIONS
+        # 2 goal-loop iterations x 3 inner AgentLoop steps each.
+        assert result.total_iterations == 6

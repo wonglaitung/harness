@@ -127,3 +127,11 @@ class RedisBackend(StateBackend):
                         if iid not in cs.item_ids:
                             cs.item_ids.append(iid)
         return list(conflicts.values())
+
+    async def aclose(self) -> None:
+        """Close the Redis connection pool (redis>=5 ``aclose`` / older ``close``)."""
+        closer = getattr(self._redis, "aclose", None) or getattr(self._redis, "close", None)
+        if closer is not None:
+            result = closer()
+            if hasattr(result, "__await__"):
+                await result

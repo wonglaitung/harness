@@ -46,13 +46,16 @@ class DBBackend(StateBackend):
     async def _ensure(self) -> Any:
         aiosqlite = _require_aiosqlite()
         if self._conn is None:
-            self._conn = await aiosqlite.connect(self._path)
             # Autocommit: transactions are managed explicitly (BEGIN IMMEDIATE) so
             # write_if_version's read-modify-write is one serialized unit. Rollback
             # journal (not WAL): cross-process readers must see the latest committed
             # state, and WAL only advances its read-mark on checkpoint — which broke
             # the compare-and-swap under contention. busy_timeout queues contenders.
-            self._conn.isolation_level = None
+            # isolation_level must be passed to connect(): aiosqlite owns the
+            # sqlite3 connection on its own worker thread, so assigning the
+            # property from the event-loop thread raises
+            # "SQLite objects created in a thread can only be used in that thread".
+            self._conn = await aiosqlite.connect(self._path, isolation_level=None)
             await self._conn.execute("PRAGMA busy_timeout=5000")
             await self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS blackboard (id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
@@ -94,14 +97,6 @@ class DBBackend(StateBackend):
         self, item_id: str, content: Any, base_version: int, **meta: Any
     ) -> tuple[bool, BlackboardItem | None]:
         await self._ensure()
-        new_item = BlackboardItem(id=item_id)
-        new_item.content = content
-        new_item.base_version = base_version
-        new_item.version = base_version + 1
-        for k, v in meta.items():
-            if hasattr(new_item, k):
-                setattr(new_item, k, v)
-        payload = self._serialize(new_item)
         async with self._lock:
             # BEGIN IMMEDIATE takes the exclusive write lock up front so the whole
             # read-modify-write is serialized across processes. We RE-READ the current
@@ -122,6 +117,16 @@ class DBBackend(StateBackend):
                 if cur is not None and cur.version != base_version:
                     await self._conn.execute("ROLLBACK")
                     return False, cur
+                # Base the update on the current item so kind/status/writer_id
+                # (and other fields) are preserved rather than reset to defaults.
+                new_item = cur or BlackboardItem(id=item_id)
+                new_item.content = content
+                new_item.base_version = base_version
+                new_item.version = base_version + 1
+                for k, v in meta.items():
+                    if hasattr(new_item, k):
+                        setattr(new_item, k, v)
+                payload = self._serialize(new_item)
                 if cur is None:
                     await self._conn.execute(
                         "INSERT INTO blackboard (id, payload) VALUES (?, ?)",
@@ -166,3 +171,14 @@ class DBBackend(StateBackend):
                         if iid not in cs.item_ids:
                             cs.item_ids.append(iid)
         return list(conflicts.values())
+
+    async def aclose(self) -> None:
+        """Close the aiosqlite connection and stop its worker thread.
+
+        Must be awaited before the event loop shuts down, otherwise aiosqlite's
+        background thread may call back into a closed loop
+        ("Event loop is closed").
+        """
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            await conn.close()

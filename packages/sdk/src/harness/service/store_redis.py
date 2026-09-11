@@ -274,7 +274,8 @@ class RedisSessionStore:
     async def close(self) -> None:
         """Close the Redis connection."""
         if self._redis:
-            await self._redis.close()
+            closer = getattr(self._redis, "aclose", None) or self._redis.close
+            await closer()
             self._redis = None
 
 
@@ -392,5 +393,6 @@ class RedisDistributedLock:
     async def close(self) -> None:
         """Close the Redis connection."""
         if self._redis:
-            await self._redis.close()
+            closer = getattr(self._redis, "aclose", None) or self._redis.close
+            await closer()
             self._redis = None

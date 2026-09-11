@@ -260,7 +260,8 @@ class WorkflowEngine:
 
             # Escalate gate-isolated deliveries to human review when governance on.
             verdict = getattr(goal_result, "gate_verdict", None)
-            if verdict is not None and not verdict.passed and self.review_queue is not None:
+            gate_blocked = verdict is not None and not verdict.passed
+            if gate_blocked and self.review_queue is not None:
                 from harness.review.queue import ReviewItem
 
                 self.review_queue.submit(
@@ -272,6 +273,11 @@ class WorkflowEngine:
                     )
                 )
 
+            # G: a completed-but-unachieved goal is a core step failure -> escalate
+            # to human review. Skipped when the gate already escalated (avoid dup).
+            if step_result.status == StepStatus.FAILED and not gate_blocked:
+                self._escalate_step_failure(step, "目标未达成", goal_result)
+
             # Update graph state
             graph.mark_completed(step.name)
 
@@ -281,10 +287,50 @@ class WorkflowEngine:
             step_result.status = StepStatus.FAILED
             step_result.error = str(e)
             graph.mark_completed(step.name)
+            # G: retry exhaustion / execution failure on a core step escalates to
+            # the human review queue (local self-heal exhausted -> human).
+            self._escalate_step_failure(step, str(e), step_result.goal_result)
             logger.error(f"Step '{step.name}' failed: {e}")
 
         step_result.completed_at = datetime.now()
         return step_result
+
+    def _escalate_step_failure(
+        self, step: WorkflowStep, error: str, goal_result: Any = None
+    ) -> None:
+        """G: escalate a core step failure to the human review queue.
+
+        Covers retry exhaustion (raised after ``_run_goal_with_retry``) and
+        completed-but-unachieved goals. Escalation must never mask the original
+        failure, so any error here is logged and swallowed.
+        """
+        if self.review_queue is None:
+            return
+        from harness.review.queue import ReviewItem
+
+        content = (
+            getattr(goal_result, "delivered_content", None)
+            or getattr(goal_result, "final_response", None)
+            or ""
+        )
+        try:
+            self.review_queue.submit(
+                ReviewItem(
+                    gate_findings=[
+                        {
+                            "type": "execution",
+                            "severity": "error",
+                            "message": f"步骤 '{step.name}' 失败：{error}",
+                        }
+                    ],
+                    content=content,
+                    source=f"workflow:{step.name}",
+                )
+            )
+        except Exception:  # noqa: BLE001 - escalation must not mask the failure
+            logger.warning(
+                "workflow step escalation to review queue failed", exc_info=True
+            )
 
     async def _run_goal_with_retry(self, step: WorkflowStep, goal_config: Any) -> Any:
         """Run a step's goal, retrying execution failures per ``max_retries``.

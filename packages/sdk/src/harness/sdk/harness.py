@@ -583,27 +583,29 @@ class AgentHarness:
 
         sc = self.config.state or StateConfig()
         # H3: under governance, authoritative (decision) writes are restricted to
-        # the control layer via the verifier. The allowlist covers the harness
-        # loop AND the review queue (both are the control/verifier layer); a
-        # sub-agent claiming source_agent="harness" is no longer sufficient on its
-        # own — the item must also be an AUTHORITATIVE/CONFIRMED write.
+        # the control layer via the verifier. Authorization is on the *write
+        # channel* (``writer_id``, falling back to ``source_agent``), not the
+        # author — so the orchestrator can persist a role's decision on its
+        # behalf (source_agent=role, writer_id="harness") without granting every
+        # role direct authoritative write access.
         allowed_sources = {"harness", "review_queue"}
         write_verifier = (
             lambda item: (
-                getattr(item, "source_agent", None) in allowed_sources
+                getattr(item, "effective_writer", None) in allowed_sources
                 and getattr(item, "kind", None) == WriteKind.AUTHORITATIVE
                 and getattr(item, "status", None) == ItemStatus.CONFIRMED
             )
             if self.config.strict
             else None
         )
-        # H: read-side guard. In strict mode, an authoritative item whose source is
-        # NOT in the allowlist (i.e. written around the write verifier) is dropped
-        # from reads, so other agents never consume a forged/stale decision.
+        # H: read-side guard. In strict mode, an authoritative item whose write
+        # channel is NOT in the allowlist (i.e. written around the write
+        # verifier) is dropped from reads, so other agents never consume a
+        # forged/stale decision.
         read_verifier = (
             lambda item: not (
                 getattr(item, "kind", None) == WriteKind.AUTHORITATIVE
-                and getattr(item, "source_agent", None) not in allowed_sources
+                and getattr(item, "effective_writer", None) not in allowed_sources
             )
             if self.config.strict
             else None

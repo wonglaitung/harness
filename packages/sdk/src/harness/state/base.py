@@ -40,6 +40,11 @@ class BlackboardItem:
     type: str = "observation"
     content: Any = None
     source_agent: str = "unknown"
+    # Trusted write channel that performed the write (authorization), distinct
+    # from ``source_agent`` (author attribution). Authoritative writes are only
+    # allowed when this identifies the control layer (H3). Defaults to
+    # ``source_agent`` so legacy/back-compat items authorize by author.
+    writer_id: str | None = None
     confidence: float = 0.5
     created_at: float = field(default_factory=time.time)
     base_version: int = 0
@@ -54,12 +59,18 @@ class BlackboardItem:
             return False
         return (time.time() - self.created_at) > self.ttl
 
+    @property
+    def effective_writer(self) -> str:
+        """The channel to authorize on: explicit writer_id, else the author."""
+        return self.writer_id or self.source_agent
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "type": self.type,
             "content": self.content,
             "source_agent": self.source_agent,
+            "writer_id": self.writer_id,
             "confidence": self.confidence,
             "version": self.version,
             "base_version": self.base_version,
@@ -108,3 +119,12 @@ class StateBackend(ABC):
 
     @abstractmethod
     async def get_conflicts(self) -> list[ConflictSet]: ...
+
+    async def aclose(self) -> None:
+        """Release backend resources (connections, files, threads).
+
+        Default no-op for stateless backends. Backends holding a connection
+        (file/db/redis) override this so the event loop can shut down without
+        an aiosqlite/redis worker thread outliving it.
+        """
+        return None

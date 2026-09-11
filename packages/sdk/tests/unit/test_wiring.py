@@ -111,3 +111,33 @@ def test_review_queue_persisted(tmp_path) -> None:
     # A fresh queue on the same file (simulating another process) sees the item.
     reopened = ReviewQueue(store=create_state_store("file", path=db))
     assert len(reopened.pending()) == 1
+
+
+async def test_strict_store_allows_control_layer_role_write() -> None:
+    """Gap 1: the strict verifier accepts the control layer writing for a role."""
+    from types import SimpleNamespace
+
+    from harness.orchestrator.team_orchestrator import TeamOrchestrator
+    from harness.orchestrator.types import AgentRole, TeamConfig
+
+    store = _Probe(HarnessConfig(strict=True))._build_state_store()
+    role = AgentRole(name="researcher", description="research")
+    cfg = TeamConfig(name="team", roles=[role], state_store=store)
+    orch = TeamOrchestrator(SimpleNamespace(agent=SimpleNamespace()))
+    result = SimpleNamespace(
+        final_response="raw", delivered_content="reconciled", gate_verdict=None
+    )
+
+    await orch._record_agent_result(cfg, role, result, "task")
+
+    items = await store.list_items()
+    assert len(items) == 1
+    assert items[0].source_agent == "researcher"
+    assert items[0].writer_id == "harness"
+
+
+async def test_strict_store_rejects_rogue_authoritative_write() -> None:
+    """A non-control writer cannot create an authoritative decision."""
+    store = _Probe(HarnessConfig(strict=True))._build_state_store()
+    with pytest.raises(PermissionError):
+        await store.put_authoritative("decision", "v", source_agent="rogue_role")
