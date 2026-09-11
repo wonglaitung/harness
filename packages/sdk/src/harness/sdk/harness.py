@@ -216,6 +216,10 @@ class AgentHarness:
         self._gate = self._build_gate()
         self._state_store = self._build_state_store()
 
+        # Thread the deterministic gate into the loop so side-effect tools
+        # (write/edit/bash) are gated before mutating state.
+        self._loop.gate = self._gate
+
     def _create_session_store(self):
         """Create session store based on storage config."""
         storage_config = self.config.storage
@@ -1035,6 +1039,9 @@ class AgentHarness:
             result.gate_verdict = verdict
             result.delivered_content = verdict.delivered_content
             result.reconciliation_report = verdict.reconciliation_report
+            if not verdict.passed:
+                # Enforce: never silently deliver the raw content on failure.
+                result.final_response = verdict.delivered_content
 
         return result
 
@@ -1209,6 +1216,9 @@ class AgentHarness:
             goal_result.gate_verdict = verdict
             goal_result.delivered_content = verdict.delivered_content
             goal_result.reconciliation_report = verdict.reconciliation_report
+            if not verdict.passed:
+                # Enforce: never silently deliver the raw content on failure.
+                goal_result.final_response = verdict.delivered_content
 
         return goal_result
 

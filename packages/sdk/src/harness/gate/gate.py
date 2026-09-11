@@ -69,10 +69,17 @@ class DeterministicGate:
         report = self.reconciler.reconcile(content, src, findings)
         passed = not any(f.severity == GateSeverity.ERROR for f in findings)
 
+        # Delivery-time enforcement: on failure, never hand back the raw content.
+        # Unsourced claims are quarantined; if nothing is redactable the whole
+        # delivery is held back so the raw result is not silently leaked.
+        delivered_content = (
+            content if passed else self.reconciler.redact(content, report)
+        )
+
         verdict = GateVerdict(
             passed=passed,
             findings=findings,
-            delivered_content=content,
+            delivered_content=delivered_content,
             reconciliation_report=report,
         )
 

@@ -68,8 +68,10 @@ class GateVerdict:
         passed: True when no ERROR-severity finding exists. WARNING-level
             findings still pass but are reported so callers can flag content.
         findings: All findings produced by validators + reconciliation.
-        delivered_content: The content to actually deliver. By default it equals
-            the input; callers may choose to strip/flag unsourced segments.
+        delivered_content: The content to actually deliver. When the verdict
+            fails (ERROR-level finding), this is the quarantined/redacted version
+            produced by the reconciler — never the raw input. Callers must deliver
+            this field, not the original content.
         reconciliation_report: Structured cross-check report (claim <-> source).
     """
 

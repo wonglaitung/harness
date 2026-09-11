@@ -52,3 +52,22 @@ class Reconciler:
             "unsourced_claims": unsourced,
             "source_count": len(sources or []),
         }
+
+    @staticmethod
+    def redact(content: str, report: dict[str, Any]) -> str:
+        """Produce a delivery-safe version by quarantining unsourced claims.
+
+        Each claim that could not be grounded against the trusted source set is
+        replaced with a visible ``[已隔离:无溯源]`` marker. When nothing in the
+        content can be grounded (no claims could be redacted but the verdict still
+        failed), a hard quarantine notice is returned so the raw content is never
+        silently delivered.
+        """
+        unsourced = (report or {}).get("unsourced_claims") or []
+        safe = content
+        for claim in unsourced:
+            if claim and claim in safe:
+                safe = safe.replace(claim, "[已隔离:无溯源]")
+        if not unsourced or safe.strip() == content.strip():
+            return "[内容未通过确定性闸门（含错误级发现），已隔离，不交付原始内容]"
+        return safe

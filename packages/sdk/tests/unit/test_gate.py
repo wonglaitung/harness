@@ -81,3 +81,27 @@ def test_logic_rule_fires() -> None:
     assert bad.passed is False
     good = gate.check("结果是 5 个单位。")
     assert good.passed is True
+
+
+def test_failure_delivers_quarantined_content() -> None:
+    # No provenance -> ERROR; delivered_content must be quarantined, not raw.
+    content = "2024年Q1营收增长12.5%，达到3.2亿元。"
+    verdict = _gate().check(content)
+    assert verdict.passed is False
+    assert verdict.delivered_content != content
+    assert "已隔离" in verdict.delivered_content
+
+
+def test_redact_replaces_unsourced_claims() -> None:
+    r = Reconciler()
+    report = r.reconcile("营收3.2亿元。", sources=[])
+    safe = Reconciler.redact("营收3.2亿元。", report)
+    assert "已隔离:无溯源" in safe
+    assert "3.2亿元" not in safe
+
+
+def test_redact_quarantines_when_nothing_redactable() -> None:
+    r = Reconciler()
+    report = {"unsourced_claims": []}
+    safe = Reconciler.redact("任意内容", report)
+    assert "已隔离" in safe

@@ -31,6 +31,11 @@ from harness.core.stuck_detector import StuckDetectionResult, StuckDetector, Stu
 from harness.llm.base import LLMClient, ToolDefinition
 from harness.memory.context_builder import ContextBuilder
 
+# Tools whose execution mutates external state (filesystem / subprocess). These
+# must clear the deterministic gate before running so a model cannot bypass
+# governance by writing to disk or executing commands.
+_SIDE_EFFECT_TOOLS = frozenset({"write", "edit", "bash"})
+
 if TYPE_CHECKING:
     from harness.sdk.config import SecurityConfig
 from harness.memory.session import SessionManager
@@ -137,6 +142,9 @@ class AgentLoop:
         self.context = context_builder
         self.sessions = session_manager
         self.config = config or LoopConfig()
+
+        # Optional deterministic gate for side-effect tool pre-check (governance).
+        self.gate = None
 
         self.state = LoopState.IDLE
         self._interrupt_flag = False
@@ -1059,6 +1067,28 @@ class AgentLoop:
                 continue
             if hook_result.action == HookAction.MODIFY_ARGS:
                 tool_call.arguments = hook_result.modified_args
+
+            # Side-effect tools (write/edit/bash) must pass the deterministic gate
+            # before mutating state. Without this, a model could bypass the gate
+            # by writing to disk / executing commands directly.
+            if self.gate is not None and tool_call.name in _SIDE_EFFECT_TOOLS:
+                import json
+
+                probe = self.gate.check(json.dumps(tool_call.arguments, ensure_ascii=False))
+                if not probe.passed:
+                    results.append(
+                        ToolResult(
+                            tool_call_id=tool_call.id,
+                            success=False,
+                            content="",
+                            error=(
+                                "写入/执行操作未通过确定性闸门，已阻止："
+                                + "; ".join(f.message for f in probe.errors)
+                            ),
+                            tool_name=tool_call.name,
+                        )
+                    )
+                    continue
 
             tool_start = time.time()
             try:
