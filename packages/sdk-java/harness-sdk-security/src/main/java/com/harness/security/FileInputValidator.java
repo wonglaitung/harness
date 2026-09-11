@@ -72,6 +72,20 @@ public class FileInputValidator {
      * @return ValidationResult
      */
     public ValidationResult validatePath(String path) {
+        return validatePath(path, "read");
+    }
+
+    /**
+     * Validate file path with access mode (M6-C).
+     *
+     * <p>In {@code "write"} mode, additional system-path checks are applied
+     * (delegates to {@link LightweightSandbox#validatePathWrite(String)}).</p>
+     *
+     * @param path file path to validate
+     * @param mode access mode: {@code "read"} or {@code "write"}
+     * @return ValidationResult
+     */
+    public ValidationResult validatePath(String path, String mode) {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
@@ -83,6 +97,14 @@ public class FileInputValidator {
             String expandedDangerous = expandPath(dangerous);
             if (expanded.contains(expandedDangerous)) {
                 errors.add("Access to sensitive path denied: " + dangerous);
+            }
+        }
+
+        // M6-C: write-mode additional check
+        if ("write".equals(mode)) {
+            LightweightSandbox.PathValidation pathCheck = LightweightSandbox.validatePathWrite(path);
+            if (!pathCheck.isValid()) {
+                errors.add(pathCheck.reason());
             }
         }
 

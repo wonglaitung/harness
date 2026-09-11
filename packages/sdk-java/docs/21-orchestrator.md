@@ -409,6 +409,47 @@ public class CicdExample {
     Triggers      Worktrees     Connectors
 ```
 
+## 复核防绕过（ReviewQueue 与 ReviewSink）— M6-G
+
+`ReviewQueue` 提供确定性闸门发现的人工复核流程。只有 `human_actors` 允许集中的身份可以操作；支持可选 `verifyActor` 做真实身份校验。决策出口经 `ReviewSink` 沉淀进知识库（KB）：
+
+```java
+import com.harness.orchestrator.ReviewQueue;
+import com.harness.orchestrator.ReviewItem;
+import com.harness.orchestrator.ReviewDecision;
+import com.harness.orchestrator.ReviewSink;
+import com.harness.orchestrator.ReviewResolution;
+import java.util.Set;
+import java.util.Map;
+
+// KB 出口实现
+class MyKBSink implements ReviewSink {
+    @Override
+    public void onResolve(ReviewResolution resolution, ReviewItem item) {
+        // 落库 / 进知识库
+    }
+}
+
+// 创建队列：允许身份 + 可选身份校验 + 可选 KB 出口
+ReviewQueue queue = new ReviewQueue(
+    Set.of("human", "auditor:alice"),     // human_actors
+    actor -> idp.verify(actor),           // verifyActor（可选，null=接受自报）
+    new MyKBSink()                        // sink（可选）
+);
+
+// 提交复核项
+ReviewItem item = ReviewItem.of(content, "deterministic_gate", findings);
+String id = queue.submit(item);
+
+// 人工确认
+queue.resolve(id, ReviewDecision.CONFIRM, "human");
+// sink.onResolve(CONFIRMED, item) 被调用；异常被吞
+```
+
+- `human_actors`：默认 `{"human"}`，可钉到具体身份（如 `"auditor:alice"`）。
+- `verifyActor`：`null` 表示接受自报身份；配置后做真实身份校验（接 IdP）。
+- `sink`：`null` 表示不导出；异常被吞（不阻断复核主流）。
+
 ## 下一步
 
 - [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览

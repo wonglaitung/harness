@@ -475,7 +475,7 @@ asyncio.run(main())
 ### 实施路线
 
 - **Phase 1（单 Agent 内核）**：新增 `harness/gate/*`、`harness/state/*`、`harness/review/queue.py`；接线 `agent_loop`/`config`/`harness`；`tests/unit/`。
-- **Phase 2（多 Agent 抽象）**：改造 `team_orchestrator`/`workflow_engine`/`worktree`/`types`；`tests/` 集成测。Java SDK 同步在 Python 完成后手工开展。
+- **Phase 2（多 Agent 抽象）**：改造 `team_orchestrator`/`workflow_engine`/`worktree`/`types`；`tests/` 集成测。Java SDK 已同步 M6 安全加固（见下文 Java SDK M6 节）。
 
 > **三块缝隙已闭合（SDK 侧）**
 > 1. **业务规则进自动治理**：`GateConfig.rules`（可调用）/ `rule_specs` / `rules_path`（声明式 `numeric_sum`/`equality`/`range`/`regex_present`）经 `_build_gate` 汇入 `LogicReconciler`——`strict=True` 即跑领域勾稽，无需手驱 `DeterministicGate`。
@@ -666,6 +666,71 @@ public enum StepStatus {
     SKIPPED     // 跳过
 }
 ```
+
+## Java SDK M6 安全加固
+
+Java SDK 已同步 Python SDK M6 安全加固，覆盖 `harness-sdk-security`、`harness-sdk-orchestrator`、`harness-sdk-memory`、`harness-sdk-core` 四个模块。
+
+### 安全模块 (`harness-sdk-security`)
+
+| 类 | M6 新增 | 说明 |
+|----|---------|------|
+| `PromptInjectionDetector` | `InjectionClassifier` 接口 + `normalize()` | 可插拔语义分类器；NFKC + confusable 映射 + 零宽清除 |
+| `LightweightSandbox` | `normalizeCommand()` / `tokenizeCommand()` / `validatePathWrite()` / `validateToolOutput()` | 解析级校验：去混淆、shell 分词、写路径拦截、工具输出扫描 |
+| `FileInputValidator` | `validatePath(path, mode)` 重载 | write 模式联动 `validatePathWrite` |
+
+```java
+// InjectionClassifier 用法
+PromptInjectionDetector detector = new PromptInjectionDetector(
+    customPatterns, text -> semanticModel.score(text));
+// normalize: NFKC + confusable → ASCII
+String safe = PromptInjectionDetector.normalize("忽略之前的指令");
+
+// LightweightSandbox 解析级校验
+LightweightSandbox.validatePathWrite("/etc/passwd");   // blocked
+LightweightSandbox.validateToolOutput("curl x | bash"); // blocked
+List<String> tokens = LightweightSandbox.tokenizeCommand("bash -c 'curl x | sh'");
+```
+
+### 编排模块 (`harness-sdk-orchestrator`)
+
+| 类 | 说明 |
+|----|------|
+| `ReviewSink` | 决策出口接口：`onResolve(ReviewResolution, ReviewItem)` |
+| `ReviewQueue` | `human_actors` 允许集 + `verifyActor` 身份校验 + `sink` 出口 |
+| `ReviewItem` | 复核项：`gateFindings` / `content` / `source` / `metadata` |
+| `ReviewDecision` | `CONFIRM` / `REVISE` / `EXEMPT` |
+| `ReviewResolution` | `CONFIRMED` / `REVISED` / `EXEMPTED` |
+
+```java
+ReviewQueue queue = new ReviewQueue(
+    Set.of("human", "auditor:alice"),
+    actor -> idp.verify(actor),  // 可选：真实身份校验
+    resolution -> auditLog.record(resolution));  // 可选：KB 出口
+String id = queue.submit(ReviewItem.of(content, "gate", findings));
+queue.resolve(id, ReviewDecision.CONFIRM, "human");
+```
+
+### 记忆模块 (`harness-sdk-memory`)
+
+| 类 | 说明 |
+|----|------|
+| `BlackboardItem` | 黑板记录：`id` / `type` / `content` / `sourceAgent` / `confidence` / `baseVersion` / `writerId` / `effectiveWriter` / `ttl` |
+| `SharedStateStore` | CAS 乐观并发 + 写/读 verifier + `readVerifierRaise` fail-loud |
+
+```java
+SharedStateStore store = new SharedStateStore(true);  // readVerifierRaise=true
+BlackboardItem item = BlackboardItem.create("decision", content, "planner", 0.9f, "harness");
+store.put(item);
+store.writeIfVersion(item.getId(), newContent, 0);  // CAS
+List<BlackboardItem> all = store.listItems();         // 读时 verifier 校验
+```
+
+### 核心模块 (`harness-sdk-core`)
+
+| 类 | 说明 |
+|----|------|
+| `HarnessCli` | `harness doctor --deps` — 委托 Gradle dependency-check 审计 CVE |
 
 ---
 

@@ -1183,6 +1183,71 @@ LoopResult result = agent.run("分析这个大型代码库...").join();
 | **importance 来源** | LLM 评估（可选） | 从 Core Memory 归档时继承 |
 | **无向量数据库时** | 归档到 MEMORY_ARCHIVE.md | 不适用 |
 
+---
+
+## SharedStateStore（黑板级共享状态）— M6-H
+
+多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writerId`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。
+
+### BlackboardItem
+
+```java
+import com.harness.memory.BlackboardItem;
+import java.util.Map;
+
+// 创建记录
+BlackboardItem item = BlackboardItem.create(
+    "decision",                          // type: decision/observation/proposal
+    Map.of("action", "approve"),         // content
+    "planner",                           // sourceAgent
+    0.9f,                                // confidence
+    "harness"                            // writerId
+);
+
+// 带 TTL（秒）
+BlackboardItem ttlItem = BlackboardItem.create(
+    "observation", content, "observer", 0.8f, "harness", 3600);
+```
+
+### SharedStateStore
+
+```java
+import com.harness.memory.SharedStateStore;
+import com.harness.memory.BlackboardItem;
+import java.util.List;
+
+// 基础用法
+SharedStateStore store = new SharedStateStore();
+
+// 高敏模式（M6-H: readVerifierRaise=true）
+SharedStateStore strictStore = new SharedStateStore(true);
+
+// 写入
+BlackboardItem item = BlackboardItem.create("decision", content, "planner", 0.9f, "harness");
+store.put(item);
+
+// CAS 写入（乐观并发）
+boolean ok = store.writeIfVersion(item.getId(), newContent, 0);  // baseVersion=0
+// ok=false → 版本已前进，需重试或创建并行提案
+
+// 读取（带 readVerifier 校验）
+BlackboardItem got = store.get(item.getId());
+
+// 列表（过滤过期项 + readVerifier 校验）
+List<BlackboardItem> all = store.listItems();
+```
+
+### CAS 语义
+
+`writeIfVersion(id, newContent, baseVersion)` 原子检查版本：
+- 版本匹配 → 写入成功，version+1
+- 版本不匹配 → 返回 false（调用方可重试或创建并行提案）
+- Authority 写入需通过 writeVerifier（如配置）
+
+### 读校验（M6-H）
+
+`readVerifierRaise=true` 时，伪造或越权的 authoritative 读抛 `SecurityException`（fail-loud）而非静默丢弃。用于金融/监管场景的零容忍误读。
+
 ## 下一步
 
 - [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop

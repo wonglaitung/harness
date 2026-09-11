@@ -2019,6 +2019,17 @@ try {
 }
 ```
 
+## CLI（harness 命令行）— M6-dep
+
+SDK 随包提供极简 CLI，用于依赖安全审计。SDK **不内置 CVE 数据库**，委托平台审计器：
+
+```bash
+java -cp harness-sdk.jar com.harness.core.HarnessCli doctor --deps
+```
+
+- 优先调用 Gradle `dependencies` 命令；无 Gradle 时提示安装。
+- 仅做审计入口，实际修复需人工评审（部署侧）。属防翻车清单「依赖安全」的 SDK 侧闭环。
+
 ## 下一步
 
 - [03-agent-loop.md](./03-agent-loop.md) - 了解 Agent Loop
