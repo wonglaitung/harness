@@ -48,6 +48,7 @@ class ObservabilityConfig:
     export_otlp: bool = False  # Export to OTLP endpoint
     otlp_endpoint: str = "http://localhost:4317"  # OTLP gRPC endpoint
     sample_rate: float = 1.0  # 1.0 = sample all traces
+    export_metrics: bool = False  # F: also export governance metrics via OTel
 
 
 class ObservabilityManager:
@@ -75,6 +76,8 @@ class ObservabilityManager:
         self.config = config or ObservabilityConfig()
         self._tracer_provider: Any = None
         self._tracer: Any = None
+        self._meter_provider: Any = None
+        self._meter: Any = None
         self._setup_complete = False
 
     @property
@@ -142,6 +145,11 @@ class ObservabilityManager:
             # Set global tracer provider
             trace.set_tracer_provider(self._tracer_provider)
 
+            # F: metrics export (governance counters). Reuses the same OTLP /
+            # console endpoints configured above so no extra plumbing is needed.
+            if self.config.export_metrics:
+                self._setup_metrics(resource)
+
             self._setup_complete = True
             logger.info(f"OpenTelemetry initialized: service={self.config.service_name}")
             return True
@@ -150,11 +158,59 @@ class ObservabilityManager:
             logger.error(f"Failed to initialize OpenTelemetry: {e}")
             return False
 
+    def _setup_metrics(self, resource: Any) -> None:
+        """Set up an OpenTelemetry MeterProvider exporting governance metrics."""
+        try:
+            from opentelemetry import metrics as otel_metrics
+            from opentelemetry.sdk.metrics import MeterProvider
+            from opentelemetry.sdk.metrics.export import (
+                ConsoleMetricExporter,
+                PeriodicExportingMetricReader,
+            )
+
+            readers: list[Any] = []
+            if self.config.export_console:
+                readers.append(PeriodicExportingMetricReader(ConsoleMetricExporter()))
+            if self.config.export_otlp:
+                try:
+                    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+                        OTLPMetricExporter,
+                    )
+
+                    readers.append(
+                        PeriodicExportingMetricReader(
+                            OTLPMetricExporter(endpoint=self.config.otlp_endpoint)
+                        )
+                    )
+                except ImportError:
+                    logger.warning(
+                        "OTLP metric exporter not available. "
+                        "Install with: pip install opentelemetry-exporter-otlp"
+                    )
+            if not readers:
+                logger.warning("Metrics export requested but no exporter configured")
+                return
+            self._meter_provider = MeterProvider(resource=resource, metric_readers=readers)
+            otel_metrics.set_meter_provider(self._meter_provider)
+            self._meter = otel_metrics.get_meter("harness")
+            logger.info("OpenTelemetry metrics export initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenTelemetry metrics: {e}")
+
     def shutdown(self) -> None:
         """Shutdown the tracer provider."""
         if self._tracer_provider:
             self._tracer_provider.shutdown()
             self._setup_complete = False
+        if self._meter_provider:
+            self._meter_provider.shutdown()
+            self._meter_provider = None
+            self._meter = None
+
+    @property
+    def meter(self) -> Any:
+        """Get the meter instance (for metrics export), or None if disabled."""
+        return self._meter
 
 
 # Global manager instance
@@ -187,6 +243,11 @@ def setup_observability(config: ObservabilityConfig | None = None) -> bool:
 def get_tracer() -> Any:
     """Get the global tracer."""
     return get_observability_manager().tracer
+
+
+def get_meter() -> Any:
+    """Get the global meter for governance metrics export (None if disabled)."""
+    return get_observability_manager().meter
 
 
 class SpanBuilder:

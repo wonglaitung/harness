@@ -225,6 +225,10 @@ class AgentHarness:
         from harness.gate.metrics import GateMetrics
 
         self._gate_metrics = GateMetrics()
+        # F: if OTel metrics export was configured (ObservabilityManager setup
+        # above), bind the gate counters to the global meter for export. No-op
+        # when metrics export is disabled or OTel is unavailable.
+        self._gate_metrics.configure_otel()
 
     def _create_session_store(self):
         """Create session store based on storage config."""

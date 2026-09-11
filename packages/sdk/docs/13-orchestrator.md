@@ -770,3 +770,38 @@ public enum StepStatus {
 | 04-并发 | 满足 | 检测器无状态纯函数（除 `custom_patterns`），线程安全 |
 | B 注入識別 | 满足 | 中文显形注入 + 零宽混淆现被拦截；英文集补充 developer mode / DAN / decode-and-run |
 | 残余风险 | 部分满足 | 仍属关键字启发式：语义等价改写（「请把上面那条规矩忘掉吧」用词偏移）、base64 整段编码、同义隐写仍可绕过；彻底防御需语义级分类器或上下文校验，列 M5 跟进项 |
+
+---
+
+## 治理層補強記錄（M5-F）：gate 指标接入 OTel 导出
+
+> 状态：✅ 已落地（设计稿 + 实现 + 单测）
+> 背景：M4 多角度分析中 F 项——`GateMetrics` 仅进程内内存快照，无 OTel / 外部
+> 导出；既有的 `core/observability.py` 只配置了 **trace**，`MeterProvider` 缺失。
+
+### 修复方案
+- 复用既有 `ObservabilityManager`：新增 `ObservabilityConfig.export_metrics`，在
+  `setup()` 内（当 `export_metrics` 为真）追加 `MeterProvider` + `PeriodicExportingMetricReader`
+  （console / OTLP gRPC，复用同一 `otlp_endpoint`），并通过 `opentelemetry.metrics.set_meter_provider`
+  注册全局 meter；`shutdown()` 一并关闭 meter provider。
+- `core/observability.py` 暴露 `get_meter()`（全局），`ObservabilityManager.meter` 属性。
+- `gate/metrics.py::GateMetrics`：新增 `configure_otel(meter=None)`，绑定后
+  `record()` 向 OTel 计数器 `harness.gate.checks` / `harness.gate.blocked` /
+  `harness.gate.findings`（带 `type`/`severity` 属性）推送；未绑定时纯内存。
+- `sdk/harness.py`：创建 `GateMetrics` 后调用 `configure_otel()`，自动接上已配置的
+  全局 meter（无 OTel 或未开启 `export_metrics` 时为 no-op，零迁移）。
+- 依赖经 `pip install harness-sdk[observability]` 可选安装；未安装时 `OTEL_AVAILABLE=False`，
+  指标仍内存可用（韧性层），不强制外部依赖。
+
+### 技术规范符合性自检
+
+| 维度 | 结论 | 说明 / 风险+缓解 |
+|------|------|------------------|
+| 02-设计·可观测 | 满足 | 拦截率/失败分布/复核积压（F 项三指标）现可经 OTel 导出至 Jaeger/Datadog/Langfuse 等 |
+| 02-代码·无强依赖 | 满足 | OTel 懒导入、可选 extra；缺失时内存快照兜底，不影响主流程 |
+| 03-日志·不打敏感信息 | 满足 | 导出指标仅计数器与 `type/severity` 枚举属性，不含结论/PII 原文 |
+| 03-日志·结构化与级别 | 满足 | OTel 属性为结构化键值；setup 失败仅 `logger.error`，不中断 |
+| 04-并发·资源释放 | 满足 | `PeriodicExportingMetricReader` + `shutdown()` 关闭导出器，避免句柄泄漏 |
+| 04-并发·线程安全 | 满足 | `record` 为计数器递增 + OTel 原子 `add`，无共享可变结构竞争 |
+| F 可观测 | 满足 | gate 指标从「内存快照」升级为可导出；trace 已由既有 `ObservabilityManager` 覆盖 |
+| 残余风险 | 部分满足 | 仅 **metric** 导出（计数级），尚未为「取消/硬杀/隔离」单步打 **trace span**；convention 03 要求关键路径带 trace ID，列 M5 跟进项（H 同批可补 span） |

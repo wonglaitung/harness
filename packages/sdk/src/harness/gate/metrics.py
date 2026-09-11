@@ -20,11 +20,41 @@ class GateMetrics:
         self.blocked = 0
         self.findings_by_type: dict[str, int] = {}
         self.findings_by_severity: dict[str, int] = {}
+        self._otel_counters: dict[str, Any] = {}
+
+    def configure_otel(self, meter: Any = None) -> None:
+        """Bind to an OpenTelemetry meter so governance counters are exported.
+
+        No-op (stays in-memory only) when OTel is unavailable or metrics export
+        is not configured. Safe to call unconditionally at startup.
+        """
+        if meter is None:
+            try:
+                from harness.core.observability import get_meter
+
+                meter = get_meter()
+            except Exception:
+                meter = None
+        if meter is None:
+            return
+        self._otel_counters = {
+            "checks": meter.create_counter(
+                "harness.gate.checks", description="Gate evaluations performed"
+            ),
+            "blocked": meter.create_counter(
+                "harness.gate.blocked", description="Gate evaluations that failed/blocked"
+            ),
+            "findings": meter.create_counter(
+                "harness.gate.findings",
+                description="Findings recorded, by type and severity",
+            ),
+        }
 
     def record(self, verdict: Any) -> None:
         """Fold a single gate verdict into the running counters."""
         self.checks += 1
-        if getattr(verdict, "passed", True):
+        passed = bool(getattr(verdict, "passed", True))
+        if passed:
             self.passed += 1
         else:
             self.blocked += 1
@@ -33,6 +63,12 @@ class GateMetrics:
             s = getattr(getattr(f, "severity", None), "value", str(getattr(f, "severity", "unknown")))
             self.findings_by_type[t] = self.findings_by_type.get(t, 0) + 1
             self.findings_by_severity[s] = self.findings_by_severity.get(s, 0) + 1
+            if self._otel_counters:
+                self._otel_counters["findings"].add(1, {"type": t, "severity": s})
+        if self._otel_counters:
+            self._otel_counters["checks"].add(1)
+            if not passed:
+                self._otel_counters["blocked"].add(1)
 
     def snapshot(self, review_backlog: int | None = None) -> dict[str, Any]:
         """Return a queryable copy, optionally merged with the review backlog."""
