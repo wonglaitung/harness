@@ -805,3 +805,40 @@ public enum StepStatus {
 | 04-并发·线程安全 | 满足 | `record` 为计数器递增 + OTel 原子 `add`，无共享可变结构竞争 |
 | F 可观测 | 满足 | gate 指标从「内存快照」升级为可导出；trace 已由既有 `ObservabilityManager` 覆盖 |
 | 残余风险 | 部分满足 | 仅 **metric** 导出（计数级），尚未为「取消/硬杀/隔离」单步打 **trace span**；convention 03 要求关键路径带 trace ID，列 M5 跟进项（H 同批可补 span） |
+
+---
+
+## 治理層補強記錄（M5-G）：actor 身份校验 + 升级流接 gate
+
+> 状态：✅ 已落地（设计稿 + 实现 + 单测）
+> 背景：M4 多角度分析中 G 项——`ReviewQueue.resolve()` 用 `actor != "human"` 字符串
+> 比对，agent 可伪造 `actor="human"` 释放关键隔离项；且 gate 拦截后**没有**自动升级
+> 到复核队列的显式路径（升级流断链）。
+
+### 修复方案
+- `review/queue.py::ReviewQueue`：
+  - 新增 `human_actors: set[str]`（默认 `{"human"}`，保持历史行为）与可选
+    `verify_actor: Callable[[str], bool]`。`resolve()` 关键项现在要求
+    `actor ∈ human_actors`，且（当配置 `verify_actor` 时）须 `verify_actor(actor)` 为真。
+    默认 `{"human"}` 下 G3 守卫不变；高风险部署可把允许集钉成具体身份
+    （`{"human:approver-alice"}`），使通用 `human` 伪造被拒。
+  - 新增 `escalate_from_verdict(verdict, *, content, source)`：仅当 verdict 含
+    ERROR 级 finding（关键隔离）时构造 `ReviewItem` 并 `submit`，返回 item_id；
+    仅 warning/info 不升级（返回 `None`）。
+- `sdk/harness.py::_apply_gate`：gate 拦截（`not passed`）且复核队列存在时，调用
+  `escalate_from_verdict` 自动升级；升级异常被吞掉并 `logger.warning`，绝不中断
+  已隔离的交付（升级是旁路副作用）。
+
+### 技术规范符合性自检
+
+| 维度 | 结论 | 说明 / 风险+缓解 |
+|------|------|------------------|
+| 02-设计·身份/授权 | 满足 | 关键项释放改为「允许集 + 可选运行时校验」，不再信赖裸字符串；默认 `{"human"}` 零迁移 |
+| 02-代码·最小授权 | 满足 | 自动化 actor 默认无法释放关键项；非关键项仍需 `allow_auto_resolve` 显式放行 |
+| 02-代码·写入幂等/隔离 | 满足 | `escalate_from_verdict` 经既有 `submit` → 持久化路径，与现有机制一致 |
+| 03-日志·审计 | 满足 | `resolved_by` 记录真实 actor 串；升级 `logger.info` 含 source/item_id，供审计 |
+| 03-日志·不打敏感 | 满足 | 仅记录 finding 枚举/消息与 item_id，不打印结论全文 |
+| 04-并发·资源释放 | 满足 | 复用 `ReviewQueue` 既有 `asyncio.Lock` 与 store 同步桥，无新增资源 |
+| 04-并发·避免竞态 | 满足 | 升级在 `submit` 临界区外（先判定再 submit），不变更既有锁粒度 |
+| G 身份/升级 | 满足 | actor 伪造被允许集挡下；gate→复核升级流接通 |
+| 残余风险 | 部分满足 | 默认 `human_actors={"human"}` 仍接受任何 caller 自报 `human`（无真认证后端）；彻底防伪造需接入真实身份提供方并配置 `verify_actor`，列 M5 跟进项；跨进程 actor 校验依赖部署侧 store 一致性 |

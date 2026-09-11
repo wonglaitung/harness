@@ -617,6 +617,23 @@ class AgentHarness:
                     provenance.append(m.content)
         verdict = self._gate.check(content, sources=provenance)
         self._gate_metrics.record(verdict)
+        # G: escalate critical (ERROR-severity) findings into the human review
+        # queue so a blocked delivery has an explicit escalation path. Escalation
+        # failures must never break the (already isolated) delivery, so they are
+        # swallowed and logged.
+        if (
+            not verdict.passed
+            and self._review_queue is not None
+            and hasattr(self._review_queue, "escalate_from_verdict")
+        ):
+            try:
+                self._review_queue.escalate_from_verdict(verdict, content=content, source="gate")
+            except Exception:  # noqa: BLE001
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "gate escalation to review queue failed", exc_info=True
+                )
         return verdict
 
     @property

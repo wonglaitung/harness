@@ -125,12 +125,28 @@ class ReviewQueue:
             for resolutions).
     """
 
-    def __init__(self, store: Any | None = None, namespace: str = "review_queue") -> None:
+    def __init__(
+        self,
+        store: Any | None = None,
+        namespace: str = "review_queue",
+        *,
+        human_actors: set[str] | None = None,
+        verify_actor: Any | None = None,
+    ) -> None:
         self._items: dict[str, ReviewItem] = {}
         self._resolutions: dict[str, ReviewResolution] = {}
         self._lock = asyncio.Lock()
         self._store = store
         self._namespace = namespace
+        # G: actor identity is NOT trusted as a bare string. Critical items can
+        # only be resolved by an actor in this allowlist (default {"human"} keeps
+        # the historical behavior). High-risk deployments should pin concrete
+        # verified human identities here (e.g. {"human:approver-alice"}) so a
+        # generic "human" claim is rejected.
+        self._human_actors: set[str] = human_actors or {"human"}
+        # Optional runtime identity verifier: when provided, critical resolution
+        # additionally requires verify_actor(actor) is True (e.g. an auth check).
+        self._verify_actor = verify_actor
 
     # -- sync bridge to the (async) store, safe from a running event loop ------
     @staticmethod
@@ -201,6 +217,37 @@ class ReviewQueue:
         logger.info("ReviewQueue submitted item %s (source=%s)", item.item_id, item.source)
         return item.item_id
 
+    def escalate_from_verdict(
+        self,
+        verdict: Any,
+        *,
+        content: str | None = None,
+        source: str = "gate",
+    ) -> str | None:
+        """G: escalate a blocked gate verdict into a human-review item.
+
+        Only verdicts carrying ERROR-severity findings (critical isolation) are
+        escalated — informational/warning findings do not require human sign-off.
+        Returns the new review item id, or ``None`` when nothing was escalated.
+        """
+        findings = [
+            {
+                "type": getattr(getattr(f, "type", None), "value", str(getattr(f, "type", "unknown"))),
+                "severity": getattr(getattr(f, "severity", None), "value", str(getattr(f, "severity", "unknown"))),
+                "message": getattr(f, "message", ""),
+            }
+            for f in getattr(verdict, "findings", []) or []
+        ]
+        is_critical = any(f["severity"] == "error" for f in findings)
+        if not is_critical:
+            return None
+        item = ReviewItem(
+            gate_findings=findings,
+            content=content if content is not None else getattr(verdict, "delivered_content", ""),
+            source=source,
+        )
+        return self.submit(item)
+
     async def resolve(
         self,
         item_id: str,
@@ -215,8 +262,12 @@ class ReviewQueue:
 
         G3 guard: automated/non-human sign-off must never silently release a
         critical isolation item. Items carrying ERROR-severity gate findings are
-        treated as critical and can ONLY be resolved by a human (``actor="human"``).
-        Non-critical items may be auto-resolved only when ``allow_auto_resolve=True``.
+        treated as critical. Such items can ONLY be resolved by an actor in the
+        configured ``human_actors`` allowlist (G: actor identity is verified, not
+        trusted as a bare string), and — when a ``verify_actor`` hook is set —
+        only after that hook confirms the actor is genuinely human. Non-critical
+        items may be auto-resolved only when ``allow_auto_resolve=True`` and the
+        actor is in the allowlist.
         """
         async with self._lock:
             item = self._items.get(item_id) or self._load_item(item_id)
@@ -228,15 +279,21 @@ class ReviewQueue:
             is_critical = any(
                 f.get("severity") == "error" for f in (item.gate_findings or [])
             )
-            if is_critical and actor != "human":
+            if actor not in self._human_actors:
+                if is_critical:
+                    raise PermissionError(
+                        "Critical isolation items (ERROR-level gate findings) can only "
+                        f"be resolved by an authorized human actor; '{actor}' is not in "
+                        "the human_actors allowlist (G)."
+                    )
+                if not allow_auto_resolve:
+                    raise PermissionError(
+                        f"Actor '{actor}' is not in the human_actors allowlist; automated "
+                        "resolution of non-critical items requires allow_auto_resolve=True."
+                    )
+            if is_critical and self._verify_actor is not None and not self._verify_actor(actor):
                 raise PermissionError(
-                    "Critical isolation items (ERROR-level gate findings) can only be "
-                    "resolved by a human; automated sign-off is forbidden (G3)."
-                )
-            if not is_critical and actor != "human" and not allow_auto_resolve:
-                raise PermissionError(
-                    "Automated resolution of non-critical items requires "
-                    "allow_auto_resolve=True."
+                    f"Actor '{actor}' failed identity verification for a critical item (G)."
                 )
 
             item.resolved = True
