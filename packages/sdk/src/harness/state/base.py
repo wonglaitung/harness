@@ -67,6 +67,16 @@ class BlackboardItem:
             "kind": self.kind.value,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "BlackboardItem":
+        """Rebuild an item from :meth:`as_dict` output (enums restored)."""
+        data = dict(d)
+        if "status" in data and not isinstance(data["status"], ItemStatus):
+            data["status"] = ItemStatus(data["status"])
+        if "kind" in data and not isinstance(data["kind"], WriteKind):
+            data["kind"] = WriteKind(data["kind"])
+        return cls(**data)
+
 
 @dataclass
 class ConflictSet:

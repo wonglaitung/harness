@@ -29,6 +29,30 @@ def _require_redis() -> Any:
     return redis
 
 
+# Atomic compare-and-set: re-read the current version inside Lua (single-threaded
+# Redis guarantees no interleaving) and only write when the version still matches
+# the expected ``base_version``. This closes the TOCTOU race in a naive
+# read-modify-write (H3: CAS must be atomic, not best-effort).
+_CAS_LUA = """
+local key = KEYS[1]
+local expected = tonumber(ARGV[1])
+local new_json = ARGV[2]
+local raw = redis.call('HGET', key, 'v')
+local cur_ver = nil
+if raw then
+  local ok, cur = pcall(cjson.decode, raw)
+  if ok and type(cur) == 'table' then
+    cur_ver = tonumber(cur.version)
+  end
+end
+if cur_ver ~= nil and cur_ver ~= expected then
+  return 'CONFLICT'
+end
+redis.call('HSET', key, 'v', new_json)
+return 'OK'
+"""
+
+
 class RedisBackend(StateBackend):
     """Redis hash-backed backend (single key per item)."""
 
@@ -36,6 +60,7 @@ class RedisBackend(StateBackend):
         redis = _require_redis()
         self._redis = redis.from_url(url, decode_responses=True)
         self._prefix = prefix
+        self._cas_script = self._redis.register_script(_CAS_LUA)
 
     def _key(self, item_id: str) -> str:
         return f"{self._prefix}{item_id}"
@@ -43,7 +68,7 @@ class RedisBackend(StateBackend):
     async def put(self, item: BlackboardItem) -> BlackboardItem:
         import json
 
-        await self._redis.hset(self._key(item.id), mapping={"v": json.dumps(item.__dict__)})
+        await self._redis.hset(self._key(item.id), mapping={"v": json.dumps(item.as_dict())})
         return item
 
     async def get(self, item_id: str) -> BlackboardItem | None:
@@ -52,7 +77,7 @@ class RedisBackend(StateBackend):
         raw = await self._redis.hget(self._key(item_id), "v")
         if raw is None:
             return None
-        return BlackboardItem(**json.loads(raw))
+        return BlackboardItem.from_dict(json.loads(raw))
 
     async def write_if_version(
         self, item_id: str, content: Any, base_version: int, **meta: Any
@@ -60,8 +85,6 @@ class RedisBackend(StateBackend):
         import json
 
         cur = await self.get(item_id)
-        if cur is not None and cur.version != base_version:
-            return False, cur
         new_item = cur or BlackboardItem(id=item_id)
         new_item.content = content
         new_item.base_version = base_version
@@ -69,7 +92,15 @@ class RedisBackend(StateBackend):
         for k, v in meta.items():
             if hasattr(new_item, k):
                 setattr(new_item, k, v)
-        await self._redis.hset(self._key(item_id), mapping={"v": json.dumps(new_item.__dict__)})
+        try:
+            result = await self._cas_script(
+                keys=[self._key(item_id)],
+                args=[base_version, json.dumps(new_item.as_dict())],
+            )
+        except Exception:  # pragma: no cover - driver/connection failure
+            return False, cur
+        if result == "CONFLICT":
+            return False, cur
         return True, new_item
 
     async def list_items(

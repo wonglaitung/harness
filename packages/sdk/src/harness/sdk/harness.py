@@ -571,7 +571,10 @@ class AgentHarness:
         from harness.state import create_state_store
 
         sc = self.config.state or StateConfig()
-        return create_state_store(sc.backend, path=sc.path, url=sc.url)
+        # H3: under governance, authoritative (decision) writes are restricted to
+        # the control layer (source_agent="harness") via the verifier.
+        verifier = (lambda item: item.source_agent == "harness") if self.config.strict else None
+        return create_state_store(sc.backend, path=sc.path, url=sc.url, verifier=verifier)
 
     def _build_review_queue(self) -> Any | None:
         """Build the human-in-the-loop review queue when governance is enabled."""

@@ -21,10 +21,19 @@ from harness.state.memory_store import InMemoryBackend
 
 
 class SharedStateStore:
-    """High-level shared-state facade for multi-agent coordination."""
+    """High-level shared-state facade for multi-agent coordination.
 
-    def __init__(self, backend: StateBackend) -> None:
+    Args:
+        backend: Pluggable storage backend.
+        verifier: Optional gate for authoritative (decision) writes. When set,
+            :meth:`put_authoritative` rejects any item for which
+            ``verifier(item)`` is falsy — enforcing "authoritative writes only
+            via the control layer / verifier" (H3: 防幻觉覆写).
+    """
+
+    def __init__(self, backend: StateBackend, verifier: Any | None = None) -> None:
         self._backend = backend
+        self._verifier = verifier
 
     async def put_additive(
         self, type: str, content: Any, source_agent: str, confidence: float = 0.5, **meta: Any
@@ -51,6 +60,11 @@ class SharedStateStore:
             status=ItemStatus.CONFIRMED,
             **meta,
         )
+        if self._verifier is not None and not self._verifier(item):
+            raise PermissionError(
+                "Authoritative writes require the control-layer verifier (H3). "
+                "Rejecting unauthorized authoritative write."
+            )
         return await self._backend.put(item)
 
     async def get(self, item_id: str) -> BlackboardItem | None:
@@ -75,23 +89,24 @@ def create_state_store(
     *,
     path: str | None = None,
     url: str | None = None,
+    verifier: Any | None = None,
 ) -> SharedStateStore:
     """Build a :class:`SharedStateStore` for the given backend name.
 
     backends: memory (tests) | file (worktree/dev) | redis | db (prod, extras).
     """
     if backend == "memory":
-        return SharedStateStore(InMemoryBackend())
+        return SharedStateStore(InMemoryBackend(), verifier=verifier)
     if backend == "file":
-        return SharedStateStore(FileBackend(path or ".harness/state.db"))
+        return SharedStateStore(FileBackend(path or ".harness/state.db"), verifier=verifier)
     if backend == "redis":
         from harness.state.redis_store import RedisBackend
 
-        return SharedStateStore(RedisBackend(url or "redis://localhost:6379/0"))
+        return SharedStateStore(RedisBackend(url or "redis://localhost:6379/0"), verifier=verifier)
     if backend == "db":
         from harness.state.db_store import DBBackend
 
-        return SharedStateStore(DBBackend(path or ".harness/state.db"))
+        return SharedStateStore(DBBackend(path or ".harness/state.db"), verifier=verifier)
     raise ValueError(f"Unknown state backend: {backend!r}")
 
 

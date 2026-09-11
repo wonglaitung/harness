@@ -18,7 +18,9 @@ def test_in_memory_backward_compatible() -> None:
     item = q.submit(ReviewItem(content="c", source="s"))
     assert len(q.pending()) == 1
     assert q.get(item) is not None
-    res = asyncio.run(q.resolve(item, ReviewDecision.CONFIRM, actor="u"))
+    res = asyncio.run(
+        q.resolve(item, ReviewDecision.CONFIRM, actor="u", allow_auto_resolve=True)
+    )
     assert res.decision is ReviewDecision.CONFIRM
     assert q.resolution(item) is not None
     assert len(q.pending()) == 0
@@ -35,7 +37,11 @@ def test_file_cross_process(tmp_path) -> None:
     reopened = ReviewQueue(store=create_state_store("file", path=db))
     assert len(reopened.pending()) == 1
     # Resolve in the second process; first process observes it.
-    asyncio.run(reopened.resolve(item, ReviewDecision.EXEMPT, actor="rev", reason="ok"))
+    asyncio.run(
+        reopened.resolve(
+            item, ReviewDecision.EXEMPT, actor="rev", reason="ok", allow_auto_resolve=True
+        )
+    )
     assert reopened.resolution(item).decision is ReviewDecision.EXEMPT
     assert len(reopened.pending()) == 0
     assert q1.resolution(item).decision is ReviewDecision.EXEMPT

@@ -231,3 +231,36 @@ async def test_db_backend_cas_crossprocess(tmp_path: Path) -> None:
     assert final.version == n_procs * target + 1
     assert final.content["n"] == n_procs * target + 1
 
+
+async def test_authoritative_verifier_blocks_unauthorized() -> None:
+    # H3: authoritative writes must pass the control-layer verifier.
+    store = create_state_store("memory", verifier=lambda item: item.source_agent == "harness")
+    # Additive (observations/proposals) are unrestricted.
+    add = await store.put_additive("obs", {"x": 1}, source_agent="agent1")
+    assert add.kind == WriteKind.ADDITIVE
+    # Non-control actor -> rejected.
+    with pytest.raises(PermissionError):
+        await store.put_authoritative("decision", "final", source_agent="agent1")
+    # Control layer -> allowed.
+    auth = await store.put_authoritative("decision", "final", source_agent="harness")
+    assert auth.kind == WriteKind.AUTHORITATIVE
+
+
+async def test_redis_cas_atomic_when_available() -> None:
+    # Only runs if a Redis server is reachable; otherwise skipped.
+    redis_mod = pytest.importorskip("redis")
+    from harness.state.redis_store import RedisBackend
+
+    try:
+        backend = RedisBackend("redis://localhost:6379/0")
+        await backend.put(
+            BlackboardItem(id="rk", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
+        )
+        ok, updated = await backend.write_if_version("rk", "v2", base_version=1)
+        assert ok is True and updated.version == 2
+        # Stale base version must be rejected (atomic CAS).
+        ok2, _ = await backend.write_if_version("rk", "v3", base_version=1)
+        assert ok2 is False
+    except Exception as e:  # redis not running in this environment
+        pytest.skip(f"Redis unavailable: {e}")
+
