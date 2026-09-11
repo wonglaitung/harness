@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 /**
  * Prompt injection detector (M6-B enhanced).
  *
- * Detects common injection patterns in user input.
+ * Detects common injection patterns in user input (English + Chinese/multilingual).
  * Supports both plain text and multimodal content (list of content blocks).
  *
  * <p>M6 additions: NFKC normalization + confusable mapping to defeat
@@ -34,54 +34,84 @@ public class PromptInjectionDetector {
     }
 
     /**
-     * Default injection patterns to detect.
+     * Default injection patterns — English + Chinese/multilingual (M5-B coverage).
      */
     public static final List<String> DEFAULT_INJECTION_PATTERNS = List.of(
-        // Role playing
+        // ---- Role playing (English) ----
         "ignore (all )?(previous|above) instructions",
         "disregard (all )?(previous|above) instructions",
         "forget (all )?(previous|above) instructions",
-        // System prompt leakage
+        // ---- System prompt leakage (English) ----
         "what (is|are) your (system |initial )?instructions",
         "repeat your (system |initial )?prompt",
         "show me your (system |initial )?prompt",
-        // Jailbreak attempts
+        // ---- Jailbreak attempts (English) ----
         "you are now (a|an) \\w+",
         "pretend (to be|you are)",
         "act as (if|though)",
-        // Encoding bypass
+        "developer mode",
+        "\\bDAN\\b",
+        // ---- Encoding bypass ----
         "base64",
         "rot13",
         "hex encode",
-        // Dangerous instructions
+        "decode and (run|execute)",
+        // ---- Dangerous instructions (English) ----
         "sudo",
         "chmod",
         "rm -rf",
         "delete all",
         "format disk",
-        // Output manipulation
         "output your prompt",
         "print your instructions",
-        "reveal your system"
+        "reveal your system",
+        // ---- Chinese / multilingual: 忽略/无视/忘掉指令 ----
+        "忽略(以上|之前|前述|上面|先前|所有)?(的)?(所有)?(指令|指示|要求|提示|设定|限制|规则|约束|安全|prompt)",
+        "无视(以上|之前|前述|上面|先前)?(的)?(指令|指示|要求|提示|设定|限制|规则|约束|安全)",
+        "忘(记|掉)(以上|之前|前述|上面|先前)?(的)?(指令|指示|要求|提示|设定|限制|规则|约束)",
+        "不要(理会|理睬|管|搭理)(以上|之前|前面|先前)?(的)?(指令|指示|要求|提示|限制|规则)",
+        "把(上面|之前|以上)(的)?(指令|指示|要求|提示)(全部)?(抛|丢|扔)到(一|脑)边",
+        // ---- Chinese: 系统提示泄露 ----
+        "(告诉|展示|显示|透露|念出|重复|说出|拷贝)(我)?(你的)?(系统|初始|system)?(提示|指令|prompt)",
+        "你的(系统|初始|system)?(提示|指令|prompt)(是(什么|啥)|内容|是什么)",
+        "(输出|打印|显示)(你(的)?(系统|初始|system)?(提示|指令|prompt))",
+        "(泄露|泄漏|透露)(你(的)?)(系统|初始|system)(提示|指令|prompt)",
+        // ---- Chinese: 越狱 / 角色扮演 ----
+        "假装(你|我)是",
+        "假设(你|我)是",
+        "扮演(一个|一名|一种|a|an|成)",
+        "(现在|现在)你(就)?(是|变成).{0,10}(限制|约束|规则|安全)",
+        "越(狱)",
+        // ---- Chinese: 危险指令 ----
+        "删除(所有|全部|一切)?(的)?(文件|数据|记录|资料)",
+        "格式化(磁盘|硬盘|磁碟|系统)",
+        "(运行|执行|执行)(以下|下列|这个|恶意)?(的)?(命令|指令|脚本)",
+        "(解密|解码)(后|之后)(运行|执行)"
     );
+
+    /** Zero-width / invisible characters stripped before matching. */
+    private static final Pattern ZERO_WIDTH = Pattern.compile(
+        "[\u200b\u200c\u200d\u2060\ufeff\u00ad]");
 
     /** Confusable character mapping (Cyrillic/math/typographic → ASCII). */
     private static final Map<Character, Character> CONFUSABLES = Map.ofEntries(
-        // Cyrillic
+        // Cyrillic → Latin
         Map.entry('а', 'a'), Map.entry('е', 'e'), Map.entry('о', 'o'),
         Map.entry('р', 'p'), Map.entry('с', 'c'), Map.entry('у', 'y'),
-        Map.entry('х', 'x'), Map.entry('А', 'A'), Map.entry('В', 'B'),
-        Map.entry('Е', 'E'), Map.entry('К', 'K'), Map.entry('М', 'M'),
-        Map.entry('Н', 'H'), Map.entry('О', 'O'), Map.entry('Р', 'P'),
-        Map.entry('С', 'C'), Map.entry('Т', 'T'), Map.entry('У', 'Y'),
-        Map.entry('Х', 'X'),
+        Map.entry('х', 'x'), Map.entry('і', 'i'), Map.entry('ј', 'j'),
+        Map.entry('ѕ', 's'), Map.entry('ԛ', 'q'), Map.entry('ɡ', 'g'),
+        Map.entry('ӏ', 'l'),
+        Map.entry('А', 'A'), Map.entry('В', 'B'), Map.entry('Е', 'E'),
+        Map.entry('К', 'K'), Map.entry('М', 'M'), Map.entry('Н', 'H'),
+        Map.entry('О', 'O'), Map.entry('Р', 'P'), Map.entry('С', 'C'),
+        Map.entry('Т', 'T'), Map.entry('Х', 'X'), Map.entry('І', 'I'),
         // Full-width ASCII
         Map.entry('ｉ', 'i'), Map.entry('ｇ', 'g'), Map.entry('ｎ', 'n'),
         Map.entry('ｏ', 'o'), Map.entry('ｒ', 'r'), Map.entry('ｅ', 'e'),
         // Common typographic
-        Map.entry('—', '-'), Map.entry('–', '-'), Map.entry(''', '\''),
-        Map.entry(''', '\''), Map.entry('"', '"'), Map.entry('"', '"'),
-        Map.entry('…', '...')
+        Map.entry('\u2014', '-'), Map.entry('\u2013', '-'), Map.entry('\u2018', '\''),
+        Map.entry('\u2019', '\''), Map.entry('\u201c', '"'), Map.entry('\u201d', '"'),
+        Map.entry('\u2026', "...")
     );
 
     private static final float CLASSIFIER_THRESHOLD = 0.5f;
@@ -131,11 +161,8 @@ public class PromptInjectionDetector {
     /**
      * Detect injection attempts.
      *
-     * <p>Processing order: extract text → normalize (NFKC + confusable mapping) →
-     * regex pattern match → optional semantic classifier.  The classifier score is
-     * reported in {@link DetectionResult#score()} but does <b>not</b> override the
-     * regex-based {@code isSafe} flag; callers should use {@code score()} for
-     * combined risk assessment.</p>
+     * <p>Processing order: extract text → normalize (strip zero-width → NFKC → confusable) →
+     * regex pattern match → optional semantic classifier.</p>
      *
      * @param text text to analyze (String or multimodal content List)
      * @return DetectionResult with safety status, detected patterns, and score
@@ -147,7 +174,7 @@ public class PromptInjectionDetector {
             return new DetectionResult(true, List.of(), 0.0f);
         }
 
-        // Normalize: NFKC + confusable mapping
+        // Normalize: strip zero-width → NFKC → confusable mapping
         String normalized = normalize(textContent);
 
         List<String> detected = new ArrayList<>();
@@ -163,8 +190,8 @@ public class PromptInjectionDetector {
         if (classifier != null) {
             try {
                 score = classifier.classify(normalized);
-                if (score >= CLASSIFIER_THRESHOLD && detected.isEmpty()) {
-                    detected.add("classifier:" + score);
+                if (score >= CLASSIFIER_THRESHOLD) {
+                    detected.add("semantic:" + String.format("%.2f", score));
                 }
             } catch (Exception e) {
                 // Classifier must not break validation
@@ -176,6 +203,9 @@ public class PromptInjectionDetector {
 
     /**
      * Sanitize text by filtering detected patterns.
+     *
+     * <p>M6 fix: normalizes text before pattern replacement so confusable/
+     * obfuscated patterns are caught in the output too.</p>
      *
      * @param text text to sanitize (String or multimodal content List)
      * @return sanitized content (same type as input)
@@ -190,44 +220,41 @@ public class PromptInjectionDetector {
     }
 
     /**
-     * Normalize text: NFKC normalization + confusable character replacement.
+     * Normalize text: strip zero-width → NFKC → confusable mapping.
      *
-     * <p>Defeats full-width characters, homoglyph substitution, and
-     * typographic character obfuscation.</p>
+     * <p>Defeats zero-width insertion, full-width characters, homoglyph
+     * substitution, and typographic character obfuscation.</p>
      *
      * @param text raw input text
-     * @return normalized text with confusables mapped to ASCII
+     * @return normalized text
      */
     public static String normalize(String text) {
         if (text == null || text.isEmpty()) {
             return text;
         }
 
-        // Step 1: NFKC normalization (full-width → half-width, compatibility decompose)
-        String nfkc = Normalizer.normalize(text, Normalizer.Form.NFKC);
+        // Step 1: Strip zero-width / invisible characters
+        String stripped = ZERO_WIDTH.matcher(text).replaceAll("");
 
-        // Step 2: Confusable character mapping
+        // Step 2: NFKC normalization (full-width → half-width, compatibility decompose)
+        String nfkc = Normalizer.normalize(stripped, Normalizer.Form.NFKC);
+
+        // Step 3: Confusable character mapping
         StringBuilder sb = new StringBuilder(nfkc.length());
         for (int i = 0; i < nfkc.length(); i++) {
             char c = nfkc.charAt(i);
             sb.append(CONFUSABLES.getOrDefault(c, c));
         }
 
-        // Step 3: Strip zero-width characters
-        String result = sb.toString()
-            .replace("\u200B", "")  // ZERO WIDTH SPACE
-            .replace("\u200C", "")  // ZERO WIDTH NON-JOINER
-            .replace("\u200D", "")  // ZERO WIDTH JOINER
-            .replace("\uFEFF", ""); // BOM / ZERO WIDTH NO-BREAK SPACE
-
-        return result;
+        return sb.toString();
     }
 
     /**
-     * Sanitize plain text string.
+     * Sanitize plain text string (normalizes first, then replaces patterns).
      */
     private String sanitizeString(String text) {
-        String sanitized = text;
+        String normalized = normalize(text);
+        String sanitized = normalized;
         for (Pattern pattern : patterns) {
             sanitized = pattern.matcher(sanitized).replaceAll("[FILTERED]");
         }
@@ -246,14 +273,12 @@ public class PromptInjectionDetector {
             if (block instanceof Map) {
                 Map<String, Object> blockMap = (Map<String, Object>) block;
                 if ("text".equals(blockMap.get("type"))) {
-                    // Sanitize text blocks
                     String text = (String) blockMap.get("text");
                     String sanitizedText = sanitizeString(text);
                     Map<String, Object> sanitizedBlock = new java.util.HashMap<>(blockMap);
                     sanitizedBlock.put("text", sanitizedText);
                     sanitizedList.add(sanitizedBlock);
                 } else {
-                    // Keep non-text blocks unchanged
                     sanitizedList.add(block);
                 }
             } else {
@@ -297,7 +322,7 @@ public class PromptInjectionDetector {
     }
 
     /**
-     * Result of injection detection (M6-B: now includes score).
+     * Result of injection detection (M6-B: includes score).
      *
      * @param isSafe           true if no patterns detected
      * @param detectedPatterns list of matched pattern strings

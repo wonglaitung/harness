@@ -167,11 +167,11 @@ public class LightweightSandbox {
     // ------------------------------------------------------------------
 
     /**
-     * Normalize a command string (M6-C).
+     * Normalize a command string (M6-C, enhanced).
      *
-     * <p>Removes backslash obfuscation ({@code cu\rl} → {@code curl}),
-     * collapses redundant whitespace, and strips leading/trailing spaces.
-     * Used before pattern matching to defeat simple obfuscation.</p>
+     * <p>Strips backslash obfuscation ({@code cu\rl} → {@code curl}),
+     * applies NFKC normalization (full-width → half-width), collapses
+     * redundant whitespace, and strips leading/trailing spaces.</p>
      *
      * @param command raw command
      * @return normalized command
@@ -180,8 +180,15 @@ public class LightweightSandbox {
         if (command == null) {
             return null;
         }
-        // Remove backslash before whitespace (cu\rl → curl)
-        String normalized = command.replaceAll("\\\\\\s", "");
+        // NFKC normalization (full-width commands like ｃｕｒｌ → curl)
+        String normalized = java.text.Normalizer.normalize(command, java.text.Normalizer.Form.NFKC);
+        // Remove backslash before shell metacharacters and whitespace
+        normalized = normalized.replaceAll("\\\\\\s", "");
+        normalized = normalized.replaceAll("\\\\\\|", "|");
+        normalized = normalized.replaceAll("\\\\>", ">");
+        normalized = normalized.replaceAll("\\\\<", "<");
+        normalized = normalized.replaceAll("\\\\&", "&");
+        normalized = normalized.replaceAll("\\\\;", ";");
         // Collapse multiple spaces
         normalized = normalized.replaceAll("\\s{2,}", " ").trim();
         return normalized;

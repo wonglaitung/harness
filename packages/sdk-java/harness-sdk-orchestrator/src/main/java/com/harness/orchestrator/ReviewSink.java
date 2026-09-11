@@ -8,15 +8,16 @@ package com.harness.orchestrator;
  * {@link #onResolve} after each successful {@code resolve()}.  Exceptions
  * thrown by the sink are swallowed (must not block the review flow).</p>
  *
- * <p>Kept as an interface so the SDK core stays decoupled from any particular
- * KB or audit backend.</p>
+ * <p>Receives the full {@link ReviewResolution} record (not just the enum)
+ * so the sink has complete audit context: who resolved, when, why, and any
+ * corrected content.</p>
  */
 public interface ReviewSink {
 
     /**
      * Called when a review item is resolved.
      *
-     * @param resolution the resolution outcome
+     * @param resolution the full resolution record (includes resolvedBy, reason, etc.)
      * @param item       the original review item
      */
     void onResolve(ReviewResolution resolution, ReviewItem item);

@@ -24,12 +24,13 @@ public class InputValidator {
 
     private final int maxLength;
     private final PromptInjectionDetector injectionDetector;
+    private final boolean blockInjection;
 
     /**
-     * Create validator with default settings.
+     * Create validator with default settings (injection as warning).
      */
     public InputValidator() {
-        this(DEFAULT_MAX_LENGTH, true, null);
+        this(DEFAULT_MAX_LENGTH, true, null, false);
     }
 
     /**
@@ -38,12 +39,14 @@ public class InputValidator {
      * @param maxLength maximum input length
      * @param checkInjection whether to check for injection patterns
      * @param customPatterns custom injection patterns
+     * @param blockInjection if true, injection is a hard error (not just warning)
      */
-    public InputValidator(int maxLength, boolean checkInjection, List<String> customPatterns) {
+    public InputValidator(int maxLength, boolean checkInjection, List<String> customPatterns, boolean blockInjection) {
         this.maxLength = maxLength;
         this.injectionDetector = checkInjection
             ? new PromptInjectionDetector(customPatterns)
             : null;
+        this.blockInjection = blockInjection;
     }
 
     /**
@@ -68,7 +71,11 @@ public class InputValidator {
         if (injectionDetector != null && text != null) {
             PromptInjectionDetector.DetectionResult detection = injectionDetector.detect(text);
             if (!detection.isSafe()) {
-                warnings.add("Potential injection patterns detected: " + detection.detectedPatterns());
+                if (blockInjection) {
+                    errors.add("Injection detected (blocked): " + detection.detectedPatterns());
+                } else {
+                    warnings.add("Potential injection patterns detected: " + detection.detectedPatterns());
+                }
             }
         }
 
