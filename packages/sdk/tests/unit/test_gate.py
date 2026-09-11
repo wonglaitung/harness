@@ -117,3 +117,22 @@ def test_unsourced_claim_quarantined_from_delivery() -> None:
     assert "5亿元" in verdict.delivered_content  # grounded claim kept
     assert "3亿元" not in verdict.delivered_content  # unsupported stripped
     assert any(f.type.value == "reconciliation" for f in verdict.findings)
+
+
+def test_cjk_claim_detected_without_leading_boundary() -> None:
+    # M5-D regression: CJK text has no word boundary before digits, so claims
+    # like "营收5亿元" must still be detected (previously skipped by \b).
+    content = "营收5亿元，建议据此推进后续事项。"
+    verdict = _gate().check(content, sources=[])
+    assert not verdict.passed  # fact:no-source ERROR without provenance
+    assert any(f.type.value == "fact" for f in verdict.findings)
+
+
+def test_cjk_unsourced_quarantined_in_cjk_context() -> None:
+    # Same as above but in pure CJK context (no ASCII hyphen/boundary): the
+    # unsupported claim must be isolated from the delivery content.
+    content = "营收5亿元，利润3亿元。"
+    verdict = _gate().check(content, sources=["营收5亿元。"])
+    assert "3亿元" not in verdict.delivered_content
+    assert "5亿元" in verdict.delivered_content
+    assert any(f.type.value == "reconciliation" for f in verdict.findings)

@@ -18,10 +18,16 @@ from harness.gate.models import (
 
 # Heuristic markers for factual claims that require provenance.
 # Numbers with units, percentages, dates, money, named entities in quotes.
+#
+# Boundary note: a leading ``\b`` requires a word boundary before the digit, but
+# CJK text has no spaces, so claims like "营收5亿元" were never detected (only
+# "x-3亿元" matched because '-' is a non-word char). We instead forbid an ASCII
+# word char or digit immediately before the number, which lets CJK characters
+# precede a claim while still excluding identifiers such as "abc5".
 _CLAIM_PATTERN = re.compile(
-    r"(?:\b\d[\d,.]*\s?(?:%|percent|kg|km|m|s|USD|\$|元|万吨|亿元|倍)\b"
-    r"|\b(?:19|20)\d{2}[-/年]\d{1,2}(?:[-/月]\d{1,2})?\b"
-    r"|\b[Qq][1-4]\s?\d{4}\b)"
+    r"(?:(?<![\dA-Za-z])\d[\d,.]*\s?(?:%|percent|kg|km|m|s|USD|\$|元|万元|万吨|亿元|倍)(?!\d)"
+    r"|(?<![\d])(?:19|20)\d{2}[-/年]\d{1,2}(?:[-/月]\d{1,2})?(?!\d)"
+    r"|(?<![\dA-Za-z])[Qq][1-4]\s?\d{4}(?!\d))"
 )
 
 
