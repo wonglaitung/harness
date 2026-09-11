@@ -141,3 +141,6 @@ ignore_missing_imports = true
 Homepage = "https://github.com/wonglaitung/harness"
 Documentation = "https://github.com/wonglaitung/harness#readme"
 Repository = "https://github.com/wonglaitung/harness"
+
+[project.scripts]
+harness = "harness.cli:main"

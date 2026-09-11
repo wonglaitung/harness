@@ -184,6 +184,19 @@ class WriteTool(Tool):
                 error=f"Write access denied: {file_path}",
             )
 
+        # M6-C: reject writes to sensitive paths even if the directory permission
+        # allowed them (e.g. MEMORY.md style writes into ~/.ssh, /etc, ...).
+        from harness.security.sandbox import LightweightSandbox
+
+        ok, reason = LightweightSandbox.validate_path_write(str(path))
+        if not ok:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=reason,
+            )
+
         try:
             # Create parent directories
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -260,6 +273,19 @@ class EditTool(Tool):
                 success=False,
                 content="",
                 error=f"Write access denied: {file_path}",
+            )
+
+        # M6-C: reject writes to sensitive paths even if the directory permission
+        # allowed them.
+        from harness.security.sandbox import LightweightSandbox
+
+        ok, reason = LightweightSandbox.validate_path_write(str(path))
+        if not ok:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                content="",
+                error=reason,
             )
 
         try:
@@ -590,22 +616,30 @@ class BashTool(Tool):
             # This must also catch CancelledError: an outer timeout wrapper
             # (ToolExecutor / AgentLoop) cancels this coroutine, which would
             # otherwise skip the kill and leave the whole process group running.
-            if process is not None:
-                import os
-                import signal
+            from harness.core.observability import traced_operation
 
-                killed = False
-                try:
-                    pgid = os.getpgid(process.pid)
-                    os.killpg(pgid, signal.SIGKILL)
-                    killed = True
-                except (ProcessLookupError, PermissionError, OSError):
-                    pass
-                if not killed:
+            with traced_operation(
+                "bash.timeout_kill",
+                {"bash.timed_out": not isinstance(_exc, asyncio.CancelledError)},
+            ) as span:
+                if process is not None:
+                    import os
+                    import signal
+
+                    killed = False
                     try:
-                        process.kill()
-                    except (ProcessLookupError, OSError):
+                        pgid = os.getpgid(process.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                        killed = True
+                    except (ProcessLookupError, PermissionError, OSError):
                         pass
+                    if not killed:
+                        try:
+                            process.kill()
+                        except (ProcessLookupError, OSError):
+                            pass
+                if span is not None:
+                    span.set_attr("bash.killed", True)
             # Re-raise cancellation so the surrounding wait_for can settle
             # correctly; a plain timeout is reported back to the caller.
             if isinstance(_exc, asyncio.CancelledError):

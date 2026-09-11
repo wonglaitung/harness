@@ -1074,21 +1074,28 @@ class AgentLoop:
             if self.gate is not None and tool_call.name in _SIDE_EFFECT_TOOLS:
                 import json
 
-                probe = self.gate.check(json.dumps(tool_call.arguments, ensure_ascii=False))
-                if not probe.passed:
-                    results.append(
-                        ToolResult(
-                            tool_call_id=tool_call.id,
-                            success=False,
-                            content="",
-                            error=(
-                                "写入/执行操作未通过确定性闸门，已阻止："
-                                + "; ".join(f.message for f in probe.errors)
-                            ),
-                            tool_name=tool_call.name,
+                from harness.core.observability import traced_operation
+
+                with traced_operation(
+                    "agent_loop.tool_gate", {"tool.name": tool_call.name}
+                ) as span:
+                    probe = self.gate.check(json.dumps(tool_call.arguments, ensure_ascii=False))
+                    if span is not None:
+                        span.set_attr("gate.passed", probe.passed)
+                    if not probe.passed:
+                        results.append(
+                            ToolResult(
+                                tool_call_id=tool_call.id,
+                                success=False,
+                                content="",
+                                error=(
+                                    "写入/执行操作未通过确定性闸门，已阻止："
+                                    + "; ".join(f.message for f in probe.errors)
+                                ),
+                                tool_name=tool_call.name,
+                            )
                         )
-                    )
-                    continue
+                        continue
 
             tool_start = time.time()
             try:

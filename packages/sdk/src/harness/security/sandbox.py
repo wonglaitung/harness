@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shutil
+import unicodedata
 from dataclasses import dataclass, field
 
 
@@ -97,6 +99,30 @@ class LightweightSandbox:
         if not self.config.blocked_patterns:
             self.config.blocked_patterns = self.DEFAULT_BLOCKED_PATTERNS.copy()
 
+    @staticmethod
+    def _normalize_cmd(cmd: str) -> str:
+        """Deterministically normalize a command to defeat trivial obfuscation.
+
+        M6-C: folds full-width/compatibility forms (NFKC) and strips backslash
+        inserted between characters to break token matching (e.g. ``cu\\rl`` ->
+        ``curl``). Does NOT perform full shell expansion (``$'...'``, ``$(...)``)
+        — residual risk documented in the design.
+        """
+        normalized = unicodedata.normalize("NFKC", cmd)
+        normalized = re.sub(r"\\([|><&; ])", r"\1", normalized)
+        return normalized
+
+    @staticmethod
+    def tokenize_command(cmd: str) -> list[str]:
+        """Split a command into shell-ish tokens on metacharacters/whitespace.
+
+        Used so per-segment checks (e.g. the whitelist base command) are robust
+        to obfuscation that the raw-string ``in`` check would miss.
+        """
+        normalized = LightweightSandbox._normalize_cmd(cmd)
+        parts = re.split(r"(?:\||;|&&|\|\||>|>>|<|\n|\s+)", normalized)
+        return [p for p in parts if p]
+
     def validate_command(self, command: str) -> tuple[bool, str]:
         """
         Validate command safety.
@@ -110,23 +136,58 @@ class LightweightSandbox:
         if not command or not command.strip():
             return False, "Empty command"
 
-        # Check blocked patterns
+        normalized = self._normalize_cmd(command)
+
+        # Check blocked patterns (against the obfuscation-normalized command).
         for pattern in self.config.blocked_patterns or []:
-            if pattern in command:
+            if pattern in normalized:
                 return False, f"Blocked pattern: {pattern}"
 
-        # Check whitelist
+        # Check whitelist (base command token from the normalized parse).
         if self.config.allowed_commands:
-            cmd_base = command.split()[0] if command.split() else ""
+            tokens = self.tokenize_command(command)
+            cmd_base = tokens[0] if tokens else ""
             if shutil.which(cmd_base) not in self.config.allowed_commands:
                 return False, f"Command not in whitelist: {cmd_base}"
 
-        # Check dangerous paths
+        # Check dangerous paths (against the normalized command).
         for path in self.DANGEROUS_PATHS:
             expanded = os.path.expanduser(path)
-            if expanded in command:
+            if expanded in normalized:
                 return False, f"Dangerous path: {path}"
 
+        return True, ""
+
+    @staticmethod
+    def validate_path_write(target: str) -> tuple[bool, str]:
+        """Reject writes to sensitive paths (used by file write/edit tools).
+
+        M6-C: closes the gap where ``update_core_memory`` / file tools could
+        write into ``~/.ssh``, ``/etc``, etc. without going through BashTool.
+        """
+        expanded_target = os.path.expanduser(target or "")
+        for path in LightweightSandbox.DANGEROUS_PATHS:
+            expanded = os.path.expanduser(path)
+            if expanded and expanded in expanded_target:
+                return False, f"Dangerous write target: {path}"
+        return True, ""
+
+    @staticmethod
+    def validate_tool_output(text: str) -> tuple[bool, str]:
+        """Coarse safety check for tool output before it is re-fed to the model.
+
+        M6-C: MCP / arbitrary side-effect tools can return content containing
+        dangerous command fragments. This reuses the blocked-pattern set as a
+        best-effort guard. NOTE: do NOT apply this to BashTool stdout (logs
+        legitimately contain such strings) — only to tool outputs that will be
+        persisted or injected as instructions.
+        """
+        if not isinstance(text, str):
+            return True, ""
+        normalized = LightweightSandbox._normalize_cmd(text)
+        for pattern in LightweightSandbox.DEFAULT_BLOCKED_PATTERNS:
+            if pattern in normalized:
+                return False, f"Blocked pattern in tool output: {pattern}"
         return True, ""
 
     async def execute(

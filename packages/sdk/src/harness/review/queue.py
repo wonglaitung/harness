@@ -22,7 +22,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,19 @@ class ReviewResolution:
         )
 
 
+class ReviewSink(Protocol):
+    """Optional sink for resolved review decisions (G: KB harvest channel).
+
+    M6-G: the SDK emits a structured decision record; the *consumer* implements
+    this to persist/harvest it into a knowledge base. Kept as a Protocol so the
+    SDK stays free of any specific KB backend.
+    """
+
+    def on_resolve(self, resolution: ReviewResolution, item: ReviewItem) -> None:
+        """Called after a review item is resolved (audit already recorded)."""
+        ...
+
+
 class ReviewQueue:
     """Review queue — in-memory by default, optionally store-backed + durable.
 
@@ -132,6 +145,7 @@ class ReviewQueue:
         *,
         human_actors: set[str] | None = None,
         verify_actor: Any | None = None,
+        sink: ReviewSink | None = None,
     ) -> None:
         self._items: dict[str, ReviewItem] = {}
         self._resolutions: dict[str, ReviewResolution] = {}
@@ -147,6 +161,9 @@ class ReviewQueue:
         # Optional runtime identity verifier: when provided, critical resolution
         # additionally requires verify_actor(actor) is True (e.g. an auth check).
         self._verify_actor = verify_actor
+        # M6-G: optional sink for harvested decisions (KB channel). Side-effect
+        # only; failures are swallowed so they never block the actual resolution.
+        self._sink = sink
 
     # -- sync bridge to the (async) store, safe from a running event loop ------
     @staticmethod
@@ -313,6 +330,13 @@ class ReviewQueue:
             self._persist_item(item)
             self._persist_resolution(resolution)
             logger.info("ReviewQueue resolved %s -> %s by %s", item_id, decision.value, actor)
+            # M6-G: emit the structured decision to the optional sink (KB harvest).
+            # Never let a sink failure undo or block the recorded resolution.
+            if self._sink is not None:
+                try:
+                    self._sink.on_resolve(resolution, item)
+                except Exception:  # noqa: BLE001
+                    logger.warning("ReviewQueue sink.on_resolve failed", exc_info=True)
             return resolution
 
     def pending(self) -> list[ReviewItem]:

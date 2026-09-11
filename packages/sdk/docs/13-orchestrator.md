@@ -391,17 +391,17 @@ asyncio.run(main())
 │              │ (监控和指标)    │                               │
 │              └───────────────┘                               │
 └─────────────────────────────────────────────────────────────┘
-                       │
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼
-    Phase 2:      Phase 3:      Phase 4:
-    Triggers      Worktrees     Connectors
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+     Phase 2:      Phase 3:      Phase 4:
+     Triggers      Worktrees     Connectors
 ```
 
 ## 确定性闸门抽象层（Deterministic Gate Abstraction）
 
-> **状态**: ✅ 已落地（确定性治理层 M1–M5 已实作/校准，详见「实施路线」与「防翻车清单 A–H 落地状态」及文末「治理層補強記錄」M4/M5-D~M5-H）
-> **设计稿自检**: 见文末「技术规范符合性自检」小节
+> **状态**: ✅ 已落地（确定性治理层 M1–M5 + M6 已实作/校准；详见文末「当前落地状态」小节）
+> **设计稿自检**: 见「技术规范符合性自检」与「当前落地状态」
 > **原则来源**: [AI应用开发通用防翻车原则与检查清单.md](../../convention/AI应用开发通用防翻车原则与检查清单.md)
 
 本项目定位为**单 Agent SDK**；多 Agent 能力须经**抽象层**实现，而非平行重写。核心决策：**两层抽象**——① 确定性安全/问责内核（gate / 共享状态 / 重试 / 人工兜底）落在**单 Agent 内核**，多 Agent 继承；② 编排层（TeamOrchestrator / WorkflowEngine）为架其上的**薄组合层**。
@@ -446,16 +446,16 @@ asyncio.run(main())
 
 多 Agent 协作的"病例本"，替代 `TeamOrchestrator` 当前的 `final_response` 文本传递：
 
-- 记录模型 `BlackboardItem`：`id / type / content / source_agent / confidence / created_at / base_version / ttl / status`
+- 记录模型 `BlackboardItem`：`id / type / content / source_agent / confidence / created_at / base_version / ttl / status / writer_id`（含 `effective_writer` 授权通道）
 - 写分层：`additive`（观测/提议，任意 Agent）vs `authoritative`（decision 落定，仅控制层经 verifier）
-- 乐观并发：`write_if_version(base_version)` CAS，版本已前进则拒覆盖 / 存为并行提案
+- 乐观并发：`write_if_version(base_version)` CAS（verifier 已覆盖 authoritative 写），版本已前进则拒覆盖 / 存为并行提案
 - 冲突集显性化：矛盾事实进冲突队列，不静默覆写
 - 可插拔后端 `StateBackend`：`memory`(测试) / `file`(worktree 内，开发) / `redis`(生产) / `db`(SQLite/Postgres，生产)；redis/db 作 optional extras（pin 版本，不进核心依赖）
 
 ### RetryPolicy 与 ReviewQueue
 
-- `RetryPolicy(max_retries, backoff)`：指数退避 + 上限 + 区分可重试/不可重试错误；用于目标级与 `WorkflowStep.max_retries`（当前 `types.py` 已声明未用）。
-- `ReviewQueue`：gate 隔离项入队，人工三选一（确认/修正/豁免），决策写审计日志并沉淀 KB 供复用（G 节）。
+- `RetryPolicy(max_retries, backoff)`：指数退避 + 上限 + 区分可重试/不可重试错误；用于目标级与 `WorkflowStep.max_retries`。
+- `ReviewQueue`：gate 隔离项入队，人工三选一（确认/修正/豁免），决策写审计日志并经 `ReviewSink` 出口供沉淀 KB（G 节）。
 
 ### 统一 `strict` 开关
 
@@ -467,7 +467,7 @@ asyncio.run(main())
 
 ### 与现有编排的关系（改造点）
 
-- `TeamOrchestrator._run_sequential/_run_hierarchical`：当前把 `result.final_response` 文本塞入下一 prompt（`team_orchestrator.py:322-380`），改为经 `SharedStateStore` 结构化字段读写；每个子 Agent 结果过同一 `DeterministicGate`（strict 传播）。
+- `TeamOrchestrator`：子 Agent 结果经 `SharedStateStore` 结构化字段读写（`source_agent=role.name, writer_id="harness"`）；每个子 Agent 结果过同一 `DeterministicGate`（strict 传播）。无 store 时回退文本传递。
 - `WorkflowEngine._execute_step`：落实 `WorkflowStep.max_retries` 经 `RetryPolicy`；步骤产物过 gate + 对账；超限升级 `ReviewQueue`。
 - `WorktreeOrchestrator`：merge 冲突升级 `ReviewQueue`（保留 abort）。
 - `AgentRole` 增 `tools`（角色最小工具集）；`TeamConfig`/`WorkflowStep` 增 `state_store/gate/retry` 引用。
@@ -491,9 +491,9 @@ asyncio.run(main())
 | 02-设计·凭证与密钥 | 满足 | 各后端连接串/路径走 `StateConfig`/环境变量，不硬编码 |
 | 02-设计·输入校验与防注入 | 满足 | 注入现为硬阻断（`InputValidator(block_injection=True)`，命中即拒绝输入）；工具回传内容亦过 `PromptInjectionDetector` 并清洗后再回灌模型；网络工具走 `PermissionSet` 白名单防 SSRF |
 | 02-设计·最小权限 | 满足 | `AgentRole.tools` 角色最小工具集；`PermissionSet` 路径/命令受限 |
-| 02-设计·依赖安全 | 部分满足 | redis/db 驱动作 optional extras（pin 版本）；风险：第三方 CVE → 缓解：锁版本+定期审计 |
+| 02-设计·依赖安全 | 满足 | redis/db 驱动作 optional extras（pin 版本）；`harness doctor --deps` 提供 CVE 审计入口（委托 `uv pip audit`/`pip-audit`），修复需人工评审 |
 | 02-设计·输出编码 | 满足 | 既有 guardrails PII 编码；`ResultSanitizer` 已存在 |
-| 02-设计·密码学原语 | 满足 | 改造 `team_orchestrator.py:230` 的 `md5` → `sha256`；不引入弱算法 |
+| 02-设计·密码学原语 | 满足 | `team_orchestrator.py` 的 `md5` → `sha256`；不引入弱算法 |
 | 03-日志·不打敏感信息 | 满足 | gate/state/review 审计日志掩码 PII/密钥，不明文落盘 |
 | 03-日志·结构化与级别 | 满足 | 复用 OTel span + 结构化日志，带 trace/run ID 贯穿 |
 | 03-日志·适量 | 满足 | 仅关键路径记审计/隔离事件 |
@@ -504,18 +504,18 @@ asyncio.run(main())
 
 ### 防翻车清单 A–H 落地状态
 
-> 依 `convention/AI应用开发通用防翻车原则与检查清单.md` 评估，M1–M3 已补齐。确定性闸门 100% 代码裁决；质量分仅可观测。
+> 依 `convention/AI应用开发通用防翻车原则与检查清单.md` 评估。确定性闸门 100% 代码裁决；质量分仅可观测。完整细项与残余风险见文末「当前落地状态」小节。
 
 | 清单节 | 落地控制 | 代码位置 |
 |--------|----------|----------|
-| A 确定性裁决 | 双通道溯源 + `DeterministicGate`（Format/Fact/Logic + Reconciler），100% 程序化裁决 | `gate/gate.py`、`gate/reconciliation.py` |
-| B 输入边界 | `InputValidator` 注入硬阻断（默认 `block_injection=True`）；工具回传亦过 `PromptInjectionDetector` 并清洗；M5-B 新增中文语义模式 + 零宽字符归一化 | `security/validation.py`、`core/agent_loop.py` |
-| C 最小权限/沙箱 | 工具调用受 `PermissionSet` 白名单；副作用工具前置闸门；M5-C `BashTool` 执行前额外经 `LightweightSandbox` 拦截 `curl\|bash`/`> /etc/`/`chmod -R 777`/fork bomb 等 | `core/agent_loop.py`、`tools/builtins.py`、`security/sandbox.py` |
-| D 对账 | 双通道溯源；无来源结论在交付内容中强制隔离/标注（`Reconciler.redact`），并记 `recon:unsourced` finding；M5-D 修复中文上下文 claim 抽取（CJK 边界 + `万元`） | `gate/gate.py`、`gate/reconciliation.py`、`gate/validators.py` |
-| E 超时/熔断 | Bash 工具 `start_new_session` + 超时 `os.killpg` 硬杀；LLM 客户端接入 `config.timeout`；M4 修复取消路径 `CancelledError` 亦硬杀（不泄漏孤儿进程） | `tools/builtins.py`、`llm/openai.py`、`llm/anthropic.py` |
-| F 可观测 | `GateMetrics` 累计拦截率/失败分布；M5-F 复用既有 `ObservabilityManager` 新增 `MeterProvider` + OTLP/console 导出（`harness.gate.*` 计数器，可经 `harness-sdk[observability]` 安装）；`gate_metrics()` 可查询复核积压 | `gate/metrics.py`、`core/observability.py`、`sdk/harness.py` |
-| G 复核防绕过 | `ReviewQueue.resolve()` 仅 `human_actors` 允许集（默认 `{"human"}`，可钉具体身份）+ 可选 `verify_actor` 可决 critical；M5-G 新增 `escalate_from_verdict` 将关键拦截自动升级到复核队列 | `review/queue.py`、`sdk/harness.py` |
-| H 状态一致 | redis 后端 Lua 原子 CAS（`write_if_version`）；M5-H `verifier` 升级为允许集 + kind/status 校验，并新增 `read_verifier`（`get`/`list_items` 丢弃伪造 authoritative）；review 队列在允许集内（`source_agent=review_queue`） | `sdk/harness.py`、`state/__init__.py`、`state/redis_store.py` |
+| A 确定性裁决 | 双通道溯源 + `DeterministicGate`（Format/Fact/Logic + Reconciler） | `gate/gate.py`、`gate/reconciliation.py` |
+| B 输入边界 | `InputValidator` 注入硬阻断；`PromptInjectionDetector` 中文+零宽+混淆归一化；可插拔 `InjectionClassifier` | `security/validation.py`、`core/agent_loop.py` |
+| C 最小权限/沙箱 | `PermissionSet` 白名单 + `LightweightSandbox` 解析级校验 | `core/agent_loop.py`、`tools/builtins.py`、`security/sandbox.py` |
+| D 对账 | 双通道溯源；无来源结论强制隔离/标注；claim 抽取归一化 | `gate/gate.py`、`gate/reconciliation.py`、`gate/validators.py` |
+| E 超时/熔断 | Bash 硬杀 + LLM `config.timeout` | `tools/builtins.py`、`llm/*` |
+| F 可观测 | `GateMetrics` + OTel 导出 + 关键路径 span | `gate/metrics.py`、`core/observability.py` |
+| G 复核防绕过 | `human_actors` 允许集 + `verify_actor` + `ReviewSink` | `review/queue.py`、`sdk/harness.py` |
+| H 状态一致 | `writer_id` + 原子 CAS + 写/读 verifier（允许集） | `sdk/harness.py`、`state/__init__.py` |
 
 ---
 
@@ -667,6 +667,55 @@ public enum StepStatus {
 }
 ```
 
+---
+
+## 当前落地状态（防翻车清单 A–H）
+
+> 依 `convention/AI应用开发通用防翻车原则与检查清单.md` 评估。确定性闸门 100% 代码裁决；质量分仅可观测。
+> 风险分级：**韧性层常开**，**治理层默认关**（`strict=False`），仅 `strict=True` 或显式 `gate`/`state`/`review` 配置时生效。
+
+### 风险分级：常开 vs 治理层
+
+| 控制 | 生效条件 |
+|------|----------|
+| 电路 breaker / 成本预算 / 基础注入硬阻断 / 命令沙箱 | **常开**（基线安全，与 `strict` 无关） |
+| DeterministicGate（A 格式/事实/逻辑 + D 对账） | `strict` |
+| SharedStateStore verifier / read_verifier（H） | `strict` |
+| ReviewQueue 升级流 + sink（G） | `strict` |
+| DAG 死锁检测（H 多 Agent） | 常开（`WorkflowEngine.detect_deadlock`） |
+
+### A–H 落地细项（代码位置为当前实现）
+
+| 清单节 | 落地控制 | 生效 | 代码位置 |
+|--------|----------|------|----------|
+| A 确定性裁决 | 双通道溯源 + `DeterministicGate`（Format/Fact/Logic + Reconciler），100% 程序化裁决 | strict | `gate/gate.py`、`gate/reconciliation.py` |
+| B 输入边界 | `InputValidator` 注入硬阻断（默认 `block_injection=True`）；工具回传过 `PromptInjectionDetector` 清洗；归一化覆盖零宽 + NFKC + 混淆字符；可插拔 `InjectionClassifier` 语义分类 | 常开（正则/归一化）+ strict（语义分类由第三方接入） | `security/validation.py`、`core/agent_loop.py` |
+| C 最小权限/沙箱 | `PermissionSet` 白名单 + 副作用工具前置闸门 + `LightweightSandbox` 解析级校验（`tokenize_command` / `validate_path_write` / `validate_tool_output`），拦截 `curl\|bash` / `> /etc/` / `chmod -R 777` / fork bomb / 危险路径 | 常开 | `core/agent_loop.py`、`tools/builtins.py`、`security/sandbox.py` |
+| D 对账 | 双通道溯源；无来源结论强制隔离/标注（`Reconciler.redact`）+ `recon:unsourced` finding；claim 抽取归一化（全角/插空格/HTML 实体） | strict | `gate/gate.py`、`gate/reconciliation.py`、`gate/validators.py` |
+| E 超时/熔断 | Bash `start_new_session` + 超时 `os.killpg` 硬杀；LLM 客户端 `config.timeout`；`CancelledError` 亦硬杀 | 常开 | `tools/builtins.py`、`llm/openai.py`、`llm/anthropic.py` |
+| F 可观测 | `GateMetrics` 拦截率/失败分布；OTel `MeterProvider` + OTLP/console 导出（`harness.gate.*` 计数器）；关键路径 trace span（gate 拦截 / 工具闸门 / 硬杀 / 步骤升级） | 指标常开（内存兜底）；导出与 span 需启用 observability | `gate/metrics.py`、`core/observability.py`、`sdk/harness.py` |
+| G 复核防绕过 | `ReviewQueue.resolve()` 仅 `human_actors` 允许集（默认 `{"human"}`，可钉具体身份）+ 可选 `verify_actor`；`escalate_from_verdict` 自动升级关键隔离；`ReviewSink` 决策出口 | strict | `review/queue.py`、`sdk/harness.py` |
+| H 状态一致 | `BlackboardItem` 含 `writer_id`/`effective_writer`；`write_if_version` 原子 CAS（verifier 已覆盖）；写/读 verifier 升为允许集 + kind/status；`read_verifier_raise` 高敏 fail-loud | strict | `sdk/harness.py`、`state/__init__.py`、`state/redis_store.py` |
+
+### 残余风险与第三方职责
+
+SDK 已闭合"配置性失分"，但以下为**工程实现缺口**或**本就属应用/部署侧**职责，不在 SDK 内核内实现：
+
+| 项 | 性质 | 说明 / 第三方职责 |
+|----|------|------------------|
+| B/C 启发式绕过 | SDK 残余（部分） | 注入语义改写 / base64 整段 / 沙箱子串变体仍可能绕过；彻底防御需语义级分类器（经 `InjectionClassifier` 接入）或上下文校验 |
+| D 归一化覆盖 | SDK 残余（部分） | Unicode 数学数字（𝟐𝟎𝟐𝟒）等仍需后续归一扩展 |
+| F 聚合看板 | 第三方 | SDK 仅产出 metric + trace span；看板 UI 由部署侧基于 OTLP 构建 |
+| G 身份真实校验 | 第三方 | 默认 `human_actors={"human"}` 接受任意自报；接真实 IdP 并配置 `verify_actor` 防伪造 |
+| G KB 沉淀 | 第三方 | `ReviewSink` 仅给出口；KB 落库/检索/自动复用由应用实现 |
+| 依赖安全 | SDK 提供入口 | `harness doctor --deps` 委托 `uv pip audit`/`pip-audit`；实际修复需人工评审（部署侧） |
+
+### 合规与启用
+
+- **默认 `strict=False`**：存量应用零迁移，仅韧性层在线。High 风险场景**必须 `True`**（README 须醒目声明）。
+- **部署侧强制**：可选环境变量 `HARNESS_REQUIRE_STRICT=1` 强制校验（见 [08-security.md](./08-security.md#部署侧强制校验环境变量)）。
+- **测试覆盖**：strict 治理路径由 `tests/unit/test_phase2.py` / `test_state_governance.py` / `test_m6_hardening.py` 覆盖；全量 SDK 套件当前 **905 passed / 21 skipped**。
+
 ## 下一步
 
 - [10-loop-engineering.md](./10-loop-engineering.md) - Loop Engineering 总览
@@ -675,205 +724,3 @@ public enum StepStatus {
 - [01-overview.md](./01-overview.md) - 项目概述与架构总览（含风险分级矩阵）
 - [08-security.md](./08-security.md) - 安全系统详解（strict 预设与共享状态治理）
 - [../../convention/AI应用开发通用防翻车原则与检查清单.md](../../convention/AI应用开发通用防翻车原则与检查清单.md) - 防翻车原则与清单（H 节多 Agent 专属）
-
----
-
-## 治理層補強記錄（M5-D）：claim 抽取中文邊界修復
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 执行中发现 `FactGrounder._CLAIM_PATTERN` 数字前要求 `\b` 词边界，
-> 而中文无空格，导致「营收5亿元」整段不被识别为事实性结论，D2/D3 隔离在
-> 中文语境下形同虚设（仅「-3亿元」因前面是 `-` 才命中）。
-
-### 修复方案
-- `_CLAIM_PATTERN`（`gate/validators.py`）：数字前边界由 `\b` 改为
-  `(?<![\dA-Za-z])`（禁止数字/ASCII 字母在数前，但允许 CJK 在数前）；
-  数字后由尾 `\b` 改为 `(?!\d)`（禁止数字半截，但允许 CJK/标点在后）。
-  补充 `万元` 单位。
-- 覆盖验证：CJK 上下文（营收5亿元、5000万元、2024年01月01日、Q1 2024）、
-  标识符排除（abc5亿元 不命中）、隔離子串匹配（2024年01月01 核心已隔離）。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·输入校验与防注入 | 满足 | claim 抽取为确定性正则，无 LLM 参与；边界放宽为纯正则改造，不引入注入面 |
-| 02-设计·输出编码 | 满足 | 仍复用 `Reconciler.redact` 的 `[已隔离:无溯源]` 标记，PII 不落盘 |
-| 03-日志·不打敏感信息 | 满足 | claim 仅用于溯源比对，审计日志不打印原始结论全文 |
-| 03-日志·结构化与级别 | 满足 | 复用既有 gate findings / verdict 结构 |
-| 04-并发·资源释放 | 满足 | 纯函数正则，无资源持有 |
-| 04-并发·避免竞态 | 满足 | `FactGrounder` 为无状态纯逻辑 |
-| 04-并发·写幂等 | 满足 | 抽取为只读，不影响写路径 |
-| A 确定性裁决 | 满足 | 中文结论现在进入溯源/隔离流程；仍为 100% 程序化裁决 |
-| D 对账 | 满足 | 无来源中文结论现在被强制隔离/标注（修复前漏检） |
-| 残余风险 | 部分满足 | 全角数字（２０２４）、数字间插空格（2 0 2 4）、HTML 实体（&#50;024）仍可能绕过抽取——后续可加归一化层（列入 M5 跟进项，非本次范围） |
-
----
-
-## 治理層補強記錄（M5-C）：BashTool 命令危險度接 LightweightSandbox
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 多角度分析中 C 项——`BashTool` 仅有 4 条 `BLOCKED_COMMANDS` +
-> `PermissionSet` 放行，对 `curl|bash`、`> /etc/...`、`chmod -R 777`、fork bomb
-> 等明显危险命令缺乏覆盖；既有的 `LightweightSandbox`（`security/sandbox.py`）已有
-> 更全的拦截规则却未被 BashTool 复用。
-
-### 修复方案
-- `tools/builtins.py::BashTool.execute`：在 `BLOCKED_COMMANDS` 与 `PermissionSet`
-  检查之后，新增一层 `LightweightSandbox().validate_command(command)` 校验
-  （懒导入，避免与 `security` 形成模块级循环依赖）。命中即返回
-  `ToolResult(success=False, error="Sandbox blocked command: <reason>")`。
-- `security/sandbox.py::LightweightSandbox.DEFAULT_BLOCKED_PATTERNS`：补强
-  pipe-to-shell 检测，新增 `| bash` / `|bash` / `| sh` / `|sh`（覆盖 URL 居中时的
-  `curl ... | bash` 场景，原 `curl | bash` 子串匹配对带参命令失效）。
-- 该层属于「韧性层」，始终开启，与 `strict` 开关无关（命令安全是基线要求）。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·输入校验与防注入 | 满足 | 危险命令为确定性子串/路径黑名单拦截，无 LLM 参与；懒导入不扩大攻击面 |
-| 02-代码·最小权限 | 满足 | 叠加 `BLOCKED_COMMANDS` + `PermissionSet` + Sandbox 三层防御；沙箱拦截优先级最高 |
-| 02-代码·命令执行 | 满足 | 仍走既有 `start_new_session` + `killpg` 硬杀路径（E3），与命令校验正交 |
-| 03-日志 | 满足 | 仅回传结构化 `error`，不打印命令输出敏感内容 |
-| 04-并发·资源释放 | 满足 | 校验为纯函数，失败即返回，不泄漏子进程 |
-| 04-并发·避免竞态 | 满足 | 每次调用独立校验，无共享可变状态 |
-| C 命令危險度 | 满足 | `curl\|bash`/`wget\|bash`/`> /etc/`/`chmod -R 777`/fork bomb/危险路径现被拦截 |
-| 残余风险 | 部分满足 | 拦截基于子串黑名单，变体（如 `cu\rl`、`curl$'\x20'`、base64 管道）仍可绕过；MCP 工具与 `update_core_memory` 写 MEMORY.md 的危險度不在此层（属工具权限治理，列 M5 跟进项） |
-
----
-
-## 治理層補強記錄（M5-B）：注入檢測語義化（中文/混淆）
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 多角度分析中 B 项——`PromptInjectionDetector` 仅英文显形词
->（`ignore previous instructions` 等），中文注入（忽略以上指令、假装你是…）
-> 与零宽字符拼接（`ign​ore`）可绕过。
-
-### 修复方案
-- `security/validation.py::PromptInjectionDetector.INJECTION_PATTERNS`：新增中文覆盖——
-  指令覆盖（忽略/无视/忘掉…指令、限制、规则、安全）、系统提示泄露（显示/你的系统提示…）、
-  越狱（假装你是/假设你是/扮演/越狱，以及「现在你是X」仅当 X 指向解除限制/规则/安全）、
-  危险指令（删除所有文件/格式化/运行脚本/解密后执行）。
-- 新增 `._normalize()`：检测前剔除零宽字符（U+200B/200C/200D/2060/FEFF/00AD），
-  同时覆盖 `detect()` 与 `sanitize()`，破解零宽拼接绕过。
-- 越狱「现在你是」模式收紧：要求后接 0–10 字内含「限制/规则/安全/约束」等绕過名詞，
-  避免把「现在你是我的好朋友」等正常表述误报（已单测验证）。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·输入校验与防注入 | 满足 | 注入检测为确定性正则 + 零宽归一化，无 LLM 参与；`block_injection=True` 默认硬阻断（B1） |
-| 02-代码·防注入 | 满足 | 归一化在 `detect`/`sanitize` 两路径均生效，外部/工具回传内容经此清洗（P1-2） |
-| 03-日志 | 满足 | 仅记录命中模式名，不打印原始注入负载全文 |
-| 04-并发 | 满足 | 检测器无状态纯函数（除 `custom_patterns`），线程安全 |
-| B 注入識別 | 满足 | 中文显形注入 + 零宽混淆现被拦截；英文集补充 developer mode / DAN / decode-and-run |
-| 残余风险 | 部分满足 | 仍属关键字启发式：语义等价改写（「请把上面那条规矩忘掉吧」用词偏移）、base64 整段编码、同义隐写仍可绕过；彻底防御需语义级分类器或上下文校验，列 M5 跟进项 |
-
----
-
-## 治理層補強記錄（M5-F）：gate 指标接入 OTel 导出
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 多角度分析中 F 项——`GateMetrics` 仅进程内内存快照，无 OTel / 外部
-> 导出；既有的 `core/observability.py` 只配置了 **trace**，`MeterProvider` 缺失。
-
-### 修复方案
-- 复用既有 `ObservabilityManager`：新增 `ObservabilityConfig.export_metrics`，在
-  `setup()` 内（当 `export_metrics` 为真）追加 `MeterProvider` + `PeriodicExportingMetricReader`
-  （console / OTLP gRPC，复用同一 `otlp_endpoint`），并通过 `opentelemetry.metrics.set_meter_provider`
-  注册全局 meter；`shutdown()` 一并关闭 meter provider。
-- `core/observability.py` 暴露 `get_meter()`（全局），`ObservabilityManager.meter` 属性。
-- `gate/metrics.py::GateMetrics`：新增 `configure_otel(meter=None)`，绑定后
-  `record()` 向 OTel 计数器 `harness.gate.checks` / `harness.gate.blocked` /
-  `harness.gate.findings`（带 `type`/`severity` 属性）推送；未绑定时纯内存。
-- `sdk/harness.py`：创建 `GateMetrics` 后调用 `configure_otel()`，自动接上已配置的
-  全局 meter（无 OTel 或未开启 `export_metrics` 时为 no-op，零迁移）。
-- 依赖经 `pip install harness-sdk[observability]` 可选安装；未安装时 `OTEL_AVAILABLE=False`，
-  指标仍内存可用（韧性层），不强制外部依赖。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·可观测 | 满足 | 拦截率/失败分布/复核积压（F 项三指标）现可经 OTel 导出至 Jaeger/Datadog/Langfuse 等 |
-| 02-代码·无强依赖 | 满足 | OTel 懒导入、可选 extra；缺失时内存快照兜底，不影响主流程 |
-| 03-日志·不打敏感信息 | 满足 | 导出指标仅计数器与 `type/severity` 枚举属性，不含结论/PII 原文 |
-| 03-日志·结构化与级别 | 满足 | OTel 属性为结构化键值；setup 失败仅 `logger.error`，不中断 |
-| 04-并发·资源释放 | 满足 | `PeriodicExportingMetricReader` + `shutdown()` 关闭导出器，避免句柄泄漏 |
-| 04-并发·线程安全 | 满足 | `record` 为计数器递增 + OTel 原子 `add`，无共享可变结构竞争 |
-| F 可观测 | 满足 | gate 指标从「内存快照」升级为可导出；trace 已由既有 `ObservabilityManager` 覆盖 |
-| 残余风险 | 部分满足 | 仅 **metric** 导出（计数级），尚未为「取消/硬杀/隔离」单步打 **trace span**；convention 03 要求关键路径带 trace ID，列 M5 跟进项（H 同批可补 span） |
-
----
-
-## 治理層補強記錄（M5-G）：actor 身份校验 + 升级流接 gate
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 多角度分析中 G 项——`ReviewQueue.resolve()` 用 `actor != "human"` 字符串
-> 比对，agent 可伪造 `actor="human"` 释放关键隔离项；且 gate 拦截后**没有**自动升级
-> 到复核队列的显式路径（升级流断链）。
-
-### 修复方案
-- `review/queue.py::ReviewQueue`：
-  - 新增 `human_actors: set[str]`（默认 `{"human"}`，保持历史行为）与可选
-    `verify_actor: Callable[[str], bool]`。`resolve()` 关键项现在要求
-    `actor ∈ human_actors`，且（当配置 `verify_actor` 时）须 `verify_actor(actor)` 为真。
-    默认 `{"human"}` 下 G3 守卫不变；高风险部署可把允许集钉成具体身份
-    （`{"human:approver-alice"}`），使通用 `human` 伪造被拒。
-  - 新增 `escalate_from_verdict(verdict, *, content, source)`：仅当 verdict 含
-    ERROR 级 finding（关键隔离）时构造 `ReviewItem` 并 `submit`，返回 item_id；
-    仅 warning/info 不升级（返回 `None`）。
-- `sdk/harness.py::_apply_gate`：gate 拦截（`not passed`）且复核队列存在时，调用
-  `escalate_from_verdict` 自动升级；升级异常被吞掉并 `logger.warning`，绝不中断
-  已隔离的交付（升级是旁路副作用）。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·身份/授权 | 满足 | 关键项释放改为「允许集 + 可选运行时校验」，不再信赖裸字符串；默认 `{"human"}` 零迁移 |
-| 02-代码·最小授权 | 满足 | 自动化 actor 默认无法释放关键项；非关键项仍需 `allow_auto_resolve` 显式放行 |
-| 02-代码·写入幂等/隔离 | 满足 | `escalate_from_verdict` 经既有 `submit` → 持久化路径，与现有机制一致 |
-| 03-日志·审计 | 满足 | `resolved_by` 记录真实 actor 串；升级 `logger.info` 含 source/item_id，供审计 |
-| 03-日志·不打敏感 | 满足 | 仅记录 finding 枚举/消息与 item_id，不打印结论全文 |
-| 04-并发·资源释放 | 满足 | 复用 `ReviewQueue` 既有 `asyncio.Lock` 与 store 同步桥，无新增资源 |
-| 04-并发·避免竞态 | 满足 | 升级在 `submit` 临界区外（先判定再 submit），不变更既有锁粒度 |
-| G 身份/升级 | 满足 | actor 伪造被允许集挡下；gate→复核升级流接通 |
-| 残余风险 | 部分满足 | 默认 `human_actors={"human"}` 仍接受任何 caller 自报 `human`（无真认证后端）；彻底防伪造需接入真实身份提供方并配置 `verify_actor`，列 M5 跟进项；跨进程 actor 校验依赖部署侧 store 一致性 |
-
----
-
-## 治理層補強記錄（M5-H）：verifier 覆盖与严格语义
-
-> 状态：✅ 已落地（设计稿 + 实现 + 单测）
-> 背景：M4 多角度分析中 H 项——`SharedStateStore` 的 `verifier` 仅在
-> `put_authoritative`（写时）生效，且默认 `source_agent=="harness"` 可被子 agent
-> 伪造串绕过；读路径（`get`/`list_items`）**无任何 verifier**，伪造/过期 authoritative
-> 项可被其他 agent 消费（无 read 校验/版本漂移防护）。
-
-### 修复方案
-- `state/__init__.py::SharedStateStore`：新增 `read_verifier` 参数；`get()` 命中但
-  `read_verifier(item)` 为假时返回 `None`，`list_items()` 过滤掉未过校验项。写时
-  `verifier` 保持不变（H3 防幻觉覆写）。`create_state_store` 透传 `read_verifier`。
-- `sdk/harness.py::_build_state_store`（strict 下）：
-  - 写 verifier 升级为**允许集**语义：要求 `source_agent ∈ {"harness","review_queue"}`
-    且 `kind==AUTHORITATIVE` 且 `status==CONFIRMED`；仅靠 `source_agent=="harness"`
-    字符串不再足以放行。两者（harness loop 与 review queue）同属控制/verifier 层。
-  - 读 verifier：strict 下，凡 `kind==AUTHORITATIVE` 且 `source_agent` 不在允许集的项
-    在 `get`/`list_items` 被丢弃，杜绝「绕过写 verifier 落库的伪造决策被消费」。
-- 非 strict 仍 `verifier=None` / `read_verifier=None`（零迁移，治理默认关）。
-
-### 技术规范符合性自检
-
-| 维度 | 结论 | 说明 / 风险+缓解 |
-|------|------|------------------|
-| 02-设计·权威写入 | 满足 | 写 verifier 由裸字符串比对升级为允许集 + kind/status 校验，子 agent 伪造 `harness` 不足以放行 |
-| 02-代码·读校验 | 满足 | `get`/`list_items` 新增 read_verifier，闭合「无 read 校验/版本漂移」读侧缺口 |
-| 02-代码·最小授权 | 满足 | additive 观测不受写 verifier 限制；仅 authoritative 决策受控；读 verifier 仅丢弃伪造 authoritative |
-| 03-日志·审计 | 满足 | verifier 拒写抛 `PermissionError`（含 H3 文案），可审计；读丢弃静默（不打印伪造内容） |
-| 04-并发·资源释放 | 满足 | 读 verifier 为纯函数，无新增资源；与既有 backend 一致 |
-| 04-并发·避免竞态 | 满足 | `write_if_version` 仍由 backend 原子 CAS 保障；verifier 为无状态判定 |
-| H verifier 覆盖 | 满足 | 写（允许集 + kind/status）+ 读（丢弃伪造 authoritative）双路校验；review_queue 作为控制层在允许集内 |
-| 残余风险 | 部分满足 | `write_if_version`（CAS 更新）本身未再套 verifier（仅 backend 原子 CAS）；read_verifier 为「丢弃」而非「告警」，高敏场景或需降级为 `raise`；verifier 仅 strict 生效（设计如此：strict=金融级治理），列 M5 跟进项 |

@@ -616,6 +616,9 @@ class AgentHarness:
             url=sc.url,
             verifier=write_verifier,
             read_verifier=read_verifier,
+            # M6-A: under strict (financial-grade) governance, a forged/stale
+            # authoritative item must fail loud on read, not be silently dropped.
+            read_verifier_raise=self.config.strict,
         )
 
     def _build_review_queue(self) -> Any | None:
@@ -647,8 +650,19 @@ class AgentHarness:
             for m in getattr(session, "messages", []):
                 if getattr(m, "role", None) == "tool" and getattr(m, "content", None):
                     provenance.append(m.content)
-        verdict = self._gate.check(content, sources=provenance)
-        self._gate_metrics.record(verdict)
+        from harness.core.observability import traced_operation
+
+        with traced_operation(
+            "gate.apply", {"gate.has_sources": bool(provenance)}
+        ) as span:
+            verdict = self._gate.check(content, sources=provenance)
+            self._gate_metrics.record(verdict)
+            if span is not None:
+                span.set_attr("gate.passed", verdict.passed)
+                span.add_event(
+                    "gate.isolated" if not verdict.passed else "gate.passed",
+                    {"findings": len(getattr(verdict, "findings", []) or [])},
+                )
         # G: escalate critical (ERROR-severity) findings into the human review
         # queue so a blocked delivery has an explicit escalation path. Escalation
         # failures must never break the (already isolated) delivery, so they are

@@ -262,16 +262,18 @@ class WorkflowEngine:
             verdict = getattr(goal_result, "gate_verdict", None)
             gate_blocked = verdict is not None and not verdict.passed
             if gate_blocked and self.review_queue is not None:
+                from harness.core.observability import traced_operation
                 from harness.review.queue import ReviewItem
 
-                self.review_queue.submit(
-                    ReviewItem(
-                        gate_findings=getattr(verdict, "findings", []),
-                        content=getattr(verdict, "delivered_content", "")
-                        or getattr(goal_result, "final_response", ""),
-                        source=f"workflow:{step.name}",
+                with traced_operation("workflow.gate_escalate", {"step.name": step.name}):
+                    self.review_queue.submit(
+                        ReviewItem(
+                            gate_findings=getattr(verdict, "findings", []),
+                            content=getattr(verdict, "delivered_content", "")
+                            or getattr(goal_result, "final_response", ""),
+                            source=f"workflow:{step.name}",
+                        )
                     )
-                )
 
             # G: a completed-but-unachieved goal is a core step failure -> escalate
             # to human review. Skipped when the gate already escalated (avoid dup).
@@ -289,7 +291,10 @@ class WorkflowEngine:
             graph.mark_completed(step.name)
             # G: retry exhaustion / execution failure on a core step escalates to
             # the human review queue (local self-heal exhausted -> human).
-            self._escalate_step_failure(step, str(e), step_result.goal_result)
+            from harness.core.observability import traced_operation
+
+            with traced_operation("workflow.step_failure_escalate", {"step.name": step.name}):
+                self._escalate_step_failure(step, str(e), step_result.goal_result)
             logger.error(f"Step '{step.name}' failed: {e}")
 
         step_result.completed_at = datetime.now()

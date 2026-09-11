@@ -7,8 +7,9 @@ Provides prompt injection detection and input validation.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 
 @dataclass
@@ -25,19 +26,45 @@ class ValidationResult:
     sanitized_text: str
 
 
+class InjectionClassifier(Protocol):
+    """Optional semantic injection classifier (third-party supplied).
+
+    M6-B: the SDK ships the deterministic keyword/normalization layer; a
+    semantic model (e.g. a fine-tuned classifier or an LLM-as-judge) can be
+    plugged in via ``PromptInjectionDetector(classifier=...)`` to raise recall
+    against paraphrased / steganographic attacks. The detector never depends on
+    this — it is defense-in-depth only.
+    """
+
+    def classify(self, text: str) -> float:
+        """Return injection risk in [0, 1]; higher means more likely injection."""
+        ...
+
+
 class PromptInjectionDetector:
     """
     Prompt injection detector.
 
     Detects common injection patterns in user input. Coverage is keyword /
     phrase based (both English and Chinese) plus obfuscation normalization
-    (invisible / zero-width characters). It is a heuristic defense-in-depth
-    filter, not a semantic guarantee — see design note residual risk.
+    (invisible / zero-width characters, NFKC, confusable look-alikes). It is a
+    heuristic defense-in-depth filter, not a semantic guarantee — see design
+    note residual risk. An optional ``classifier`` adds semantic scoring.
     """
 
     # Invisible / zero-width characters used to break keyword matching.
     # Stripped before pattern matching.
     _ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
+
+    # Confusable / look-alike characters (e.g. Cyrillic 'а' for Latin 'a')
+    # used to evade keyword matching. NFKC does NOT fold these, so the common
+    # ones are mapped explicitly (M6-B).
+    _CONFUSABLE = {
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x",
+        "і": "i", "ј": "j", "ѕ": "s", "ԛ": "q", "ɡ": "g", "ӏ": "l",
+        "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+        "Р": "P", "С": "C", "Т": "T", "Х": "X", "І": "I",
+    }
 
     INJECTION_PATTERNS = [
         # Role playing (English)
@@ -99,19 +126,30 @@ class PromptInjectionDetector:
     def _normalize(text: str) -> str:
         # Strip invisible characters (zero-width spaces, soft hyphen, BOM,
         # word joiner) that attackers insert to defeat substring/keyword
-        # matching, e.g. "ign\u200bore".
-        return PromptInjectionDetector._ZERO_WIDTH.sub("", text)
+        # matching, e.g. "ign\u200bore". Then NFKC folds full-width/compatibility
+        # forms, and confusable look-alikes are mapped to ASCII (M6-B).
+        text = PromptInjectionDetector._ZERO_WIDTH.sub("", text)
+        text = unicodedata.normalize("NFKC", text)
+        return "".join(PromptInjectionDetector._CONFUSABLE.get(ch, ch) for ch in text)
 
-    def __init__(self, custom_patterns: list[str] | None = None):
+    def __init__(
+        self,
+        custom_patterns: list[str] | None = None,
+        classifier: InjectionClassifier | None = None,
+    ):
         """
         Initialize detector.
 
         Args:
             custom_patterns: Additional patterns to detect
+            classifier: Optional semantic :class:`InjectionClassifier` for
+                defense-in-depth scoring (M6-B). When supplied, a risk score
+                >= 0.5 additionally flags the input as injection.
         """
         self.patterns = [re.compile(p, re.IGNORECASE) for p in self.INJECTION_PATTERNS]
         if custom_patterns:
             self.patterns.extend(re.compile(p, re.IGNORECASE) for p in custom_patterns)
+        self._classifier = classifier
 
     def detect(self, text: str | list[dict[str, Any]]) -> tuple[bool, list[str]]:
         """
@@ -142,6 +180,16 @@ class PromptInjectionDetector:
         for pattern in self.patterns:
             if pattern.search(text):
                 detected.append(pattern.pattern)
+
+        # Semantic classifier (optional, third-party supplied). It never breaks
+        # deterministic validation; a high score only adds a finding.
+        if self._classifier is not None:
+            try:
+                score = self._classifier.classify(text)
+                if isinstance(score, (int, float)) and score >= 0.5:
+                    detected.append(f"semantic:{score:.2f}")
+            except Exception:  # noqa: BLE001 - classifier must not break validation
+                pass
 
         return len(detected) == 0, detected
 

@@ -6,7 +6,9 @@ verdict. Validators return a list of :class:`GateFinding`.
 
 from __future__ import annotations
 
+import html
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -25,10 +27,27 @@ from harness.gate.models import (
 # word char or digit immediately before the number, which lets CJK characters
 # precede a claim while still excluding identifiers such as "abc5".
 _CLAIM_PATTERN = re.compile(
-    r"(?:(?<![\dA-Za-z])\d[\d,.]*\s?(?:%|percent|kg|km|m|s|USD|\$|元|万元|万吨|亿元|倍)(?!\d)"
+    r"(?:(?<![\dA-Za-z])\d[\d,.]*\s?(?:%|％|percent|kg|km|m|s|USD|\$|元|万元|万吨|亿元|倍|摄氏度|°C)(?!\d)"
     r"|(?<![\d])(?:19|20)\d{2}[-/年]\d{1,2}(?:[-/月]\d{1,2})?(?!\d)"
     r"|(?<![\dA-Za-z])[Qq][1-4]\s?\d{4}(?!\d))"
 )
+
+
+def _normalize_claim_text(text: str) -> str:
+    """Normalize text before claim extraction so obfuscated numbers are caught.
+
+    M6-D: closes the D-section gap where full-width digits (``２０２４``),
+    intra-digit spaces (``2 0 2 4``) and HTML entities (``&#52;``) evaded the
+    claim pattern. Steps are deterministic, no LLM involved:
+      1. full-width digits/letters -> ASCII (via NFKC);
+      2. NFKC compatibility normalization (full-width punctuation etc.);
+      3. strip whitespace inserted *inside* a digit run ("2 0 2 4");
+      4. decode HTML/XML entities (``&#52;`` -> ``4``).
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
+    text = html.unescape(text)
+    return text
 
 
 class GateValidator(Protocol):
@@ -171,7 +190,7 @@ class FactGrounder:
 
     @staticmethod
     def _extract_claims(content: str) -> list[str]:
-        return [m.group(0) for m in _CLAIM_PATTERN.finditer(content)]
+        return [m.group(0) for m in _CLAIM_PATTERN.finditer(_normalize_claim_text(content))]
 
     @staticmethod
     def _claim_supported(claim: str, sources: list[str]) -> bool:

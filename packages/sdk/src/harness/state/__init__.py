@@ -35,6 +35,10 @@ class SharedStateStore:
             from read results (returned as ``None`` / filtered out). This closes the
             read-side gap — a forged/stale authoritative item written around the
             write verifier cannot be consumed by other agents (H: 无 read 校验).
+        read_verifier_raise: When True and ``read_verifier`` is set, a forged/
+            forbidden authoritative item raises ``PermissionError`` on read instead
+            of being silently dropped — for high-sensitivity deployments that must
+            fail loud rather than swallow (M6-A).
     """
 
     def __init__(
@@ -42,10 +46,13 @@ class SharedStateStore:
         backend: StateBackend,
         verifier: Any | None = None,
         read_verifier: Any | None = None,
+        *,
+        read_verifier_raise: bool = False,
     ) -> None:
         self._backend = backend
         self._verifier = verifier
         self._read_verifier = read_verifier
+        self._read_verifier_raise = read_verifier_raise
 
     async def put_additive(
         self, type: str, content: Any, source_agent: str, confidence: float = 0.5, **meta: Any
@@ -98,6 +105,10 @@ class SharedStateStore:
     async def get(self, item_id: str) -> BlackboardItem | None:
         item = await self._backend.get(item_id)
         if item is not None and self._read_verifier is not None and not self._read_verifier(item):
+            if self._read_verifier_raise:
+                raise PermissionError(
+                    "Forged/forbidden authoritative item rejected by read_verifier (H)."
+                )
             return None
         return item
 
@@ -138,7 +149,15 @@ class SharedStateStore:
     ) -> list[BlackboardItem]:
         items = await self._backend.list_items(type=type, status=status)
         if self._read_verifier is not None:
-            items = [i for i in items if self._read_verifier(i)]
+            if self._read_verifier_raise:
+                bad = [i for i in items if not self._read_verifier(i)]
+                if bad:
+                    raise PermissionError(
+                        "Forged/forbidden authoritative items rejected by "
+                        f"read_verifier (H): {len(bad)} item(s)."
+                    )
+            else:
+                items = [i for i in items if self._read_verifier(i)]
         return items
 
     async def get_conflicts(self) -> list[ConflictSet]:
@@ -160,16 +179,25 @@ def create_state_store(
     url: str | None = None,
     verifier: Any | None = None,
     read_verifier: Any | None = None,
+    read_verifier_raise: bool = False,
 ) -> SharedStateStore:
     """Build a :class:`SharedStateStore` for the given backend name.
 
     backends: memory (tests) | file (worktree/dev) | redis | db (prod, extras).
     """
     if backend == "memory":
-        return SharedStateStore(InMemoryBackend(), verifier=verifier, read_verifier=read_verifier)
+        return SharedStateStore(
+            InMemoryBackend(),
+            verifier=verifier,
+            read_verifier=read_verifier,
+            read_verifier_raise=read_verifier_raise,
+        )
     if backend == "file":
         return SharedStateStore(
-            FileBackend(path or ".harness/state.db"), verifier=verifier, read_verifier=read_verifier
+            FileBackend(path or ".harness/state.db"),
+            verifier=verifier,
+            read_verifier=read_verifier,
+            read_verifier_raise=read_verifier_raise,
         )
     if backend == "redis":
         from harness.state.redis_store import RedisBackend
@@ -178,12 +206,16 @@ def create_state_store(
             RedisBackend(url or "redis://localhost:6379/0"),
             verifier=verifier,
             read_verifier=read_verifier,
+            read_verifier_raise=read_verifier_raise,
         )
     if backend == "db":
         from harness.state.db_store import DBBackend
 
         return SharedStateStore(
-            DBBackend(path or ".harness/state.db"), verifier=verifier, read_verifier=read_verifier
+            DBBackend(path or ".harness/state.db"),
+            verifier=verifier,
+            read_verifier=read_verifier,
+            read_verifier_raise=read_verifier_raise,
         )
     raise ValueError(f"Unknown state backend: {backend!r}")
 
