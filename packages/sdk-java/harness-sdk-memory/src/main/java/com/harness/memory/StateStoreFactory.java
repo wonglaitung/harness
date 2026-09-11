@@ -44,7 +44,7 @@ public class StateStoreFactory {
      *
      * @return new SharedStateStore
      */
-    public static SharedStateStore create() {
+    public static StateStore create() {
         return new SharedStateStore();
     }
 
@@ -53,9 +53,9 @@ public class StateStoreFactory {
      *
      * @param backend backend type
      * @param dbPath  database path (required for FILE backend, ignored for MEMORY)
-     * @return new store instance (SharedStateStore for MEMORY, FileStateStore for FILE)
+     * @return new store instance
      */
-    public static Object create(Backend backend, Path dbPath) {
+    public static StateStore create(Backend backend, java.nio.file.Path dbPath) {
         return switch (backend) {
             case MEMORY -> new SharedStateStore();
             case FILE -> new FileStateStore(dbPath);
@@ -72,9 +72,9 @@ public class StateStoreFactory {
      * @param readVerifier      optional predicate for read authorization check
      * @return new store instance
      */
-    public static Object create(
+    public static StateStore create(
             Backend backend,
-            Path dbPath,
+            java.nio.file.Path dbPath,
             boolean readVerifierRaise,
             Predicate<BlackboardItem> writeVerifier,
             Predicate<BlackboardItem> readVerifier) {
@@ -92,7 +92,7 @@ public class StateStoreFactory {
      * @param readVerifierRaise if true, forged reads throw SecurityException
      * @return new store instance
      */
-    public static Object create(Backend backend, Path dbPath, boolean readVerifierRaise) {
+    public static StateStore create(Backend backend, java.nio.file.Path dbPath, boolean readVerifierRaise) {
         return switch (backend) {
             case MEMORY -> new SharedStateStore(readVerifierRaise);
             case FILE -> new FileStateStore(dbPath, readVerifierRaise, null, null);

@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * store.writeIfVersion(item.getId(), newContent, 0);
  * }</pre>
  */
-public class SharedStateStore {
+public class SharedStateStore implements StateStore {
 
     private static final Logger logger = LoggerFactory.getLogger(SharedStateStore.class);
 

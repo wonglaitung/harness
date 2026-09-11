@@ -35,7 +35,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
  *
  * <p>Note: Requires SQLite JDBC driver on classpath: org.xerial:sqlite-jdbc</p>
  */
-public class FileStateStore {
+public class FileStateStore implements StateStore {
 
     private static final Logger logger = LoggerFactory.getLogger(FileStateStore.class);
 

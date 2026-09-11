@@ -446,6 +446,42 @@ queue.resolve(id, ReviewDecision.CONFIRM, "human");
 // sink.onResolve(CONFIRMED, item) 被调用；异常被吞
 ```
 
+### Store 持久化（跨进程）
+
+传入 `StateStore`（SharedStateStore 或 FileStateStore）可持久化复核项和决议，支持多进程可见：
+
+```java
+import com.harness.memory.FileStateStore;
+import com.harness.memory.StateStore;
+import java.nio.file.Path;
+
+// 文件后端（SQLite）
+StateStore store = new FileStateStore(Path.of(".harness/review.db"));
+
+// 创建持久化队列
+ReviewQueue durableQueue = new ReviewQueue(
+    Set.of("human"),                     // human_actors
+    null,                                // verifyActor
+    null,                                // sink
+    store,                               // store（持久化）
+    "review_queue"                       // namespace（存储前缀）
+);
+
+// 提交 → 自动持久化到 store
+String id = durableQueue.submit(item);
+
+// 另一个进程可看到同一 store 中的 pending items
+ReviewQueue otherProcess = new ReviewQueue(Set.of("human"), null, null, store, "review_queue");
+List<ReviewItem> pending = otherProcess.pending(); // 包含跨进程的 items
+```
+
+**行为对比**：
+
+| 模式 | store | 特点 |
+|------|-------|------|
+| 默认（内存） | `null` | 单进程，进程退出丢失 |
+| Store 持久化 | `StateStore` | 多进程可见，进程崩溃可恢复 |
+
 - `human_actors`：默认 `{"human"}`，可钉到具体身份（如 `"auditor:alice"`）。
 - `verifyActor`：`null` 表示接受自报身份；配置后做真实身份校验（接 IdP）。
 - `sink`：`null` 表示不导出；异常被吞（不阻断复核主流）。
