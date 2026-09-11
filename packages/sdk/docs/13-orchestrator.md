@@ -513,9 +513,9 @@ asyncio.run(main())
 | C 最小权限/沙箱 | 工具调用受 `PermissionSet` 白名单；副作用工具（write/edit/bash）前置闸门前才放行 | `core/agent_loop.py`（`_SIDE_EFFECT_TOOLS`） |
 | D 对账 | 双通道溯源；无来源结论在交付内容中强制隔离/标注（`Reconciler.redact`），并记 `recon:unsourced` finding | `gate/gate.py`、`gate/reconciliation.py` |
 | E 超时/熔断 | Bash 工具 `start_new_session` + 超时 `os.killpg` 硬杀；LLM 客户端接入 `config.timeout` | `tools/builtins.py`、`llm/openai.py`、`llm/anthropic.py` |
-| F 可观测 | `GateMetrics` 累计拦截率/失败分布，复用 `ReviewQueue.pending()` 暴露复核积压，`gate_metrics()` 可查询 | `gate/metrics.py`、`sdk/harness.py` |
-| G 复核防绕过 | `ReviewQueue.resolve()` 仅 human 可决 critical（`ERROR` 级发现）；非 critical 需显式 `allow_auto_resolve` | `review/queue.py` |
-| H 状态一致 | redis 后端 Lua 原子 CAS（`write_if_version`）；authoritative 写受 `verifier` 限制（`source_agent=="harness"`） | `state/redis_store.py`、`state/__init__.py` |
+| F 可观测 | `GateMetrics` 累计拦截率/失败分布，复用 `ReviewQueue.pending()` 暴露复核积压，`gate_metrics()` 可查询（注：当前仅内存快照，生产级需接入 OTel 管线；loop 侧效工具前置检查暂不计入指标） | `gate/metrics.py`、`sdk/harness.py` |
+| G 复核防绕过 | `ReviewQueue.resolve()` 仅 human 可决 critical（`ERROR` 级发现）；非 critical 需显式 `allow_auto_resolve`；`actor` 为字符串参数、无身份校验，须由 API 层补强 | `review/queue.py` |
+| H 状态一致 | redis 后端 Lua 原子 CAS（`write_if_version`）；authoritative 写受 `verifier` 限制（`source_agent=="harness"`，**仅 `strict=True` 时注入**，默认关则不校验）；review 队列经 `_backend.put` 直写（绕开 verifier，因自身 `source_agent=review_queue`） | `sdk/harness.py:582`、`state/__init__.py`、`state/redis_store.py` |
 
 ---
 

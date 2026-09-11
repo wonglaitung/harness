@@ -1062,9 +1062,11 @@ class AgentHarness:
             result.gate_verdict = verdict
             result.delivered_content = verdict.delivered_content
             result.reconciliation_report = verdict.reconciliation_report
-            if not verdict.passed:
-                # Enforce: never silently deliver the raw content on failure.
-                result.final_response = verdict.delivered_content
+            # D2/D3: always deliver the governance-quarantined content, never the
+            # raw text. Reconciler.redact() is a no-op when there are no unsourced
+            # claims, so this is safe for clean deliveries and mandatory when
+            # claims were isolated/flagged.
+            result.final_response = verdict.delivered_content
 
         return result
 
@@ -1239,9 +1241,8 @@ class AgentHarness:
             goal_result.gate_verdict = verdict
             goal_result.delivered_content = verdict.delivered_content
             goal_result.reconciliation_report = verdict.reconciliation_report
-            if not verdict.passed:
-                # Enforce: never silently deliver the raw content on failure.
-                goal_result.final_response = verdict.delivered_content
+            # D2/D3: always deliver the governance-quarantined content (see run()).
+            goal_result.final_response = verdict.delivered_content
 
         return goal_result
 
@@ -1498,12 +1499,24 @@ class AgentHarness:
         ]
 
         # Resume from snapshot
-        return await self._loop.resume_from_snapshot(
+        result = await self._loop.resume_from_snapshot(
             snapshot=snapshot,
             tools=tool_defs if tool_defs else None,
             on_chunk=on_chunk,
             on_progress=on_progress,
         )
+
+        # A-1: resumed deliveries must also pass through the deterministic gate
+        # (the snapshot itself is not a trusted source). Reuse the same path as
+        # run()/run_goal() so isolation/blocking is enforced consistently.
+        verdict = self._apply_gate(result.final_response, result.session)
+        if verdict is not None:
+            result.gate_verdict = verdict
+            result.delivered_content = verdict.delivered_content
+            result.reconciliation_report = verdict.reconciliation_report
+            result.final_response = verdict.delivered_content
+
+        return result
 
     @classmethod
     def from_config(cls, path: str) -> "AgentHarness":

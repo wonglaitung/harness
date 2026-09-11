@@ -255,3 +255,33 @@ class TestBashToolHardKill:
         assert "killed" in result.error
         # Must not have waited the full 30s sleep.
         assert elapsed < 15
+
+    @pytest.mark.asyncio
+    async def test_cancellation_kills_process_group(self, tmp_path):
+        """E1 regression: an outer timeout wrapper cancelling the BashTool
+        coroutine (CancelledError) must still hard-kill the process group, not
+        leave an orphaned command running."""
+        import asyncio
+        import os
+
+        tool = BashTool()
+        context = ToolContext(
+            session_id="test",
+            working_directory=str(tmp_path),
+            permissions=PermissionSet.full_access(),
+        )
+        marker = tmp_path / "orphan_marker"
+        # Simulate ToolExecutor/AgentLoop wrapping: cancel the inner coroutine.
+        async def _inner() -> object:
+            return await tool.execute(
+                {"command": f"sleep 5 && touch {marker}"}, context
+            )
+
+        try:
+            await asyncio.wait_for(_inner(), timeout=0.5)
+        except asyncio.TimeoutError:
+            pass
+
+        # Give any orphaned process time to run if the kill had been skipped.
+        await asyncio.sleep(6)
+        assert not marker.exists(), "process group leaked after cancellation"

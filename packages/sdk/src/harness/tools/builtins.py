@@ -567,9 +567,12 @@ class BashTool(Tool):
                 error=error_output if process.returncode != 0 else None,
             )
 
-        except (TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.TimeoutError, asyncio.CancelledError) as _exc:
             # Hard-kill the spawned process group so a slow/hung command cannot
             # leak orphan processes and exhaust host resources (E3: not soft-only).
+            # This must also catch CancelledError: an outer timeout wrapper
+            # (ToolExecutor / AgentLoop) cancels this coroutine, which would
+            # otherwise skip the kill and leave the whole process group running.
             if process is not None:
                 import os
                 import signal
@@ -584,8 +587,12 @@ class BashTool(Tool):
                 if not killed:
                     try:
                         process.kill()
-                    except ProcessLookupError:
+                    except (ProcessLookupError, OSError):
                         pass
+            # Re-raise cancellation so the surrounding wait_for can settle
+            # correctly; a plain timeout is reported back to the caller.
+            if isinstance(_exc, asyncio.CancelledError):
+                raise
             return ToolResult(
                 tool_call_id="",
                 success=False,
