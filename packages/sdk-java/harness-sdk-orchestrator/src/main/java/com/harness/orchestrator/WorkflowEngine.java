@@ -79,9 +79,9 @@ public class WorkflowEngine {
                 graph.addDependency(step.getName(), dep);
             }
         }
-        Set<String> cycles = graph.detectDeadlock();
-        if (!cycles.isEmpty()) {
-            String msg = "Workflow has deadlock cycles: " + String.join(", ", cycles);
+        boolean hasCycle = graph.detectDeadlock();
+        if (hasCycle) {
+            String msg = "Workflow has circular dependency — deadlock detected";
             logger.error(msg);
             return CompletableFuture.completedFuture(WorkflowResult.builder()
                     .workflowName(config.getName())
