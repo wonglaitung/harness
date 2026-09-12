@@ -14,6 +14,7 @@ import com.harness.core.Tool;
 import com.harness.core.ToolCategory;
 import com.harness.core.ToolContext;
 import com.harness.core.ValidationResult;
+import com.harness.security.FileInputValidator;
 import com.harness.types.ToolResult;
 
 /**
@@ -92,6 +93,15 @@ public class WriteTool implements Tool {
         return CompletableFuture.supplyAsync(() -> {
             String filePath = (String) args.get("file_path");
             String content = (String) args.get("content");
+
+            // B2: Deterministic gate — validate path before write
+            FileInputValidator validator = new FileInputValidator();
+            com.harness.security.ValidationResult pathCheck = validator.validatePath(filePath, "write");
+            if (!pathCheck.isValid()) {
+                String reasons = String.join("; ", pathCheck.errors());
+                logger.warn("ToolGate blocked write to {}: {}", filePath, reasons);
+                return ToolResult.failure("", "Deterministic gate rejected: " + reasons, NAME);
+            }
 
             try {
                 Path path = Path.of(filePath);

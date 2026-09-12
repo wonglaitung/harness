@@ -244,15 +244,47 @@ Be strict but fair. Only mark as achieved if the agent has clearly completed the
         List<Message> messages = new ArrayList<>();
         messages.add(new Message("user", prompt));
 
-        return llmClient.callAsync(messages, null, "You are a goal verification assistant. Respond only in valid JSON format.")
+        CompletableFuture<VerificationResult> llmFuture = llmClient.callAsync(messages, null, "You are a goal verification assistant. Respond only in valid JSON format.")
                 .thenApply(response -> {
                     String responseText = response.content() != null ? response.content() : "";
                     return parseLLMResponse(responseText);
-                })
-                .exceptionally(error -> {
-                    throw new VerificationException("LLM verification error: " + error.getMessage(),
-                            shouldRetry(error));
                 });
+
+        // C4: deterministic_verifier override — run both paths, deterministic wins on conflict
+        if (config.getDeterministicVerifier() != null) {
+            CompletableFuture<VerificationResult> detFuture;
+            try {
+                VerificationResult detResult = config.getDeterministicVerifier().apply(result);
+                detFuture = CompletableFuture.completedFuture(detResult);
+            } catch (Exception e) {
+                logger.warn("Deterministic verifier failed, falling back to LLM only: {}", e.getMessage());
+                return llmFuture;
+            }
+
+            return llmFuture.thenCombine(detFuture, (llmResult, detResult) -> {
+                logger.info("C4 dual-path: LLM={}, deterministic={}", llmResult.isAchieved(), detResult.isAchieved());
+
+                if (llmResult.isAchieved() != detResult.isAchieved()) {
+                    // Disagreement: deterministic wins (M6-A: LLM is observation-only)
+                    logger.warn("C4 override: deterministic={} wins over LLM={}", detResult.isAchieved(), llmResult.isAchieved());
+                    return VerificationResult.builder()
+                        .achieved(detResult.isAchieved())
+                        .confidence(detResult.getConfidence())
+                        .reasoning("[C4 override] " + detResult.getReasoning()
+                            + " (LLM said: " + llmResult.isAchieved() + ")")
+                        .build();
+                }
+
+                // Agreement: use deterministic result (higher trust)
+                return VerificationResult.builder()
+                    .achieved(detResult.isAchieved())
+                    .confidence(Math.max(llmResult.getConfidence(), detResult.getConfidence()))
+                    .reasoning("[C4 dual-path] " + detResult.getReasoning())
+                    .build();
+            });
+        }
+
+        return llmFuture;
     }
 
     private CompletableFuture<VerificationResult> verifyTool(GoalResult result, Map<String, Object> context) {

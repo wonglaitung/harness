@@ -29,6 +29,7 @@ public class GoalConfig {
     private final int timeoutSeconds;
     private final VerificationMethod verificationMethod;
     private final Function<GoalResult, Boolean> customVerifier;
+    private final Function<GoalResult, VerificationResult> deterministicVerifier;
     private final int verifierMaxRetries;
     private final double verifierRetryDelay;
     private final double verifierRetryBackoff;
@@ -48,6 +49,7 @@ public class GoalConfig {
         this.timeoutSeconds = builder.timeoutSeconds;
         this.verificationMethod = builder.verificationMethod;
         this.customVerifier = builder.customVerifier;
+        this.deterministicVerifier = builder.deterministicVerifier;
         this.verifierMaxRetries = builder.verifierMaxRetries;
         this.verifierRetryDelay = builder.verifierRetryDelay;
         this.verifierRetryBackoff = builder.verifierRetryBackoff;
@@ -150,6 +152,14 @@ public class GoalConfig {
     }
 
     /**
+     * Optional deterministic verifier that runs alongside LLM verification.
+     * When both paths disagree, the deterministic verdict wins (C4 override).
+     */
+    public Function<GoalResult, VerificationResult> getDeterministicVerifier() {
+        return deterministicVerifier;
+    }
+
+    /**
      * Maximum retries for verifier failures.
      */
     public int getVerifierMaxRetries() {
@@ -249,6 +259,7 @@ public class GoalConfig {
         private int timeoutSeconds = 3600;
         private VerificationMethod verificationMethod = VerificationMethod.LLM;
         private Function<GoalResult, Boolean> customVerifier = null;
+        private Function<GoalResult, VerificationResult> deterministicVerifier = null;
         private int verifierMaxRetries = 3;
         private double verifierRetryDelay = 1.0;
         private double verifierRetryBackoff = 2.0;
@@ -327,6 +338,15 @@ public class GoalConfig {
          */
         public Builder customVerifier(Function<GoalResult, Boolean> customVerifier) {
             this.customVerifier = customVerifier;
+            return this;
+        }
+
+        /**
+         * Set the deterministic verifier for C4 override.
+         * When set alongside LLM verification, both run and deterministic wins on conflict.
+         */
+        public Builder deterministicVerifier(Function<GoalResult, VerificationResult> deterministicVerifier) {
+            this.deterministicVerifier = deterministicVerifier;
             return this;
         }
 

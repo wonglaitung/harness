@@ -263,4 +263,28 @@ class WorkflowEngineTest {
     }
 
     private record MockResponse(String content, int iterations, boolean achieved) {}
+
+    // H1: Pre-execution deadlock detection
+    @Test
+    void testCyclicDependencyFailsFast() {
+        WorkflowConfig config = WorkflowConfig.builder()
+                .name("cyclic-workflow")
+                .addStep(WorkflowStep.builder()
+                        .name("stepA")
+                        .goal("Step A")
+                        .addDependsOn("stepB")
+                        .build())
+                .addStep(WorkflowStep.builder()
+                        .name("stepB")
+                        .goal("Step B")
+                        .addDependsOn("stepA")
+                        .build())
+                .build();
+
+        WorkflowResult result = engine.execute(config).join();
+
+        assertEquals(WorkflowStatus.FAILED, result.getStatus());
+        assertNotNull(result.getError());
+        assertTrue(result.getError().contains("deadlock") || result.getError().contains("cycle"));
+    }
 }

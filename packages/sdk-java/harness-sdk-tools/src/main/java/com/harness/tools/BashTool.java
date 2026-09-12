@@ -16,6 +16,7 @@ import com.harness.core.Tool;
 import com.harness.core.ToolCategory;
 import com.harness.core.ToolContext;
 import com.harness.core.ValidationResult;
+import com.harness.security.LightweightSandbox;
 import com.harness.types.ToolResult;
 
 /**
@@ -106,6 +107,15 @@ public class BashTool implements Tool {
         long timeout = args.containsKey("timeout")
             ? ((Number) args.get("timeout")).longValue()
             : defaultTimeout;
+
+        // B2: Deterministic gate — validate command before execution
+        LightweightSandbox sandbox = new LightweightSandbox();
+        LightweightSandbox.CommandValidation validation = sandbox.validateCommand(command);
+        if (!validation.isValid()) {
+            logger.warn("ToolGate blocked bash command: {}", validation.reason());
+            return CompletableFuture.completedFuture(
+                ToolResult.failure("", "Deterministic gate rejected: " + validation.reason(), NAME));
+        }
 
         String workDir = context.workingDirectory();
 

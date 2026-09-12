@@ -69,6 +69,29 @@ public class WorkflowEngine {
     public CompletableFuture<WorkflowResult> execute(WorkflowConfig config) {
         logger.info("Starting workflow: {}", config.getName());
 
+        // H1: Pre-execution deadlock detection — fail fast before any step runs
+        DependencyGraph graph = new DependencyGraph();
+        for (WorkflowStep step : config.getSteps()) {
+            graph.addStep(step);
+        }
+        for (WorkflowStep step : config.getSteps()) {
+            for (String dep : step.getDependsOn()) {
+                graph.addDependency(step.getName(), dep);
+            }
+        }
+        Set<String> cycles = graph.detectDeadlock();
+        if (!cycles.isEmpty()) {
+            String msg = "Workflow has deadlock cycles: " + String.join(", ", cycles);
+            logger.error(msg);
+            return CompletableFuture.completedFuture(WorkflowResult.builder()
+                    .workflowName(config.getName())
+                    .status(WorkflowStatus.FAILED)
+                    .error(msg)
+                    .startedAt(Instant.now())
+                    .completedAt(Instant.now())
+                    .build());
+        }
+
         Instant startedAt = Instant.now();
         Map<String, StepResult> stepResults = new HashMap<>();
 
