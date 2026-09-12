@@ -9,6 +9,9 @@ dependencies {
     // Integration module includes all other modules
     api(project(":harness-sdk-integration"))
 
+    // 确定性闸门（deterministic gate）
+    api(project(":harness-sdk-gate"))
+
     // 测试
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
 }
