@@ -538,3 +538,104 @@ class ConfirmationHook(LifecycleHook):
                     return True
 
         return False
+
+
+class ToolGateHook(LifecycleHook):
+    """Deterministic pre-execution gate for dangerous tools (B2).
+
+    Intercepts BashTool and WriteTool calls BEFORE execution and runs them
+    through deterministic validation (LightweightSandbox + FileInputValidator).
+    Blocks execution if the deterministic check fails.
+
+    This enforces the principle: "写操作必须经过确定性闸门才落盘"
+    (write operations must pass deterministic gate before persisting).
+
+    Example::
+
+        hook = ToolGateHook()
+        agent.add_hook(hook)
+    """
+
+    # Tools that require gate validation
+    GATED_TOOLS = frozenset({"bash", "write", "edit"})
+
+    def __init__(self) -> None:
+        self._sandbox = None
+        self._file_validator = None
+
+    def _get_sandbox(self):
+        if self._sandbox is None:
+            from harness.security.sandbox import LightweightSandbox
+            self._sandbox = LightweightSandbox()
+        return self._sandbox
+
+    def _get_file_validator(self):
+        if self._file_validator is None:
+            from harness.security.file_validator import FileInputValidator
+            self._file_validator = FileInputValidator()
+        return self._file_validator
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [HookPoint.BEFORE_TOOL_EXECUTE]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        """Validate tool call through deterministic gate before execution."""
+        if context.tool_name not in self.GATED_TOOLS:
+            return HookResult.continue_()
+
+        args = context.tool_args or {}
+
+        if context.tool_name == "bash":
+            return self._validate_bash(args)
+        elif context.tool_name in ("write", "edit"):
+            return self._validate_write(args)
+
+        return HookResult.continue_()
+
+    def _validate_bash(self, args: dict) -> HookResult:
+        """Validate bash command through LightweightSandbox."""
+        command = args.get("command", "")
+        if not command:
+            return HookResult.continue_()
+
+        try:
+            sandbox = self._get_sandbox()
+            is_valid, reason = sandbox.validate_command(command)
+            if not is_valid:
+                logger.warning("ToolGate blocked bash command: %s", reason)
+                return HookResult.abort(
+                    f"Deterministic gate rejected command: {reason}"
+                )
+        except Exception as e:
+            logger.warning("ToolGate sandbox validation error: %s", e)
+            # Fail-closed: reject on validation error
+            return HookResult.abort(
+                f"Gate validation failed (fail-closed): {e}"
+            )
+
+        return HookResult.continue_()
+
+    def _validate_write(self, args: dict) -> HookResult:
+        """Validate file write through FileInputValidator."""
+        file_path = args.get("path", args.get("file_path", ""))
+        if not file_path:
+            return HookResult.continue_()
+
+        try:
+            validator = self._get_file_validator()
+            result = validator.validate_path(file_path)
+            if not result.valid:
+                reasons = "; ".join(result.errors)
+                logger.warning("ToolGate blocked write to %s: %s", file_path, reasons)
+                return HookResult.abort(
+                    f"Deterministic gate rejected write: {reasons}"
+                )
+        except Exception as e:
+            logger.warning("ToolGate file validator error: %s", e)
+            # Fail-closed: reject on validation error
+            return HookResult.abort(
+                f"Gate validation failed (fail-closed): {e}"
+            )
+
+        return HookResult.continue_()

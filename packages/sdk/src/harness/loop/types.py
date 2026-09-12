@@ -113,6 +113,7 @@ class GoalConfig:
     # Verification configuration
     verification_method: VerificationMethod = VerificationMethod.LLM
     custom_verifier: Callable[[LoopResult], bool] | Callable[[LoopResult], Any] | None = None
+    deterministic_verifier: Callable[[LoopResult], bool] | Callable[[LoopResult], Any] | None = None
 
     # Verifier fault tolerance
     verifier_max_retries: int = 3

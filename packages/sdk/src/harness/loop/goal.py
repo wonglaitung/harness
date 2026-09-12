@@ -270,31 +270,36 @@ class GoalVerifier:
         result: LoopResult,
         context: dict[str, Any],
     ) -> VerificationResult:
-        """
-        Verify using LLM.
+        """Verify using LLM, with optional deterministic override (C4).
 
-        Sends the goal, success criteria, and agent response to an LLM
-        for verification.
+        When ``config.deterministic_verifier`` is set, both LLM and deterministic
+        checks run.  The deterministic verdict wins on conflict — LLM output is
+        treated as observation-only, never as the final裁决.
         """
         if self.llm is None:
             raise VerificationError("LLM client not available", should_retry=False)
 
-        # Build verification prompt
+        # --- deterministic path (runs first when available) ---
+        det_result: VerificationResult | None = None
+        if self.config.deterministic_verifier is not None:
+            try:
+                det_result = await self._run_deterministic_verifier(result)
+            except Exception as e:
+                logger.warning("Deterministic verifier failed (LLM fallback): %s", e)
+
+        # --- LLM path ---
         prompt = self._build_verification_prompt(result)
 
         try:
-            # Call LLM for verification
             response = await self.llm.call(
                 messages=[{"role": "user", "content": prompt}],
                 system="You are a goal verification assistant. Respond only in valid JSON format.",
             )
 
             response_text = response.content or ""
-
-            # Parse JSON response
             verification_data = self._parse_llm_response(response_text)
 
-            return VerificationResult(
+            llm_result = VerificationResult(
                 achieved=verification_data.get("achieved", False),
                 confidence=verification_data.get("confidence", 0.5),
                 reasoning=verification_data.get("reasoning", ""),
@@ -305,7 +310,6 @@ class GoalVerifier:
                 f"Failed to parse LLM response: {e}", should_retry=True
             ) from None
         except Exception as e:
-            # Check for rate limiting or transient errors
             error_str = str(e).lower()
             should_retry = any(
                 keyword in error_str for keyword in ["rate limit", "timeout", "503", "502", "429"]
@@ -313,6 +317,57 @@ class GoalVerifier:
             raise VerificationError(
                 f"LLM verification error: {e}", should_retry=should_retry
             ) from None
+
+        # --- deterministic override (C4: 确定性闸门终审) ---
+        if det_result is not None and det_result.achieved != llm_result.achieved:
+            logger.warning(
+                "C4 override: LLM said %s but deterministic says %s — deterministic wins",
+                llm_result.achieved,
+                det_result.achieved,
+            )
+            # Deterministic wins; preserve LLM reasoning as observation
+            return VerificationResult(
+                achieved=det_result.achieved,
+                confidence=det_result.confidence,
+                reasoning=(
+                    f"[deterministic override] {det_result.reasoning} "
+                    f"| [LLM observation] {llm_result.reasoning}"
+                ),
+            )
+
+        return llm_result
+
+    async def _run_deterministic_verifier(
+        self,
+        result: LoopResult,
+    ) -> VerificationResult:
+        """Run the deterministic verifier (sync or async)."""
+        verifier = self.config.deterministic_verifier
+        if verifier is None:
+            raise VerificationError("No deterministic verifier", should_retry=False)
+
+        import asyncio
+        if asyncio.iscoroutinefunction(verifier):
+            achieved = await verifier(result)
+        else:
+            achieved = await asyncio.get_event_loop().run_in_executor(
+                None, verifier, result,
+            )
+
+        if isinstance(achieved, bool):
+            return VerificationResult(
+                achieved=achieved,
+                confidence=1.0 if achieved else 0.0,
+                reasoning="Deterministic verifier result",
+            )
+        elif isinstance(achieved, VerificationResult):
+            return achieved
+        else:
+            return VerificationResult(
+                achieved=bool(achieved),
+                confidence=0.8 if achieved else 0.2,
+                reasoning=f"Deterministic verifier returned: {type(achieved).__name__}",
+            )
 
     async def _verify_tool(
         self,
