@@ -16,6 +16,9 @@ dependencies {
     // Logging
     implementation("org.slf4j:slf4j-api:$slf4jVersion")
 
+    // SQLite 持久化（FileStateStore 运行时按需加载驱动）
+    implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

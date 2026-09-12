@@ -9,6 +9,8 @@ val junitVersion: String by extra
 dependencies {
     api(project(":harness-sdk-core"))
     api(project(":harness-sdk-memory"))
+    // 工具实现复用安全内核（FileInputValidator / LightweightSandbox）
+    api(project(":harness-sdk-security"))
 
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")

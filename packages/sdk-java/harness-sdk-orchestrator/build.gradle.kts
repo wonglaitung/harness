@@ -10,6 +10,8 @@ dependencies {
     // 依赖 core 和 loop 模块
     api(project(":harness-sdk-core"))
     api(project(":harness-sdk-loop"))
+    // 编排模块消费 BlackboardItem / SharedStateStore / ReviewItem 等记忆体类型
+    api(project(":harness-sdk-memory"))
 
     // JSON 处理
     api("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
