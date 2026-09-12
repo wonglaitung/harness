@@ -4,6 +4,8 @@ import com.harness.loop.GoalLoop;
 import com.harness.loop.types.GoalConfig;
 import com.harness.loop.types.GoalResult;
 import com.harness.loop.types.VerificationMethod;
+import com.harness.memory.BlackboardItem;
+import com.harness.memory.SharedStateStore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,14 +52,26 @@ public class WorkflowEngine {
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{\\{steps\\.([^.]+)\\.exports\\.([^}]+)\\}\\}");
 
     private final GoalLoop.AgentRunner agent;
+    private final SharedStateStore store;
 
     /**
-     * Create a new WorkflowEngine.
+     * Create a new WorkflowEngine with default in-memory SharedStateStore.
      *
      * @param agent Agent runner for goal execution
      */
     public WorkflowEngine(GoalLoop.AgentRunner agent) {
+        this(agent, new SharedStateStore(false));
+    }
+
+    /**
+     * Create a new WorkflowEngine with explicit SharedStateStore (A3 黑板).
+     *
+     * @param agent Agent runner for goal execution
+     * @param store Shared state store for inter-step data with versioning + timestamp + writer
+     */
+    public WorkflowEngine(GoalLoop.AgentRunner agent, SharedStateStore store) {
         this.agent = agent;
+        this.store = store;
     }
 
     /**
@@ -222,27 +236,40 @@ public class WorkflowEngine {
                 .thenApply(goalResult -> {
                     StepStatus status = goalResult.achieved() ? StepStatus.SUCCESS : StepStatus.FAILED;
 
-                    return StepResult.builder()
+                    StepResult stepResult = StepResult.builder()
                             .stepName(step.getName())
                             .status(status)
                             .goalResult(goalResult)
                             .startedAt(startedAt)
                             .completedAt(Instant.now())
                             .build();
+
+                    // A3: Write exports to SharedStateStore with versioning + timestamp + writer
+                    writeExportsToStore(step.getName(), stepResult.getExports(), goalResult);
+
+                    return stepResult;
                 })
-                .exceptionally(error -> StepResult.builder()
-                        .stepName(step.getName())
-                        .status(StepStatus.FAILED)
-                        .error(error.getMessage())
-                        .startedAt(startedAt)
-                        .completedAt(Instant.now())
-                        .build());
+                .exceptionally(error -> {
+                    StepResult failedResult = StepResult.builder()
+                            .stepName(step.getName())
+                            .status(StepStatus.FAILED)
+                            .error(error.getMessage())
+                            .startedAt(startedAt)
+                            .completedAt(Instant.now())
+                            .build();
+
+                    // A3: Even on failure, record the attempt in the store
+                    writeExportsToStore(step.getName(), failedResult.getExports(), null);
+
+                    return failedResult;
+                });
     }
 
     /**
      * Resolve template variables in goal description.
      *
      * <p>Supports syntax: {{steps.prev.exports.key}}</p>
+     * Reads from SharedStateStore (A3) with fallback to raw StepResult exports.
      */
     private String resolveTemplates(String goal, Map<String, StepResult> previousResults) {
         Matcher matcher = TEMPLATE_PATTERN.matcher(goal);
@@ -252,17 +279,94 @@ public class WorkflowEngine {
             String stepName = matcher.group(1);
             String exportKey = matcher.group(2);
 
-            StepResult stepResult = previousResults.get(stepName);
-            if (stepResult != null && stepResult.getExports().containsKey(exportKey)) {
-                Object value = stepResult.getExports().get(exportKey);
-                matcher.appendReplacement(sb, value != null ? value.toString() : "");
-            } else {
-                matcher.appendReplacement(sb, matcher.group(0)); // Keep original if not found
-            }
+            String value = resolveExport(stepName, exportKey, previousResults);
+            matcher.appendReplacement(sb, value != null ? value : matcher.group(0));
         }
         matcher.appendTail(sb);
 
         return sb.toString();
+    }
+
+    /**
+     * Resolve a single export value from SharedStateStore (A3) with fallback.
+     *
+     * <p>First checks the blackboard store for a matching item, then falls back
+     * to raw StepResult exports for backward compatibility.</p>
+     */
+    private String resolveExport(String stepName, String exportKey, Map<String, StepResult> previousResults) {
+        // A3: Try reading from SharedStateStore (blackboard with version + timestamp + writer)
+        String storeKey = stepName + "::exports::" + exportKey;
+        BlackboardItem item = store.get(storeKey);
+        if (item != null && item.content().containsKey(exportKey)) {
+            Object value = item.content().get(exportKey);
+            logger.debug("A3: resolved '{}' from blackboard (v{}, writer={})",
+                exportKey, item.baseVersion(), item.writerId());
+            return value != null ? value.toString() : null;
+        }
+
+        // Fallback: raw StepResult exports (backward compatible)
+        StepResult stepResult = previousResults.get(stepName);
+        if (stepResult != null && stepResult.getExports().containsKey(exportKey)) {
+            Object value = stepResult.getExports().get(exportKey);
+            return value != null ? value.toString() : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * A3: Write step exports to SharedStateStore with versioning + timestamp + writer.
+     *
+     * <p>Each export key becomes a BlackboardItem on the blackboard with:
+     * <ul>
+     *   <li>id: "{stepName}::exports::{key}"</li>
+     *   <li>type: "step_export"</li>
+     *   <li>sourceAgent: step name</li>
+     *   <li>writerId: "orchestrator"</li>
+     *   <li>baseVersion: auto-incremented (CAS)</li>
+     *   <li>createdAt: current timestamp</li>
+     * </ul>
+     */
+    private void writeExportsToStore(String stepName, Map<String, Object> exports, GoalResult goalResult) {
+        if (exports == null || exports.isEmpty()) {
+            return;
+        }
+
+        for (Map.Entry<String, Object> entry : exports.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            // Build item content
+            java.util.Map<String, Object> content = new java.util.HashMap<>();
+            content.put(key, value);
+            if (goalResult != null) {
+                content.put("_achieved", goalResult.achieved());
+            }
+
+            String itemId = stepName + "::exports::" + key;
+
+            // Check existing version for CAS
+            BlackboardItem existing = store.get(itemId);
+            int baseVersion = existing != null ? existing.baseVersion() + 1 : 0;
+
+            BlackboardItem item = new BlackboardItem(
+                itemId,
+                "step_export",
+                content,
+                stepName,       // sourceAgent
+                1.0f,           // confidence
+                baseVersion,
+                0,              // no TTL
+                "active",
+                "orchestrator", // writerId
+                null,
+                java.time.Instant.now()
+            );
+
+            store.put(item);
+            logger.debug("A3: wrote export to blackboard: {} (v{}, writer={})",
+                itemId, baseVersion, item.writerId());
+        }
     }
 
     /**
