@@ -3,6 +3,7 @@ package com.harness.core;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
@@ -55,6 +56,32 @@ public interface LLMClient {
     @FunctionalInterface
     interface StreamCallback {
         void onChunk(String chunk);
+    }
+
+    /**
+     * Stream the LLM response as structured {@link StreamEvent}s.
+     *
+     * <p>Default implementation delegates to {@link #stream} and wraps each raw
+     * text chunk into a {@code StreamEvent} of type {@code "text"}. Concrete
+     * providers may override this to also emit {@code tool_calls}/{@code done}
+     * events with usage. The {@code seq} is left at 0 by the default wrapper;
+     * callers that need a strict sequence should manage it themselves.</p>
+     *
+     * @param messages The conversation messages
+     * @param tools Available tools (optional)
+     * @param systemPrompt System prompt (optional)
+     * @param onEvent Callback for each structured event
+     */
+    default void streamWithEvents(
+            List<Message> messages,
+            List<ToolDefinition> tools,
+            String systemPrompt,
+            java.util.function.Consumer<StreamEvent> onEvent) {
+        stream(messages, tools, systemPrompt, chunk -> {
+            if (chunk != null && !chunk.isEmpty()) {
+                onEvent.accept(StreamEvent.textChunk(chunk, 0));
+            }
+        });
     }
 
     /**

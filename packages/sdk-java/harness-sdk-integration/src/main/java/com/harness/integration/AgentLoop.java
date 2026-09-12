@@ -23,6 +23,7 @@ import com.harness.core.OutputOffloader;
 import com.harness.core.StuckDetector;
 import com.harness.core.StuckDetectorConfig;
 import com.harness.core.StuckDetectionResult;
+import com.harness.core.StreamEvent;
 import com.harness.core.StepBudgetController;
 import com.harness.core.StepBudgetConfig;
 import com.harness.core.Tool;
@@ -171,9 +172,38 @@ public class AgentLoop {
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return runSync(session, onProgress);
+                return runSync(session, onProgress, null);
             } catch (Exception e) {
                 logger.error("Agent loop error: {}", e.getMessage(), e);
+                return com.harness.types.LoopResult.error(session, 0, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Run the agent loop with streaming output.
+     *
+     * <p>Mirrors {@link #run} but emits {@link StreamEvent}s (one per iteration:
+     * a {@code text} event with the assistant content, a {@code tool_calls} event
+     * when the model requests tools, and a final {@code done} event with token
+     * usage) in addition to progress events. The returned future resolves with the
+     * {@link com.harness.types.LoopResult}.</p>
+     *
+     * @param session Current session with messages
+     * @param onEvent Stream event callback (optional)
+     * @return LoopResult
+     */
+    public CompletableFuture<com.harness.types.LoopResult> streamRun(
+        com.harness.types.Session session,
+        Consumer<StreamEvent> onEvent
+    ) {
+        logger.info("Streaming agent loop for session: {}", session.id());
+
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return runSync(session, null, onEvent);
+            } catch (Exception e) {
+                logger.error("Agent loop streaming error: {}", e.getMessage(), e);
                 return com.harness.types.LoopResult.error(session, 0, e.getMessage());
             }
         });
@@ -184,20 +214,21 @@ public class AgentLoop {
      */
     private com.harness.types.LoopResult runSync(
         com.harness.types.Session session,
-        Consumer<Object> onProgress
+        Consumer<Object> onProgress,
+        Consumer<StreamEvent> onEvent
     ) {
         // Wrap with tracing if enabled
         if (tracingManager != null && tracingManager.isEnabled()) {
             try {
                 return tracingManager.withSpan("agent_loop.run", null, () ->
-                    runSyncImpl(session, onProgress)
+                    runSyncImpl(session, onProgress, onEvent)
                 );
             } catch (Exception e) {
                 logger.error("Tracing error: {}", e.getMessage());
-                return runSyncImpl(session, onProgress);
+                return runSyncImpl(session, onProgress, onEvent);
             }
         }
-        return runSyncImpl(session, onProgress);
+        return runSyncImpl(session, onProgress, onEvent);
     }
 
     /**
@@ -205,7 +236,8 @@ public class AgentLoop {
      */
     private com.harness.types.LoopResult runSyncImpl(
         com.harness.types.Session session,
-        Consumer<Object> onProgress
+        Consumer<Object> onProgress,
+        Consumer<StreamEvent> onEvent
     ) {
         // Add trace attributes
         if (tracingManager != null && tracingManager.isEnabled()) {
@@ -223,6 +255,7 @@ public class AgentLoop {
         com.harness.types.Session currentSession = session;
         AtomicInteger iteration = new AtomicInteger(0);
         TokenUsage totalUsage = new TokenUsage();
+        AtomicInteger streamEventSeq = new AtomicInteger(0);
 
         // 1. ON_LOOP_START hook
         executeHooks(HookPoint.ON_LOOP_START, currentSession, iteration.get(), null, null);
@@ -236,6 +269,8 @@ public class AgentLoop {
             // 2. Check circuit breaker
             if (circuitBreaker != null && circuitBreaker.isOpen()) {
                 logger.warn("Circuit breaker is open: {}", circuitBreaker.getReason());
+                emitStreamEvent(onEvent, StreamEvent.error(
+                    circuitBreaker.getReason(), streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
                 return com.harness.types.LoopResult.stuck(
                     currentSession, iteration.get(), circuitBreaker.getReason()
                 );
@@ -244,6 +279,8 @@ public class AgentLoop {
             // 3. BEFORE_LLM_CALL hook
             HookContext beforeLlmContext = buildHookContext(currentSession, iteration.get(), null, null);
             if (hookShouldAbort(HookPoint.BEFORE_LLM_CALL, beforeLlmContext)) {
+                emitStreamEvent(onEvent, StreamEvent.error(
+                    "Interrupted by hook", streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
                 return com.harness.types.LoopResult.interrupted(currentSession, iteration.get());
             }
 
@@ -270,6 +307,8 @@ public class AgentLoop {
                 }
 
                 logger.error("LLM call failed: {}", e.getMessage());
+                emitStreamEvent(onEvent, StreamEvent.error(
+                    e.getMessage(), streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
                 return com.harness.types.LoopResult.error(currentSession, iteration.get(), e.getMessage());
             }
 
@@ -295,12 +334,28 @@ public class AgentLoop {
 
             emitProgress(onProgress, ProgressEventType.llmCallEnd(iteration.get(), response));
 
+            // 5b. Emit streaming events for this iteration
+            if (onEvent != null) {
+                int seq = streamEventSeq.incrementAndGet();
+                if (response.content() != null && !response.content().isEmpty()) {
+                    emitStreamEvent(onEvent, StreamEvent.textChunk(
+                        response.content(), seq, "agent-text-" + currentSession.id() + "-" + seq));
+                }
+                if (response.isToolUse() && response.toolCalls() != null && !response.toolCalls().isEmpty()) {
+                    emitStreamEvent(onEvent, StreamEvent.toolCalls(
+                        response.toolCalls(), streamEventSeq.incrementAndGet(),
+                        "agent-tools-" + currentSession.id() + "-" + seq));
+                }
+            }
+
             // 6. Stuck detection
             StuckDetectionResult stuck = stuckDetector.check(
                 session.id(), currentSession.messages(), iteration.get()
             );
             if (stuck.isStuck()) {
                 logger.warn("Stuck detected: {}", stuck.reason());
+                emitStreamEvent(onEvent, StreamEvent.error(
+                    "Stuck: " + stuck.reason(), streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
                 return com.harness.types.LoopResult.stuck(
                     currentSession, iteration.get(), "Stuck: " + stuck.reason()
                 );
@@ -314,6 +369,8 @@ public class AgentLoop {
                     // BEFORE_TOOL_EXECUTE hook
                     HookContext toolContext = buildHookContext(currentSession, iteration.get(), response, call);
                     if (hookShouldAbort(HookPoint.BEFORE_TOOL_EXECUTE, toolContext)) {
+                        emitStreamEvent(onEvent, StreamEvent.error(
+                            "Interrupted by hook", streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
                         return com.harness.types.LoopResult.interrupted(currentSession, iteration.get());
                     }
 
@@ -395,6 +452,9 @@ public class AgentLoop {
                     tracingManager.addAttribute("result.iterations", iteration.get() + 1);
                 }
 
+                emitStreamEvent(onEvent, StreamEvent.done(
+                    totalUsage, streamEventSeq.incrementAndGet(), "agent-done-" + currentSession.id()));
+
                 return com.harness.types.LoopResult.completed(
                     currentSession, response.content(), iteration.get(), totalUsage
                 );
@@ -412,6 +472,8 @@ public class AgentLoop {
 
         // Max iterations reached
         logger.warn("Max iterations reached: {}", config.maxIterations());
+        emitStreamEvent(onEvent, StreamEvent.done(
+            totalUsage, streamEventSeq.incrementAndGet(), "agent-done-" + currentSession.id()));
         return com.harness.types.LoopResult.maxIterations(currentSession, iteration.get());
     }
 
@@ -619,6 +681,19 @@ public class AgentLoop {
                 onProgress.accept(event);
             } catch (Exception e) {
                 logger.warn("Progress callback error: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Emit a streaming event if a callback is set.
+     */
+    private void emitStreamEvent(Consumer<StreamEvent> onEvent, StreamEvent event) {
+        if (onEvent != null) {
+            try {
+                onEvent.accept(event);
+            } catch (Exception e) {
+                logger.warn("Stream event callback error: {}", e.getMessage());
             }
         }
     }

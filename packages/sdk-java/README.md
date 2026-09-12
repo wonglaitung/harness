@@ -84,8 +84,12 @@ harness-sdk-java/
   - `runGoal(goal)`: 目标驱动执行
   - `runGoal(goal, sessionId)`: 带会话 ID 的目标驱动执行
   - `runGoal(goal, sessionId, onProgress, customVerifier)`: 完整参数的目标驱动执行
-  - `runGoal(goalConfig, onProgress)`: 使用 GoalConfig 的目标驱动执行
-  - `registerTool(tool)`: 注册工具
+   - `runGoal(goalConfig, onProgress)`: 使用 GoalConfig 的目标驱动执行
+   - `stream(prompt, onEvent)`: 流式执行 Agent，发射结构化 `StreamEvent` 信封
+   - `stream(prompt, sessionId, onEvent)`: 带会话 ID 的流式执行
+   - `streamGoal(goal, onEvent)`: 目标驱动流式执行（`goal_*` 信封）
+   - `streamGoal(goal, sessionId, onEvent)` / `streamGoal(goalConfig, onEvent)`: 完整参数的流式目标执行
+   - `registerTool(tool)`: 注册工具
   - `addHook(hook)`: 添加生命周期钩子
   - `fromEnv()`: 从环境变量创建（静态方法）
   - `listDiscoveredSkills()`: 列出已发现的技能元数据
@@ -93,7 +97,29 @@ harness-sdk-java/
   - `getMcpServerConfig(name)`: 获取 MCP 服务器配置
   - `getMcpServerTools(name)`: 获取 MCP 服务器工具
   - `getAllMcpTools()`: 获取所有 MCP 工具
-- **Builder 模式**: `AgentHarness.builder().config(config).addTool(tool).build()`
+ - **Builder 模式**: `AgentHarness.builder().config(config).addTool(tool).build()`
+
+#### 流式输出（StreamEvent）
+
+Java SDK 已对齐 Python SDK 的结构化流式信封 `StreamEvent`（`com.harness.core.StreamEvent`）。
+每个事件携带 `source` / `category` / `seq` / `eventId` / `parentId`，用于组合消费与因果关联：
+
+```java
+AgentHarness agent = AgentHarness.builder().llmClient(client).build();
+
+// 单 Agent 流式
+agent.stream("实现用户登录", ev -> {
+    if ("text".equals(ev.type())) System.out.print(ev.text());
+}).join();
+
+// 目标驱动流式（goal_start / goal_iteration / goal_verification / goal_done）
+agent.streamGoal("实现用户登录：JWT + 密码加密 + 登录页", ev -> {
+    System.out.println(ev.type() + " seq=" + ev.seq());
+}).join();
+```
+
+`AgentLoop.streamRun()` 与 `GoalLoop.stream()` 为底层入口；`LLMClient.streamWithEvents(...)`
+为默认封装（将 `stream()` 的文本分块包装为 `text` 事件）。
 
 ### harness-sdk-llm
 - **AnthropicClient**: Claude API 客户端，支持自定义 baseUrl

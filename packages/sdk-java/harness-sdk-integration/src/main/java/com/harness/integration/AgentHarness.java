@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import com.harness.core.HarnessConfig;
 import com.harness.core.LLMClient;
+import com.harness.core.StreamEvent;
 import com.harness.core.LoopConfig;
 import com.harness.core.Tool;
 import com.harness.core.ToolRegistry;
@@ -185,6 +186,23 @@ public class AgentHarness {
      * @return LoopResult
      */
     public CompletableFuture<LoopResult> run(String prompt, String sessionId, Consumer<Object> onProgress) {
+        return runOrStream(prompt, sessionId, onProgress, null);
+    }
+
+    /**
+     * Run the agent, optionally emitting structured {@link StreamEvent}s.
+     *
+     * @param prompt User prompt
+     * @param sessionId Optional session ID
+     * @param onProgress Optional progress callback
+     * @param onEvent Optional streaming event callback
+     * @return LoopResult
+     */
+    private CompletableFuture<LoopResult> runOrStream(
+            String prompt,
+            String sessionId,
+            Consumer<Object> onProgress,
+            Consumer<StreamEvent> onEvent) {
         logger.info("Running agent with prompt: {}...", prompt.substring(0, Math.min(50, prompt.length())));
 
         if (agentLoop == null) {
@@ -228,13 +246,15 @@ public class AgentHarness {
         session = session.addMessage(com.harness.types.Message.user(prompt));
         sessions.put(effectiveSessionId, session);
 
-        // Run agent loop
-        return agentLoop.run(session, onProgress)
-            .thenApply(result -> {
-                // Update session in map
-                sessions.put(effectiveSessionId, result.session());
-                return result;
-            });
+        // Run agent loop (streaming or not)
+        CompletableFuture<LoopResult> future = (onEvent != null)
+            ? agentLoop.streamRun(session, onEvent)
+            : agentLoop.run(session, onProgress);
+        return future.thenApply(result -> {
+            // Update session in map
+            sessions.put(effectiveSessionId, result.session());
+            return result;
+        });
     }
 
     /**
@@ -278,6 +298,47 @@ public class AgentHarness {
                 sessions.put(sessionId, result.session());
                 return result;
             });
+    }
+
+    /**
+     * Stream the agent's response as structured {@link StreamEvent}s.
+     *
+     * <p>Mirrors {@link #run(String)} but emits a {@code StreamEvent} envelope
+     * (text / tool_calls / done / error) for each iteration.</p>
+     *
+     * @param prompt User prompt
+     * @param onEvent Stream event callback
+     * @return LoopResult
+     */
+    public CompletableFuture<LoopResult> stream(String prompt, Consumer<StreamEvent> onEvent) {
+        return stream(prompt, null, onEvent);
+    }
+
+    /**
+     * Stream the agent's response as structured events with a session.
+     *
+     * @param prompt User prompt
+     * @param sessionId Optional session ID
+     * @param onEvent Stream event callback
+     * @return LoopResult
+     */
+    public CompletableFuture<LoopResult> stream(String prompt, String sessionId, Consumer<StreamEvent> onEvent) {
+        return runOrStream(prompt, sessionId, null, onEvent);
+    }
+
+    /**
+     * Stream the agent's response, delegating to the underlying agent loop.
+     *
+     * <p>Used by {@link com.harness.loop.GoalLoop.AgentRunner} to forward agent
+     * events during goal-driven streaming.</p>
+     *
+     * @param prompt User prompt
+     * @param sessionId Optional session ID
+     * @param onEvent Stream event callback
+     * @return LoopResult
+     */
+    public CompletableFuture<LoopResult> streamRun(String prompt, String sessionId, Consumer<StreamEvent> onEvent) {
+        return runOrStream(prompt, sessionId, null, onEvent);
     }
 
     /**
@@ -343,6 +404,11 @@ public class AgentHarness {
             }
 
             @Override
+            public CompletableFuture<LoopResult> streamRun(String prompt, String sid, Consumer<StreamEvent> onEvent) {
+                return AgentHarness.this.streamRun(prompt, sid, onEvent);
+            }
+
+            @Override
             public Session getSession(String sid) {
                 return AgentHarness.this.getSession(sid);
             }
@@ -378,6 +444,11 @@ public class AgentHarness {
             }
 
             @Override
+            public CompletableFuture<LoopResult> streamRun(String prompt, String sessionId, Consumer<StreamEvent> onEvent) {
+                return AgentHarness.this.streamRun(prompt, sessionId, onEvent);
+            }
+
+            @Override
             public Session getSession(String sessionId) {
                 return AgentHarness.this.getSession(sessionId);
             }
@@ -389,6 +460,115 @@ public class AgentHarness {
         }, goalConfig, onProgress);
 
         return loop.run();
+    }
+
+    /**
+     * Run the agent in goal-driven mode with streaming output.
+     *
+     * <p>Mirrors {@link #runGoal(String)} but emits a {@code goal_*} event
+     * envelope (goal_start / goal_iteration / goal_verification / goal_done).</p>
+     *
+     * @param goal Description of the goal to achieve
+     * @param onEvent Stream event callback
+     * @return GoalResult with achievement status and execution details
+     */
+    public CompletableFuture<GoalResult> streamGoal(String goal, Consumer<StreamEvent> onEvent) {
+        return streamGoal(goal, null, onEvent);
+    }
+
+    /**
+     * Stream the goal-driven run with a session ID.
+     */
+    public CompletableFuture<GoalResult> streamGoal(String goal, String sessionId, Consumer<StreamEvent> onEvent) {
+        return streamGoal(goal, sessionId, null, null, onEvent);
+    }
+
+    /**
+     * Stream the goal-driven run with full control.
+     */
+    public CompletableFuture<GoalResult> streamGoal(
+            String goal,
+            String sessionId,
+            Consumer<Object> onProgress,
+            java.util.function.Function<GoalResult, Boolean> customVerifier,
+            Consumer<StreamEvent> onEvent) {
+        logger.info("Streaming goal: {}...", goal.substring(0, Math.min(50, goal.length())));
+
+        VerificationMethod verificationMethod = customVerifier != null
+                ? VerificationMethod.CUSTOM
+                : VerificationMethod.LLM;
+
+        GoalConfig config = GoalConfig.builder()
+                .description(goal)
+                .sessionId(sessionId)
+                .verificationMethod(verificationMethod)
+                .customVerifier(customVerifier)
+                .build();
+
+        GoalLoop loop = new GoalLoop(new GoalLoop.AgentRunner() {
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sid) {
+                return AgentHarness.this.run(prompt, sid);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sid, Consumer<Object> progress) {
+                return AgentHarness.this.run(prompt, sid, progress);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> streamRun(String prompt, String sid, Consumer<StreamEvent> ev) {
+                return AgentHarness.this.streamRun(prompt, sid, ev);
+            }
+
+            @Override
+            public Session getSession(String sid) {
+                return AgentHarness.this.getSession(sid);
+            }
+
+            @Override
+            public int getContextWindow() {
+                return AgentHarness.this.config.getContextWindow();
+            }
+        }, config, onProgress);
+
+        return loop.stream(onEvent);
+    }
+
+    /**
+     * Stream the goal-driven run with a complete configuration.
+     */
+    public CompletableFuture<GoalResult> streamGoal(GoalConfig goalConfig, Consumer<StreamEvent> onEvent) {
+        logger.info("Streaming goal: {}...", goalConfig.getDescription().substring(0, Math.min(50, goalConfig.getDescription().length())));
+
+        GoalLoop loop = new GoalLoop(new GoalLoop.AgentRunner() {
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sessionId) {
+                return AgentHarness.this.run(prompt, sessionId);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> run(String prompt, String sessionId, Consumer<Object> progress) {
+                return AgentHarness.this.run(prompt, sessionId, progress);
+            }
+
+            @Override
+            public CompletableFuture<LoopResult> streamRun(String prompt, String sessionId, Consumer<StreamEvent> ev) {
+                return AgentHarness.this.streamRun(prompt, sessionId, ev);
+            }
+
+            @Override
+            public Session getSession(String sessionId) {
+                return AgentHarness.this.getSession(sessionId);
+            }
+
+            @Override
+            public int getContextWindow() {
+                return AgentHarness.this.config.getContextWindow();
+            }
+        }, goalConfig, null);
+
+        return loop.stream(onEvent);
     }
 
     /**

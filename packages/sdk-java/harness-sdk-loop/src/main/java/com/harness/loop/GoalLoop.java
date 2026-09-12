@@ -5,6 +5,7 @@ import com.harness.loop.types.GoalResult;
 import com.harness.loop.types.GoalStatus;
 import com.harness.loop.types.VerificationRecord;
 import com.harness.loop.types.VerificationResult;
+import com.harness.core.StreamEvent;
 import com.harness.types.LoopResult;
 import com.harness.types.Session;
 import com.harness.types.TokenUsage;
@@ -126,6 +127,24 @@ Take the next step to make progress. Focus on what remains to be done.""";
          * Get the context window size.
          */
         int getContextWindow();
+
+        /**
+         * Stream the agent, emitting structured {@link StreamEvent}s.
+         *
+         * <p>Default delegates to {@link #run(String, String, Consumer)} which
+         * emits no agent-level events; the goal loop still emits its own
+         * {@code goal_*} envelope. Implementations (e.g. AgentHarness) may
+         * override to forward agent text events with appropriate causal links.</p>
+         *
+         * @param prompt The prompt
+         * @param sessionId Session ID
+         * @param onEvent Stream event callback (may be null)
+         * @return CompletableFuture with LoopResult
+         */
+        default CompletableFuture<LoopResult> streamRun(
+                String prompt, String sessionId, Consumer<StreamEvent> onEvent) {
+            return run(prompt, sessionId, null);
+        }
     }
 
     private final AgentRunner agent;
@@ -142,6 +161,7 @@ Take the next step to make progress. Focus on what remains to be done.""";
     private int totalOutputTokens = 0;
     private int totalAgentIterations = 0;
     private final List<VerificationRecord> verificationLog = new ArrayList<>();
+    private final java.util.concurrent.atomic.AtomicInteger streamEventSeq = new java.util.concurrent.atomic.AtomicInteger(0);
 
     /**
      * Create a new GoalLoop.
@@ -190,30 +210,77 @@ Take the next step to make progress. Focus on what remains to be done.""";
 
         logger.info("Starting goal loop: {}...", config.getDescription().substring(0, Math.min(100, config.getDescription().length())));
 
-        return runLoop(currentPrompt);
+        return runLoop(currentPrompt, null, null);
     }
 
-    private CompletableFuture<GoalResult> runLoop(String currentPrompt) {
+    /**
+     * Run the goal-driven loop with streaming output.
+     *
+     * <p>Mirrors {@link #run} but emits structured {@link StreamEvent}s with the
+     * {@code goal_*} envelope: {@code goal_start}, {@code goal_iteration},
+     * {@code goal_verification} and {@code goal_done}. Each agent iteration's
+     * events are forwarded and linked via {@code parentId}.</p>
+     *
+     * @param onEvent Stream event callback
+     * @return CompletableFuture with GoalResult
+     */
+    public CompletableFuture<GoalResult> stream(Consumer<StreamEvent> onEvent) {
+        iteration = 0;
+        contextResets = 0;
+        startTime = System.currentTimeMillis();
+        sessionId = config.getSessionId() != null
+                ? config.getSessionId()
+                : "goal-" + UUID.randomUUID().toString().substring(0, 8);
+        totalInputTokens = 0;
+        totalOutputTokens = 0;
+        totalAgentIterations = 0;
+        verificationLog.clear();
+
+        String currentPrompt = buildInitialPrompt();
+
+        logger.info("Starting streaming goal loop: {}...", config.getDescription().substring(0, Math.min(100, config.getDescription().length())));
+
+        streamEventSeq.set(0);
+        String goalId = "goal-" + sessionId;
+        if (onEvent != null) {
+            onEvent.accept(StreamEvent.goalStart(goalId, streamEventSeq.incrementAndGet(), config.getDescription()));
+        }
+        return runLoop(currentPrompt, onEvent, goalId);
+    }
+
+    private CompletableFuture<GoalResult> runLoop(String currentPrompt, Consumer<StreamEvent> onEvent, String goalId) {
         // Check timeout
         if (checkTimeout()) {
-            return CompletableFuture.completedFuture(createResult(GoalStatus.TIMEOUT, null, null));
+            GoalResult gr = createResult(GoalStatus.TIMEOUT, null, null);
+            emitGoalDone(onEvent, goalId, gr, "Timeout");
+            return CompletableFuture.completedFuture(gr);
         }
 
         // Check max iterations
         if (iteration >= config.getMaxIterations()) {
             logger.warn("Max iterations ({}) reached", config.getMaxIterations());
-            return CompletableFuture.completedFuture(createResult(GoalStatus.MAX_ITERATIONS, null, null));
+            GoalResult gr = createResult(GoalStatus.MAX_ITERATIONS, null, null);
+            emitGoalDone(onEvent, goalId, gr, "Max iterations reached");
+            return CompletableFuture.completedFuture(gr);
         }
 
         // Check max context resets
         if (contextResets > config.getMaxContextResets()) {
             logger.warn("Max context resets ({}) exceeded", config.getMaxContextResets());
-            return CompletableFuture.completedFuture(createResult(GoalStatus.MAX_RESETS, null, null));
+            GoalResult gr = createResult(GoalStatus.MAX_RESETS, null, null);
+            emitGoalDone(onEvent, goalId, gr, "Max context resets exceeded");
+            return CompletableFuture.completedFuture(gr);
         }
 
         // Run agent
         logger.debug("Running agent iteration {}", iteration + 1);
-        return agent.run(currentPrompt, sessionId, onProgress)
+        String iterId = "iter-" + (iteration + 1);
+        Consumer<StreamEvent> forwarder = ev -> {
+            if (onEvent != null) {
+                onEvent.accept(ev);
+            }
+        };
+        return agent.streamRun(currentPrompt, sessionId, forwarder)
                 .thenCompose(result -> {
                     iteration++;
 
@@ -228,19 +295,33 @@ Take the next step to make progress. Focus on what remains to be done.""";
                         totalOutputTokens += result.tokenUsage().outputTokens();
                     }
 
+                    // Emit goal_iteration
+                    if (onEvent != null) {
+                        onEvent.accept(StreamEvent.goalIteration(iterId, goalId,
+                                streamEventSeq.incrementAndGet(), iteration, result.content()));
+                    }
+
                     // Check cost control
                     if (checkCostExceeded()) {
-                        return CompletableFuture.completedFuture(
-                                createResult(GoalStatus.ERROR, null, "Cost budget exceeded"));
+                        GoalResult gr = createResult(GoalStatus.ERROR, null, "Cost budget exceeded");
+                        emitGoalDone(onEvent, goalId, gr, "Cost budget exceeded");
+                        return CompletableFuture.completedFuture(gr);
                     }
 
                     // Verify goal
                     return verifyGoal(result)
                             .thenCompose(verification -> {
+                                // Emit goal_verification
+                                if (onEvent != null) {
+                                    onEvent.accept(StreamEvent.goalVerification("verify-" + iterId, iterId,
+                                            streamEventSeq.incrementAndGet(), verification.isAchieved(),
+                                            verification.getReasoning()));
+                                }
                                 if (verification.isAchieved()) {
                                     logger.info("Goal achieved after {} iterations", iteration);
-                                    return CompletableFuture.completedFuture(
-                                            createResult(GoalStatus.ACHIEVED, result, null));
+                                    GoalResult gr = createResult(GoalStatus.ACHIEVED, result, null);
+                                    emitGoalDone(onEvent, goalId, gr, null);
+                                    return CompletableFuture.completedFuture(gr);
                                 }
 
                                 // Check if we need context reset
@@ -255,18 +336,30 @@ Take the next step to make progress. Focus on what remains to be done.""";
                                     emitProgress("context_reset", "Resetting context to prevent overflow",
                                             Map.of("reset_count", contextResets));
 
-                                    return runLoop(continuationPrompt);
+                                    return runLoop(continuationPrompt, onEvent, goalId);
                                 } else {
                                     // Continue in same session
                                     String nextPrompt = buildNextStepPrompt(result, verification);
-                                    return runLoop(nextPrompt);
+                                    return runLoop(nextPrompt, onEvent, goalId);
                                 }
                             });
                 })
                 .exceptionally(error -> {
                     logger.error("Goal loop error: {}", error.getMessage());
-                    return createResult(GoalStatus.ERROR, null, error.getMessage());
+                    GoalResult gr = createResult(GoalStatus.ERROR, null, error.getMessage());
+                    emitGoalDone(onEvent, goalId, gr, error.getMessage());
+                    return gr;
                 });
+    }
+
+    /**
+     * Emit a goal_done event if streaming is active.
+     */
+    private void emitGoalDone(Consumer<StreamEvent> onEvent, String goalId, GoalResult gr, String error) {
+        if (onEvent != null) {
+            onEvent.accept(StreamEvent.goalDone("goal-done-" + goalId, goalId,
+                    streamEventSeq.incrementAndGet(), gr, gr.status() == GoalStatus.ACHIEVED, error));
+        }
     }
 
     private CompletableFuture<VerificationResult> verifyGoal(LoopResult result) {
