@@ -164,7 +164,33 @@
 
 ## 2026-09-12 提取
 
+## 2026-09-13 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股IPO募资3600亿突破历史 — 制度红利持续兑现，港交所(00388)最强左侧信号 🔥🔥🔥🔥🔥** - http://finance.eastmoney.com/a/202609123872729143.html
+
+### 港股分析
+- **港股互联网逆市飘红-五连跌中机构集体转向-六重左侧共振最强信号**
+
+### 港股分析
+- **美债10Y-4.97%-逼近5%终极关口-利率恐慌历史极值**
+
+### 新范式/工具
+- **LLM Wiki — Persistent Incremental Wiki (Anti-RAG) 新范式** - https://github.com/nashsu/llm_wiki
+
+### 新范式/工具
+- **QAH (Quantization-Aware Healing)** - https://huggingface.co/blog/MultiverseComputingCAI/quantization-aware-healing
+
+### 新范式/工具
+- **Hyperresearch — Adversarial Deep Research Pipeline 新范式** - https://github.com/jordan-gibbs/hyperresearch
+
+### 新范式/工具
+- **Copperhead — Agent-Native PCB Design 新范式** - https://copperhead.sh/
+
+### 新范式/工具
+- **Funes — Agent 记忆即数据集：跨 Agent 持久化记忆新范式** - https://huggingface.co/blog/funes
 
 ### 港股分析
 - **港股通32.5亿净买入-南向逆势加仓右侧超强确认**
