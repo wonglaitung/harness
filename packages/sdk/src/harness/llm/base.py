@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from harness.types import LLMResponse
+from harness.types import Chunk, ChunkType, LLMResponse
 
 if TYPE_CHECKING:
     from harness.core import StreamingConfig
@@ -113,6 +113,52 @@ class LLMClient(ABC):
             str: Each chunk of the response
         """
         pass
+
+    async def stream_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[Chunk]:
+        """
+        Stream response with tool call support.
+
+        Yields TEXT chunks as they arrive, then TOOL_CALL_START chunks
+        for any tool calls, and finally a DONE chunk with usage info.
+
+        Default implementation falls back to call() for clients that
+        don't implement streaming with tool support.
+
+        Args:
+            messages: List of messages in conversation
+            tools: Available tools for the LLM to use
+            system: System prompt
+            **kwargs: Additional provider-specific parameters
+
+        Yields:
+            Chunk objects (TEXT, TOOL_CALL_START, DONE)
+        """
+        response = await self.call(messages, tools, system, **kwargs)
+
+        if response.content:
+            yield Chunk(type=ChunkType.TEXT, content=response.content)
+
+        for tc in response.tool_calls:
+            yield Chunk(
+                type=ChunkType.TOOL_CALL_START,
+                tool_call_id=tc.id,
+                tool_name=tc.name,
+                tool_arguments=tc.arguments,
+            )
+
+        yield Chunk(
+            type=ChunkType.DONE,
+            metadata={
+                "tool_calls": response.tool_calls,
+                "usage": response.usage,
+            },
+        )
 
     @property
     @abstractmethod

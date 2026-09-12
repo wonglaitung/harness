@@ -1161,32 +1161,67 @@ class AgentHarness:
         Yields:
             Text chunks from the response
         """
-        # Set up progress callback
         progress_callback = on_progress
         if progress_callback is None and verbose:
             progress_callback = create_progress_handler("emoji")
 
-        # Run the agent normally
-        result = await self.run(
-            prompt=prompt,
-            session_id=session_id,
-            on_progress=progress_callback,
+        matched_metadata = self._progressive_loader.match_skills(prompt, self._skill_metadata)
+        skills_to_load = {meta.name for meta in matched_metadata}
+        skills_to_load.update(self._activated_skills)
+
+        for meta in self._skill_metadata:
+            if meta.name in skills_to_load and meta.name not in self._skill_registry:
+                skill = self._progressive_loader.load_full_content(meta)
+                if skill:
+                    self._skill_registry.register(skill)
+
+        enhanced_system_prompt = self._skill_injector.inject_skills(
+            self.config.system_prompt,
+            prompt,
         )
 
-        # Yield the response in chunks for simulated streaming
-        content = result.content
-        if content:
-            # Split into reasonable chunks (word boundaries)
-            words = content.split()
-            chunk_size = max(1, len(words) // 50)  # ~50 chunks
+        context_window = self.config.get_context_window()
+        self._context_builder = ContextBuilder(
+            config=ContextConfig(
+                max_tokens=context_window,
+                system_prompt=enhanced_system_prompt,
+                window_size=self.config.session_window,
+                memory_md_path=self.config.memory_md_path,
+            )
+        )
+        self._loop.context = self._context_builder
 
-            for i in range(0, len(words), chunk_size):
-                chunk = " ".join(words[i : i + chunk_size])
-                if i + chunk_size < len(words):
-                    chunk += " "
-                if on_chunk:
-                    on_chunk(chunk)
-                yield chunk
+        session = self._session_manager.get_or_create(session_id)
+
+        all_tools = self._tool_registry.get_all()
+        tool_defs = [
+            ToolDefinition(
+                name=t.name,
+                description=t.description,
+                input_schema=t.input_schema,
+            )
+            for t in all_tools
+        ]
+
+        async for chunk in self._loop.stream_run(
+            prompt=prompt,
+            session=session,
+            tools=tool_defs if tool_defs else None,
+            on_chunk=on_chunk,
+            on_progress=progress_callback,
+        ):
+            yield chunk
+
+        result = self._loop._stream_result
+        if result is not None:
+            self._session_manager.update_session(result.session)
+
+            verdict = self._apply_gate(result.final_response, result.session)
+            if verdict is not None:
+                result.gate_verdict = verdict
+                result.delivered_content = verdict.delivered_content
+                result.reconciliation_report = verdict.reconciliation_report
+                result.final_response = verdict.delivered_content
 
     def run_sync(
         self,

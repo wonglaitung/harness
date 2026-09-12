@@ -332,6 +332,148 @@ class OpenAIClient(LLMClient):
                 # Queue empty, release control to prevent CPU spin
                 await asyncio.sleep(0.01)
 
+    async def stream_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[Chunk]:
+        """
+        Stream response with tool call support.
+
+        Yields TEXT chunks as they arrive, then TOOL_CALL_START chunks
+        for any tool calls, and finally a DONE chunk with usage info.
+
+        Args:
+            messages: Conversation messages
+            tools: Available tools
+            system: System prompt
+            **kwargs: Additional parameters
+
+        Yields:
+            Chunk objects (TEXT, TOOL_CALL_START, DONE)
+        """
+        import json
+        import queue
+        import threading
+
+        from harness.core import StreamingConfig, StreamingHandler
+
+        client = self._get_client()
+
+        streaming_config = self.config.streaming_config or StreamingConfig()
+        handler = StreamingHandler(config=streaming_config)
+
+        formatted_messages = []
+        if system:
+            formatted_messages.append({"role": "system", "content": system})
+        formatted_messages.extend(messages)
+
+        params: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "messages": formatted_messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        if "temperature" in kwargs:
+            params["temperature"] = kwargs["temperature"]
+        elif self.config.temperature != 1.0:
+            params["temperature"] = self.config.temperature
+
+        if tools:
+            params["tools"] = [self._format_tool(t) for t in tools]
+            params["tool_choice"] = "auto"
+
+        chunk_queue: queue.Queue = queue.Queue()
+        exception_holder: dict[str, Any] = {}
+
+        def sync_stream_worker():
+            try:
+                response_stream = client.chat.completions.create(**params)
+                for chunk in response_stream:
+                    chunk_queue.put(chunk)
+            except Exception as e:
+                logger.exception("Error in sync_stream_worker")
+                exception_holder["exception"] = e
+            finally:
+                chunk_queue.put(None)
+
+        worker_thread = threading.Thread(target=sync_stream_worker, daemon=True)
+        worker_thread.start()
+
+        tool_calls_acc: dict[int, dict[str, Any]] = {}
+        usage = TokenUsage()
+
+        while True:
+            if "exception" in exception_holder:
+                raise exception_holder["exception"]
+
+            if not chunk_queue.empty():
+                raw_chunk = chunk_queue.get_nowait()
+                if raw_chunk is None:
+                    break
+
+                choice = raw_chunk.choices[0] if raw_chunk.choices else None
+
+                if choice and choice.delta:
+                    if choice.delta.content:
+                        chunk = Chunk(type=ChunkType.TEXT, content=choice.delta.content)
+                        await handler.handle(chunk)
+                        yield chunk
+
+                    if choice.delta.tool_calls:
+                        for tc_delta in choice.delta.tool_calls:
+                            idx = tc_delta.index
+                            if idx not in tool_calls_acc:
+                                tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                            if tc_delta.id:
+                                tool_calls_acc[idx]["id"] = tc_delta.id
+                            if tc_delta.function:
+                                if tc_delta.function.name:
+                                    tool_calls_acc[idx]["name"] = tc_delta.function.name
+                                if tc_delta.function.arguments:
+                                    tool_calls_acc[idx]["arguments"] += tc_delta.function.arguments
+
+                if raw_chunk.usage:
+                    usage = TokenUsage(
+                        input_tokens=raw_chunk.usage.prompt_tokens,
+                        output_tokens=raw_chunk.usage.completion_tokens,
+                    )
+            else:
+                await asyncio.sleep(0.01)
+
+        for idx in sorted(tool_calls_acc.keys()):
+            tc_data = tool_calls_acc[idx]
+            try:
+                arguments = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+            except json.JSONDecodeError:
+                arguments = {}
+
+            yield Chunk(
+                type=ChunkType.TOOL_CALL_START,
+                tool_call_id=tc_data["id"],
+                tool_name=tc_data["name"],
+                tool_arguments=arguments,
+            )
+
+        yield Chunk(
+            type=ChunkType.DONE,
+            metadata={
+                "tool_calls": [
+                    ToolCall(
+                        id=tc_data["id"],
+                        name=tc_data["name"],
+                        arguments=json.loads(tc_data["arguments"]) if tc_data["arguments"] else {},
+                    )
+                    for tc_data in tool_calls_acc.values()
+                ],
+                "usage": usage,
+            },
+        )
+
     def _format_tool(self, tool: ToolDefinition) -> dict[str, Any]:
         """Format tool for OpenAI API."""
         return {

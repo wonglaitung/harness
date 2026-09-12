@@ -966,6 +966,448 @@ class AgentLoop:
                 except Exception:
                     logger.exception("Error while ending step budget task")
 
+    async def stream_run(
+        self,
+        prompt: str | list[dict[str, Any]],
+        session: Session,
+        tools: list[ToolDefinition] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_progress: ProgressCallback | None = None,
+    ):
+        """
+        Run the agent loop with streaming output.
+
+        Uses llm.stream_with_tools() for each iteration, yielding text chunks
+        as they arrive from the LLM. Tool execution remains blocking.
+
+        This is a generator that yields text strings. After iteration completes,
+        the final LoopResult is available via self._stream_result.
+
+        Args:
+            prompt: User input
+            session: Current session
+            tools: Available tools
+            on_chunk: Callback for each text chunk
+            on_progress: Progress event callback
+        """
+        from harness.types import ChunkType
+
+        logger.info(f"stream_run called, prompt length={len(prompt)}")
+
+        if self._input_validator:
+            validation_result = self._input_validator.validate(prompt)
+            if not validation_result.valid:
+                raise ValueError(f"Invalid input: {validation_result.errors}")
+
+        self._on_progress = on_progress
+        self._loop_start_time = time.time()
+        self._interrupt_flag = False
+        self._stream_result = None
+
+        if self._cost_controller:
+            self._cost_controller._on_progress = on_progress
+
+        prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
+        self._emit_progress(
+            ProgressEventType.LOOP_START,
+            "Starting agent loop (streaming)",
+            {"prompt": prompt_preview, "session_id": session.id},
+        )
+
+        hook_result = await self._hooks.execute_hooks(
+            HookPoint.ON_LOOP_START,
+            HookContext(
+                hook_point=HookPoint.ON_LOOP_START,
+                session_id=session.id,
+                iteration=0,
+            ),
+        )
+        if hook_result.action == HookAction.ABORT:
+            self.state = LoopState.ERROR
+            self._stream_result = LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                iterations=0,
+                error=hook_result.metadata.get("reason", "Aborted by hook"),
+            )
+            return
+
+        self.state = LoopState.BUILDING_CONTEXT
+        iteration = 0
+        total_usage = session.token_usage
+        self._iteration = 0
+        self._stuck_feedback_count = 0
+        self._circuit_breaker_stop_injected = False
+
+        if self._circuit_breaker:
+            self._circuit_breaker.reset()
+
+        if self._step_budget:
+            self._step_budget.start_task()
+
+        try:
+            while iteration < self.config.max_iterations:
+                if self._step_budget and iteration > 0:
+                    budget_result = self._step_budget.advance_iteration()
+                    if budget_result.should_stop:
+                        self.state = LoopState.ERROR
+                        self._stream_result = LoopResult(
+                            status=LoopState.ERROR,
+                            session=session,
+                            messages=session.messages,
+                            iterations=iteration,
+                            error=budget_result.message,
+                            token_usage=total_usage,
+                        )
+                        return
+
+                if self._cost_controller:
+                    budget_status = self._cost_controller.check(total_usage, session.id)
+                    if not budget_status.is_within_budget:
+                        self.state = LoopState.ERROR
+                        raise BudgetExceededError(
+                            budget_status.warning_message or "Budget exceeded",
+                            usage=total_usage,
+                            limit=self._cost_controller.config.max_tokens_per_session,
+                        )
+
+                self._emit_progress(
+                    ProgressEventType.ITERATION,
+                    f"Iteration {iteration + 1}/{self.config.max_iterations}",
+                    {"iteration": iteration + 1},
+                )
+
+                if self._interrupt_flag:
+                    self.state = LoopState.INTERRUPTED
+                    self._stream_result = LoopResult(
+                        status=LoopState.INTERRUPTED,
+                        session=session,
+                        iterations=iteration,
+                    )
+                    return
+
+                self.state = LoopState.BUILDING_CONTEXT
+                if iteration == 0 and prompt:
+                    last_msg = session.messages[-1] if session.messages else None
+                    if not (last_msg and last_msg.role == "user" and last_msg.content == prompt):
+                        session.add_message(Message(role="user", content=prompt))
+
+                remaining_steps = self.config.max_iterations - iteration
+                if remaining_steps <= 2 and iteration > 0:
+                    session.add_message(
+                        Message(
+                            role="user",
+                            content=(
+                                f"[系统提示] 还有 {remaining_steps} 步达到迭代上限。"
+                                "请立即总结当前进展并给出最终回答。"
+                            ),
+                            metadata={"type": "remaining_steps_hint", "injected": True},
+                        )
+                    )
+
+                context = self.context.build(session)
+
+                self.state = LoopState.CALLING_LLM
+                llm_call_start = time.time()
+                self._emit_progress(
+                    ProgressEventType.LLM_CALL,
+                    f"Calling LLM (streaming): {self.llm.model_name}",
+                    {"model": self.llm.model_name, "message_count": len(context.messages)},
+                )
+
+                text_chunks: list[str] = []
+                tool_calls: list[ToolCall] = []
+                stream_error: str | None = None
+
+                try:
+                    async for chunk in self.llm.stream_with_tools(
+                        messages=context.messages,
+                        tools=tools,
+                        system=context.system_prompt,
+                    ):
+                        if chunk.type == ChunkType.TEXT:
+                            text_chunks.append(chunk.content)
+                            if on_chunk:
+                                on_chunk(chunk.content)
+                            yield chunk.content
+                        elif chunk.type == ChunkType.TOOL_CALL_START:
+                            tool_calls.append(
+                                ToolCall(
+                                    id=chunk.tool_call_id or "",
+                                    name=chunk.tool_name or "",
+                                    arguments=chunk.tool_arguments,
+                                )
+                            )
+                        elif chunk.type == ChunkType.DONE:
+                            usage = chunk.metadata.get("usage")
+                            if usage:
+                                total_usage.input_tokens += usage.input_tokens
+                                total_usage.output_tokens += usage.output_tokens
+                except Exception as e:
+                    logger.exception(f"Stream error: {type(e).__name__}: {e}")
+                    stream_error = str(e)
+
+                llm_duration = (time.time() - llm_call_start) * 1000
+
+                if stream_error:
+                    self._emit_progress(
+                        ProgressEventType.ERROR,
+                        f"Stream error: {stream_error}",
+                        {"error": stream_error},
+                        duration_ms=llm_duration,
+                    )
+                    self.state = LoopState.ERROR
+                    self._stream_result = LoopResult(
+                        status=LoopState.ERROR,
+                        session=session,
+                        messages=session.messages,
+                        iterations=iteration,
+                        error=stream_error,
+                        token_usage=total_usage,
+                    )
+                    return
+
+                full_text = "".join(text_chunks)
+
+                self._emit_progress(
+                    ProgressEventType.LLM_RESPONSE,
+                    "LLM responded (streaming)",
+                    {
+                        "stop_reason": "tool_use" if tool_calls else "end_turn",
+                        "content_length": len(full_text),
+                        "tool_count": len(tool_calls),
+                        "tool_names": [tc.name for tc in tool_calls],
+                    },
+                    duration_ms=llm_duration,
+                )
+
+                if full_text or not tool_calls:
+                    assistant_msg = Message(role="assistant", content=full_text)
+                    session.add_message(assistant_msg)
+
+                if tool_calls:
+                    self.state = LoopState.EXECUTING_TOOLS
+                    self._emit_progress(
+                        ProgressEventType.STATE_CHANGE,
+                        f"Executing {len(tool_calls)} tool(s)",
+                        {
+                            "state": LoopState.EXECUTING_TOOLS.value,
+                            "tool_count": len(tool_calls),
+                            "tools": [tc.name for tc in tool_calls],
+                        },
+                    )
+
+                    tool_results = await self._execute_tools(tool_calls, session)
+
+                    has_circuit_breaker_error = False
+                    for result in tool_results:
+                        content = result.content if result.success else f"Error: {result.error}"
+                        if result.error and "Circuit breaker" in result.error:
+                            has_circuit_breaker_error = True
+                        tool_msg = Message(
+                            role="tool",
+                            content=content,
+                            metadata={
+                                "tool_call_id": result.tool_call_id,
+                                "tool_name": result.tool_name,
+                                "is_error": not result.success,
+                            },
+                        )
+                        session.add_message(tool_msg)
+
+                    if has_circuit_breaker_error and not self._circuit_breaker_stop_injected:
+                        self._circuit_breaker_stop_injected = True
+                        session.add_message(
+                            Message(
+                                role="user",
+                                content=(
+                                    "[系统强制停止] 工具调用被阻止，因为检测到重复调用相同工具。"
+                                    "请立即停止调用工具，基于当前已有信息给出最终回答。"
+                                ),
+                                metadata={"type": "circuit_breaker_stop", "injected": True},
+                            )
+                        )
+
+                    iteration += 1
+                    self._iteration = iteration
+
+                    stuck_result = await self._is_stuck(session, iteration)
+                    if stuck_result.is_stuck:
+                        if self._stuck_feedback_count < self.config.max_stuck_feedbacks:
+                            self._stuck_feedback_count += 1
+                            feedback = self._generate_stuck_feedback(
+                                self._stuck_feedback_count, session, stuck_result
+                            )
+                            session.add_message(
+                                Message(
+                                    role="user",
+                                    content=feedback,
+                                    metadata={"type": "stuck_feedback", "injected": True},
+                                )
+                            )
+                            if self._stuck_detector:
+                                self._stuck_detector.clear_session(session.id)
+                        else:
+                            self.state = LoopState.STUCK
+                            self._stream_result = LoopResult(
+                                status=LoopState.STUCK,
+                                session=session,
+                                messages=session.messages,
+                                iterations=iteration,
+                                error="Agent stuck: repeated failures after feedback attempts",
+                                token_usage=total_usage,
+                            )
+                            return
+
+                    continue
+
+                self.state = LoopState.COMPLETED
+                session.token_usage = total_usage
+
+                exit_hook_result = await self._hooks.execute_hooks(
+                    HookPoint.ON_EXIT_ATTEMPT,
+                    HookContext(
+                        hook_point=HookPoint.ON_EXIT_ATTEMPT,
+                        session_id=session.id,
+                        iteration=iteration,
+                    ),
+                )
+                if exit_hook_result.action == HookAction.REINJECT:
+                    if session.messages:
+                        first_user_msg = next(
+                            (m for m in session.messages if m.role == "user"), None
+                        )
+                        session.messages.clear()
+                        if first_user_msg:
+                            session.add_message(first_user_msg)
+                    if exit_hook_result.inject_message:
+                        session.add_message(exit_hook_result.inject_message)
+                    else:
+                        session.add_message(
+                            Message(
+                                role="user",
+                                content="[继续] 请继续之前的任务。",
+                            )
+                        )
+                    iteration += 1
+                    self._iteration = iteration
+                    continue
+
+                total_duration = (time.time() - self._loop_start_time) * 1000
+                self._emit_progress(
+                    ProgressEventType.LOOP_END,
+                    "Loop completed successfully (streaming)",
+                    {
+                        "status": "completed",
+                        "iterations": iteration + 1,
+                        "total_tokens": total_usage.total_tokens,
+                    },
+                    duration_ms=total_duration,
+                )
+
+                await self._hooks.execute_hooks(
+                    HookPoint.ON_LOOP_END,
+                    HookContext(
+                        hook_point=HookPoint.ON_LOOP_END,
+                        session_id=session.id,
+                        iteration=iteration,
+                    ),
+                )
+
+                self._error_handler.reset()
+
+                self._stream_result = LoopResult(
+                    status=LoopState.COMPLETED,
+                    session=session,
+                    messages=session.messages,
+                    final_response=full_text,
+                    iterations=iteration,
+                    token_usage=total_usage,
+                )
+                return
+
+            self.state = LoopState.ERROR
+            self._emit_progress(
+                ProgressEventType.ERROR,
+                "Max iterations reached",
+                {"iterations": iteration},
+            )
+
+            await self._hooks.execute_hooks(
+                HookPoint.ON_LOOP_END,
+                HookContext(
+                    hook_point=HookPoint.ON_LOOP_END,
+                    session_id=session.id,
+                    iteration=iteration,
+                ),
+            )
+
+            final_response = None
+            for msg in reversed(session.messages):
+                if msg.role == "assistant" and msg.content:
+                    final_response = msg.content
+                    break
+
+            self._stream_result = LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                messages=session.messages,
+                final_response=final_response,
+                iterations=iteration,
+                error="Max iterations reached",
+                token_usage=total_usage,
+            )
+
+        except Exception as e:
+            logger.exception(f"Stream loop exception: {type(e).__name__}: {e}")
+
+            await self._hooks.execute_hooks(
+                HookPoint.ON_ERROR,
+                HookContext(
+                    hook_point=HookPoint.ON_ERROR,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                    error=e,
+                ),
+            )
+
+            self.state = LoopState.ERROR
+            self._emit_progress(
+                ProgressEventType.ERROR,
+                f"Error: {str(e)}",
+                {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                },
+            )
+
+            await self._hooks.execute_hooks(
+                HookPoint.ON_LOOP_END,
+                HookContext(
+                    hook_point=HookPoint.ON_LOOP_END,
+                    session_id=session.id,
+                    iteration=self._iteration,
+                ),
+            )
+
+            self._error_handler.reset()
+
+            self._stream_result = LoopResult(
+                status=LoopState.ERROR,
+                session=session,
+                messages=session.messages,
+                iterations=self._iteration,
+                error=str(e),
+                token_usage=total_usage,
+            )
+
+        finally:
+            if self._step_budget:
+                try:
+                    self._step_budget.end_task()
+                except Exception:
+                    logger.exception("Error while ending step budget task")
+
     async def _execute_tools(
         self,
         tool_calls: list[ToolCall],

@@ -260,6 +260,35 @@ class MockHarness:
                 token_usage=total_usage,
             )
 
+    async def stream(
+        self,
+        prompt: str,
+        session_id: str | None = None,
+        on_chunk=None,
+        **kwargs,
+    ):
+        """
+        Stream the mock agent's response.
+
+        Args:
+            prompt: User input
+            session_id: Optional session ID
+            on_chunk: Optional callback for each text chunk
+
+        Yields:
+            Text chunks from the response
+        """
+        result = await self.run(prompt=prompt, session_id=session_id, **kwargs)
+
+        content = result.content
+        if content:
+            words = content.split()
+            for i, word in enumerate(words):
+                chunk = word if i == 0 else " " + word
+                if on_chunk:
+                    on_chunk(chunk)
+                yield chunk
+
     async def run_goal(
         self,
         goal: str | GoalConfig,

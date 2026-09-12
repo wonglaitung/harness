@@ -461,6 +461,26 @@ class ChunkType(Enum):
 
 
 @dataclass
+class StreamEvent:
+    """
+    Event yielded by AgentLoop.stream_run().
+
+    Attributes:
+        type: Event type ("text", "tool_calls", "done", "error")
+        text: Text chunk content (for type="text")
+        tool_calls: Tool calls detected after stream completes (for type="done")
+        usage: Token usage (for type="done")
+        error: Error message (for type="error")
+    """
+
+    type: str  # "text" | "tool_calls" | "done" | "error"
+    text: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    error: str | None = None
+
+
+@dataclass
 class Chunk:
     """
     A chunk of streaming output.

@@ -164,6 +164,87 @@ class AnthropicClient(LLMClient):
 
                 yield text
 
+    async def stream_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[Chunk]:
+        """
+        Stream response with tool call support.
+
+        Yields TEXT chunks as they arrive, then TOOL_CALL_START chunks
+        for any tool calls, and finally a DONE chunk with usage info.
+
+        Args:
+            messages: Conversation messages
+            tools: Available tools
+            system: System prompt
+            **kwargs: Additional parameters
+
+        Yields:
+            Chunk objects (TEXT, TOOL_CALL_START, DONE)
+        """
+        from harness.core import StreamingConfig, StreamingHandler
+
+        client = self._get_client()
+
+        streaming_config = self.config.streaming_config or StreamingConfig()
+        handler = StreamingHandler(config=streaming_config)
+
+        messages = self._convert_messages(messages)
+
+        params = {
+            "model": self.config.model,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            "messages": messages,
+        }
+
+        if system:
+            params["system"] = system
+
+        if tools:
+            params["tools"] = [t.to_api_format() for t in tools]
+
+        async with client.messages.stream(**params) as stream:
+            async for text in stream.text_stream:
+                chunk = Chunk(type=ChunkType.TEXT, content=text)
+                await handler.handle(chunk)
+                yield chunk
+
+            final_message = await stream.get_final_message()
+
+        tool_calls = []
+        for block in final_message.content:
+            if hasattr(block, "name"):
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input if hasattr(block, "input") else {},
+                    )
+                )
+
+        for tc in tool_calls:
+            yield Chunk(
+                type=ChunkType.TOOL_CALL_START,
+                tool_call_id=tc.id,
+                tool_name=tc.name,
+                tool_arguments=tc.arguments,
+            )
+
+        yield Chunk(
+            type=ChunkType.DONE,
+            metadata={
+                "tool_calls": tool_calls,
+                "usage": TokenUsage(
+                    input_tokens=final_message.usage.input_tokens,
+                    output_tokens=final_message.usage.output_tokens,
+                ),
+            },
+        )
+
     def _parse_response(self, response) -> LLMResponse:
         """Parse Anthropic response into our format."""
         # Extract content

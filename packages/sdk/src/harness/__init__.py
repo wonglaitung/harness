@@ -236,6 +236,7 @@ from harness.types import (
     ProgressEvent,
     ProgressEventType,
     Session,
+    StreamEvent,
     TokenUsage,
     ToolCall,
     ToolResult,
@@ -306,6 +307,7 @@ __all__ = [
     "LoopResult",
     "LoopSnapshot",
     "LoopState",
+    "StreamEvent",
     # Cost control
     "CostConfig",
     "CostController",

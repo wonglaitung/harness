@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from harness.llm.base import LLMClient, LLMConfig, ToolDefinition
-from harness.types import LLMResponse, StopReason, TokenUsage, ToolCall
+from harness.types import Chunk, ChunkType, LLMResponse, StopReason, TokenUsage, ToolCall
 
 
 @dataclass
@@ -128,6 +128,37 @@ class MockLLMClient(LLMClient):
             yield chunk
             # Small delay to simulate streaming
             # await asyncio.sleep(0.01)  # Optional: uncomment for realistic streaming
+
+    async def stream_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition] | None = None,
+        system: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[Chunk]:
+        """Stream a mock response with tool call support."""
+        response = await self.call(messages, tools, system, **kwargs)
+
+        words = response.content.split()
+        for i, word in enumerate(words):
+            text = word if i == 0 else " " + word
+            yield Chunk(type=ChunkType.TEXT, content=text)
+
+        for tc in response.tool_calls:
+            yield Chunk(
+                type=ChunkType.TOOL_CALL_START,
+                tool_call_id=tc.id,
+                tool_name=tc.name,
+                tool_arguments=tc.arguments,
+            )
+
+        yield Chunk(
+            type=ChunkType.DONE,
+            metadata={
+                "tool_calls": response.tool_calls,
+                "usage": response.usage,
+            },
+        )
 
     def reset(self) -> None:
         """Reset the mock client state."""
