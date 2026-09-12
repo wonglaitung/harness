@@ -95,9 +95,18 @@ public class SharedStateStore implements StateStore {
      *
      * @param item the blackboard item
      * @throws IllegalArgumentException if write verifier rejects the item
+     * @throws IllegalArgumentException if AUTHORITATIVE item has no provenance (A4)
      */
     public void put(BlackboardItem item) {
         Objects.requireNonNull(item, "BlackboardItem must not be null");
+
+        // A4: AUTHORITATIVE writes MUST carry provenance — fail-closed without it.
+        if ("authoritative".equals(item.status()) && item.provenance() == null) {
+            throw new IllegalArgumentException(
+                "AUTHORITATIVE write requires provenance (item id=" + item.getId()
+                + ", type=" + item.getType() + "). Set provenance to a trusted source "
+                + "reference (e.g. 'file:report.pdf:page=3') before writing.");
+        }
 
         // Authoritative writes require write-verifier approval
         if ("authoritative".equals(item.type()) && writeVerifier != null) {

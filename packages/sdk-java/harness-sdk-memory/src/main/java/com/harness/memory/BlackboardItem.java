@@ -22,6 +22,8 @@ import java.util.UUID;
  * @param status           item status ("active", "resolved", "archived")
  * @param writerId         identity of the writer
  * @param effectiveWriter  effective writer when writing on behalf of another agent
+ * @param provenance       A4: mandatory for authoritative writes — a trusted source
+ *                         reference (e.g. "file:report.pdf:page=3", "db:accounts:row=42")
  * @param createdAt        creation timestamp
  */
 public record BlackboardItem(
@@ -35,6 +37,7 @@ public record BlackboardItem(
     String status,
     String writerId,
     String effectiveWriter,
+    String provenance,
     Instant createdAt
 ) {
 
@@ -58,6 +61,7 @@ public record BlackboardItem(
             "active",
             writerId,
             null,
+            null,  // provenance — optional for additive, required for authoritative
             Instant.now()
         );
     }
@@ -76,7 +80,7 @@ public record BlackboardItem(
         return new BlackboardItem(
             item.id, item.type, item.content, item.sourceAgent, item.confidence,
             item.baseVersion, ttlSeconds, item.status, item.writerId,
-            item.effectiveWriter, item.createdAt
+            item.effectiveWriter, item.provenance, item.createdAt
         );
     }
 
@@ -97,7 +101,7 @@ public record BlackboardItem(
         return new BlackboardItem(
             id, type, content, sourceAgent, confidence,
             baseVersion + 1, ttlSeconds, status, writerId,
-            effectiveWriter, createdAt
+            effectiveWriter, provenance, createdAt
         );
     }
 
@@ -108,7 +112,18 @@ public record BlackboardItem(
         return new BlackboardItem(
             id, type, content, sourceAgent, confidence,
             baseVersion, ttlSeconds, newStatus, writerId,
-            effectiveWriter, createdAt
+            effectiveWriter, provenance, createdAt
+        );
+    }
+
+    /**
+     * A4: Create a copy with provenance set.
+     */
+    public BlackboardItem withProvenance(String provenance) {
+        return new BlackboardItem(
+            id, type, content, sourceAgent, confidence,
+            baseVersion, ttlSeconds, status, writerId,
+            effectiveWriter, provenance, createdAt
         );
     }
 }
