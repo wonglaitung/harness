@@ -7,6 +7,7 @@ import com.harness.core.*;
 import com.harness.types.*;
 import com.harness.tools.*;
 import com.harness.llm.OpenAIClient;
+import com.harness.integration.AgentHarness;
 
 import java.util.*;
 

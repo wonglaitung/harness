@@ -18,6 +18,7 @@ import com.harness.memory.*;
 import com.harness.skills.*;
 import com.harness.skills.SkillMetadata;
 import com.harness.mcp.*;
+import com.harness.integration.AgentHarness;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

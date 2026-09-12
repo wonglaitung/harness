@@ -111,7 +111,7 @@ public class PromptInjectionDetector {
         // Common typographic
         Map.entry('\u2014', '-'), Map.entry('\u2013', '-'), Map.entry('\u2018', '\''),
         Map.entry('\u2019', '\''), Map.entry('\u201c', '"'), Map.entry('\u201d', '"'),
-        Map.entry('\u2026', "...")
+        Map.entry('\u2026', '.')
     );
 
     private static final float CLASSIFIER_THRESHOLD = 0.5f;

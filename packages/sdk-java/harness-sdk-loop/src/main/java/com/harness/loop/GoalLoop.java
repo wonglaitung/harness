@@ -5,6 +5,7 @@ import com.harness.loop.types.GoalResult;
 import com.harness.loop.types.GoalStatus;
 import com.harness.loop.types.VerificationRecord;
 import com.harness.loop.types.VerificationResult;
+import com.harness.core.LLMClient;
 import com.harness.core.StreamEvent;
 import com.harness.types.LoopResult;
 import com.harness.types.Session;
@@ -150,6 +151,7 @@ Take the next step to make progress. Focus on what remains to be done.""";
     private final AgentRunner agent;
     private final GoalConfig config;
     private final Consumer<Object> onProgress;
+    private final LLMClient llmClient;
     private final GoalVerifier verifier;
 
     // State tracking
@@ -181,10 +183,24 @@ Take the next step to make progress. Focus on what remains to be done.""";
      * @param onProgress Optional progress callback
      */
     public GoalLoop(AgentRunner agent, GoalConfig config, Consumer<Object> onProgress) {
+        this(agent, config, onProgress, null);
+    }
+
+    /**
+     * Create a new GoalLoop with progress callback and an LLM client for verification.
+     *
+     * @param agent The agent runner
+     * @param config Goal configuration
+     * @param onProgress Optional progress callback
+     * @param llmClient LLM client used for LLM-based goal verification (required when
+     *                  {@code verificationMethod} is {@code LLM})
+     */
+    public GoalLoop(AgentRunner agent, GoalConfig config, Consumer<Object> onProgress, LLMClient llmClient) {
         this.agent = agent;
         this.config = config;
         this.onProgress = onProgress;
-        this.verifier = new GoalVerifier(config);
+        this.llmClient = llmClient;
+        this.verifier = new GoalVerifier(config, llmClient);
     }
 
     /**

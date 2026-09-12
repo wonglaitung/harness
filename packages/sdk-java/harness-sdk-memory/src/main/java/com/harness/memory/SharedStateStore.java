@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * BlackboardItem item = BlackboardItem.create("decision", content, "planner", 0.9f, "harness");
  * store.put(item);
  * // CAS write
- * store.writeIfVersion(item.getId(), newContent, 0);
+ * store.writeIfVersion(item.id(), newContent, 0);
  * }</pre>
  */
 public class SharedStateStore implements StateStore {
@@ -103,8 +103,8 @@ public class SharedStateStore implements StateStore {
         // A4: AUTHORITATIVE writes MUST carry provenance — fail-closed without it.
         if ("authoritative".equals(item.status()) && item.provenance() == null) {
             throw new IllegalArgumentException(
-                "AUTHORITATIVE write requires provenance (item id=" + item.getId()
-                + ", type=" + item.getType() + "). Set provenance to a trusted source "
+                "AUTHORITATIVE write requires provenance (item id=" + item.id()
+                + ", type=" + item.type() + "). Set provenance to a trusted source "
                 + "reference (e.g. 'file:report.pdf:page=3') before writing.");
         }
 
@@ -112,12 +112,12 @@ public class SharedStateStore implements StateStore {
         if ("authoritative".equals(item.type()) && writeVerifier != null) {
             if (!writeVerifier.test(item)) {
                 throw new IllegalArgumentException(
-                    "Write verifier rejected authoritative item: " + item.getId());
+                    "Write verifier rejected authoritative item: " + item.id());
             }
         }
 
-        items.put(item.getId(), item);
-        logger.debug("Put item {}: type={}, source={}", item.getId(), item.type(), item.sourceAgent());
+        items.put(item.id(), item);
+        logger.debug("Put item {}: type={}, source={}", item.id(), item.type(), item.sourceAgent());
     }
 
     /**
@@ -161,7 +161,7 @@ public class SharedStateStore implements StateStore {
         List<BlackboardItem> result = new ArrayList<>();
         for (BlackboardItem item : items.values()) {
             if (item.isExpired()) {
-                items.remove(item.getId());
+                items.remove(item.id());
                 continue;
             }
 
@@ -169,9 +169,9 @@ public class SharedStateStore implements StateStore {
             if (readVerifier != null && !readVerifier.test(item)) {
                 if (readVerifierRaise) {
                     throw new SecurityException(
-                        "Forged/forbidden authoritative item rejected by readVerifier (H): " + item.getId());
+                        "Forged/forbidden authoritative item rejected by readVerifier (H): " + item.id());
                 }
-                logger.warn("Read verifier rejected item {} (silently dropping)", item.getId());
+                logger.warn("Read verifier rejected item {} (silently dropping)", item.id());
                 continue;
             }
 
@@ -209,7 +209,8 @@ public class SharedStateStore implements StateStore {
             BlackboardItem candidate = new BlackboardItem(
                 current.id(), current.type(), newContent, current.sourceAgent(),
                 current.confidence(), current.baseVersion() + 1, current.ttlSeconds(),
-                current.status(), current.writerId(), current.effectiveWriter(),
+                current.status(), current.writerId(),                 current.effectiveWriter(),
+                current.provenance(),
                 current.createdAt());
             if (!writeVerifier.test(candidate)) {
                 throw new IllegalArgumentException(
@@ -220,7 +221,8 @@ public class SharedStateStore implements StateStore {
         BlackboardItem updated = new BlackboardItem(
             current.id(), current.type(), newContent, current.sourceAgent(),
             current.confidence(), current.baseVersion() + 1, current.ttlSeconds(),
-            current.status(), current.writerId(), current.effectiveWriter(),
+            current.status(), current.writerId(),             current.effectiveWriter(),
+            current.provenance(),
             current.createdAt());
 
         items.put(id, updated);
@@ -260,18 +262,18 @@ public class SharedStateStore implements StateStore {
                 continue;
             }
             for (BlackboardItem other : allItems) {
-                if (other.getId().equals(item.getId()) || !other.type().equals(item.type())) {
+                if (other.id().equals(item.id()) || !other.type().equals(item.type())) {
                     continue;
                 }
                 if ("authoritative".equals(other.type()) &&
                     !other.content().equals(item.content())) {
                     ConflictSet cs = conflicts.computeIfAbsent(
                         item.type(), k -> new ConflictSet(k, new ArrayList<>(), java.time.Instant.now()));
-                    if (!cs.itemIds().contains(item.getId())) {
-                        cs.itemIds().add(item.getId());
+                    if (!cs.itemIds().contains(item.id())) {
+                        cs.itemIds().add(item.id());
                     }
-                    if (!cs.itemIds().contains(other.getId())) {
-                        cs.itemIds().add(other.getId());
+                    if (!cs.itemIds().contains(other.id())) {
+                        cs.itemIds().add(other.id());
                     }
                 }
             }

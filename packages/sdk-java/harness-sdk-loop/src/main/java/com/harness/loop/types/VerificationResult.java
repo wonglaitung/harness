@@ -163,6 +163,15 @@ public class VerificationResult {
     }
 
     /**
+     * Start building a VerificationResult.
+     *
+     * @return a fresh Builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
      * Builder for VerificationResult.
      */
     public static class Builder {

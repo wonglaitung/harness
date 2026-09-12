@@ -97,7 +97,7 @@ public class WriteTool implements Tool {
             // B2: Deterministic gate — validate path before write
             FileInputValidator validator = new FileInputValidator();
             com.harness.security.ValidationResult pathCheck = validator.validatePath(filePath, "write");
-            if (!pathCheck.isValid()) {
+            if (!pathCheck.valid()) {
                 String reasons = String.join("; ", pathCheck.errors());
                 logger.warn("ToolGate blocked write to {}: {}", filePath, reasons);
                 return ToolResult.failure("", "Deterministic gate rejected: " + reasons, NAME);

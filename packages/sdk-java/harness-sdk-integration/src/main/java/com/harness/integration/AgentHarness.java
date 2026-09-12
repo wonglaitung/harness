@@ -417,7 +417,7 @@ public class AgentHarness {
             public int getContextWindow() {
                 return AgentHarness.this.config.getContextWindow();
             }
-        }, config, onProgress);
+        }, config, onProgress, this.llmClient);
 
         return loop.run();
     }
@@ -457,7 +457,7 @@ public class AgentHarness {
             public int getContextWindow() {
                 return AgentHarness.this.config.getContextWindow();
             }
-        }, goalConfig, onProgress);
+        }, goalConfig, onProgress, this.llmClient);
 
         return loop.run();
     }
@@ -530,7 +530,7 @@ public class AgentHarness {
             public int getContextWindow() {
                 return AgentHarness.this.config.getContextWindow();
             }
-        }, config, onProgress);
+        }, config, onProgress, this.llmClient);
 
         return loop.stream(onEvent);
     }

@@ -29,7 +29,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
  * BlackboardItem item = BlackboardItem.create("decision", content, "planner", 0.9f, "harness");
  * store.put(item);
  * // CAS write
- * store.writeIfVersion(item.getId(), newContent, 0);
+ * store.writeIfVersion(item.id(), newContent, 0);
  * store.close();
  * }</pre>
  *
@@ -128,7 +128,7 @@ public class FileStateStore implements StateStore {
         if ("authoritative".equals(item.type()) && writeVerifier != null) {
             if (!writeVerifier.test(item)) {
                 throw new IllegalArgumentException(
-                    "Write verifier rejected authoritative item: " + item.getId());
+                    "Write verifier rejected authoritative item: " + item.id());
             }
         }
 
@@ -137,15 +137,15 @@ public class FileStateStore implements StateStore {
             String json = serialize(item);
             try (PreparedStatement ps = connection.prepareStatement(
                     "INSERT OR REPLACE INTO blackboard (id, payload) VALUES (?, ?)")) {
-                ps.setString(1, item.getId());
+                ps.setString(1, item.id());
                 ps.setString(2, json);
                 ps.executeUpdate();
             }
             connection.commit();
-            logger.debug("Put item {}: type={}, source={}", item.getId(), item.type(), item.sourceAgent());
+            logger.debug("Put item {}: type={}, source={}", item.id(), item.type(), item.sourceAgent());
         } catch (Exception e) {
             rollbackQuietly();
-            throw new RuntimeException("Failed to put item: " + item.getId(), e);
+            throw new RuntimeException("Failed to put item: " + item.id(), e);
         } finally {
             lock.writeLock().unlock();
         }
@@ -196,8 +196,10 @@ public class FileStateStore implements StateStore {
         } catch (Exception e) {
             throw new RuntimeException("Failed to get item: " + id, e);
         } finally {
-            if (lock.isReadLockedByCurrentThread()) {
+            try {
                 lock.readLock().unlock();
+            } catch (IllegalMonitorStateException ignore) {
+                // not held
             }
         }
     }
@@ -244,9 +246,9 @@ public class FileStateStore implements StateStore {
                     if (readVerifier != null && !readVerifier.test(item)) {
                         if (readVerifierRaise) {
                             throw new SecurityException(
-                                "Forged/forbidden authoritative item rejected by readVerifier (H): " + item.getId());
+                                "Forged/forbidden authoritative item rejected by readVerifier (H): " + item.id());
                         }
-                        logger.warn("Read verifier rejected item {} (silently dropping)", item.getId());
+                        logger.warn("Read verifier rejected item {} (silently dropping)", item.id());
                         continue;
                     }
 
@@ -291,7 +293,8 @@ public class FileStateStore implements StateStore {
                 BlackboardItem candidate = new BlackboardItem(
                     current.id(), current.type(), newContent, current.sourceAgent(),
                     current.confidence(), current.baseVersion() + 1, current.ttlSeconds(),
-                    current.status(), current.writerId(), current.effectiveWriter(),
+                    current.status(), current.writerId(),                     current.effectiveWriter(),
+                    current.provenance(),
                     current.createdAt());
                 if (!writeVerifier.test(candidate)) {
                     throw new IllegalArgumentException(
@@ -302,7 +305,8 @@ public class FileStateStore implements StateStore {
             BlackboardItem updated = new BlackboardItem(
                 current.id(), current.type(), newContent, current.sourceAgent(),
                 current.confidence(), current.baseVersion() + 1, current.ttlSeconds(),
-                current.status(), current.writerId(), current.effectiveWriter(),
+                current.status(), current.writerId(),                 current.effectiveWriter(),
+                current.provenance(),
                 current.createdAt());
 
             String json = serialize(updated);
@@ -359,18 +363,18 @@ public class FileStateStore implements StateStore {
                 continue;
             }
             for (BlackboardItem other : items) {
-                if (other.getId().equals(item.getId()) || !other.type().equals(item.type())) {
+                if (other.id().equals(item.id()) || !other.type().equals(item.type())) {
                     continue;
                 }
                 if ("authoritative".equals(other.type()) &&
                     !other.content().equals(item.content())) {
                     ConflictSet cs = conflicts.computeIfAbsent(
                         item.type(), k -> new ConflictSet(k, new ArrayList<>(), Instant.now()));
-                    if (!cs.itemIds().contains(item.getId())) {
-                        cs.itemIds().add(item.getId());
+                    if (!cs.itemIds().contains(item.id())) {
+                        cs.itemIds().add(item.id());
                     }
-                    if (!cs.itemIds().contains(other.getId())) {
-                        cs.itemIds().add(other.getId());
+                    if (!cs.itemIds().contains(other.id())) {
+                        cs.itemIds().add(other.id());
                     }
                 }
             }

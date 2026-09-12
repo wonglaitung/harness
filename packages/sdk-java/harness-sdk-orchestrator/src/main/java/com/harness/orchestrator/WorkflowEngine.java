@@ -360,6 +360,7 @@ public class WorkflowEngine {
                 "active",
                 "orchestrator", // writerId
                 null,
+                null,
                 java.time.Instant.now()
             );
 

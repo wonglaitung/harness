@@ -133,9 +133,10 @@ public class ReviewQueue {
             0,
             3600,
             "confirmed",
-            "harness",
-            "harness",
-            java.time.Instant.now()
+                "harness",
+                "harness",
+                null,
+                java.time.Instant.now()
         );
         store.put(bi);
     }
@@ -158,9 +159,10 @@ public class ReviewQueue {
             0,
             3600,
             "confirmed",
-            "harness",
-            "harness",
-            java.time.Instant.now()
+                "harness",
+                "harness",
+                null,
+                java.time.Instant.now()
         );
         store.put(bi);
     }
@@ -339,7 +341,7 @@ public class ReviewQueue {
                         merged.putIfAbsent(remote.getId(), remote);
                     }
                 } catch (Exception e) {
-                    logger.warn("Skipping malformed store item: {}", bi.getId());
+                    logger.warn("Skipping malformed store item: {}", bi.id());
                 }
             }
         }
