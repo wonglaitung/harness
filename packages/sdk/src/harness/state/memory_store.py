@@ -23,6 +23,13 @@ class InMemoryBackend(StateBackend):
         self._lock = asyncio.Lock()
 
     async def put(self, item: BlackboardItem) -> BlackboardItem:
+        # A4: AUTHORITATIVE writes MUST carry provenance — fail-closed without it.
+        if item.kind == WriteKind.AUTHORITATIVE and not item.provenance:
+            raise ValueError(
+                f"AUTHORITATIVE write requires provenance (item id={item.id}, "
+                f"type={item.type}). Set item.provenance to a trusted source "
+                f"reference (e.g. 'file:report.pdf:page=3') before writing."
+            )
         async with self._lock:
             self._store[item.id] = item
             self._detect_conflict(item)
@@ -38,6 +45,14 @@ class InMemoryBackend(StateBackend):
     async def write_if_version(
         self, item_id: str, content: Any, base_version: int, **meta: Any
     ) -> tuple[bool, BlackboardItem | None]:
+        # A4: Check provenance for AUTHORITATIVE writes via meta
+        kind = meta.get("kind")
+        provenance = meta.get("provenance")
+        if kind == WriteKind.AUTHORITATIVE and not provenance:
+            raise ValueError(
+                f"AUTHORITATIVE write_if_version requires provenance "
+                f"(item_id={item_id}). Set provenance= in meta before writing."
+            )
         async with self._lock:
             cur = self._store.get(item_id)
             if cur is not None and cur.version != base_version:

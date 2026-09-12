@@ -45,6 +45,11 @@ class BlackboardItem:
     # allowed when this identifies the control layer (H3). Defaults to
     # ``source_agent`` so legacy/back-compat items authorize by author.
     writer_id: str | None = None
+    # A4: Provenance — mandatory for AUTHORITATIVE writes. A short URI or
+    # reference string identifying the trusted source that supports this item's
+    # content (e.g. "file:report.pdf:page=3", "db:accounts:row=42",
+    # "api:ledger:txn=abc123"). ADDITIVE items may omit this (observer role).
+    provenance: str | None = None
     confidence: float = 0.5
     created_at: float = field(default_factory=time.time)
     base_version: int = 0
@@ -71,6 +76,7 @@ class BlackboardItem:
             "content": self.content,
             "source_agent": self.source_agent,
             "writer_id": self.writer_id,
+            "provenance": self.provenance,
             "confidence": self.confidence,
             "version": self.version,
             "base_version": self.base_version,

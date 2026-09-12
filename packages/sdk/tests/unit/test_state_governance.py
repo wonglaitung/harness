@@ -172,3 +172,73 @@ async def test_redis_write_if_version_enforces_verifier() -> None:
             with contextlib.suppress(Exception):
                 await store.aclose()
 
+
+# ── A4: Provenance enforcement ────────────────────────────────────────────────
+
+
+async def test_authoritative_write_requires_provenance() -> None:
+    """A4: AUTHORITATIVE writes without provenance must be rejected (fail-closed)."""
+    store = create_state_store("memory")
+    item = BlackboardItem(
+        id="no-prov",
+        type="decision",
+        content="some decision",
+        kind=WriteKind.AUTHORITATIVE,
+        provenance=None,  # Missing!
+    )
+    with pytest.raises(ValueError, match="provenance"):
+        await store.put(item)
+
+
+async def test_additive_write_allows_no_provenance() -> None:
+    """A4: ADDITIVE writes may omit provenance (observer/proposal role)."""
+    store = create_state_store("memory")
+    item = BlackboardItem(
+        id="add-no-prov",
+        type="observation",
+        content={"obs": 1},
+        kind=WriteKind.ADDITIVE,
+        provenance=None,
+    )
+    result = await store.put(item)
+    assert result.provenance is None
+
+
+async def test_authoritative_write_with_provenance_succeeds() -> None:
+    """A4: AUTHORITATIVE writes with provenance are accepted."""
+    store = create_state_store("memory")
+    item = BlackboardItem(
+        id="with-prov",
+        type="decision",
+        content="verified fact",
+        kind=WriteKind.AUTHORITATIVE,
+        provenance="file:report.pdf:page=3",
+        writer_id="harness",
+    )
+    result = await store.put(item)
+    assert result.provenance == "file:report.pdf:page=3"
+
+
+async def test_write_if_version_requires_provenance_for_authoritative() -> None:
+    """A4: write_if_version with kind=AUTHORITATIVE requires provenance in meta."""
+    backend = InMemoryBackend()
+    # Seed an item
+    seed = BlackboardItem(id="cas-prov", type="test", content="v0")
+    await backend.put(seed)
+
+    # CAS with AUTHORITATIVE but no provenance -> ValueError
+    with pytest.raises(ValueError, match="provenance"):
+        await backend.write_if_version(
+            "cas-prov", "v1", base_version=0,
+            kind=WriteKind.AUTHORITATIVE,
+        )
+
+    # CAS with AUTHORITATIVE + provenance -> success
+    ok, updated = await backend.write_if_version(
+        "cas-prov", "v1", base_version=0,
+        kind=WriteKind.AUTHORITATIVE,
+        provenance="db:accounts:row=42",
+    )
+    assert ok is True
+    assert updated.provenance == "db:accounts:row=42"
+
