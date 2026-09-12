@@ -251,6 +251,158 @@ class GoalLoop:
             logger.exception(f"Goal loop error: {e}")
             return self._create_result(GoalStatus.ERROR, error=str(e))
 
+    async def stream(self):
+        """
+        Run the goal-driven loop with streaming output.
+
+        Yields StreamEvent objects:
+        - type="text": text chunks from each agent iteration
+        - type="goal_iteration": iteration metadata after each agent run
+        - type="goal_verification": verification result
+        - type="goal_done": goal completed (carries GoalResult)
+
+        After iteration completes, the final GoalResult is available
+        via self._stream_result.
+        """
+        from harness.types import StreamEvent
+
+        # Initialize state
+        initial_session_id = self.config.session_id or f"goal-{uuid.uuid4().hex[:8]}"
+        self._state = GoalLoopState(
+            iteration=0,
+            context_resets=0,
+            start_time=time.time(),
+            session_id=initial_session_id,
+        )
+        self._stream_result = None
+
+        current_prompt = self._build_initial_prompt()
+
+        logger.info(f"Starting goal loop (streaming): {self.config.description[:100]}...")
+
+        try:
+            while True:
+                if self._check_timeout():
+                    goal_result = self._create_result(GoalStatus.TIMEOUT)
+                    self._stream_result = goal_result
+                    yield StreamEvent(type="goal_done", goal_result=goal_result)
+                    return
+
+                if self._state.iteration >= self.config.max_iterations:
+                    goal_result = self._create_result(GoalStatus.MAX_ITERATIONS)
+                    self._stream_result = goal_result
+                    yield StreamEvent(type="goal_done", goal_result=goal_result)
+                    return
+
+                if self._state.context_resets > self.config.max_context_resets:
+                    goal_result = self._create_result(GoalStatus.MAX_RESETS)
+                    self._stream_result = goal_result
+                    yield StreamEvent(type="goal_done", goal_result=goal_result)
+                    return
+
+                # Stream agent iteration
+                logger.debug(f"Running agent iteration {self._state.iteration + 1} (streaming)")
+                iteration_text_parts: list[str] = []
+
+                async for event in self.agent.stream(
+                    prompt=current_prompt,
+                    session_id=self._state.session_id,
+                    on_progress=self.on_progress,
+                ):
+                    if hasattr(event, "type"):
+                        # StreamEvent from agent.stream()
+                        yield event
+                        if event.type == "text":
+                            iteration_text_parts.append(event.text)
+                    else:
+                        # Raw text chunk (str)
+                        yield StreamEvent(type="text", text=event)
+                        iteration_text_parts.append(event)
+
+                self._state.iteration += 1
+
+                # Collect the LoopResult from the agent loop
+                agent_result = self.agent._loop._stream_result
+
+                if agent_result is not None:
+                    if agent_result.iterations:
+                        self._state.total_agent_iterations += agent_result.iterations
+                    if agent_result.token_usage:
+                        self._state.total_input_tokens += agent_result.token_usage.input_tokens
+                        self._state.total_output_tokens += agent_result.token_usage.output_tokens
+
+                if self._check_cost_exceeded():
+                    goal_result = self._create_result(
+                        GoalStatus.ERROR, result=agent_result, error="Cost budget exceeded"
+                    )
+                    self._stream_result = goal_result
+                    yield StreamEvent(type="goal_done", goal_result=goal_result)
+                    return
+
+                # Yield iteration metadata
+                yield StreamEvent(
+                    type="goal_iteration",
+                    iteration=self._state.iteration,
+                    text=f"Iteration {self._state.iteration} complete",
+                )
+
+                # Verify goal
+                if agent_result is not None:
+                    verification = await self._verify_goal(agent_result)
+                else:
+                    # No result — treat as not achieved
+                    from harness.loop.types import VerificationResult
+                    verification = VerificationResult(
+                        achieved=False,
+                        confidence=0.0,
+                        reasoning="No agent result produced",
+                    )
+
+                yield StreamEvent(
+                    type="goal_verification",
+                    iteration=self._state.iteration,
+                    achieved=verification.achieved,
+                    text=f"Verification: {'achieved' if verification.achieved else 'not achieved'}",
+                )
+
+                if verification.achieved:
+                    goal_result = self._create_result(
+                        GoalStatus.ACHIEVED, result=agent_result
+                    )
+                    self._stream_result = goal_result
+                    yield StreamEvent(type="goal_done", goal_result=goal_result)
+                    return
+
+                # Context reset or next step
+                if agent_result is not None and self._should_reset_context(agent_result):
+                    self._state.context_resets += 1
+                    self._state.session_id = f"goal-{uuid.uuid4().hex[:8]}"
+                    current_prompt = self._build_continuation_prompt(agent_result)
+                    self._emit_progress(
+                        "context_reset",
+                        "Resetting context to prevent overflow",
+                        {"reset_count": self._state.context_resets},
+                    )
+                else:
+                    if agent_result is not None:
+                        current_prompt = self._build_next_step_prompt(
+                            agent_result, verification
+                        )
+
+                await asyncio.sleep(0)
+
+        except asyncio.CancelledError:
+            logger.info("Goal loop cancelled (streaming)")
+            goal_result = self._create_result(GoalStatus.CANCELLED)
+            self._stream_result = goal_result
+            yield StreamEvent(type="goal_done", goal_result=goal_result)
+
+        except Exception as e:
+            logger.exception(f"Goal loop error (streaming): {e}")
+            goal_result = self._create_result(GoalStatus.ERROR, error=str(e))
+            self._stream_result = goal_result
+            yield StreamEvent(type="goal_done", goal_result=goal_result, error=str(e))
+
     async def _verify_goal(self, result: LoopResult) -> VerificationResult:
         """Verify if the goal has been achieved."""
         verification = await self.verifier.verify(

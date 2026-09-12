@@ -1348,6 +1348,74 @@ class AgentHarness:
 
         return goal_result
 
+    async def stream_goal(
+        self,
+        goal: str,
+        session_id: str | None = None,
+        success_criteria: str | None = None,
+        workspace_dir: str = ".",
+        max_iterations: int = 50,
+        max_context_resets: int = 5,
+        timeout_seconds: int = 3600,
+        custom_verifier: Callable | None = None,
+        on_progress: ProgressCallback | None = None,
+        **kwargs,
+    ):
+        """
+        Run the agent in goal-driven mode with streaming output.
+
+        Yields StreamEvent objects:
+        - type="text": text chunks from each agent iteration
+        - type="goal_iteration": iteration metadata after each agent run
+        - type="goal_verification": verification result
+        - type="goal_done": goal completed (carries GoalResult)
+
+        Example:
+            ```python
+            agent = AgentHarness(model="claude-sonnet-4-6")
+
+            async for event in agent.stream_goal("Fix all type errors"):
+                if event.type == "text":
+                    print(event.text, end="", flush=True)
+                elif event.type == "goal_done":
+                    result = event.goal_result
+                    if result.achieved:
+                        print(f"Done in {result.total_iterations} iterations")
+            ```
+        """
+        from harness.loop import GoalConfig, GoalLoop, VerificationMethod
+
+        verification_method = (
+            VerificationMethod.CUSTOM if custom_verifier else VerificationMethod.LLM
+        )
+
+        config = GoalConfig(
+            description=goal,
+            session_id=session_id,
+            success_criteria=success_criteria,
+            workspace_dir=workspace_dir,
+            max_iterations=max_iterations,
+            max_context_resets=max_context_resets,
+            timeout_seconds=timeout_seconds,
+            verification_method=verification_method,
+            custom_verifier=custom_verifier,
+            **kwargs,
+        )
+
+        loop = GoalLoop(agent=self, config=config, on_progress=on_progress)
+
+        async for event in loop.stream():
+            # Apply gate on goal_done
+            if event.type == "goal_done" and event.goal_result is not None:
+                goal_result = event.goal_result
+                verdict = self._apply_gate(goal_result.final_response)
+                if verdict is not None:
+                    goal_result.gate_verdict = verdict
+                    goal_result.delivered_content = verdict.delivered_content
+                    goal_result.reconciliation_report = verdict.reconciliation_report
+                    goal_result.final_response = verdict.delivered_content
+            yield event
+
     def register_tool(
         self,
         tool: Tool,

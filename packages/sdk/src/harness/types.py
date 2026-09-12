@@ -463,20 +463,29 @@ class ChunkType(Enum):
 @dataclass
 class StreamEvent:
     """
-    Event yielded by AgentLoop.stream_run().
+    Event yielded by AgentLoop.stream_run() and GoalLoop.stream().
 
     Attributes:
-        type: Event type ("text", "tool_calls", "done", "error")
+        type: Event type ("text", "tool_calls", "done", "error",
+               "goal_iteration", "goal_verification", "goal_done")
         text: Text chunk content (for type="text")
         tool_calls: Tool calls detected after stream completes (for type="done")
         usage: Token usage (for type="done")
         error: Error message (for type="error")
+        iteration: Current goal iteration (for goal events)
+        achieved: Whether goal is achieved (for "goal_verification"/"goal_done")
+        goal_result: GoalResult object (for type="goal_done")
     """
 
-    type: str  # "text" | "tool_calls" | "done" | "error"
+    type: str  # "text" | "tool_calls" | "done" | "error" | "goal_*"
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
+    error: str | None = None
+    # Goal-specific fields (set for goal_iteration / goal_verification / goal_done)
+    iteration: int | None = None
+    achieved: bool | None = None
+    goal_result: Any = None
     error: str | None = None
 
 
