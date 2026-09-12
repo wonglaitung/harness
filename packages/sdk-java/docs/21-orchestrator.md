@@ -565,8 +565,40 @@ WorkflowResult result = engine.execute(cyclic).join();
 // result.status = FAILED, result.error = "Workflow has circular dependency"
 ```
 
+## 流式多 Agent 协作
+
+团队 / 工作流 / 黑板编排均可在**流式模式**下运行，通过 `StreamEvent` 信封实时观测各 Agent 产出与黑板写入。
+
+```java
+import com.harness.core.StreamEvent;
+import com.harness.orchestrator.TeamOrchestrator;
+import com.harness.orchestrator.TeamConfig;
+import com.harness.orchestrator.AgentRole;
+import com.harness.orchestrator.CoordinationMode;
+
+TeamConfig team = TeamConfig.builder()
+    .name("login-team")
+    .addRole(AgentRole.builder().name("backend-dev").build())
+    .addRole(AgentRole.builder().name("frontend-dev").build())
+    .coordinationMode(CoordinationMode.COLLABORATIVE)
+    .build();
+
+TeamOrchestrator orchestrator = new TeamOrchestrator(team, client);
+CompletableFuture<TeamResult> future = orchestrator.run(goal, (String sid, Consumer<StreamEvent> onEvent) -> {
+    // 将团队流式事件转发给上层消费者
+    return harness.stream(sid, onEvent);
+});
+TeamResult result = future.join();
+```
+
+目标驱动编排（`streamGoal`）会额外产出 `goal_start` / `goal_iteration` / `goal_verification` / `goal_done` 信封；黑板写入（如 `WorkflowEngine` 的 `step_export`）可在 `goal_done` 时通过 `BlackboardItem.create(...)` 落盘，写入 `provenance` 以满足 A4 审计要求。
+
+完整可运行示例见 `examples/MultiAgentStreamingTeam.java`、`MultiAgentTeam.java`、`MultiAgentWorkflow.java`、`MultiAgentBlackboard.java`。
+
 ## 下一步
 
 - [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览
 - [11-worktrees.md](./19-worktrees.md) - 并行隔离执行
 - [12-connectors.md](./20-connectors.md) - 外部系统集成
+- [03-agent-loop.md](./03-agent-loop.md) - Agent / Goal Loop 流式执行
+- [07-sdk-api.md](./07-sdk-api.md) - SDK 流式 API

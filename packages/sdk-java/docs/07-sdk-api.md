@@ -203,16 +203,33 @@ agent.run("prompt").thenAccept(result -> {
 
 **注意**：不要依赖字符串匹配检测事件循环（如检查异常消息），这在不同 Python 版本中可能不稳定。
 
-#### stream() - 流式执行
+#### stream() - 结构化流式执行
+
+Java SDK 提供基于 `StreamEvent` 信封的流式 API（`Consumer<StreamEvent>` 回调 + `CompletableFuture`）。事件携带 `source`/`category`/`seq`/`eventId`/`parentId` 元信息，支持可组合的消费者。
 
 ```java
-// stream() - 流式执行（Java 中通过 run() + result 获取完整响应）
-// Java SDK 的 run() 返回 CompletableFuture<LoopResult>
-// 工具调用在内部处理，最终结果包含完整响应
-CompletableFuture<LoopResult> future = agent.run("prompt");
+import com.harness.core.StreamEvent;
+import com.harness.types.LoopResult;
+
+// 单 Agent 流式输出
+CompletableFuture<LoopResult> future = agent.stream("请实现用户登录", ev -> {
+    if ("text".equals(ev.type())) System.out.print(ev.text());
+    else if ("done".equals(ev.type())) System.out.println("\n[done] " + ev.usage());
+    else if ("error".equals(ev.type())) System.err.println("[error] " + ev.error());
+});
 LoopResult result = future.join();
-System.out.println(result.content()); // 获取完整响应
+
+// 目标驱动流式输出（goal_* 信封）
+import com.harness.loop.types.GoalResult;
+CompletableFuture<GoalResult> goalFuture = agent.streamGoal("实现 JWT 登录", ev -> {
+    if ("goal_done".equals(ev.type()) && ev.goalResult() instanceof GoalResult gr) {
+        // gr 即最终目标结果
+    }
+});
+GoalResult goalResult = goalFuture.join();
 ```
+
+> 事件类型：`text` / `tool_calls` / `done` / `error`（Agent Loop）；`goal_start` / `goal_iteration` / `goal_verification` / `goal_done`（Goal Loop）。详见 [03-agent-loop.md](./03-agent-loop.md) 的「流式执行」章节。
 
 #### run_goal() - 目标驱动执行
 

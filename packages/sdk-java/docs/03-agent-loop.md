@@ -1635,9 +1635,79 @@ LoopConfig config = LoopConfig.builder()
 LoopResult
 ```
 
+## 流式执行（Streaming）
+
+Agent Loop 与 Goal Loop 均支持**结构化流式输出**：以 `StreamEvent` 信封为单位，通过 `Consumer<StreamEvent>` 回调 + `CompletableFuture` 逐事件下发（Java 惯用法对应 Python 的 `async generator`）。
+
+### StreamEvent 信封
+
+`com.harness.core.StreamEvent` 是不可变 record，字段与 Python SDK 完全对齐：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `source` | String | 事件来源：`agent` / `goal_loop` |
+| `category` | String | 关注点分离：`text` / `lifecycle` / `verification` |
+| `seq` | int | 严格递增序列号 |
+| `eventId` | String | 事件唯一 ID |
+| `parentId` | String | 因果链上游 ID |
+| `type` | String | 事件类型（`text`/`tool_calls`/`done`/`error`/`goal_start`/`goal_iteration`/`goal_verification`/`goal_done`） |
+| `text` | String | 文本块（type=text 时） |
+| `toolCalls` | List\<ToolCall> | 工具调用（type=tool_calls 时） |
+| `usage` | TokenUsage | token 用量（type=done 时） |
+| `error` | String | 错误信息（type=error 时） |
+| `iteration` | Integer | 目标迭代序号 |
+| `achieved` | Boolean | 目标是否达成 |
+| `goalResult` | Object | 目标结果（type=goal_done 时，承载 `GoalResult`） |
+
+工厂方法：`StreamEvent.textChunk(...)`、`toolCalls(...)`、`done(...)`、`error(...)`、`goalStart(...)`、`goalIteration(...)`、`goalVerification(...)`、`goalDone(...)`。
+
+### AgentLoop.streamRun
+
+```java
+import com.harness.core.StreamEvent;
+import com.harness.types.LoopResult;
+import java.util.concurrent.CompletableFuture;
+
+AgentLoop loop = new AgentLoop(client, tools, config, hooks);
+CompletableFuture<LoopResult> future = loop.streamRun("请实现用户登录", ev -> {
+    if ("text".equals(ev.type())) {
+        System.out.print(ev.text());            // 逐块输出
+    } else if ("done".equals(ev.type())) {
+        System.out.println("\n[done] tokens=" + ev.usage());
+    } else if ("error".equals(ev.type())) {
+        System.err.println("[error] " + ev.error());
+    }
+});
+LoopResult result = future.join();
+```
+
+事件顺序：`text`/`tool_calls` 块 → `done`（携带 `usage`）或 `error`。
+
+### GoalLoop.stream — goal_* 信封
+
+```java
+import com.harness.loop.GoalLoop;
+import com.harness.loop.types.GoalResult;
+
+GoalLoop loop = new GoalLoop(runner, goalConfig, onProgress, llmClient);
+CompletableFuture<GoalResult> future = loop.stream(ev -> {
+    switch (ev.type()) {
+        case "goal_start"        -> System.out.println("目标开始: " + ev.text());
+        case "text"              -> System.out.print(ev.text());
+        case "goal_iteration"    -> System.out.println("\n迭代#" + ev.iteration());
+        case "goal_verification" -> System.out.println("验证: achieved=" + ev.achieved());
+        case "goal_done"         -> System.out.println("完成: " + ev.goalResult());
+    }
+});
+GoalResult goalResult = future.join();
+```
+
+`goal_done` 事件通过 `goalResult` 字段携带完整 `GoalResult`，`parentId` 串联 `goal → iteration → verification → done` 因果链。
+
 ## 下一步
 
 - [04-tool-system.md](./04-tool-system.md) - 了解工具系统
 - [05-memory-system.md](./05-memory-system.md) - 了解记忆系统
 - [18-loop-engineering.md](./18-loop-engineering.md) - 了解 Loop Engineering 目标驱动执行
-- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API
+- [07-sdk-api.md](./07-sdk-api.md) - 查看 SDK API 与流式接口
+- [21-orchestrator.md](./21-orchestrator.md) - 多 Agent 流式协作与黑板
