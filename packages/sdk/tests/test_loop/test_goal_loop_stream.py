@@ -1,4 +1,10 @@
-"""Tests for GoalLoop.stream() — Phase 2 streaming goal execution."""
+"""Tests for GoalLoop.stream() — Phase 2 streaming goal execution.
+
+Verifies industry-convention structured envelope:
+- source, category, seq, event_id, parent_id
+- Concern separation (text vs lifecycle vs verification)
+- Causal linking via parent_id
+"""
 
 from __future__ import annotations
 
@@ -36,7 +42,10 @@ class _MockAgent:
         r = self.responses[min(self._call, len(self.responses) - 1)]
         self._call += 1
         self._loop._stream_result = r
-        yield StreamEvent(type="text", text=r.final_response or "")
+        yield StreamEvent(
+            type="text", text=r.final_response or "",
+            source="agent", category="text",
+        )
 
     def get_session(self, sid: str) -> Session | None:
         return Session(id=sid, messages=[])
@@ -68,6 +77,7 @@ async def test_stream_yields_text_and_goal_done():
     events = [e async for e in loop.stream()]
     types = [e.type for e in events]
     assert "text" in types
+    assert "goal_start" in types
     assert "goal_done" in types
 
     done = [e for e in events if e.type == "goal_done"][0]
@@ -84,6 +94,56 @@ async def test_stream_carries_text_content():
     assert any("hello world" in e.text for e in text_events)
 
 
+# ── Structured envelope ──────────────────────────────────────────────────────
+
+
+async def test_events_have_source_and_category():
+    agent = _MockAgent([_make_result("x")])
+    loop = GoalLoop(agent=agent, config=_cfg())
+
+    events = [e async for e in loop.stream()]
+
+    # Text events from agent
+    text_evts = [e for e in events if e.type == "text"]
+    assert all(e.source == "agent" for e in text_evts)
+    assert all(e.category == "text" for e in text_evts)
+
+    # Lifecycle events from goal_loop
+    lifecycle = [e for e in events if e.category == "lifecycle"]
+    assert all(e.source == "goal_loop" for e in lifecycle)
+
+
+async def test_seq_is_strictly_increasing():
+    agent = _MockAgent([_make_result("x")])
+    loop = GoalLoop(agent=agent, config=_cfg())
+
+    events = [e async for e in loop.stream()]
+    seqs = [e.seq for e in events]
+    assert seqs == sorted(seqs)
+    assert len(set(seqs)) == len(seqs)  # all unique
+
+
+async def test_events_have_event_id():
+    agent = _MockAgent([_make_result("x")])
+    loop = GoalLoop(agent=agent, config=_cfg())
+
+    events = [e async for e in loop.stream()]
+    # All events should have event_id
+    assert all(e.event_id for e in events)
+
+
+async def test_parent_id_links_to_goal():
+    agent = _MockAgent([_make_result("x")])
+    loop = GoalLoop(agent=agent, config=_cfg())
+
+    events = [e async for e in loop.stream()]
+
+    # All non-goal_start events should have parent_id
+    for e in events:
+        if e.type != "goal_start":
+            assert e.parent_id is not None
+
+
 # ── Iteration tracking ───────────────────────────────────────────────────────
 
 
@@ -95,6 +155,8 @@ async def test_stream_yields_goal_iteration():
     iters = [e for e in events if e.type == "goal_iteration"]
     assert len(iters) >= 1
     assert iters[0].iteration >= 1
+    # Iteration events have lifecycle category
+    assert all(e.category == "lifecycle" for e in iters)
 
 
 # ── Verification ─────────────────────────────────────────────────────────────
@@ -108,6 +170,7 @@ async def test_stream_yields_goal_verification():
     verifs = [e for e in events if e.type == "goal_verification"]
     assert len(verifs) >= 1
     assert verifs[0].achieved is True
+    assert verifs[0].category == "verification"
 
 
 # ── Max iterations ───────────────────────────────────────────────────────────
@@ -189,3 +252,26 @@ async def test_stream_multi_iteration():
 
     done = [e for e in events if e.type == "goal_done"][0]
     assert done.goal_result.total_iterations >= 2
+
+
+# ── Category separation ─────────────────────────────────────────────────────
+
+
+async def test_categories_are_disjoint():
+    """text, lifecycle, verification are separate categories."""
+    agent = _MockAgent([_make_result("done")])
+    loop = GoalLoop(agent=agent, config=_cfg())
+
+    events = [e async for e in loop.stream()]
+    categories = {e.category for e in events}
+    assert "text" in categories
+    assert "lifecycle" in categories
+    assert "verification" in categories
+    # No overlap in type-to-category mapping
+    for e in events:
+        if e.type == "text":
+            assert e.category == "text"
+        elif e.type in ("goal_start", "goal_iteration", "goal_done"):
+            assert e.category == "lifecycle"
+        elif e.type == "goal_verification":
+            assert e.category == "verification"

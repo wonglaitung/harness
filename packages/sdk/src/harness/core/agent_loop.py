@@ -54,6 +54,7 @@ from harness.types import (
     ProgressEvent,
     ProgressEventType,
     Session,
+    StreamEvent,
     ToolCall,
 )
 
@@ -1038,6 +1039,7 @@ class AgentLoop:
         self._iteration = 0
         self._stuck_feedback_count = 0
         self._circuit_breaker_stop_injected = False
+        _seq = 0  # event sequence counter
 
         if self._circuit_breaker:
             self._circuit_breaker.reset()
@@ -1129,7 +1131,11 @@ class AgentLoop:
                             text_chunks.append(chunk.content)
                             if on_chunk:
                                 on_chunk(chunk.content)
-                            yield chunk.content
+                            _seq += 1
+                            yield StreamEvent(
+                                type="text", text=chunk.content,
+                                source="agent", category="text", seq=_seq,
+                            )
                         elif chunk.type == ChunkType.TOOL_CALL_START:
                             tool_calls.append(
                                 ToolCall(

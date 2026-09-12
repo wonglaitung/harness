@@ -463,17 +463,28 @@ class ChunkType(Enum):
 @dataclass
 class StreamEvent:
     """
-    Event yielded by AgentLoop.stream_run() and GoalLoop.stream().
+    Typed event envelope for all streaming surfaces.
+
+    Follows industry conventions (LangGraph/CrewAI/OpenAI SDK):
+    - source: identifies the emitter (agent, goal_loop, tool, etc.)
+    - category: separates concerns (text, lifecycle, tool, verification)
+    - seq: strictly-increasing sequence number for ordering
+    - event_id / parent_id: causal linking for nested execution
 
     Attributes:
         type: Event type ("text", "tool_calls", "done", "error",
                "goal_iteration", "goal_verification", "goal_done")
         text: Text chunk content (for type="text")
-        tool_calls: Tool calls detected after stream completes (for type="done")
+        tool_calls: Tool calls detected (for type="done")
         usage: Token usage (for type="done")
         error: Error message (for type="error")
+        source: Emitter identifier ("agent", "goal_loop", "tool", "system")
+        category: Concern separation ("text", "lifecycle", "tool", "verification")
+        seq: Strictly-increasing sequence number within the stream
+        event_id: Unique event identifier for causal linking
+        parent_id: Parent event id (links child events to their cause)
         iteration: Current goal iteration (for goal events)
-        achieved: Whether goal is achieved (for "goal_verification"/"goal_done")
+        achieved: Whether goal is achieved (for verification/goal_done)
         goal_result: GoalResult object (for type="goal_done")
     """
 
@@ -482,11 +493,16 @@ class StreamEvent:
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
     error: str | None = None
-    # Goal-specific fields (set for goal_iteration / goal_verification / goal_done)
+    # Structured envelope fields (industry convention)
+    source: str = "agent"  # "agent" | "goal_loop" | "tool" | "system"
+    category: str = "text"  # "text" | "lifecycle" | "tool" | "verification"
+    seq: int = 0
+    event_id: str = ""
+    parent_id: str | None = None
+    # Goal-specific fields
     iteration: int | None = None
     achieved: bool | None = None
     goal_result: Any = None
-    error: str | None = None
 
 
 @dataclass

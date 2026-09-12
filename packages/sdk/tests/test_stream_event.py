@@ -25,6 +25,10 @@ class TestStreamEvent:
         assert event.text == "Hello"
         assert event.tool_calls == []
         assert event.error is None
+        # New envelope fields have sensible defaults
+        assert event.source == "agent"
+        assert event.category == "text"
+        assert event.seq == 0
 
     def test_done_event(self):
         """Test creating a done event."""
@@ -44,6 +48,30 @@ class TestStreamEvent:
         event = StreamEvent(type="error", error="Something went wrong")
         assert event.type == "error"
         assert event.error == "Something went wrong"
+
+    def test_envelope_fields(self):
+        """Test structured envelope fields (source/category/seq/event_id/parent_id)."""
+        event = StreamEvent(
+            type="text", text="chunk",
+            source="agent", category="text",
+            seq=42, event_id="evt-1", parent_id="evt-0",
+        )
+        assert event.source == "agent"
+        assert event.category == "text"
+        assert event.seq == 42
+        assert event.event_id == "evt-1"
+        assert event.parent_id == "evt-0"
+
+    def test_goal_event_fields(self):
+        """Test goal-specific fields."""
+        event = StreamEvent(
+            type="goal_iteration",
+            source="goal_loop", category="lifecycle",
+            seq=5, iteration=3, achieved=False,
+        )
+        assert event.type == "goal_iteration"
+        assert event.iteration == 3
+        assert event.achieved is False
 
 
 class TestMockLLMStreamWithTools:

@@ -22,6 +22,7 @@ from harness.types import (
     Message,
     Session,
     StopReason,
+    StreamEvent,
     TokenUsage,
     ToolCall,
 )
@@ -68,7 +69,9 @@ async def test_stream_run_simple_text():
         chunks.append(chunk)
 
     assert len(chunks) > 0
-    full_text = "".join(chunks)
+    assert all(isinstance(c, StreamEvent) for c in chunks)
+    text_events = [c for c in chunks if c.type == "text"]
+    full_text = "".join(c.text for c in text_events)
     assert "Hello world" in full_text
 
     assert loop._stream_result is not None
@@ -104,13 +107,14 @@ async def test_stream_run_with_tool_calls():
     assert loop._stream_result.status == LoopState.COMPLETED
     assert loop._stream_result.iterations == 1
 
-    full_text = "".join(chunks)
+    text_events = [c for c in chunks if c.type == "text"]
+    full_text = "".join(c.text for c in text_events)
     assert "File contents: test" in full_text
 
 
 @pytest.mark.asyncio
-async def test_stream_run_yields_strings():
-    """Test that stream_run yields plain strings, not objects."""
+async def test_stream_run_yields_stream_events():
+    """Test that stream_run yields StreamEvent objects with correct envelope."""
     llm = MockLLMClient(
         responses=[
             MockResponse(content="Test response", stop_reason=StopReason.END_TURN),
@@ -124,7 +128,10 @@ async def test_stream_run_yields_strings():
         prompt="Test",
         session=session,
     ):
-        assert isinstance(chunk, str)
+        assert isinstance(chunk, StreamEvent)
+        assert chunk.source == "agent"
+        assert chunk.category == "text"
+        assert chunk.seq > 0
 
 
 @pytest.mark.asyncio
@@ -297,5 +304,6 @@ async def test_stream_run_multiple_iterations():
     assert loop._stream_result.status == LoopState.COMPLETED
     assert loop._stream_result.iterations == 2
 
-    full_text = "".join(chunks)
+    text_events = [c for c in chunks if c.type == "text"]
+    full_text = "".join(c.text for c in text_events)
     assert "Final answer" in full_text
