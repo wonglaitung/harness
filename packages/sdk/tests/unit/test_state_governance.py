@@ -13,6 +13,7 @@ import pytest
 
 from harness.state import BlackboardItem, ItemStatus, WriteKind, create_state_store
 from harness.state.file_store import FileBackend
+from harness.state.memory_store import InMemoryBackend
 
 _ALLOWED = {"harness", "review_queue"}
 
@@ -29,7 +30,8 @@ async def test_write_if_version_enforces_authoritative_verifier() -> None:
     """Gap 2: CAS must not be a bypass around the authoritative write verifier."""
     store = create_state_store("memory", verifier=_write_verifier)
     item = await store.put_authoritative(
-        "decision", "v1", source_agent="planner", writer_id="harness"
+        "decision", "v1", source_agent="planner", writer_id="harness",
+        provenance="test:source",
     )
     assert item.version == 1 and item.source_agent == "planner"
 
@@ -101,7 +103,8 @@ async def test_file_backend_cas_enforces_verifier(tmp_path: Path) -> None:
         "file", path=str(tmp_path / "state.db"), verifier=_write_verifier
     )
     item = await store.put_authoritative(
-        "decision", "v1", source_agent="planner", writer_id="harness"
+        "decision", "v1", source_agent="planner", writer_id="harness",
+        provenance="test:source",
     )
     with pytest.raises(PermissionError):
         await store.write_if_version(item.id, "v2", base_version=1, writer_id="rogue")
@@ -119,7 +122,8 @@ async def test_db_backend_cas_preserves_kind_and_writer(tmp_path: Path) -> None:
         "db", path=str(tmp_path / "state.db"), verifier=_write_verifier
     )
     item = await store.put_authoritative(
-        "decision", "v1", source_agent="planner", writer_id="harness"
+        "decision", "v1", source_agent="planner", writer_id="harness",
+        provenance="test:source",
     )
     # Unauthorized channel rejected.
     with pytest.raises(PermissionError):
@@ -151,6 +155,7 @@ async def test_redis_write_if_version_enforces_verifier() -> None:
             "v1",
             source_agent="planner",
             writer_id="harness",
+            provenance="test:source",
         )
         with pytest.raises(PermissionError):
             await store.write_if_version(item.id, "v2", base_version=1, writer_id="rogue")
@@ -178,7 +183,7 @@ async def test_redis_write_if_version_enforces_verifier() -> None:
 
 async def test_authoritative_write_requires_provenance() -> None:
     """A4: AUTHORITATIVE writes without provenance must be rejected (fail-closed)."""
-    store = create_state_store("memory")
+    backend = InMemoryBackend()
     item = BlackboardItem(
         id="no-prov",
         type="decision",
@@ -187,12 +192,12 @@ async def test_authoritative_write_requires_provenance() -> None:
         provenance=None,  # Missing!
     )
     with pytest.raises(ValueError, match="provenance"):
-        await store.put(item)
+        await backend.put(item)
 
 
 async def test_additive_write_allows_no_provenance() -> None:
     """A4: ADDITIVE writes may omit provenance (observer/proposal role)."""
-    store = create_state_store("memory")
+    backend = InMemoryBackend()
     item = BlackboardItem(
         id="add-no-prov",
         type="observation",
@@ -200,13 +205,13 @@ async def test_additive_write_allows_no_provenance() -> None:
         kind=WriteKind.ADDITIVE,
         provenance=None,
     )
-    result = await store.put(item)
+    result = await backend.put(item)
     assert result.provenance is None
 
 
 async def test_authoritative_write_with_provenance_succeeds() -> None:
     """A4: AUTHORITATIVE writes with provenance are accepted."""
-    store = create_state_store("memory")
+    backend = InMemoryBackend()
     item = BlackboardItem(
         id="with-prov",
         type="decision",
@@ -215,7 +220,7 @@ async def test_authoritative_write_with_provenance_succeeds() -> None:
         provenance="file:report.pdf:page=3",
         writer_id="harness",
     )
-    result = await store.put(item)
+    result = await backend.put(item)
     assert result.provenance == "file:report.pdf:page=3"
 
 
@@ -235,7 +240,7 @@ async def test_write_if_version_requires_provenance_for_authoritative() -> None:
 
     # CAS with AUTHORITATIVE + provenance -> success
     ok, updated = await backend.write_if_version(
-        "cas-prov", "v1", base_version=0,
+        "cas-prov", "v1", base_version=1,
         kind=WriteKind.AUTHORITATIVE,
         provenance="db:accounts:row=42",
     )

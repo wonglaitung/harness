@@ -69,7 +69,7 @@ class TestObservabilityManager:
 
     def test_setup_console_export(self):
         """Test setup with console export."""
-        pytest.importorskip("opentelemetry")
+        pytest.importorskip("opentelemetry.sdk")
 
         config = ObservabilityConfig(export_console=True)
         manager = ObservabilityManager(config)
@@ -95,12 +95,19 @@ class TestSpanBuilder:
 
     def test_span_builder_disabled(self):
         """Test SpanBuilder when tracing is disabled."""
-        with SpanBuilder("test.span") as builder:
-            assert builder._span is None
+        from harness.core.observability import _global_manager
+        old = _global_manager
+        import harness.core.observability as mod
+        mod._global_manager = ObservabilityManager(ObservabilityConfig(enabled=False))
+        try:
+            with SpanBuilder("test.span") as builder:
+                assert builder._span is None
+        finally:
+            mod._global_manager = old
 
     def test_span_builder_with_attributes(self):
         """Test SpanBuilder with attributes."""
-        pytest.importorskip("opentelemetry")
+        pytest.importorskip("opentelemetry.sdk")
 
         config = ObservabilityConfig(export_console=True)
         manager = ObservabilityManager(config)
@@ -124,7 +131,7 @@ class TestTracedOperation:
 
     def test_traced_operation_enabled(self):
         """Test traced_operation when enabled."""
-        pytest.importorskip("opentelemetry")
+        pytest.importorskip("opentelemetry.sdk")
 
         config = ObservabilityConfig(export_console=True)
         manager = ObservabilityManager(config)
@@ -163,7 +170,7 @@ class TestTokenUsageRecording:
 
     def test_record_token_usage(self):
         """Test recording token usage on a span."""
-        pytest.importorskip("opentelemetry")
+        pytest.importorskip("opentelemetry.sdk")
 
         from harness.core.observability import record_token_usage
 
@@ -191,7 +198,7 @@ class TestProgressEventTracing:
 
     def test_trace_progress_event(self):
         """Test tracing a progress event."""
-        pytest.importorskip("opentelemetry")
+        pytest.importorskip("opentelemetry.sdk")
 
         from harness.core.observability import trace_progress_event
 

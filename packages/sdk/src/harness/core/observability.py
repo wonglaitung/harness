@@ -267,6 +267,7 @@ class SpanBuilder:
         self.name = name
         self.parent = parent
         self._span: Span | None = None
+        self._cm: Any = None
         self._start_time: float | None = None
 
     def __enter__(self) -> SpanBuilder:
@@ -277,16 +278,12 @@ class SpanBuilder:
         self._start_time = time.time()
 
         if self.parent:
-            # Use parent context
             ctx = trace.set_span_in_context(self.parent)
-            self._span = tracer.start_as_current_span(
-                self.name,
-                context=ctx,
-            )
+            self._cm = tracer.start_as_current_span(self.name, context=ctx)
         else:
-            self._span = tracer.start_as_current_span(self.name)
+            self._cm = tracer.start_as_current_span(self.name)
 
-        self._span.__enter__()
+        self._span = self._cm.__enter__()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -297,7 +294,7 @@ class SpanBuilder:
             self._span.set_status(Status(StatusCode.ERROR, str(exc_val)))
             self._span.record_exception(exc_val)
 
-        self._span.__exit__(exc_type, exc_val, exc_tb)
+        self._cm.__exit__(exc_type, exc_val, exc_tb)
 
     def set_attr(self, key: str, value: Any) -> SpanBuilder:
         """Set an attribute on the span."""
@@ -397,18 +394,18 @@ def record_token_usage(usage: TokenUsage, span: Span | None = None) -> None:
     if span is None:
         return
 
-    span.set_attr("tokens.input", usage.input_tokens)
-    span.set_attr("tokens.output", usage.output_tokens)
-    span.set_attr("tokens.total", usage.total_tokens)
+    span.set_attribute("tokens.input", usage.input_tokens)
+    span.set_attribute("tokens.output", usage.output_tokens)
+    span.set_attribute("tokens.total", usage.total_tokens)
 
     if usage.cache_read_tokens > 0:
-        span.set_attr("tokens.cache_read", usage.cache_read_tokens)
+        span.set_attribute("tokens.cache_read", usage.cache_read_tokens)
 
     if usage.cache_write_tokens > 0:
-        span.set_attr("tokens.cache_write", usage.cache_write_tokens)
+        span.set_attribute("tokens.cache_write", usage.cache_write_tokens)
 
     if usage.tool_calls > 0:
-        span.set_attr("tokens.tool_calls", usage.tool_calls)
+        span.set_attribute("tokens.tool_calls", usage.tool_calls)
 
 
 # Convenience function to check if tracing is active

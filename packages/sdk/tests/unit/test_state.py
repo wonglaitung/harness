@@ -32,7 +32,8 @@ async def test_put_and_get() -> None:
 
 async def test_write_if_version_cas() -> None:
     backend = InMemoryBackend()
-    item = BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
+    item = BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE,
+                          provenance="test:source")
     await backend.put(item)
 
     # Correct base version -> success, version advances.
@@ -48,10 +49,12 @@ async def test_write_if_version_cas() -> None:
 async def test_authoritative_conflict_surfaces() -> None:
     backend = InMemoryBackend()
     await backend.put(
-        BlackboardItem(id="d1", type="budget", content="100", kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="d1", type="budget", content="100", kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
     await backend.put(
-        BlackboardItem(id="d2", type="budget", content="200", kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="d2", type="budget", content="200", kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
     conflicts: list[ConflictSet] = await backend.get_conflicts()
     assert len(conflicts) == 1
@@ -60,7 +63,8 @@ async def test_authoritative_conflict_surfaces() -> None:
 
 async def test_file_backend_persists(tmp_path: Path) -> None:
     store = create_state_store("file", path=str(tmp_path / "state.db"))
-    item = await store.put_authoritative("decision", "final", source_agent="planner")
+    item = await store.put_authoritative("decision", "final", source_agent="planner",
+                                          provenance="test:source")
     reopened = create_state_store("file", path=str(tmp_path / "state.db"))
     got = await reopened.get(item.id)
     assert got is not None
@@ -71,7 +75,8 @@ async def test_file_backend_persists(tmp_path: Path) -> None:
 async def test_file_backend_cas_singleproc(tmp_path: Path) -> None:
     backend = FileBackend(str(tmp_path / "state.db"))
     await backend.put(
-        BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
 
     ok, updated = await backend.write_if_version("k", "v2", base_version=1)
@@ -117,7 +122,8 @@ async def test_file_backend_cas_crossprocess(tmp_path: Path) -> None:
     path = str(tmp_path / "state.db")
     seed = FileBackend(path)
     await seed.put(
-        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
 
     n_procs = 4
@@ -144,7 +150,8 @@ async def test_file_backend_cas_crossprocess(tmp_path: Path) -> None:
 async def test_db_backend_cas_singleproc(tmp_path: Path) -> None:
     backend = DBBackend(str(tmp_path / "state.db"))
     await backend.put(
-        BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="k", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
 
     ok, updated = await backend.write_if_version("k", "v2", base_version=1)
@@ -167,7 +174,8 @@ async def test_db_backend_cas_concurrent(tmp_path: Path) -> None:
     """Async concurrency must not lose updates (no gaps in base versions)."""
     backend = DBBackend(str(tmp_path / "state.db"))
     await backend.put(
-        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
 
     n_tasks = 8
@@ -215,7 +223,8 @@ async def test_db_backend_cas_crossprocess(tmp_path: Path) -> None:
     path = str(tmp_path / "state.db")
     seed = DBBackend(path)
     await seed.put(
-        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE)
+        BlackboardItem(id="c", type="counter", content={"n": 0}, kind=WriteKind.AUTHORITATIVE,
+                       provenance="test:source")
     )
     await seed.aclose()
 
@@ -252,7 +261,8 @@ async def test_authoritative_verifier_blocks_unauthorized() -> None:
     with pytest.raises(PermissionError):
         await store.put_authoritative("decision", "final", source_agent="agent1")
     # Control layer -> allowed.
-    auth = await store.put_authoritative("decision", "final", source_agent="harness")
+    auth = await store.put_authoritative("decision", "final", source_agent="harness",
+                                         provenance="test:source")
     assert auth.kind == WriteKind.AUTHORITATIVE
 
 
@@ -270,8 +280,10 @@ async def test_strict_write_verifier_allowlist() -> None:
     with pytest.raises(PermissionError):
         await store.put_authoritative("decision", "v", source_agent="agentX")
     # Control-layer writers are accepted.
-    assert (await store.put_authoritative("decision", "v", source_agent="harness")).kind == WriteKind.AUTHORITATIVE
-    assert (await store.put_authoritative("decision", "v", source_agent="review_queue")) is not None
+    assert (await store.put_authoritative("decision", "v", source_agent="harness",
+                                          provenance="test:source")).kind == WriteKind.AUTHORITATIVE
+    assert (await store.put_authoritative("decision", "v", source_agent="review_queue",
+                                          provenance="test:source")) is not None
 
 
 async def test_read_verifier_drops_forged_authoritative() -> None:
@@ -287,6 +299,7 @@ async def test_read_verifier_drops_forged_authoritative() -> None:
     forged = BlackboardItem(
         id="fk", type="decision", content="x",
         kind=WriteKind.AUTHORITATIVE, source_agent="evil", status=ItemStatus.CONFIRMED,
+        provenance="forged:source",
     )
     await store._backend.put(forged)
     assert await store.get("fk") is None
@@ -294,6 +307,7 @@ async def test_read_verifier_drops_forged_authoritative() -> None:
     good = BlackboardItem(
         id="gk", type="decision", content="y",
         kind=WriteKind.AUTHORITATIVE, source_agent="harness", status=ItemStatus.CONFIRMED,
+        provenance="test:source",
     )
     await store._backend.put(good)
     assert (await store.get("gk")).source_agent == "harness"
@@ -311,11 +325,13 @@ async def test_read_verifier_filters_list_items() -> None:
     store = create_state_store("memory", read_verifier=read_v)
     await store._backend.put(
         BlackboardItem(id="a", type="t", content="1", kind=WriteKind.AUTHORITATIVE,
-                       source_agent="evil", status=ItemStatus.CONFIRMED)
+                       source_agent="evil", status=ItemStatus.CONFIRMED,
+                       provenance="forged:source")
     )
     await store._backend.put(
         BlackboardItem(id="b", type="t", content="2", kind=WriteKind.AUTHORITATIVE,
-                       source_agent="harness", status=ItemStatus.CONFIRMED)
+                       source_agent="harness", status=ItemStatus.CONFIRMED,
+                       provenance="test:source")
     )
     ids = {i.id for i in await store.list_items(type="t")}
     assert ids == {"b"}
@@ -336,7 +352,8 @@ async def test_redis_cas_atomic_when_available() -> None:
 
     try:
         await backend.put(
-            BlackboardItem(id="rk", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE)
+            BlackboardItem(id="rk", type="decision", content="v1", kind=WriteKind.AUTHORITATIVE,
+                           provenance="test:source")
         )
         ok, updated = await backend.write_if_version("rk", "v2", base_version=1)
         assert ok is True and updated.version == 2

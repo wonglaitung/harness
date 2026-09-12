@@ -70,10 +70,18 @@ class _FakeCounter:
 class _FakeMeter:
     def __init__(self) -> None:
         self.counters: dict[str, _FakeCounter] = {}
+        self.gauges: dict[str, _FakeCounter] = {}
 
     def create_counter(self, name: str, description: str = "") -> _FakeCounter:
         c = _FakeCounter()
         self.counters[name] = c
+        return c
+
+    def create_observable_gauge(
+        self, name: str, callbacks=None, description: str = "", unit: str = ""
+    ) -> _FakeCounter:
+        c = _FakeCounter()
+        self.gauges[name] = c
         return c
 
 
@@ -102,7 +110,8 @@ def test_no_otel_stays_in_memory() -> None:
     m = GateMetrics()
     assert m._otel_counters == {}
     m.record(_verdict(False))
-    m.record(_verdict(False, [GateFinding("b", FindingType.RECONCILIATION, GateSeverity.WARNING, "x")]))
+    finding = GateFinding("b", FindingType.RECONCILIATION, GateSeverity.WARNING, "x")
+    m.record(_verdict(False, [finding]))
     assert m.blocked == 2
     assert m.snapshot()["blocked"] == 2
     assert m.snapshot()["findings_by_severity"]["warning"] == 1

@@ -431,9 +431,14 @@ class TestRedisSessionStore:
     @pytest.fixture
     async def redis_store(self):
         """Create Redis session store."""
-        from harness.service.store_redis import RedisSessionStore
-
-        store = RedisSessionStore("redis://localhost:6379/15")
+        try:
+            from harness.service.store_redis import RedisSessionStore
+        except ImportError:
+            pytest.skip("redis package not installed")
+        try:
+            store = RedisSessionStore("redis://localhost:6379/15")
+        except Exception as e:
+            pytest.skip(f"Redis unavailable: {e}")
 
         yield store
 
@@ -568,9 +573,14 @@ class TestRedisDistributedLock:
     @pytest.fixture
     async def lock(self):
         """Create Redis distributed lock."""
-        from harness.service.store_redis import RedisDistributedLock
-
-        lock = RedisDistributedLock("redis://localhost:6379/15")
+        try:
+            from harness.service.store_redis import RedisDistributedLock
+        except ImportError:
+            pytest.skip("redis package not installed")
+        try:
+            lock = RedisDistributedLock("redis://localhost:6379/15")
+        except Exception as e:
+            pytest.skip(f"Redis unavailable: {e}")
 
         yield lock
 

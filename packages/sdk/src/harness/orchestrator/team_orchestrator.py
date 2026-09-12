@@ -443,7 +443,8 @@ Provide your allocation in the following format:
         # behalf: source_agent keeps author attribution, writer_id authorizes the
         # control channel so the strict write verifier (H3) accepts it.
         await config.state_store.put_authoritative(
-            role.name, content, source_agent=role.name, writer_id="harness"
+            role.name, content, source_agent=role.name, writer_id="harness",
+            provenance=f"agent:{role.name}:result",
         )
 
         verdict = getattr(result, "gate_verdict", None)

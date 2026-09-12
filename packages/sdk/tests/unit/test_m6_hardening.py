@@ -118,6 +118,7 @@ async def test_read_verifier_raise_blocks_forged_item() -> None:
         source_agent="rogue",
         kind=WriteKind.AUTHORITATIVE,
         status=ItemStatus.CONFIRMED,
+        provenance="forged:source",
     )
     await store._backend.put(forged)
     with pytest.raises(PermissionError):
@@ -137,6 +138,7 @@ async def test_read_verifier_drop_mode_silent() -> None:
         source_agent="rogue",
         kind=WriteKind.AUTHORITATIVE,
         status=ItemStatus.CONFIRMED,
+        provenance="forged:source",
     )
     await store._backend.put(forged)
     assert await store.get("decision:2") is None

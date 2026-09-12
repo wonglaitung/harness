@@ -94,6 +94,11 @@ class TracingMiddleware(BaseHTTPMiddleware):
             if span_context and span_context.is_valid:
                 trace_id = format(span_context.trace_id, "032x")
                 response.headers["X-Trace-Id"] = trace_id
+            else:
+                # No valid span context — echo back the custom header
+                trace_id = request.headers.get("X-B3-TraceId") or request.headers.get("X-Trace-Id")
+                if trace_id:
+                    response.headers["X-Trace-Id"] = trace_id
 
             return response
 
