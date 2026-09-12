@@ -901,6 +901,7 @@ asyncio.run(main())
 | `examples/multi_agent_team.py` | TeamOrchestrator 三种协调模式（Broadcast / Sequential / Hierarchical） | `MOCK=1 python examples/multi_agent_team.py` |
 | `examples/multi_agent_workflow.py` | WorkflowEngine DAG 调度（并行+串行）、模板变量、失败重试+ReviewQueue 升级、死锁检测 | `MOCK=1 python examples/multi_agent_workflow.py` |
 | `examples/multi_agent_blackboard.py` | SharedStateStore 黑板通信：additive/authoritative 写分层、CAS 乐观并发、冲突检测、provenance 溯源 | `python examples/multi_agent_blackboard.py` |
+| `examples/multi_agent_streaming_team.py` | 端到端：Team 协调 + 流式 `stream_goal()`（GoalLoop.stream）+ 黑板共享状态串联 | `python examples/multi_agent_streaming_team.py` |
 
 > **协作核心原则**：多 Agent 经结构化共享状态（Blackboard）协作，禁用点对点文本传纸条。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。
 
