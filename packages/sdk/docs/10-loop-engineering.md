@@ -70,6 +70,31 @@ config = GoalConfig(
 result = await agent.run_goal(config)
 ```
 
+### 流式目标执行 (stream_goal)
+
+除了 `run_goal()`，还提供 `stream_goal()` 方法实现实时流式输出：
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+agent = AgentHarness()
+
+# 流式目标执行
+async for event in agent.stream_goal("修复所有类型错误"):
+    if event.type == "text":
+        # 实时输出文本
+        print(event.text, end="", flush=True)
+    elif event.type == "goal_iteration":
+        print(f"\n--- 第 {event.iteration} 轮迭代完成 ---")
+    elif event.type == "goal_verification":
+        status = "达成" if event.achieved else "未达成"
+        print(f"\n验证结果: {status}")
+    elif event.type == "goal_done":
+        result = event.goal_result
+        print(f"\n目标完成: {result.status.value}, 共 {result.total_iterations} 轮")
+```
+
 ### 会话连续性
 
 默认情况下，每次调用 `run_goal()` 会创建新的会话。如果需要在多轮目标执行之间保持对话上下文，可以指定 `session_id`：

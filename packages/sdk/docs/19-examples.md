@@ -56,8 +56,34 @@ from harness import AgentHarness
 
 agent = AgentHarness()
 
-async for chunk in agent.stream("写一篇关于 AI 的短文"):
-    print(chunk, end="", flush=True)
+# 基础流式（返回 StreamEvent 对象）
+async for event in agent.stream("写一篇关于 AI 的短文"):
+    if event.type == "text":
+        print(event.text, end="", flush=True)
+    elif event.type == "done":
+        print(f"\n完成: {event.usage.total_tokens} tokens")
+```
+
+### 目标驱动流式执行
+
+```python
+from harness import AgentHarness
+from harness.loop import GoalStatus
+
+agent = AgentHarness()
+
+# 流式目标驱动执行
+async for event in agent.stream_goal("修复所有类型错误"):
+    if event.type == "text":
+        print(event.text, end="", flush=True)
+    elif event.type == "goal_iteration":
+        print(f"\n--- 第 {event.iteration} 轮 ---")
+    elif event.type == "goal_done":
+        result = event.goal_result
+        if result.status == GoalStatus.ACHIEVED:
+            print(f"\n目标达成！共 {result.total_iterations} 轮迭代")
+        else:
+            print(f"\n目标未达成: {result.status.value}")
 ```
 
 ### 从配置文件创建
@@ -865,3 +891,28 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## 多 Agent 协作可运行示例
+
+`examples/` 目录下提供三个完整可运行的多 Agent 协作示例（无需真实 LLM，设 `MOCK=1` 即可跑通）：
+
+| 文件 | 演示内容 | 运行方式 |
+|------|----------|----------|
+| `examples/multi_agent_team.py` | TeamOrchestrator 三种协调模式（Broadcast / Sequential / Hierarchical） | `MOCK=1 python examples/multi_agent_team.py` |
+| `examples/multi_agent_workflow.py` | WorkflowEngine DAG 调度（并行+串行）、模板变量、失败重试+ReviewQueue 升级、死锁检测 | `MOCK=1 python examples/multi_agent_workflow.py` |
+| `examples/multi_agent_blackboard.py` | SharedStateStore 黑板通信：additive/authoritative 写分层、CAS 乐观并发、冲突检测、provenance 溯源 | `python examples/multi_agent_blackboard.py` |
+
+> **协作核心原则**：多 Agent 经结构化共享状态（Blackboard）协作，禁用点对点文本传纸条。详见 [13-orchestrator.md](./13-orchestrator.md#确定性闸门抽象层deterministic-gate-abstraction)。
+
+### 快速体验
+
+```bash
+# 无需 API Key，使用 mock agent 验证多 Agent 编排逻辑
+cd packages/sdk
+MOCK=1 python examples/multi_agent_team.py
+MOCK=1 python examples/multi_agent_workflow.py
+
+# 黑板通信示例（纯本地，无外部依赖）
+python examples/multi_agent_blackboard.py
+```
+

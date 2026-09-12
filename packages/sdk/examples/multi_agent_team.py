@@ -27,7 +27,7 @@ from harness.orchestrator import (
     TeamConfig,
     TeamOrchestrator,
 )
-from harness.state import SharedStateStore
+from harness.state import create_state_store
 from harness.review.queue import ReviewQueue
 
 
@@ -127,7 +127,7 @@ async def demo_sequential():
     team = TeamOrchestrator(orchestrator)
 
     # 配置 SharedStateStore（黑板通信，非 P2P）
-    store = SharedStateStore()
+    store = create_state_store("memory")
     review_queue = ReviewQueue(human_actors={"human"})
 
     config = TeamConfig(

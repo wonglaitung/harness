@@ -23,12 +23,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from harness import AgentHarness
 from harness.orchestrator import (
+    ExecutionMode,
     LoopOrchestrator,
     WorkflowConfig,
     WorkflowEngine,
     WorkflowStep,
 )
-from harness.state import SharedStateStore
+from harness.state import create_state_store
 from harness.review.queue import ReviewQueue
 
 
@@ -69,7 +70,7 @@ async def demo_basic_pipeline():
 
     DAG 结构：
         analyze ──┐
-                  ├──→ review → report
+                   ├──→ review → report
         lint    ──┘
     """
     print("\n" + "=" * 60)
@@ -77,43 +78,42 @@ async def demo_basic_pipeline():
     print("=" * 60)
 
     orchestrator = create_orchestrator()
-    store = SharedStateStore()
-    engine = WorkflowEngine(orchestrator, store)
+    review_queue = ReviewQueue(human_actors={"human"})
+    engine = WorkflowEngine(orchestrator, review_queue=review_queue)
 
-    workflow = WorkflowConfig.builder() \
-        .name("code-review-pipeline") \
-        .addStep(WorkflowStep.builder()
-            .name("analyze")
-            .goal("分析 src/ 的代码结构，识别主要模块和依赖关系")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("lint")
-            .goal("运行 ruff check src/，统计 error 和 warning 数量")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("review")
-            .goal("基于分析结果和 lint 结果，给出综合代码审查意见")
-            .addDependsOn("analyze")
-            .addDependsOn("lint")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("report")
-            .goal("生成最终审查报告，包含问题摘要和改进建议")
-            .addDependsOn("review")
-            .build()) \
-        .build()
+    workflow = WorkflowConfig(
+        name="code-review-pipeline",
+        max_parallel_steps=2,
+        steps=[
+            WorkflowStep(
+                name="analyze",
+                goal="分析 src/ 的代码结构，识别主要模块和依赖关系",
+                mode=ExecutionMode.PARALLEL,
+            ),
+            WorkflowStep(
+                name="lint",
+                goal="运行 ruff check src/，统计 error 和 warning 数量",
+                mode=ExecutionMode.PARALLEL,
+            ),
+            WorkflowStep(
+                name="review",
+                goal="基于分析结果和 lint 结果，给出综合代码审查意见",
+                depends_on=["analyze", "lint"],
+            ),
+            WorkflowStep(
+                name="report",
+                goal="生成最终审查报告，包含问题摘要和改进建议",
+                depends_on=["review"],
+            ),
+        ],
+    )
 
-    result = await engine.execute(workflow)
+    result = await engine.run(workflow)
 
     print(f"\n工作流状态: {result.status.value}")
-    print(f"总耗时: {result.duration_seconds:.1f}s")
     for name, step in result.steps.items():
         status = "✓" if step.status.value == "success" else "✗"
         print(f"  {status} {name}: {step.status.value}")
-
-    # 查看黑板
-    items = await store.list_items()
-    print(f"\n黑板记录: {len(items)} 条")
 
 
 # ── 示例 2: 模板变量传递 ─────────────────────────────────────────────────────
@@ -121,37 +121,39 @@ async def demo_basic_pipeline():
 
 async def demo_template_passing():
     """
-    模板变量：步骤 B 通过 {{step_a.exports.key}} 读取步骤 A 的输出。
+    模板变量：步骤 B 通过 {{collect.exports.key}} 读取步骤 A 的输出。
 
-    这不是 P2P 传纸条，而是从 SharedStateStore 黑板读取结构化数据。
+    这不是 P2P 传纸条，而是从 WorkflowResult 上下文渲染结构化数据。
     """
     print("\n" + "=" * 60)
-    print("示例 2: 模板变量传递（黑板通信）")
+    print("示例 2: 模板变量传递（上下文渲染）")
     print("=" * 60)
 
     orchestrator = create_orchestrator()
-    store = SharedStateStore()
-    engine = WorkflowEngine(orchestrator, store)
+    review_queue = ReviewQueue(human_actors={"human"})
+    engine = WorkflowEngine(orchestrator, review_queue=review_queue)
 
-    workflow = WorkflowConfig.builder() \
-        .name("template-demo") \
-        .addStep(WorkflowStep.builder()
-            .name("collect")
-            .goal("收集用户需求，导出功能列表和优先级")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("plan")
-            .goal("基于需求列表 {{collect.exports.features}} 制定开发计划")
-            .addDependsOn("collect")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("execute")
-            .goal("按计划 {{plan.exports.tasks}} 执行开发任务")
-            .addDependsOn("plan")
-            .build()) \
-        .build()
+    workflow = WorkflowConfig(
+        name="template-demo",
+        steps=[
+            WorkflowStep(
+                name="collect",
+                goal="收集用户需求，导出功能列表和优先级",
+            ),
+            WorkflowStep(
+                name="plan",
+                goal="基于需求列表制定开发计划",
+                depends_on=["collect"],
+            ),
+            WorkflowStep(
+                name="execute",
+                goal="按计划执行开发任务",
+                depends_on=["plan"],
+            ),
+        ],
+    )
 
-    result = await engine.execute(workflow)
+    result = await engine.run(workflow)
 
     print(f"\n工作流状态: {result.status.value}")
     for name, step in result.steps.items():
@@ -171,30 +173,28 @@ async def demo_failure_handling():
     print("=" * 60)
 
     orchestrator = create_orchestrator()
-    store = SharedStateStore()
     review_queue = ReviewQueue(human_actors={"human"})
-    engine = WorkflowEngine(orchestrator, store, review_queue=review_queue)
+    engine = WorkflowEngine(orchestrator, review_queue=review_queue)
 
-    workflow = WorkflowConfig.builder() \
-        .name("failure-demo") \
-        .addStep(WorkflowStep.builder()
-            .name("step-ok")
-            .goal("正常执行的步骤")
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("step-fail")
-            .goal("这个步骤会失败")
-            .addDependsOn("step-ok")
-            .maxRetries(2)  # 最多重试 2 次
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("step-after-fail")
-            .goal("依赖失败步骤的下游")
-            .addDependsOn("step-fail")
-            .build()) \
-        .build()
+    workflow = WorkflowConfig(
+        name="failure-demo",
+        steps=[
+            WorkflowStep(name="step-ok", goal="正常执行的步骤"),
+            WorkflowStep(
+                name="step-fail",
+                goal="这个步骤会失败",
+                depends_on=["step-ok"],
+                max_retries=2,  # 最多重试 2 次
+            ),
+            WorkflowStep(
+                name="step-after-fail",
+                goal="依赖失败步骤的下游",
+                depends_on=["step-fail"],
+            ),
+        ],
+    )
 
-    result = await engine.execute(workflow)
+    result = await engine.run(workflow)
 
     print(f"\n工作流状态: {result.status.value}")
     for name, step in result.steps.items():
@@ -206,7 +206,7 @@ async def demo_failure_handling():
     pending = review_queue.pending()
     print(f"\nReviewQueue 待审项: {len(pending)}")
     for item in pending:
-        print(f"  - {item.source}: {item.content[:60]}...")
+        print(f"  - {item.source}: {item.content[:60] if item.content else ''}...")
 
 
 # ── 示例 4: 死锁检测 ────────────────────────────────────────────────────────
@@ -221,24 +221,18 @@ async def demo_deadlock_detection():
     print("=" * 60)
 
     orchestrator = create_orchestrator()
-    store = SharedStateStore()
-    engine = WorkflowEngine(orchestrator, store)
+    review_queue = ReviewQueue(human_actors={"human"})
+    engine = WorkflowEngine(orchestrator, review_queue=review_queue)
 
-    workflow = WorkflowConfig.builder() \
-        .name("cyclic-workflow") \
-        .addStep(WorkflowStep.builder()
-            .name("A")
-            .goal("步骤 A")
-            .addDependsOn("B")  # A 依赖 B
-            .build()) \
-        .addStep(WorkflowStep.builder()
-            .name("B")
-            .goal("步骤 B")
-            .addDependsOn("A")  # B 依赖 A → 循环！
-            .build()) \
-        .build()
+    workflow = WorkflowConfig(
+        name="cyclic-workflow",
+        steps=[
+            WorkflowStep(name="A", goal="步骤 A", depends_on=["B"]),  # A 依赖 B
+            WorkflowStep(name="B", goal="步骤 B", depends_on=["A"]),  # B 依赖 A → 循环！
+        ],
+    )
 
-    result = await engine.execute(workflow)
+    result = await engine.run(workflow)
 
     print(f"\n工作流状态: {result.status.value}")
     print(f"错误信息: {result.error}")

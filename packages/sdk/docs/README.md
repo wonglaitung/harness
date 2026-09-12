@@ -92,9 +92,10 @@ agent = AgentHarness(
 # 同步调用
 response = agent.run("分析当前目录的代码结构")
 
-# 流式调用
-async for chunk in agent.stream("帮我重构这个函数"):
-    print(chunk.content, end="")
+# 流式调用（返回 StreamEvent 对象）
+async for event in agent.stream("帮我重构这个函数"):
+    if event.type == "text":
+        print(event.text, end="")
 
 # 浏览器自动化（内网支持）
 browser_agent = AgentHarness(

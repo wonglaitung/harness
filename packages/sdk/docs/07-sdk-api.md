@@ -68,6 +68,7 @@ from harness import (
     # 核心类型
     Message,
     Session,
+    StreamEvent,
     ToolCall,
     ToolResult,
     TokenUsage,
@@ -315,13 +316,57 @@ async def stream(
     self,
     prompt: str,                     # 用户输入
     session_id: str | None = None,   # 会话 ID（用于对话连续性）
-    on_chunk: Callable[[str], None] | None = None, # 每个文本块的回调
+    on_chunk: Callable[[str], None] | None = None, # 每个文本块的回调（已弃用，优先使用 StreamEvent）
     on_progress: ProgressCallback | None = None, # 进度事件回调
     verbose: bool = False,           # 如果为 True，在控制台打印进度
-) -> AsyncIterator[str]:
-    """流式执行 Agent 任务，逐步返回内容
+) -> AsyncIterator[StreamEvent]:
+    """流式执行 Agent 任务，逐步返回结构化事件
     
-    注意：工具调用在内部处理，不会流式传输。
+    每个事件包含结构化信封 (source/category/seq/event_id/parent_id)，
+    对齐业界实践 (LangGraph/CrewAI/OpenAI SDK)。
+    
+    事件类型:
+    - type="text": 文本块 (source="agent", category="text")
+    - type="done": 流完成 (携带 tool_calls 和 usage)
+    - type="error": 错误事件
+    
+    工具调用在内部处理，不会流式传输。
+    """
+```
+
+#### stream_goal() - 目标驱动流式执行
+
+```python
+async def stream_goal(
+    self,
+    goal: str,                        # 目标描述
+    session_id: str | None = None,   # 会话 ID（用于对话连续性）
+    success_criteria: str | None = None,  # 成功标准
+    custom_verifier: Callable | None = None,  # 自定义验证函数
+    max_iterations: int = 50,        # 最大迭代次数
+    max_context_resets: int = 5,     # 最大上下文重置次数
+    timeout_seconds: int = 3600,     # 超时时间（秒）
+    workspace_dir: str = ".",        # 工作目录
+    on_progress: ProgressCallback | None = None,  # 进度回调
+    **kwargs,                        # 其他 GoalConfig 选项
+) -> AsyncIterator[StreamEvent]:
+    """目标驱动流式执行：Agent 自主运行直到目标达成
+
+    事件类型:
+    - type="goal_start": 目标开始 (source="goal_loop", category="lifecycle")
+    - type="text": 文本块 (source="agent", category="text")
+    - type="goal_iteration": 迭代完成 (source="goal_loop", category="lifecycle")
+    - type="goal_verification": 验证结果 (source="goal_loop", category="verification")
+    - type="goal_done": 目标完成/终止 (source="goal_loop", category="lifecycle")
+    
+    示例：
+        async for event in agent.stream_goal("修复所有类型错误"):
+            if event.type == "text":
+                print(event.text, end="", flush=True)
+            elif event.type == "goal_done":
+                result = event.goal_result
+                if result.status == GoalStatus.ACHIEVED:
+                    print(f"目标达成，共 {result.total_iterations} 轮迭代")
     """
 ```
 
@@ -1707,6 +1752,78 @@ class LoopResult:
     @property
     def content(self) -> str:
         return self.final_response or ""    # 最终响应内容
+```
+
+### StreamEvent
+
+流式输出事件（`harness.types.StreamEvent`），对齐业界实践 (LangGraph/CrewAI/OpenAI SDK)：
+
+```python
+@dataclass
+class StreamEvent:
+    type: str       # "text" | "tool_calls" | "done" | "error" | "goal_*"
+    text: str = ""  # 文本块内容 (type="text")
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    error: str | None = None
+
+    # 结构化信封 (industry convention)
+    source: str = "agent"   # 事件来源: "agent" | "goal_loop" | "tool" | "system"
+    category: str = "text"  # 关注点分离: "text" | "lifecycle" | "tool" | "verification"
+    seq: int = 0            # 严格递增序列号
+    event_id: str = ""      # 唯一事件 ID
+    parent_id: str | None = None  # 父事件 ID (因果链追溯)
+
+    # 目标驱动字段
+    iteration: int | None = None
+    achieved: bool | None = None
+    goal_result: Any = None
+```
+
+#### 事件来源 (source)
+
+| source | 说明 |
+|--------|------|
+| `"agent"` | Agent 执行产生 (文本块、工具调用) |
+| `"goal_loop"` | GoalLoop 产生 (迭代、验证、目标完成) |
+| `"tool"` | 工具执行产生 |
+| `"system"` | 系统事件 |
+
+#### 事件分类 (category)
+
+| category | 说明 |
+|----------|------|
+| `"text"` | 文本输出 |
+| `"lifecycle"` | 生命周期事件 (goal_start, goal_iteration, goal_done) |
+| `"tool"` | 工具执行事件 |
+| `"verification"` | 验证事件 (goal_verification) |
+
+#### 使用示例
+
+```python
+from harness import AgentHarness
+
+agent = AgentHarness()
+
+# 基础流式
+async for event in agent.stream("写一篇短文"):
+    if event.type == "text":
+        print(event.text, end="")
+    elif event.type == "done":
+        print(f"\n耗时: {event.usage.total_tokens} tokens")
+
+# 目标驱动流式
+async for event in agent.stream_goal("修复所有类型错误"):
+    if event.type == "text":
+        print(event.text, end="")
+    elif event.type == "goal_iteration":
+        print(f"第 {event.iteration} 轮迭代完成")
+    elif event.type == "goal_verification":
+        status = "达成" if event.achieved else "未达成"
+        print(f"验证: {status}")
+    elif event.type == "goal_done":
+        result = event.goal_result
+        print(f"目标完成: {result.status.value}")
 ```
 
 ### ToolCall

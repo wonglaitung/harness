@@ -1077,18 +1077,40 @@ class BudgetStatus:
 
 ## 流式输出
 
-Agent Loop 支持流式输出，允许逐步接收 LLM 的响应。
+Agent Loop 支持流式输出，通过 `AgentLoop.stream_run()` 实现 token 级流式传输。
 
 ```python
-# 方式 1：通过 AgentHarness.stream()
-async for chunk in agent.stream("分析这段代码"):
-    print(chunk.content, end="")
+# 方式 1：通过 AgentHarness.stream()（返回 StreamEvent）
+async for event in agent.stream("分析这段代码"):
+    if event.type == "text":
+        print(event.text, end="")
+    elif event.type == "done":
+        print(f"\n完成: {event.usage.total_tokens} tokens")
 
-# 方式 2：在 AgentLoop 中使用
-result = await agent_loop.run(messages, stream=True)
+# 方式 2：通过 AgentHarness.stream_goal()（目标驱动流式）
+async for event in agent.stream_goal("修复所有类型错误"):
+    if event.type == "text":
+        print(event.text, end="")
+    elif event.type == "goal_done":
+        result = event.goal_result
+        print(f"迭代 {result.total_iterations} 次")
 ```
 
-流式输出遵循背压控制：如果消费者处理速度慢于生产速度，LLM 读取会被自动暂停。
+### StreamEvent 事件
+
+流式输出返回 `StreamEvent` 对象，包含结构化信封字段（对齐业界实践）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | str | 事件类型: `"text"`, `"done"`, `"error"`, `"goal_*"` |
+| `text` | str | 文本内容 (type="text") |
+| `source` | str | 事件来源: `"agent"`, `"goal_loop"`, `"tool"`, `"system"` |
+| `category` | str | 关注点: `"text"`, `"lifecycle"`, `"tool"`, `"verification"` |
+| `seq` | int | 严格递增序列号 |
+| `event_id` | str | 唯一事件 ID |
+| `parent_id` | str \| None | 父事件 ID |
+
+详见 [07-sdk-api.md](./07-sdk-api.md#streamevent)。
 
 ## 错误处理
 

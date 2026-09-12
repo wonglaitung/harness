@@ -779,7 +779,7 @@ SDK 已闭合"配置性失分"，但以下为**工程实现缺口**或**本就�
 
 - **默认 `strict=False`**：存量应用零迁移，仅韧性层在线。High 风险场景**必须 `True`**（README 须醒目声明）。
 - **部署侧强制**：可选环境变量 `HARNESS_REQUIRE_STRICT=1` 强制校验（见 [08-security.md](./08-security.md#部署侧强制校验环境变量)）。
-- **测试覆盖**：strict 治理路径由 `tests/unit/test_phase2.py` / `test_state_governance.py` / `test_m6_hardening.py` 覆盖；全量 SDK 套件当前 **905 passed / 21 skipped**。
+- **测试覆盖**：strict 治理路径由 `tests/unit/test_phase2.py` / `test_state_governance.py` / `test_m6_hardening.py` 覆盖；全量 SDK 套件当前 **940 passed / 17 skipped**。
 
 ## 下一步
 
