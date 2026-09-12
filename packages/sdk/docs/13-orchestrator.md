@@ -446,8 +446,8 @@ asyncio.run(main())
 
 多 Agent 协作的"病例本"，替代 `TeamOrchestrator` 当前的 `final_response` 文本传递：
 
-- 记录模型 `BlackboardItem`：`id / type / content / source_agent / confidence / created_at / base_version / ttl / status / writer_id`（含 `effective_writer` 授权通道）
-- 写分层：`additive`（观测/提议，任意 Agent）vs `authoritative`（decision 落定，仅控制层经 verifier）
+- 记录模型 `BlackboardItem`：`id / type / content / source_agent / confidence / created_at / base_version / ttl / status / writer_id`（含 `effective_writer` 授权通道）/ **`provenance`**（A4: AUTHORITATIVE 写必填，溯源引用如 `file:report.pdf:page=3`）
+- 写分层：`additive`（观测/提议，任意 Agent）vs `authoritative`（decision 落定，仅控制层经 verifier）；**AUTHORITATIVE 写必须携带 `provenance`，否则 fail-closed**
 - 乐观并发：`write_if_version(base_version)` CAS（verifier 已覆盖 authoritative 写），版本已前进则拒覆盖 / 存为并行提案
 - 冲突集显性化：矛盾事实进冲突队列，不静默覆写
 - 可插拔后端 `StateBackend`：`memory`(测试) / `file`(worktree 内，开发) / `redis`(生产) / `db`(SQLite/Postgres，生产)；redis/db 作 optional extras（pin 版本，不进核心依赖）
@@ -513,7 +513,7 @@ asyncio.run(main())
 | C 最小权限/沙箱 | `PermissionSet` 白名单 + `LightweightSandbox` 解析级校验 | `core/agent_loop.py`、`tools/builtins.py`、`security/sandbox.py` |
 | D 对账 | 双通道溯源；无来源结论强制隔离/标注；claim 抽取归一化 | `gate/gate.py`、`gate/reconciliation.py`、`gate/validators.py` |
 | E 超时/熔断 | Bash 硬杀 + LLM `config.timeout` | `tools/builtins.py`、`llm/*` |
-| F 可观测 | `GateMetrics` + OTel 导出 + 关键路径 span | `gate/metrics.py`、`core/observability.py` |
+| F 可观测 | `GateMetrics` + OTel 导出 + 关键路径 span + **治理率指标（`isolation_rate`/`coverage_rate`/`grounding_rate`）** | `gate/metrics.py`、`core/observability.py` |
 | G 复核防绕过 | `human_actors` 允许集 + `verify_actor` + `ReviewSink` | `review/queue.py`、`sdk/harness.py` |
 | H 状态一致 | `writer_id` + 原子 CAS + 写/读 verifier（允许集） | `sdk/harness.py`、`state/__init__.py` |
 

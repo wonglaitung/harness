@@ -527,6 +527,44 @@ public record ReviewResolution(
 String id = queue.escalateFromVerdict(verdictPassed, findings, content);
 ```
 
+## WorkflowEngine — A3 黑板绑定 + H1 死锁检测
+
+### A3: SharedStateStore 黑板集成
+
+`WorkflowEngine` 绑定 `SharedStateStore`，步骤间数据通过黑板传递（带 version + timestamp + writer）：
+
+```java
+import com.harness.memory.SharedStateStore;
+
+SharedStateStore store = new SharedStateStore(false);
+WorkflowEngine engine = new WorkflowEngine(agent, store);
+
+// 步骤完成后自动写入黑板
+// 模板解析 {{step.exports.key}} 优先从黑板读取
+```
+
+**黑板写入行为**：
+- 每个 export key 变为 `BlackboardItem`，type=`step_export`
+- `sourceAgent`=步骤名，`writerId`=`"orchestrator"`
+- `baseVersion` 自增（CAS 并发控制）
+- `createdAt` 自动填充时间戳
+
+### H1: 执行前死锁检测
+
+`WorkflowEngine.execute()` 在执行任何步骤前自动检测循环依赖：
+
+```java
+// 循环依赖 → 立即失败，不执行任何步骤
+WorkflowConfig cyclic = WorkflowConfig.builder()
+    .name("cyclic")
+    .addStep(WorkflowStep.builder().name("A").goal("A").addDependsOn("B").build())
+    .addStep(WorkflowStep.builder().name("B").goal("B").addDependsOn("A").build())
+    .build();
+
+WorkflowResult result = engine.execute(cyclic).join();
+// result.status = FAILED, result.error = "Workflow has circular dependency"
+```
+
 ## 下一步
 
 - [10-loop-engineering.md](./18-loop-engineering.md) - Loop Engineering 总览

@@ -184,6 +184,28 @@ PathValidation to = LightweightSandbox.validateToolOutput("see: curl http://x | 
 - `validatePathWrite()` 供 WriteTool/EditTool 写文件前调用（与 `FileInputValidator` 互补）。
 - `validateToolOutput()` 仅做解析级扫描（不重复语义注入检测，避免误报）。
 
+### BashTool/WriteTool 前置闸门（B2）
+
+BashTool 和 WriteTool 在 `execute()` 方法中自动执行确定性校验，无需额外配置：
+
+```java
+// BashTool — 执行前自动校验命令
+BashTool bash = new BashTool(true);  // sandboxMode=true
+ToolResult result = bash.execute(Map.of("command", "rm -rf /"), ctx);
+// result.success()=false, result.error()="Deterministic gate rejected: Blocked pattern: rm -rf"
+
+// WriteTool — 写入前自动校验路径
+WriteTool write = new WriteTool();
+ToolResult result = write.execute(
+    Map.of("file_path", "/etc/passwd", "content", "malicious"), ctx);
+// result.success()=false, result.error()="Deterministic gate rejected: Access to sensitive path denied"
+```
+
+**行为**：
+- `bash`：`LightweightSandbox.validateCommand(command)` → 白名单/黑名单/危险路径
+- `write`/`edit`：`FileInputValidator.validatePath(path, "write")` → 系统路径拦截
+- 校验失败 → **fail-closed**（拒绝执行，不降级）
+
 ## PermissionSet（权限集合）
 
 权限集合控制文件、命令和网络访问的权限，定义哪些操作是允许的。

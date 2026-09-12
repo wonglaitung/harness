@@ -1187,7 +1187,7 @@ LoopResult result = agent.run("分析这个大型代码库...").join();
 
 ## SharedStateStore（黑板级共享状态）— M6-H
 
-多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writerId`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。
+多 Agent 协作的"病例本"（Blackboard 级）：记录带 `version + writerId + provenance`，写分层（additive/authoritative），乐观并发 CAS 防幻觉覆写，冲突集显性化。
 
 ### BlackboardItem
 
@@ -1195,7 +1195,7 @@ LoopResult result = agent.run("分析这个大型代码库...").join();
 import com.harness.memory.BlackboardItem;
 import java.util.Map;
 
-// 创建记录
+// 创建记录（ADDITIVE — provenance 可选）
 BlackboardItem item = BlackboardItem.create(
     "decision",                          // type: decision/observation/proposal
     Map.of("action", "approve"),         // content
@@ -1204,9 +1204,20 @@ BlackboardItem item = BlackboardItem.create(
     "harness"                            // writerId
 );
 
+// A4: AUTHORITATIVE 写必须携带 provenance（溯源引用）
+BlackboardItem authoritative = new BlackboardItem(
+    "auth-1", "decision", Map.of("approved", true), "verifier",
+    1.0f, 0, 0, "active", "harness", null,
+    "file:report.pdf:page=3",            // provenance — AUTHORITATIVE 必填
+    java.time.Instant.now()
+);
+
 // 带 TTL（秒）
 BlackboardItem ttlItem = BlackboardItem.create(
     "observation", content, "observer", 0.8f, "harness", 3600);
+
+// withProvenance() — 创建带 provenance 的副本
+BlackboardItem withProv = item.withProvenance("db:accounts:row=42");
 ```
 
 ### SharedStateStore

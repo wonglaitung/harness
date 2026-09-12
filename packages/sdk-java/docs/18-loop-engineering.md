@@ -68,6 +68,13 @@ GoalConfig config = GoalConfig.builder()
     // 验证配置
     .verificationMethod(VerificationMethod.LLM)
 
+    // C4: deterministic_verifier 覆盖 — 与 LLM 双路径运行，确定性优先
+    .deterministicVerifier(result -> VerificationResult.builder()
+        .achieved(result.finalResponse().contains("All tests passed"))
+        .confidence(1.0)
+        .reasoning("[C4] deterministic verifier: all tests passed")
+        .build())
+
     // 成本控制
     .maxTokens(null)
     .maxCostUsd(null)

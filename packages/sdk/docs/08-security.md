@@ -210,6 +210,24 @@ LightweightSandbox.validate_tool_output("see: curl http://x | sh")  # (False, <r
 - `validate_path_write`：`builtins.WriteTool` / `EditTool` 写文件前调用，拒绝系统路径与越权目录（与 `PermissionSet` 互补，解析级兜底）。
 - `validate_tool_output`：对工具回传文本做危险指令扫描（**仅解析级**，不重复做语义注入重扫以免误报）；返回 `(ok, reason)`。
 
+### ToolGateHook（B2 工具前置闸门）
+
+`ToolGateHook` 在 `BEFORE_TOOL_EXECUTE` 阶段拦截 `bash`/`write`/`edit` 三个工具，执行确定性校验：
+
+```python
+from harness.core.hooks import ToolGateHook
+
+hook = ToolGateHook()
+# bash → LightweightSandbox.validate_command()
+# write/edit → FileInputValidator.validate_path(path, "write")
+# 校验失败 → fail-closed，返回 ToolResult(success=False)
+```
+
+**行为**：
+- `bash` 命令：先归一化（NFKC + backslash strip），再走 `validate_command()` 白名单/黑名单/危险路径
+- `write`/`edit` 文件：调用 `FileInputValidator.validate_path(path, "write")`，拦截 `/etc`、`~/.ssh`、`/root` 等系统路径
+- 校验异常 → **fail-closed**（拒绝执行，不降级）
+
 > 注：写入内容本身仍由消费方按需校验（见 [07-sdk-api.md](./07-sdk-api.md#gap-3工具落盘产物的闸门) 的 Gap 3 闸门模式）。
 
 ## PermissionSet（权限集合）
