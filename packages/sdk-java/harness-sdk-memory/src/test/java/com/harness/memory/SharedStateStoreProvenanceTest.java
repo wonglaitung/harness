@@ -25,11 +25,11 @@ class SharedStateStoreProvenanceTest {
         SharedStateStore store = new SharedStateStore(false);
         BlackboardItem item = new BlackboardItem(
             "item-1", "decision", Map.of("y", 2), "agent-b",
-            1.0f, 0, 0, "active", "harness", null,
+            1.0f, 0, 0, "authoritative", "harness", null,
             null,  // No provenance!
             java.time.Instant.now()
         );
-        // AUTHORITATIVE without provenance must fail
+        // AUTHORITATIVE (status) without provenance must fail
         assertThrows(IllegalArgumentException.class, () -> store.put(item));
     }
 
@@ -38,7 +38,7 @@ class SharedStateStoreProvenanceTest {
         SharedStateStore store = new SharedStateStore(false);
         BlackboardItem item = new BlackboardItem(
             "item-2", "decision", Map.of("z", 3), "agent-c",
-            1.0f, 0, 0, "active", "harness", null,
+            1.0f, 0, 0, "authoritative", "harness", null,
             "file:report.pdf:page=3",  // Has provenance
             java.time.Instant.now()
         );

@@ -52,7 +52,9 @@ public class LightweightSandbox {
         "rm -rf ~",
         "chmod -R 777",
         "> /etc/",
-        "> ~/.ssh/"
+        "> ~/.ssh/",
+        "| sh",          // pipe-to-shell (download-and-execute)
+        "| bash"
     );
 
     /**
@@ -189,6 +191,8 @@ public class LightweightSandbox {
         normalized = normalized.replaceAll("\\\\<", "<");
         normalized = normalized.replaceAll("\\\\&", "&");
         normalized = normalized.replaceAll("\\\\;", ";");
+        // Remove backslash obfuscation before word characters (e.g. cu\rl -> curl)
+        normalized = normalized.replaceAll("\\\\(?=\\w)", "");
         // Collapse multiple spaces
         normalized = normalized.replaceAll("\\s{2,}", " ").trim();
         return normalized;

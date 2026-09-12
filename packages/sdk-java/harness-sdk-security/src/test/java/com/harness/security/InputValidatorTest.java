@@ -19,7 +19,7 @@ class InputValidatorTest {
 
     @Test
     void testInputTooLong() {
-        InputValidator validator = new InputValidator(100, true, null);
+        InputValidator validator = new InputValidator(100, true, null, false);
 
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 200; i++) {
@@ -81,7 +81,7 @@ class InputValidatorTest {
 
     @Test
     void testValidateMultimodalTooLong() {
-        InputValidator validator = new InputValidator(100, true, null);
+        InputValidator validator = new InputValidator(100, true, null, false);
 
         // Create multimodal content with long text
         StringBuilder sb = new StringBuilder();

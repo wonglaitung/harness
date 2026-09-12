@@ -155,6 +155,7 @@ class AutomationTest {
 
         agent.addResponse("Output test result", 1);
 
+        // start() only schedules; executeNow() performs the single manual run.
         automation.start(agent).join();
         automation.executeNow().join();
 

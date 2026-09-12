@@ -3,8 +3,8 @@ package com.harness.memory;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,9 +29,9 @@ class SharedStateStoreM6Test {
         BlackboardItem item = BlackboardItem.create("decision",
             Map.of("action", "approve"), "planner", 0.9f, "harness");
         store.put(item);
-        BlackboardItem got = store.get(item.getId());
+        BlackboardItem got = store.get(item.id());
         assertNotNull(got);
-        assertEquals(item.getId(), got.id());
+        assertEquals(item.id(), got.id());
     }
 
     @Test
@@ -54,10 +54,10 @@ class SharedStateStoreM6Test {
         BlackboardItem item = BlackboardItem.create("decision",
             Map.of("v", "old"), "a", 0.5f, "w");
         store.put(item);
-        boolean ok = store.writeIfVersion(item.getId(), Map.of("v", "new"), 0);
+        boolean ok = store.writeIfVersion(item.id(), Map.of("v", "new"), 0);
         assertTrue(ok);
-        assertEquals(1, store.getVersion(item.getId()));
-        assertEquals("new", store.get(item.getId()).content().get("v"));
+        assertEquals(1, store.getVersion(item.id()));
+        assertEquals("new", store.get(item.id()).content().get("v"));
     }
 
     @Test
@@ -66,9 +66,9 @@ class SharedStateStoreM6Test {
             Map.of("v", "old"), "a", 0.5f, "w");
         store.put(item);
         // Version is 0, but we pass 1
-        boolean ok = store.writeIfVersion(item.getId(), Map.of("v", "new"), 1);
+        boolean ok = store.writeIfVersion(item.id(), Map.of("v", "new"), 1);
         assertFalse(ok);
-        assertEquals(0, store.getVersion(item.getId()));  // unchanged
+        assertEquals(0, store.getVersion(item.id()));  // unchanged
     }
 
     @Test
@@ -89,7 +89,7 @@ class SharedStateStoreM6Test {
             Map.of(), "a", 0.9f, "harness"));
 
         assertThrows(SecurityException.class, () -> strictStore.get(
-            strictStore.listItems().get(0).getId()));
+            strictStore.listItems().get(0).id()));
     }
 
     @Test
@@ -98,11 +98,12 @@ class SharedStateStoreM6Test {
             null,
             item -> false);  // readVerifier rejects everything
 
-        silentStore.put(BlackboardItem.create("authoritative",
-            Map.of(), "a", 0.9f, "harness"));
+        BlackboardItem item = BlackboardItem.create("authoritative",
+            Map.of(), "a", 0.9f, "harness");
+        silentStore.put(item);
 
-        // No exception, just returns null
-        BlackboardItem got = silentStore.get(silentStore.listItems().get(0).getId());
+        // No exception, just returns null (silently dropped by read verifier)
+        BlackboardItem got = silentStore.get(item.id());
         assertNull(got);
     }
 
@@ -113,7 +114,7 @@ class SharedStateStoreM6Test {
         BlackboardItem item = new BlackboardItem(
             "id-1", "observation", Map.of(), "a", 0.5f,
             0, 1,  // ttlSeconds=1 (very short)
-            "active", "w", null, Instant.now().minusSeconds(10));
+            "active", "w", null, null, Instant.now().minusSeconds(10));
         store.put(item);
         assertNull(store.get("id-1"));  // expired
     }
@@ -158,13 +159,13 @@ class SharedStateStoreM6Test {
     @Test
     void getConflictsDetectsConflictingAuthoritative() {
         BlackboardItem itemA = new BlackboardItem(
-            "conflict-a", "decision", Map.of("verdict", "A"),
+            "conflict-a", "authoritative", Map.of("verdict", "A"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
-            "conflict-b", "decision", Map.of("verdict", "B"),
+            "conflict-b", "authoritative", Map.of("verdict", "B"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);
@@ -172,7 +173,7 @@ class SharedStateStoreM6Test {
         List<ConflictSet> conflicts = store.getConflicts();
         assertEquals(1, conflicts.size());
         ConflictSet cs = conflicts.get(0);
-        assertEquals("decision", cs.key());
+        assertEquals("authoritative", cs.key());
         assertTrue(cs.itemIds().contains("conflict-a"));
         assertTrue(cs.itemIds().contains("conflict-b"));
     }
@@ -180,13 +181,13 @@ class SharedStateStoreM6Test {
     @Test
     void getConflictsNoConflictWhenSameContent() {
         BlackboardItem itemA = new BlackboardItem(
-            "same-a", "decision", Map.of("verdict", "A"),
+            "same-a", "authoritative", Map.of("verdict", "A"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
-            "same-b", "decision", Map.of("verdict", "A"),
+            "same-b", "authoritative", Map.of("verdict", "A"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);
@@ -200,11 +201,11 @@ class SharedStateStoreM6Test {
         BlackboardItem itemA = new BlackboardItem(
             "add-a", "observation", Map.of("data", "X"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
             "add-b", "observation", Map.of("data", "Y"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);

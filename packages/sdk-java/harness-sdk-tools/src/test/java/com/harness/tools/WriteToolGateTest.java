@@ -33,7 +33,9 @@ class WriteToolGateTest {
         var result = tool.execute(args, ctx).join();
         assertFalse(result.success());
         assertTrue(result.error().contains("Deterministic gate rejected"));
-        assertFalse(Files.exists(Path.of("/etc/passwd")));
+        // /etc/passwd exists on the host; the gate must have rejected the write,
+        // so its content must not have been replaced with the malicious payload.
+        assertFalse(Files.readString(Path.of("/etc/passwd")).contains("malicious"));
     }
 
     @Test

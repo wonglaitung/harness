@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,9 +45,9 @@ class FileStateStoreM6Test {
             "decision", Map.of("key", "value"), "planner", 0.9f, "harness");
         store.put(item);
 
-        BlackboardItem retrieved = store.get(item.getId());
+        BlackboardItem retrieved = store.get(item.id());
         assertNotNull(retrieved);
-        assertEquals(item.getId(), retrieved.id());
+        assertEquals(item.id(), retrieved.id());
         assertEquals("decision", retrieved.type());
         assertEquals("planner", retrieved.sourceAgent());
     }
@@ -54,11 +56,11 @@ class FileStateStoreM6Test {
     void getExpiredReturnsNull() {
         BlackboardItem item = new BlackboardItem(
             "expired-item", "decision", Map.of("key", "value"),
-            "planner", 0.9f, 0, -1, // ttlSeconds = -1 → expired
-            ItemStatus.CONFIRMED, "harness", "harness", Instant.now().minusSeconds(3600));
+            "planner", 0.9f, 0, 1, // ttlSeconds = 1, createdAt far in past → expired
+            "confirmed", "harness", "harness", null, Instant.now().minusSeconds(3600));
         store.put(item);
 
-        BlackboardItem retrieved = store.get(item.getId());
+        BlackboardItem retrieved = store.get(item.id());
         assertNull(retrieved);
     }
 
@@ -69,15 +71,15 @@ class FileStateStoreM6Test {
         store.put(item);
 
         // CAS should succeed with correct base version
-        boolean ok = store.writeIfVersion(item.getId(), Map.of("v", 2), 0);
+        boolean ok = store.writeIfVersion(item.id(), Map.of("v", 2), 0);
         assertTrue(ok);
 
         // CAS should fail with wrong base version
-        boolean fail = store.writeIfVersion(item.getId(), Map.of("v", 3), 0);
+        boolean fail = store.writeIfVersion(item.id(), Map.of("v", 3), 0);
         assertFalse(fail);
 
         // Verify final state
-        BlackboardItem updated = store.get(item.getId());
+        BlackboardItem updated = store.get(item.id());
         assertNotNull(updated);
         assertEquals(1, updated.baseVersion());
     }
@@ -93,10 +95,10 @@ class FileStateStoreM6Test {
             BlackboardItem item = new BlackboardItem(
                 "auth-cas", "authoritative", Map.of("v", 1),
                 "planner", 0.9f, 0, 3600,
-                ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+                "proposed", "harness", "harness", null, Instant.now());
             verifiedStore.put(item);
 
-            boolean ok = verifiedStore.writeIfVersion(item.getId(), Map.of("v", 2), 0);
+            boolean ok = verifiedStore.writeIfVersion(item.id(), Map.of("v", 2), 0);
             assertTrue(ok);
         } finally {
             verifiedStore.close();
@@ -113,11 +115,9 @@ class FileStateStoreM6Test {
             BlackboardItem item = new BlackboardItem(
                 "auth-reject", "authoritative", Map.of("v", 1),
                 "planner", 0.9f, 0, 3600,
-                ItemStatus.PROPOSED, "rogue", "rogue", Instant.now());
-            rejectStore.put(item);
-
-            assertThrows(IllegalArgumentException.class, () ->
-                rejectStore.writeIfVersion(item.getId(), Map.of("v", 2), 0));
+                "proposed", "rogue", "rogue", null, Instant.now());
+            // Put is rejected by the write verifier (AUTHORITATIVE type)
+            assertThrows(IllegalArgumentException.class, () -> rejectStore.put(item));
         } finally {
             rejectStore.close();
         }
@@ -134,7 +134,7 @@ class FileStateStoreM6Test {
             BlackboardItem item = new BlackboardItem(
                 "forged", "decision", Map.of("key", "value"),
                 "rogue", 0.9f, 0, 3600,
-                ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+                "proposed", "harness", "harness", null, Instant.now());
             secureStore.put(item);
 
             assertThrows(SecurityException.class, () ->
@@ -155,7 +155,7 @@ class FileStateStoreM6Test {
             BlackboardItem item = new BlackboardItem(
                 "drop-me", "decision", Map.of("key", "value"),
                 "rogue", 0.9f, 0, 3600,
-                ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+                "proposed", "harness", "harness", null, Instant.now());
             quietStore.put(item);
 
             BlackboardItem result = quietStore.get("drop-me");
@@ -171,12 +171,12 @@ class FileStateStoreM6Test {
             "valid", Map.of("k", "v"), "planner", 0.9f, "harness");
         BlackboardItem expired = new BlackboardItem(
             "expired-list", "decision", Map.of("k", "v"),
-            "planner", 0.9f, 0, -1,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "planner", 0.9f, 0, 1, // ttlSeconds = 1, createdAt far in past → expired
+            "proposed", "harness", "harness", null, Instant.now().minusSeconds(3600));
         BlackboardItem rejected = new BlackboardItem(
             "rejected-list", "decision", Map.of("k", "v"),
             "rogue", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         Predicate<BlackboardItem> verifier = item -> !"rogue".equals(item.sourceAgent());
         FileStateStore mixedStore = new FileStateStore(
@@ -188,7 +188,7 @@ class FileStateStoreM6Test {
 
             List<BlackboardItem> items = mixedStore.listItems();
             assertEquals(1, items.size());
-            assertEquals("valid", items.get(0).id());
+            assertEquals(valid.id(), items.get(0).id());
         } finally {
             mixedStore.close();
         }
@@ -197,13 +197,13 @@ class FileStateStoreM6Test {
     @Test
     void getConflictsDetectsConflictingAuthoritative() {
         BlackboardItem itemA = new BlackboardItem(
-            "conflict-a", "decision", Map.of("verdict", "A"),
+            "conflict-a", "authoritative", Map.of("verdict", "A"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
-            "conflict-b", "decision", Map.of("verdict", "B"),
+            "conflict-b", "authoritative", Map.of("verdict", "B"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);
@@ -211,7 +211,7 @@ class FileStateStoreM6Test {
         List<ConflictSet> conflicts = store.getConflicts();
         assertEquals(1, conflicts.size());
         ConflictSet cs = conflicts.get(0);
-        assertEquals("decision", cs.key());
+        assertEquals("authoritative", cs.key());
         assertTrue(cs.itemIds().contains("conflict-a"));
         assertTrue(cs.itemIds().contains("conflict-b"));
     }
@@ -221,11 +221,11 @@ class FileStateStoreM6Test {
         BlackboardItem itemA = new BlackboardItem(
             "same-a", "decision", Map.of("verdict", "A"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
             "same-b", "decision", Map.of("verdict", "A"), // same content
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);
@@ -239,11 +239,11 @@ class FileStateStoreM6Test {
         BlackboardItem itemA = new BlackboardItem(
             "add-a", "observation", Map.of("data", "X"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
         BlackboardItem itemB = new BlackboardItem(
             "add-b", "observation", Map.of("data", "Y"),
             "planner", 0.9f, 0, 3600,
-            ItemStatus.PROPOSED, "harness", "harness", Instant.now());
+            "proposed", "harness", "harness", null, Instant.now());
 
         store.put(itemA);
         store.put(itemB);
@@ -263,14 +263,15 @@ class FileStateStoreM6Test {
 
     @Test
     void closeAndReopen() {
-        store.put(BlackboardItem.create("persist", Map.of("k", "v"), "planner", 0.9f, "harness"));
+        BlackboardItem item = BlackboardItem.create("persist", Map.of("k", "v"), "planner", 0.9f, "harness");
+        store.put(item);
         store.close();
 
         // Reopen from same file
         FileStateStore reopened = new FileStateStore(dbPath);
         try {
-            BlackboardItem item = reopened.get("persist");
-            assertNotNull(item);
+            BlackboardItem got = reopened.get(item.id());
+            assertNotNull(got);
         } finally {
             reopened.close();
         }

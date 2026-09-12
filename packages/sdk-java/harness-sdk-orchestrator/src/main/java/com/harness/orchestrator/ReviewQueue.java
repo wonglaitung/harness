@@ -175,7 +175,7 @@ public class ReviewQueue {
         Map<String, Object> content = bi.content();
         List<Map<String, Object>> findings = (List<Map<String, Object>>) content.get("gateFindings");
         Map<String, String> metadata = (Map<String, String>) content.get("metadata");
-        return new ReviewItem(findings, (String) content.get("content"),
+        return new ReviewItem((String) content.get("id"), findings, (String) content.get("content"),
             (String) content.get("source"), metadata);
     }
 
@@ -318,9 +318,10 @@ public class ReviewQueue {
      * Check if an item is still pending.
      */
     public boolean isPending(String itemId) {
+        // A resolved item is no longer pending, even if its payload lingers in the store.
+        if (resolutions.containsKey(itemId) || loadResolution(itemId) != null) return false;
         if (items.containsKey(itemId)) return true;
-        ReviewItem stored = loadItem(itemId);
-        return stored != null;
+        return loadItem(itemId) != null;
     }
 
     /**
@@ -334,9 +335,12 @@ public class ReviewQueue {
             List<BlackboardItem> storeItems = store.listItems();
             for (BlackboardItem bi : storeItems) {
                 if (!namespace.equals(bi.type())) continue;
+                String rid = (String) bi.content().get("id");
+                if (rid == null) continue;
+                // Resolved items are no longer pending — skip them.
+                if (resolutions.containsKey(rid) || loadResolution(rid) != null) continue;
                 try {
-                    ReviewItem remote = loadItem(
-                        ((String) bi.content().get("id")));
+                    ReviewItem remote = loadItem(rid);
                     if (remote != null) {
                         merged.putIfAbsent(remote.getId(), remote);
                     }

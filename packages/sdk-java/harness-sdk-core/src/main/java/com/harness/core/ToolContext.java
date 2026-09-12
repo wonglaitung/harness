@@ -18,6 +18,10 @@ public record ToolContext(
         this(sessionId, DEFAULT_WORKING_DIR, 0, Map.of());
     }
 
+    public ToolContext(String sessionId, String workingDirectory) {
+        this(sessionId, workingDirectory, 0, Map.of());
+    }
+
     /**
      * Create a ToolContext with working directory and session ID.
      */

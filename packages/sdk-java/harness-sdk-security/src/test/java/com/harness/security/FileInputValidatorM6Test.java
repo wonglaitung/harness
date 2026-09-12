@@ -14,31 +14,31 @@ class FileInputValidatorM6Test {
     @Test
     void validatePathWriteModeBlocksSystemPath() {
         ValidationResult result = validator.validatePath("/etc/passwd", "write");
-        assertFalse(result.isValid());
+        assertFalse(result.valid());
     }
 
     @Test
     void validatePathWriteModeBlocksRoot() {
         ValidationResult result = validator.validatePath("/root/.ssh/id_rsa", "write");
-        assertFalse(result.isValid());
+        assertFalse(result.valid());
     }
 
     @Test
     void validatePathWriteModeAllowsSafePath() {
         ValidationResult result = validator.validatePath("./output/report.md", "write");
-        assertTrue(result.isValid());
+        assertTrue(result.valid());
     }
 
     @Test
     void validatePathReadModeDoesNotBlockSystemPath() {
         // Read mode only checks existing DANGEROUS_PATHS, not write-specific ones
         ValidationResult result = validator.validatePath("/etc/passwd", "read");
-        assertFalse(result.isValid());  // still blocked by DANGEROUS_PATHS
+        assertFalse(result.valid());  // still blocked by DANGEROUS_PATHS
     }
 
     @Test
     void validatePathDefaultIsReadMode() {
         ValidationResult result = validator.validatePath("/tmp/safe.txt");
-        assertTrue(result.isValid());
+        assertTrue(result.valid());
     }
 }

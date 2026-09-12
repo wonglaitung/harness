@@ -98,18 +98,20 @@ class ReviewQueueM6Test {
 
     @Test
     void criticalItemOnlyByHumanActors() {
+        // Queue restricted to the "human" role (auditor:alice is NOT a human actor)
+        ReviewQueue humanOnly = new ReviewQueue(Set.of("human"));
         ReviewItem item = new ReviewItem(
             List.of(), "content", "gate",
             Map.of("severity", "error"));
-        String id = queue.submit(item);
+        String id = humanOnly.submit(item);
 
         // Non-human actor blocked
         assertThrows(IllegalStateException.class,
-            () -> queue.resolve(id, ReviewDecision.CONFIRM, "auditor:alice"));
+            () -> humanOnly.resolve(id, ReviewDecision.CONFIRM, "auditor:alice"));
 
         // Human actor allowed
         assertDoesNotThrow(
-            () -> queue.resolve(id, ReviewDecision.CONFIRM, "human"));
+            () -> humanOnly.resolve(id, ReviewDecision.CONFIRM, "human"));
     }
 
     // ---- REVISE with corrected content ----

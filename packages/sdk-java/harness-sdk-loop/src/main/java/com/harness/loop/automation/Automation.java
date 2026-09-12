@@ -176,7 +176,7 @@ public class Automation {
 
         scheduledFuture = scheduler.scheduleAtFixedRate(
                 this::executeGoal,
-                0,
+                intervalMillis,
                 intervalMillis,
                 TimeUnit.MILLISECONDS
         );
@@ -193,7 +193,7 @@ public class Automation {
 
         scheduledFuture = scheduler.scheduleAtFixedRate(
                 this::executeGoal,
-                0,
+                intervalMillis,
                 intervalMillis,
                 TimeUnit.MILLISECONDS
         );

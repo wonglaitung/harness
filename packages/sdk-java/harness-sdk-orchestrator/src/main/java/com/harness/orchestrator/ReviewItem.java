@@ -33,7 +33,20 @@ public class ReviewItem {
             String content,
             String source,
             Map<String, String> metadata) {
-        this.id = UUID.randomUUID().toString();
+        this(UUID.randomUUID().toString(), gateFindings, content, source, metadata);
+    }
+
+    /**
+     * Id-preserving constructor used when reconstructing an item from storage,
+     * so the persisted identifier survives a round-trip.
+     */
+    ReviewItem(
+            String id,
+            List<Map<String, Object>> gateFindings,
+            String content,
+            String source,
+            Map<String, String> metadata) {
+        this.id = id;
         this.gateFindings = gateFindings != null ? List.copyOf(gateFindings) : List.of();
         this.content = content;
         this.source = source;
