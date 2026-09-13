@@ -484,6 +484,29 @@ manager.stop().join();
 | Loop Engineering | 目标驱动执行、并行 Worktree、工作流编排 |
 | 触发器系统 | Cron/Interval 触发、自动化任务调度 |
 
+### 生产环境配置建议
+
+> **安全第一**：生产环境请设置 `strict=True`（Python）或 `.strict(true)`（Java），开启金融级安全治理，包括输入校验、PII 检测、注入阻断、审计日志等全链路防护。
+
+```python
+# Python — 生产环境推荐
+agent = AgentHarness(
+    model="gpt-4o",
+    strict=True,          # 开启金融级安全治理
+    tools=[...],
+)
+```
+
+```java
+// Java — 生产环境推荐
+HarnessConfig config = HarnessConfig.builder()
+    .model("gpt-4o")
+    .strict(true)         // 开启金融级安全治理
+    .build();
+```
+
+`strict=False`（默认）适用于开发调试，跳过部分安全检查以提升开发效率。生产、测试、预发环境建议始终开启。
+
 ---
 
 ## 项目结构
