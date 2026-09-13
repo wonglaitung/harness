@@ -27,10 +27,10 @@ public class InputValidator {
     private final boolean blockInjection;
 
     /**
-     * Create validator with default settings (injection as warning).
+     * Create validator with default settings (injection blocked by default).
      */
     public InputValidator() {
-        this(DEFAULT_MAX_LENGTH, true, null, false);
+        this(DEFAULT_MAX_LENGTH, true, null, true);
     }
 
     /**
