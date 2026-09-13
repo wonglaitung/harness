@@ -151,7 +151,7 @@ public class ChinesePIIRecognizers {
             // Simplified Chinese
             "银行卡", "银行卡号", "卡号", "账号", "账户", "储蓄卡", "信用卡", "借记卡",
             // Traditional Chinese
-            "銀行卡", "銀行卡號", "銀行帳號", "卡號", "帳號", "帳戶", "儲蓄卡", "信用卡", "借記卡",
+            "銀行卡", "銀行卡號", "銀行帳號", "卡號", "帳號", "帳戶", "儲蓄卡", "借記卡",
             // English
             "card", "bank card", "account"
         );
@@ -388,7 +388,7 @@ public class ChinesePIIRecognizers {
 
         private static final Set<String> CONTEXT = Set.of(
             // Simplified Chinese
-            "身份证", "身份证号", "证件号", "香港身份证", "HKID",
+            "身份证", "身份证号", "证件号", "香港身份证",
             // Traditional Chinese (Hong Kong)
             "身份證", "身份證號碼", "身份證字號", "證件號", "香港身份證",
             // English
