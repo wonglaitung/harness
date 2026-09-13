@@ -237,7 +237,7 @@ public class HarnessConfig {
         private String provider = "auto";
         private String baseUrl = null;
         private int contextWindow = 200000;
-        private int maxTokens = 4096;
+        private int maxTokens = 16384;
         private double temperature = 1.0;
         private String memoryDir = ".harness/memory";
         private String memoryMdPath = null;  // Path to MEMORY.md, defaults to ~/.harness/
