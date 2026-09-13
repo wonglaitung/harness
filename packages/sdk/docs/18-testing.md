@@ -245,7 +245,7 @@ from harness import AgentHarness
 def agent():
     return AgentHarness(
         api_key="test-key",
-        model="claude-haiku-4-5",  # 使用便宜模型
+        model="gpt-4o-mini",  # 使用便宜模型
     )
 
 @pytest.mark.asyncio
@@ -289,7 +289,7 @@ from harness import AgentHarness
 from harness.testing import RecordingHarness
 
 # 创建 AgentHarness 和录制器
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 recorder = RecordingHarness(agent)
 
 # 开始录制

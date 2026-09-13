@@ -28,22 +28,22 @@ async def example_anthropic():
 
     # Method 1: Using provider parameter
     agent = AgentHarness(
-        model="claude-sonnet-4-6",
+        model="gpt-4o",
         provider="anthropic",  # Optional, auto-detected from model name
         tools=[ReadTool()],
     )
 
-    # Method 2: Using explicit client
-    anthropic_client = AnthropicClient(
-        model="claude-sonnet-4-6",
-        api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    # Method 2: Using explicit client (OpenAI compatible)
+    openai_client = OpenAIClient(
+        model="gpt-4o",
+        api_key=os.environ.get("OPENAI_API_KEY"),
     )
     agent = AgentHarness(  # noqa: F841
-        llm_client=anthropic_client,
+        llm_client=openai_client,
         tools=[ReadTool()],
     )
 
-    print("Anthropic client configured.")
+    print("OpenAI client configured.")
 
 
 async def example_openai():
@@ -179,17 +179,17 @@ async def example_config_file():
 async def main():
     """Run all examples."""
 
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        await example_anthropic()
-    else:
-        print("=== Anthropic Example ===")
-        print("Set ANTHROPIC_API_KEY to run this example.")
-
     if os.environ.get("OPENAI_API_KEY"):
         await example_openai()
     else:
-        print("\n=== OpenAI Example ===")
+        print("=== OpenAI Example ===")
         print("Set OPENAI_API_KEY to run this example.")
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        await example_anthropic()
+    else:
+        print("\n=== Anthropic Example ===")
+        print("Set ANTHROPIC_API_KEY to run this example.")
 
     await example_openai_custom_endpoint()
     await example_custom_llm()

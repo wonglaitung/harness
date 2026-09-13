@@ -14,7 +14,7 @@
 # script.py
 from harness import AgentHarness
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 result = await agent.run("分析代码")
 ```
 
@@ -28,7 +28,7 @@ result = await agent.run("分析代码")
 from harness import HarnessConfig
 
 config = HarnessConfig(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     memory_dir="./sessions",
 )
 agent = AgentHarness(config=config)
@@ -44,7 +44,7 @@ from fastapi import FastAPI
 from harness import AgentHarness
 
 app = FastAPI()
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 
 @app.post("/chat")
 async def chat(message: str, session_id: str = None):
@@ -71,7 +71,7 @@ from harness.service.store_redis import RedisSessionStore
 
 # 配置 Redis 存储
 store = RedisSessionStore("redis://localhost:6379")
-agent = AgentHarness(config=HarnessConfig(model="claude-sonnet-4-6"))
+agent = AgentHarness(config=HarnessConfig(model="gpt-4o"))
 
 # 或使用 harness.service 完整服务
 # 见 15-spring-cloud-integration.md

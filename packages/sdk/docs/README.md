@@ -81,7 +81,7 @@ from harness.tools.browser import get_browser_tools
 
 # 创建 Harness 实例
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=[ReadTool(), GlobTool()],
     memory_dir="~/.harness/memory",
     # 文档大小检查配置
@@ -99,7 +99,7 @@ async for event in agent.stream("帮我重构这个函数"):
 
 # 浏览器自动化（内网支持）
 browser_agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=get_browser_tools(),  # 7 个浏览器工具
 )
 

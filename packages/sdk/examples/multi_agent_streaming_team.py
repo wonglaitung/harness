@@ -38,7 +38,7 @@ class MockStreamingAgent:
     - ``get_session(session_id)`` 供 GoalLoop 取会话
 
     生产环境替换为：
-        agent = AgentHarness(model="claude-sonnet-4-6")
+        agent = AgentHarness(model="gpt-4o")
         async for event in agent.stream_goal(goal):
             ...
     """

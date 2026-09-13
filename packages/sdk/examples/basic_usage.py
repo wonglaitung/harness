@@ -29,15 +29,15 @@ async def main():
     """Run basic agent example."""
 
     # Check for API key
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY environment variable not set")
-        print("Set it with: export ANTHROPIC_API_KEY=your-key-here")
+    if not os.environ.get("OPENAI_API_KEY") and not os.environ.get("ANTHROPIC_API_KEY"):
+        print("Error: OPENAI_API_KEY environment variable not set")
+        print("Set it with: export OPENAI_API_KEY=your-key-here")
         return
 
     # Create agent with file tools
     print("Creating agent with file tools...")
     agent = AgentHarness(
-        model="claude-sonnet-4-6",
+        model="gpt-4o",
         tools=[ReadTool(), WriteTool(), GlobTool()],
     )
 

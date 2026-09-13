@@ -160,7 +160,7 @@ PROVIDER = "openai"  # 第三方 API 使用 openai 协议
 # 方式 2: 使用官方 Anthropic API
 # BASE_URL = None
 # API_KEY = os.environ.get("ANTHROPIC_API_KEY")  # 或设置 ANTHROPIC_API_KEY 环境变量
-# MODEL = "claude-sonnet-4-6"
+# MODEL = "gpt-4o"
 # PROVIDER = "anthropic"
 
 # 方式 3: 使用官方 OpenAI API
@@ -3303,7 +3303,7 @@ async def demo_guardrails():
 
     ┌─────────────────────────────────────────────────────────────┐
     │  AgentHarness(                                              │
-    │      model="claude-sonnet-4-6",                            │
+    │      model="gpt-4o",                            │
     │      guardrails=GuardrailConfig(                           │
     │          enabled=True,                                     │
     │          layer1_enabled=True,                              │
@@ -3463,7 +3463,7 @@ async def demo_cpu_router():
     print("""
     # 示例 1: 自动检测 provider
     routing = RoutingConfig(
-        high_model="claude-sonnet-4-6",  # 自动检测 → anthropic
+        high_model="gpt-4o",  # 自动检测 → anthropic
         low_model="qwen-plus",           # 自动检测 → openai
         router_model_path="models/qwen3.5-0.8b.gguf",
     )
@@ -3500,7 +3500,7 @@ async def demo_cpu_router():
 
     from harness.model_presets import get_model_preset
 
-    models = ["claude-sonnet-4-6", "gpt-4o", "qwen-plus", "deepseek-chat"]
+    models = ["gpt-4o", "gpt-4o", "qwen-plus", "deepseek-chat"]
     print("模型名 → provider 检测结果:")
     for model in models:
         preset = get_model_preset(model)
@@ -3717,7 +3717,7 @@ async def demo_guardrails_advanced():
     )
 
     agent = AgentHarness(
-        model="claude-sonnet-4-6",
+        model="gpt-4o",
         guardrails=guardrails,
     )
     """)
@@ -4064,7 +4064,7 @@ async def demo_loop_engineering_automation():
     from harness.loop import Automation
 
     async def main():
-        agent = AgentHarness(model="claude-sonnet-4-6")
+        agent = AgentHarness(model="gpt-4o")
 
         # 创建自动化任务
         automation = Automation(
@@ -4227,7 +4227,7 @@ async def demo_loop_engineering_worktree():
     from harness.loop import WorktreeOrchestrator, WorktreeConfig
 
     async def main():
-        agent = AgentHarness(model="claude-sonnet-4-6")
+        agent = AgentHarness(model="gpt-4o")
 
         orchestrator = WorktreeOrchestrator(agent, workspace_dir=".")
 

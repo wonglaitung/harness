@@ -58,12 +58,14 @@ class AgentHarness:
     This class provides a simple interface to create and run AI agents
     that can use tools, maintain memory, and execute complex tasks.
 
-    Example with Anthropic:
+    Example with OpenAI-compatible provider (推荐):
         ```python
         from harness import AgentHarness, ReadTool
 
         agent = AgentHarness(
-            model="claude-sonnet-4-6",
+            model="gpt-4o",
+            api_key="your-api-key",
+            base_url="https://api.your-provider.com/v1",  # 可自定义端点
             tools=[ReadTool()],
         )
 
@@ -71,11 +73,11 @@ class AgentHarness:
         print(result.content)
         ```
 
-    Example with OpenAI:
+    Example with Anthropic:
         ```python
         agent = AgentHarness(
-            model="gpt-4o",
-            provider="openai",
+            model="claude-sonnet-4-6",
+            provider="anthropic",
             tools=[ReadTool()],
         )
         ```
@@ -91,9 +93,9 @@ class AgentHarness:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-6",
+        model: str = "gpt-4o",
         api_key: str | None = None,
-        provider: str = "anthropic",
+        provider: str = "openai",
         base_url: str | None = None,
         tools: list[Tool] | None = None,
         config: HarnessConfig | None = None,
@@ -105,10 +107,10 @@ class AgentHarness:
         Initialize the Harness agent.
 
         Args:
-            model: LLM model to use (e.g., "claude-sonnet-4-6", "gpt-4o")
+            model: LLM model to use (e.g., "gpt-4o", "claude-sonnet-4-6")
             api_key: API key (or set environment variable)
-            provider: LLM provider - "anthropic", "openai", or "custom"
-            base_url: Custom API endpoint (for local LLMs, Azure, etc.)
+            provider: LLM provider - "openai"(推荐), "anthropic", or "custom"
+            base_url: Custom API endpoint (for third-party providers, local LLMs, Azure, etc.)
             tools: List of tools to make available
             config: Full configuration object
             llm_client: Custom LLM client instance (overrides provider detection)
@@ -293,7 +295,7 @@ class AgentHarness:
             hourly_request_limit=cost_control.hourly_request_limit,
             global_daily_budget_usd=cost_control.global_daily_budget_usd,
             auto_throttle=cost_control.auto_throttle,
-            fallback_model=cost_control.fallback_model or "claude-haiku-4-5",
+            fallback_model=cost_control.fallback_model or "gpt-4o-mini",
             context_reduction_ratio=cost_control.context_reduction_ratio,
             warning_threshold=cost_control.warning_threshold,
         )
@@ -1713,10 +1715,10 @@ class AgentHarness:
         Create an agent from environment variables.
 
         Supported environment variables:
-        - ANTHROPIC_API_KEY / OPENAI_API_KEY: API key
-        - HARNESS_MODEL: Model name (default: claude-sonnet-4-6)
-        - HARNESS_PROVIDER: Provider (anthropic/openai/auto)
-        - HARNESS_BASE_URL: Custom API endpoint
+        - OPENAI_API_KEY / ANTHROPIC_API_KEY: API key (优先 OPENAI_API_KEY)
+        - HARNESS_MODEL: Model name (default: gpt-4o)
+        - HARNESS_PROVIDER: Provider (openai/anthropic/auto)
+        - HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
         - HARNESS_MAX_ITERATIONS: Max loop iterations
         - HARNESS_SYSTEM_PROMPT: System prompt
         - HARNESS_MEMORY_DIR: Memory directory
@@ -1728,8 +1730,9 @@ class AgentHarness:
         Example:
             ```python
             import os
-            os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
-            os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+            os.environ["OPENAI_API_KEY"] = "your-key"
+            os.environ["HARNESS_BASE_URL"] = "https://api.your-provider.com/v1"
+            os.environ["HARNESS_MODEL"] = "gpt-4o"
 
             agent = AgentHarness.from_env()
             ```

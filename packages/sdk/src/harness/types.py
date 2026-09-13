@@ -265,7 +265,7 @@ class CostConfig:
     # Global level
     global_daily_budget_usd: float = 100.0
     auto_throttle: bool = True
-    fallback_model: str = "claude-haiku-4-5"
+    fallback_model: str = "gpt-4o-mini"
     context_reduction_ratio: float = 0.5
 
     # Common settings

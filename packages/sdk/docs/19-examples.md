@@ -551,7 +551,7 @@ from pathlib import Path
 
 # 配置全局 MEMORY.md 文件路径
 config = HarnessConfig(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     memory_md_path=Path.home() / ".harness" / "MEMORY.md",
 )
 

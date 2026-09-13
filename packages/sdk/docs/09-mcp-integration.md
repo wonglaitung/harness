@@ -139,7 +139,7 @@ from harness import AgentHarness
 
 # 最简使用
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     api_key="your-key"
 )
 

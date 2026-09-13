@@ -696,7 +696,7 @@ from harness.core.subagent import SubAgentManager
 from harness import AgentHarness
 
 # 创建父代理和子代理管理器
-parent = AgentHarness(model="claude-sonnet-4-6")
+parent = AgentHarness(model="gpt-4o")
 manager = SubAgentManager(parent)
 
 # 创建子代理配置

@@ -21,7 +21,7 @@ Worktrees 模块支持**并行执行多个 Goal**，每个在独立的 git workt
 from harness import AgentHarness
 from harness.loop import WorktreeOrchestrator, WorktreeConfig
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 orchestrator = WorktreeOrchestrator(agent, ".")
 
 # 并行执行多个 Goal
@@ -90,7 +90,7 @@ from harness import AgentHarness
 from harness.loop import WorktreeOrchestrator, WorktreeConfig
 
 async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
+    agent = AgentHarness(model="gpt-4o")
     orchestrator = WorktreeOrchestrator(agent, ".")
 
     # 定义并行任务

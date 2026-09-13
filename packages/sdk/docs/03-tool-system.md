@@ -541,7 +541,7 @@ tools = get_browser_tools()
 from harness import AgentHarness
 
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=get_browser_tools(),
 )
 

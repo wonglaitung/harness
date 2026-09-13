@@ -47,12 +47,13 @@
 import os
 from harness import AgentHarness
 
-# 从环境变量读取
+# 从环境变量读取（推荐使用 OpenAI 兼容格式）
 agent = AgentHarness(
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
-    # 或 OpenAI
-    # api_key=os.environ.get("OPENAI_API_KEY"),
-    # model="gpt-4o",
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    # 或 Anthropic
+    # api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    # model="claude-sonnet-4-6",
+    # provider="anthropic",
 )
 ```
 

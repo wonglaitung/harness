@@ -177,13 +177,13 @@ class SubAgentManager:
         # Inherit API settings from parent
         parent_config = getattr(self.parent, "config", None)
         sub_config = HarnessConfig(
-            model=getattr(parent_config, "model", "claude-sonnet-4-6")
+            model=getattr(parent_config, "model", "gpt-4o")
             if parent_config
-            else "claude-sonnet-4-6",
+            else "gpt-4o",
             api_key=getattr(parent_config, "api_key", None) if parent_config else None,
-            provider=getattr(parent_config, "provider", "anthropic")
+            provider=getattr(parent_config, "provider", "openai")
             if parent_config
-            else "anthropic",
+            else "openai",
             base_url=getattr(parent_config, "base_url", None) if parent_config else None,
             max_iterations=config.max_iterations,
             system_prompt=config.system_prompt or self._build_default_prompt(config),

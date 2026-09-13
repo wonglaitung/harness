@@ -75,7 +75,7 @@ from harness.orchestrator import (
     CoordinationMode,
 )
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 orchestrator = LoopOrchestrator(agent)
 
 # 创建工作流
@@ -312,7 +312,7 @@ from harness.orchestrator import (
 )
 
 async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
+    agent = AgentHarness(model="gpt-4o")
     orchestrator = LoopOrchestrator(agent)
 
     # 定义 CI/CD 工作流

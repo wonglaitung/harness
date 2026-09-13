@@ -231,7 +231,7 @@ AgentHarness 是 SDK 的主入口，提供完整的 Agent 运行时。
 class AgentHarness:
     def __init__(
         self,
-        model: str = "claude-sonnet-4-6",    # 模型名称
+        model: str = "gpt-4o",    # 模型名称
         api_key: str | None = None,           # API 密钥（或设置环境变量）
         provider: str = "anthropic",          # LLM 提供商 - "anthropic", "openai", 或 "custom"
         base_url: str | None = None,          # 自定义 API 端点（用于本地 LLM、Azure 等）
@@ -250,7 +250,7 @@ class AgentHarness:
 
 因此：
 
-- `AgentHarness(model="claude-sonnet-4-6")` → 正常（anthropic 默认匹配）
+- `AgentHarness(model="gpt-4o")` → 正常（anthropic 默认匹配）
 - `AgentHarness(model="gpt-4o")` → **错误**，会被当作 Anthropic 客户端调用。请显式设置
   `provider="openai"`（或 `AgentHarness(config=HarnessConfig(model="gpt-4o"))`，此时 `provider="auto"` 会正确检测）
 - 想对任何模型启用自动检测：`AgentHarness(model="gpt-4o", provider="auto")` 或
@@ -726,10 +726,10 @@ def from_env(cls) -> AgentHarness:
     """从环境变量创建 AgentHarness
 
     支持的环境变量：
-    - ANTHROPIC_API_KEY / OPENAI_API_KEY: API 密钥
-    - HARNESS_MODEL: 模型名称（默认: claude-sonnet-4-6）
-    - HARNESS_PROVIDER: 提供商（anthropic/openai/auto）
-    - HARNESS_BASE_URL: 自定义 API 端点
+    - OPENAI_API_KEY / ANTHROPIC_API_KEY: API 密钥（优先 OPENAI_API_KEY）
+    - HARNESS_MODEL: 模型名称（默认: gpt-4o）
+    - HARNESS_PROVIDER: 提供商（openai/anthropic/auto）
+    - HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
     - HARNESS_MAX_ITERATIONS: 最大迭代次数
     - HARNESS_SYSTEM_PROMPT: 系统提示词
     - HARNESS_MEMORY_DIR: 记忆目录
@@ -738,8 +738,9 @@ def from_env(cls) -> AgentHarness:
     示例：
         ```python
         import os
-        os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
-        os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+        os.environ["OPENAI_API_KEY"] = "your-api-key"
+        os.environ["HARNESS_BASE_URL"] = "https://api.your-provider.com/v1"
+        os.environ["HARNESS_MODEL"] = "gpt-4o"
 
         agent = AgentHarness.from_env()
         ```
@@ -753,7 +754,7 @@ from harness.sdk.config import HarnessConfig
 
 class HarnessConfig:
     # LLM 配置
-    model: str = "claude-sonnet-4-6"
+    model: str = "gpt-4o"
     api_key: str | None = None
     provider: str = "auto"           # "anthropic", "openai", "auto" 自动检测（见下方说明）
     base_url: str | None = None      # 自定义 API 端点（本地 LLM、Azure 等）
@@ -981,7 +982,7 @@ from harness.model_presets import (
     get_default_output_tokens,
 )
 
-preset = get_model_preset("claude-sonnet-4-6")
+preset = get_model_preset("gpt-4o")
 print(preset.provider)              # "anthropic"
 print(preset.context_window)        # 200000
 print(get_default_output_tokens("gpt-4o"))  # 4096
@@ -994,8 +995,8 @@ print(get_default_output_tokens("gpt-4o"))  # 4096
 | 模型 | max_tokens |
 |------|------------|
 | claude-opus-4-6 | 8192 |
-| claude-sonnet-4-6 | 8192 |
-| claude-haiku-4-5 | 8192 |
+| gpt-4o | 8192 |
+| gpt-4o-mini | 8192 |
 | gpt-4o | 4096 |
 | gpt-4o-mini | 4096 |
 | 其他 | 4096 |
@@ -1004,7 +1005,7 @@ print(get_default_output_tokens("gpt-4o"))  # 4096
 
 ```yaml
 # harness.yaml
-model: claude-sonnet-4-6
+model: gpt-4o
 max_iterations: 100
 memory_dir: .harness/memory
 context_window: auto        # "auto" / "32k" / "64k" / "128k" / "200k" / int
@@ -1083,7 +1084,7 @@ from harness.llm.anthropic import AnthropicClient
 
 client = AnthropicClient(
     api_key="sk-ant-...",
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
 )
 ```
 
@@ -1282,7 +1283,7 @@ agent = AgentHarness(
 ```python
 # provider 自动检测（复用 model_presets.py）
 routing = RoutingConfig(
-    high_model="claude-sonnet-4-6",  # 自动检测 → anthropic
+    high_model="gpt-4o",  # 自动检测 → anthropic
     low_model="qwen-plus",           # 自动检测 → openai
     router_model_path="models/qwen3.5-0.8b.gguf",
 )

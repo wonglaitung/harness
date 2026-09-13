@@ -7,7 +7,7 @@ Multi-Agent Team 示例 — TeamOrchestrator 三种协调模式。
 3. Hierarchical 模式：leader 动态分配任务给 worker
 
 运行方式：
-    export ANTHROPIC_API_KEY=your-key-here
+    export OPENAI_API_KEY=your-key-here
     python examples/multi_agent_team.py
 
 无需真实 LLM：设置 MOCK=1 使用 mock agent 运行。
@@ -51,10 +51,10 @@ def create_orchestrator():
             )
         )
     else:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("Error: 设置 ANTHROPIC_API_KEY 或 MOCK=1")
+        if not os.environ.get("OPENAI_API_KEY") and not os.environ.get("ANTHROPIC_API_KEY"):
+            print("Error: 设置 OPENAI_API_KEY 或 MOCK=1")
             sys.exit(1)
-        agent = AgentHarness(model="claude-sonnet-4-6")
+        agent = AgentHarness(model="gpt-4o")
 
     return LoopOrchestrator(agent=agent)
 

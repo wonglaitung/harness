@@ -1282,7 +1282,7 @@ from harness.guardrails import GuardrailConfig
 
 # 只启用 Layer 1（PII 过滤）
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=[ReadTool()],
     guardrails=GuardrailConfig(
         enabled=True,
@@ -1294,7 +1294,7 @@ agent = AgentHarness(
 
 # 同时启用 Layer 1 和 Layer 2
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     guardrails=GuardrailConfig(
         enabled=True,
         layer1_enabled=True,
@@ -1433,7 +1433,7 @@ async def browser_confirm_handler(tool_name: str, args: dict) -> ConfirmationRes
     return ConfirmationResult(confirmed=True, trust_session=False)
 
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=get_browser_tools(),
 )
 agent.add_hook(ConfirmationHook(on_confirm=browser_confirm_handler))

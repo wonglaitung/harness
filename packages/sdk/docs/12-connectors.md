@@ -31,7 +31,7 @@ from harness.connectors import (
 )
 from harness.triggers import TriggerManager
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 trigger_manager = TriggerManager(agent)
 
 # 创建 ConnectorManager
@@ -221,7 +221,7 @@ from harness.connectors import (
 from harness.triggers import TriggerManager
 
 async def main():
-    agent = AgentHarness(model="claude-sonnet-4-6")
+    agent = AgentHarness(model="gpt-4o")
     trigger_manager = TriggerManager(agent)
     manager = ConnectorManager(trigger_manager)
 

@@ -599,7 +599,7 @@ from pathlib import Path
 
 # 方式 1：通过 HarnessConfig 配置
 config = HarnessConfig(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     memory_md_path=Path.home() / ".harness" / "MEMORY.md",  # 全局记忆文件路径
 )
 agent = AgentHarness(config=config)
@@ -607,7 +607,7 @@ agent = AgentHarness(config=config)
 # 方式 2：通过 ContextBuilder 添加自定义记忆源
 from harness.memory.system_prompt import SystemPromptSource
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 agent._context_builder.add_prompt_source(SystemPromptSource(
     name="GlobalMemory",
     priority=40,
@@ -1079,7 +1079,7 @@ from harness.tools.builtins import UpdateCoreMemoryTool
 
 # 显式添加工具
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=[
         UpdateCoreMemoryTool(),  # 显式添加
     ],

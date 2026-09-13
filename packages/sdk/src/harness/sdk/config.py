@@ -312,7 +312,7 @@ class HarnessConfig:
     """
 
     # LLM settings
-    model: str = "claude-sonnet-4-6"
+    model: str = "gpt-4o"
     api_key: str | None = None
     provider: str = "auto"  # "anthropic", "openai", "auto" for auto-detect
     base_url: str | None = None  # For custom endpoints (e.g., local LLM, Azure)
@@ -444,10 +444,10 @@ class HarnessConfig:
         Load configuration from environment variables.
 
         Supported environment variables:
-        - ANTHROPIC_API_KEY / OPENAI_API_KEY: API key
-        - HARNESS_MODEL: Model name (default: claude-sonnet-4-6)
-        - HARNESS_PROVIDER: Provider (anthropic/openai/auto)
-        - HARNESS_BASE_URL: Custom API endpoint
+        - OPENAI_API_KEY / ANTHROPIC_API_KEY: API key (优先 OPENAI_API_KEY)
+        - HARNESS_MODEL: Model name (default: gpt-4o)
+        - HARNESS_PROVIDER: Provider (openai/anthropic/auto)
+        - HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
         - HARNESS_MAX_ITERATIONS: Max loop iterations
         - HARNESS_SYSTEM_PROMPT: System prompt
         - HARNESS_MEMORY_DIR: Memory directory
@@ -458,14 +458,14 @@ class HarnessConfig:
         """
         import os
 
-        # Detect API key
-        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
+        # Detect API key (优先 OpenAI 兼容格式)
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
         # Detect provider from API key
-        if os.getenv("ANTHROPIC_API_KEY"):
-            provider = "anthropic"
-        elif os.getenv("OPENAI_API_KEY"):
+        if os.getenv("OPENAI_API_KEY"):
             provider = "openai"
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
         else:
             provider = "auto"
 
@@ -474,7 +474,7 @@ class HarnessConfig:
 
         return cls(
             api_key=api_key,
-            model=os.getenv("HARNESS_MODEL", "claude-sonnet-4-6"),
+            model=os.getenv("HARNESS_MODEL", "gpt-4o"),
             provider=provider,
             base_url=os.getenv("HARNESS_BASE_URL"),
             max_iterations=int(os.getenv("HARNESS_MAX_ITERATIONS", "10")),

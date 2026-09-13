@@ -36,7 +36,7 @@ from harness import AgentHarness, ReadTool, GlobTool
 
 # Create agent
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=[ReadTool(), GlobTool()],
 )
 
@@ -108,7 +108,7 @@ from harness import AgentHarness
 
 # Environment variable: ANTHROPIC_API_KEY
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     provider="anthropic",
 )
 ```
@@ -303,7 +303,7 @@ from harness.testing import RecordingHarness, RecordingConfig
 from harness import AgentHarness
 
 # Record
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 recorder = RecordingHarness(agent)
 
 result = await recorder.run("Complex task")
@@ -329,7 +329,7 @@ from harness import AgentHarness, ReadTool
 from harness.guardrails import GuardrailConfig
 
 agent = AgentHarness(
-    model="claude-sonnet-4-6",
+    model="gpt-4o",
     tools=[ReadTool()],
     guardrails=GuardrailConfig(
         enabled=True,
@@ -394,7 +394,7 @@ Let the agent run autonomously until a goal is achieved:
 ```python
 from harness import AgentHarness, GoalStatus
 
-agent = AgentHarness(model="claude-sonnet-4-6")
+agent = AgentHarness(model="gpt-4o")
 
 # Basic usage
 result = await agent.run_goal("Fix all type errors in src/")
@@ -463,17 +463,18 @@ Create agent from environment variables:
 
 ```python
 import os
-os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
-os.environ["HARNESS_MODEL"] = "claude-sonnet-4-6"
+os.environ["OPENAI_API_KEY"] = "your-api-key"
+os.environ["HARNESS_BASE_URL"] = "https://api.your-provider.com/v1"  # 可选
+os.environ["HARNESS_MODEL"] = "gpt-4o"
 
 agent = AgentHarness.from_env()
 ```
 
 **Supported environment variables**:
-- `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`: API key
-- `HARNESS_MODEL`: Model name (default: claude-sonnet-4-6)
-- `HARNESS_PROVIDER`: Provider (anthropic/openai/auto)
-- `HARNESS_BASE_URL`: Custom API endpoint
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`: API key (优先 OPENAI_API_KEY)
+- `HARNESS_MODEL`: Model name (default: gpt-4o)
+- `HARNESS_PROVIDER`: Provider (openai/anthropic/auto)
+- `HARNESS_BASE_URL`: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
 - `HARNESS_MAX_ITERATIONS`: Max loop iterations
 
 ### Goal Status
