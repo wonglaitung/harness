@@ -26,6 +26,7 @@
 - [20-connectors.md](./20-connectors.md) - Connectors 外部系统集成
 - [21-orchestrator.md](./21-orchestrator.md) - Orchestrator 工作流编排
 - [22-examples.md](./22-examples.md) - 示例代码
+- [23-deterministic-gate.md](./23-deterministic-gate.md) - Deterministic Gate 确定性闸门（三层验证、声明式规则、治理率指标）
 - [programmer_skill.md](./programmer_skill.md) - 编程规范
 
 ## 项目定位
