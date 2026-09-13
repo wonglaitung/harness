@@ -114,3 +114,11 @@
 - 结构性覆盖很高（估计 90%+），主要模块均已对齐，含近期 streaming / gate / M6 同步。
 - **核心风险不是"缺模块"，而是"同步后行为漂移 + 文档/测试滞后 + 无自动 parity 校验"**——本报告已刷新、CI 测试已固化全绿(549 测试)、Redis agent-state store 已补齐、关键逻辑跨语言对拍已建立。
 - 下一步优先级：收敛对拍发现的 2 处漂移(normalize_command 反斜杠 / validate 注入粒度) → 回灌 Python 近期改动(document size validation 等) → 报告纳入 CI 自动重生。
+
+## 9. 提供者默认值统一
+
+Python SDK 与 Java SDK 已同步切换为 **OpenAI 兼容格式的第三方提供者**作为默认：
+- 默认模型：`gpt-4o`，fallback：`gpt-4o-mini`
+- 默认 provider：`openai`（Java）/ `openai`（Python `AgentHarness`）
+- `from_env()` 优先检测 `OPENAI_API_KEY`，支持 `HARNESS_BASE_URL` 自定义任意兼容端点
+- 保留 `AnthropicClient`/`ModelPresets` 功能代码不变
