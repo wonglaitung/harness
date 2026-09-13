@@ -13,8 +13,11 @@ import java.util.Map;
  *
  * Example:
  * <pre>
+ * // 使用 OpenAI 兼容的第三方提供者（可自定义 URL + Key）
  * HarnessConfig config = HarnessConfig.builder()
- *     .model("claude-sonnet-4-6")
+ *     .model("gpt-4o")
+ *     .apiKey(System.getenv("OPENAI_API_KEY"))
+ *     .baseUrl("https://api.openai.com/v1")   // 可替换为任意兼容端点
  *     .maxIterations(10)
  *     .toolTimeout(30.0)
  *     .build();
@@ -157,16 +160,17 @@ public class HarnessConfig {
     public static HarnessConfig fromEnv() {
         Builder builder = builder();
 
-        String apiKey = System.getenv("ANTHROPIC_API_KEY");
+        // 优先使用 OpenAI 兼容格式的第三方提供者
+        String apiKey = System.getenv("OPENAI_API_KEY");
         if (apiKey == null) {
-            apiKey = System.getenv("OPENAI_API_KEY");
+            apiKey = System.getenv("ANTHROPIC_API_KEY");
         }
 
         String provider = "auto";
-        if (System.getenv("ANTHROPIC_API_KEY") != null) {
-            provider = "anthropic";
-        } else if (System.getenv("OPENAI_API_KEY") != null) {
+        if (System.getenv("OPENAI_API_KEY") != null) {
             provider = "openai";
+        } else if (System.getenv("ANTHROPIC_API_KEY") != null) {
+            provider = "anthropic";
         }
 
         String envProvider = System.getenv("HARNESS_PROVIDER");
@@ -228,7 +232,7 @@ public class HarnessConfig {
     }
 
     public static class Builder {
-        private String model = "claude-sonnet-4-6";
+        private String model = "gpt-4o";
         private String apiKey = null;
         private String provider = "auto";
         private String baseUrl = null;

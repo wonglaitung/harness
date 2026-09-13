@@ -32,9 +32,9 @@ AgentHarness agent = AgentHarness.fromEnv(List.of(new ReadTool()));
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
+| `OPENAI_API_KEY` | OpenAI API Key（推荐，兼容任意第三方提供者） | - |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | - |
-| `OPENAI_API_KEY` | OpenAI API Key | - |
-| `HARNESS_MODEL` | 模型名称 | `claude-sonnet-4-6` |
+| `HARNESS_MODEL` | 模型名称 | `gpt-4o` |
 | `HARNESS_PROVIDER` | 提供商 | `auto` |
 | `HARNESS_BASE_URL` | 自定义 API 端点 | - |
 | `HARNESS_MAX_ITERATIONS` | 最大迭代次数 | `10` |
@@ -143,10 +143,10 @@ import com.harness.core.LLMClient;
 import java.util.List;
 
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")           // 模型名称
-    .apiKey("sk-ant-...")                 // API 密钥（或设置环境变量）
+    .model("gpt-4o")           // 模型名称
+    .apiKey("your-api-key")                 // API 密钥（或设置环境变量）
     .config(HarnessConfig.builder()
-        .provider("anthropic")             // LLM 提供商 - "anthropic", "openai", 或 "auto"
+        .provider("openai")             // LLM 提供商 - "openai"(推荐), "anthropic", 或 "auto"
         .baseUrl(null)                     // 自定义 API 端点
         .build())
     .llmClient(null)                       // 自定义 LLM 客户端实例
@@ -469,8 +469,8 @@ import com.harness.core.HarnessConfig;
 // Java HarnessConfig uses Builder pattern:
 HarnessConfig config = HarnessConfig.builder()
     // LLM 配置
-    .model("claude-sonnet-4-6")
-    .apiKey("sk-ant-...")
+    .model("gpt-4o")
+    .apiKey("your-api-key")
     .provider("auto")            // "auto", "anthropic", "openai"
     .baseUrl(null)               // 自定义 API 端点
     .contextWindow(200000)       // 模型上下文窗口大小（默认 200000）
@@ -629,7 +629,7 @@ Java SDK 不包含内置模型预设。请在 `HarnessConfig.Builder` 中显式�
 
 ```java
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .contextWindow(200000)
     .maxTokens(4096)
     .build();
@@ -641,7 +641,7 @@ Java SDK 使用固定的默认值 `maxTokens = 4096`，不支持自动模式。�
 
 ```java
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-opus-4-6")
+    .model("gpt-4o")
     .maxTokens(8192)  // Opus 支持更大的输出
     .build();
 ```
@@ -656,7 +656,7 @@ AgentHarness agent = AgentHarness.builder()
     .build();
 
 // 支持的环境变量:
-// ANTHROPIC_API_KEY / OPENAI_API_KEY
+// OPENAI_API_KEY（推荐）/ ANTHROPIC_API_KEY
 // HARNESS_MODEL, HARNESS_PROVIDER, HARNESS_BASE_URL
 // HARNESS_MAX_ITERATIONS, HARNESS_SYSTEM_PROMPT, HARNESS_MEMORY_DIR
 ```
@@ -1027,8 +1027,8 @@ import com.harness.core.HarnessConfig;
 
 AgentHarness agent = AgentHarness.builder()
     .config(HarnessConfig.builder()
-        .apiKey("sk-ant-...")
-        .model("claude-sonnet-4-6")
+        .apiKey("your-api-key")
+        .model("gpt-4o")
         .build())
     .build();
 ```

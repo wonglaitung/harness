@@ -49,7 +49,7 @@ import com.harness.types.TokenUsage;
  * Example:
  * <pre>
  * AgentHarness agent = AgentHarness.builder()
- *     .model("claude-sonnet-4-6")
+ *     .model("gpt-4o")
  *     .llmClient(myClient)
  *     .addTool(new ReadTool())
  *     .addTool(new WriteTool())
@@ -1080,10 +1080,10 @@ public class AgentHarness {
      *
      * <p>Supported environment variables:</p>
      * <ul>
-     *   <li>ANTHROPIC_API_KEY / OPENAI_API_KEY: API key</li>
-     *   <li>HARNESS_MODEL: Model name (default: claude-sonnet-4-6)</li>
-     *   <li>HARNESS_PROVIDER: Provider (anthropic/openai/auto)</li>
-     *   <li>HARNESS_BASE_URL: Custom API endpoint</li>
+     *   <li>OPENAI_API_KEY / ANTHROPIC_API_KEY: API key (优先 OPENAI_API_KEY)</li>
+     *   <li>HARNESS_MODEL: Model name (default: gpt-4o)</li>
+     *   <li>HARNESS_PROVIDER: Provider (openai/anthropic/auto)</li>
+     *   <li>HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）</li>
      *   <li>HARNESS_MAX_ITERATIONS: Max loop iterations</li>
      *   <li>HARNESS_SYSTEM_PROMPT: System prompt</li>
      *   <li>HARNESS_MEMORY_DIR: Memory directory</li>
@@ -1092,9 +1092,10 @@ public class AgentHarness {
      *
      * <p>Example:</p>
      * <pre>{@code
-     * // Set environment variables
-     * // ANTHROPIC_API_KEY=sk-ant-...
-     * // HARNESS_MODEL=claude-sonnet-4-6
+     * // 使用 OpenAI 兼容的第三方提供者
+     * // OPENAI_API_KEY=your-key
+     * // HARNESS_BASE_URL=https://api.your-provider.com/v1
+     * // HARNESS_MODEL=gpt-4o
      *
      * AgentHarness agent = AgentHarness.fromEnv();
      * LoopResult result = agent.run("Hello").join();

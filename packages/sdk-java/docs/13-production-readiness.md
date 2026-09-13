@@ -47,10 +47,10 @@
 import com.harness.integration.AgentHarness;
 import com.harness.core.HarnessConfig;
 
-// 从环境变量读取
-String apiKey = System.getenv("ANTHROPIC_API_KEY");
-// 或 OpenAI
-// String apiKey = System.getenv("OPENAI_API_KEY");
+// 从环境变量读取（推荐使用 OpenAI 兼容格式）
+String apiKey = System.getenv("OPENAI_API_KEY");
+// 或 Anthropic
+// String apiKey = System.getenv("ANTHROPIC_API_KEY");
 
 HarnessConfig config = HarnessConfig.builder()
     .apiKey(apiKey)

@@ -86,7 +86,7 @@ import java.util.List;
 // AgentLoop is managed internally by AgentHarness.
 // Use AgentHarness to run agent loops:
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 
 // Simple run
@@ -379,7 +379,7 @@ public class MyPermissionHook implements LifecycleHook {
 
 // 注册钩子到 Agent
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 agent.addHook(new MyPermissionHook());
 
@@ -424,7 +424,7 @@ public class MyPermissionHook implements LifecycleHook {
 
 // 注册钩子
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 agent.addHook(new MyPermissionHook());
 
@@ -775,7 +775,7 @@ import com.harness.integration.HarnessAgentFactory;
 
 // 创建父代理
 AgentHarness parent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 
 // 使用工厂创建管理器
@@ -825,7 +825,7 @@ import com.harness.integration.AgentHarnessParentAdapter;
 
 // 创建父代理
 AgentHarness parent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 
 // 使用工厂创建管理器（真实 AgentHarness）

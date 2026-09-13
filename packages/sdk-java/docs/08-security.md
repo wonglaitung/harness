@@ -1287,7 +1287,7 @@ GuardrailConfig guardrailConfig = GuardrailConfig.builder()
     .build();
 
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .addTool(new ReadTool())
     .addHook(new GuardrailHook(guardrailConfig))
     .build();
@@ -1301,7 +1301,7 @@ GuardrailConfig fullConfig = GuardrailConfig.builder()
     .build();
 
 AgentHarness fullAgent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .addHook(new GuardrailHook(fullConfig))
     .build();
 

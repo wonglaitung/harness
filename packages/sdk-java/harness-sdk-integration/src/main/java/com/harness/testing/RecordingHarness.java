@@ -28,7 +28,7 @@ import com.harness.types.TokenUsage;
  * <pre>
  * // Record mode
  * RecordingHarness harness = RecordingHarness.record(
- *     AgentHarness.builder().model("claude-sonnet-4-6").build()
+ *     AgentHarness.builder().model("gpt-4o").build()
  * );
  *
  * LoopResult result = harness.run("Hello!").join();

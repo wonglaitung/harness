@@ -36,12 +36,12 @@ class AgentHarnessTest {
     @Test
     void testBuilderCreatesHarness() {
         AgentHarness agent = AgentHarness.builder()
-            .model("claude-sonnet-4-6")
+            .model("gpt-4o")
             .llmClient(mockLLM)
             .build();
 
         assertNotNull(agent);
-        assertEquals("claude-sonnet-4-6", agent.getConfig().getModel());
+        assertEquals("gpt-4o", agent.getConfig().getModel());
     }
 
     @Test

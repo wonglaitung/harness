@@ -141,7 +141,7 @@ import com.harness.types.LoopResult;
 
 // 最简使用
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .apiKey("your-key")
     .build();
 AgentHarness agent = new AgentHarness(config);

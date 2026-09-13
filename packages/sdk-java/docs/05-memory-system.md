@@ -559,13 +559,13 @@ import java.nio.file.Path;
 
 // 方式 1：通过 HarnessConfig 配置
 AgentHarness agent1 = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .memoryMdPath(Path.of(System.getProperty("user.home"), ".harness", "MEMORY.md"))
     .build();
 
 // 方式 2：通过 ContextBuilder 添加自定义记忆源
 AgentHarness agent2 = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 agent2.contextBuilder().addPromptSource(SystemPromptSource.builder()
     .name("GlobalMemory")
@@ -1034,7 +1034,7 @@ import com.harness.tools.UpdateCoreMemoryTool;
 
 // 显式添加工具
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .tools(java.util.List.of(new UpdateCoreMemoryTool()))
     .build();
 ```
@@ -1159,7 +1159,7 @@ import com.harness.integration.AgentHarness;
 import com.harness.types.LoopConfig;
 
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .contextWindow(200000)
     .sessionWindow(100)
     .enableCompression(true)

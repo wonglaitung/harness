@@ -63,7 +63,7 @@ Agent = Model + Harness
 ```java
 // 创建 Harness 实例
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .apiKey(System.getenv("ANTHROPIC_API_KEY"))
     .tools(List.of(
         new ReadTool(),

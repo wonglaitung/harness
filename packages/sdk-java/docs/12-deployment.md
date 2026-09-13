@@ -16,7 +16,7 @@ import com.harness.integration.AgentHarness;
 import com.harness.types.LoopResult;
 
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 LoopResult result = agent.run("分析代码").join();
 ```
@@ -32,7 +32,7 @@ import com.harness.core.HarnessConfig;
 import com.harness.integration.AgentHarness;
 
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .memoryDir("./sessions")
     .build();
 AgentHarness agent = new AgentHarness(config);
@@ -52,7 +52,7 @@ import com.harness.types.LoopResult;
 public class AgentService {
 
     private final AgentHarness agent = AgentHarness.builder()
-        .model("claude-sonnet-4-6")
+        .model("gpt-4o")
         .build();
 
     @PostMapping("/chat")
@@ -85,7 +85,7 @@ import com.harness.memory.SessionManager;
 // 配置 Redis 存储
 SessionManager sessionManager = new SessionManager("redis://localhost:6379");
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .storage(HarnessConfig.StorageConfig.builder()
         .type("redis")
         .build())

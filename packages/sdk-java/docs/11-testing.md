@@ -225,7 +225,7 @@ public class IntegrationTest {
     private AgentHarness createAgent() {
         HarnessConfig config = HarnessConfig.builder()
             .apiKey("test-key")
-            .model("claude-haiku-4-5")  // 使用便宜模型
+            .model("gpt-4o-mini")  // 使用便宜模型
             .build();
         return new AgentHarness(config);
     }

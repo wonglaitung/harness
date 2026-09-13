@@ -367,7 +367,7 @@ import java.util.concurrent.CompletableFuture;
 // ToolExecutor is managed internally by AgentHarness.
 // Tools are registered and executed through AgentHarness.
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 
 // Register tools
@@ -524,7 +524,7 @@ import com.harness.mcp.McpServerConfig;
 
 // MCP 工具和内置工具统一使用
 AgentHarness agent = AgentHarness.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .build();
 
 // 添加 MCP 服务器

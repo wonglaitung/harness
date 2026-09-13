@@ -47,7 +47,7 @@ public class HarnessAgentFactory implements SubAgentManager.AgentFactory {
 
             // Build sub-agent harness config
             HarnessConfig subConfig = HarnessConfig.builder()
-                .model(parent != null ? parent.getModel() : "claude-sonnet-4-6")
+                .model(parent != null ? parent.getModel() : "gpt-4o")
                 .maxIterations(config.maxIterations())
                 .systemPrompt(config.systemPrompt() != null
                     ? config.systemPrompt()

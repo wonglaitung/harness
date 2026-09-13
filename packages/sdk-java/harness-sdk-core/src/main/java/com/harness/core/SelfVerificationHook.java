@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
  * Example:
  * <pre>
  * AgentHarness agent = AgentHarness.builder()
- *     .model("claude-sonnet-4-6")
+ *     .model("gpt-4o")
  *     .build();
  *
  * agent.addHook(new SelfVerificationHook(

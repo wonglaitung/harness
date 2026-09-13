@@ -697,7 +697,7 @@ import java.nio.file.Path;
 
 // 配置全局 MEMORY.md 文件路径
 HarnessConfig config = HarnessConfig.builder()
-    .model("claude-sonnet-4-6")
+    .model("gpt-4o")
     .memoryMdPath(Path.of(System.getProperty("user.home"), ".harness", "MEMORY.md").toString())
     .build();
 

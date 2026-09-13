@@ -2,16 +2,16 @@
  * LLM client implementations for Harness SDK Java.
  *
  * Supported providers:
- * - {@link AnthropicClient}: Anthropic Claude API
- * - {@link OpenAIClient}: OpenAI-compatible APIs (including third-party gateways)
+ * - {@link OpenAIClient}: OpenAI-compatible APIs (推荐，支持任意第三方提供者)
+ * - {@link AnthropicClient}: Anthropic Claude API (备用)
  *
  * Usage:
  * <pre>
+ * // OpenAI 兼容的第三方提供者（推荐）
+ * LLMClient client = new OpenAIClient(apiKey, "https://api.your-provider.com/v1", "gpt-4o");
+ *
  * // Anthropic Claude
  * LLMClient client = new AnthropicClient(apiKey, "claude-sonnet-4-6");
- *
- * // OpenAI-compatible (bank gateway)
- * LLMClient client = new OpenAIClient(apiKey, "https://api.bank.com/v1", "model-name");
  * </pre>
  */
 package com.harness.llm;

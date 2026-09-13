@@ -52,7 +52,7 @@ public record CostConfig(
     // Global level defaults
     public static final double DEFAULT_GLOBAL_DAILY_BUDGET_USD = 100.0;
     public static final boolean DEFAULT_AUTO_THROTTLE = true;
-    public static final String DEFAULT_FALLBACK_MODEL = "claude-haiku-4-5";
+    public static final String DEFAULT_FALLBACK_MODEL = "gpt-4o-mini";
     public static final double DEFAULT_CONTEXT_REDUCTION_RATIO = 0.5;
 
     // Common defaults

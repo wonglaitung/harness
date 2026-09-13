@@ -464,25 +464,22 @@ implementation 'com.harness:harness-sdk-all:1.0.0'
 ### 环境变量配置
 
 ```bash
-# Anthropic Claude
-export ANTHROPIC_API_KEY=your-api-key
-
-# OpenAI / 兼容接口
+# OpenAI 兼容的第三方提供者（推荐）
 export OPENAI_API_KEY=your-api-key
-export OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI
+export OPENAI_BASE_URL=https://api.your-provider.com/v1  # 可选，默认 OpenAI
 
 # Harness 配置
-export HARNESS_MODEL=claude-sonnet-4-6
-export HARNESS_PROVIDER=anthropic  # 或 openai/auto
+export HARNESS_MODEL=gpt-4o
+export HARNESS_PROVIDER=openai  # 或 anthropic/auto
 export HARNESS_MAX_ITERATIONS=10
 ```
 
 **支持的环境变量**：
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
+| `OPENAI_API_KEY` | OpenAI API Key（推荐，兼容任意第三方） | - |
 | `ANTHROPIC_API_KEY` | Anthropic API Key | - |
-| `OPENAI_API_KEY` | OpenAI API Key | - |
-| `HARNESS_MODEL` | 模型名称 | `claude-sonnet-4-6` |
+| `HARNESS_MODEL` | 模型名称 | `gpt-4o` |
 | `HARNESS_PROVIDER` | 提供商 | `auto` |
 | `HARNESS_BASE_URL` | 自定义 API 端点 | - |
 | `HARNESS_MAX_ITERATIONS` | 最大迭代次数 | `10` |
@@ -551,7 +548,7 @@ public class Example {
             .build();
 
         // 方式 3：从环境变量自动配置
-        // 需要设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY
+        // 需要设置 OPENAI_API_KEY（推荐）或 ANTHROPIC_API_KEY
         HarnessConfig configFromEnv = HarnessConfig.fromEnv();
         AgentHarness agent3 = AgentHarness.builder()
             .config(configFromEnv)

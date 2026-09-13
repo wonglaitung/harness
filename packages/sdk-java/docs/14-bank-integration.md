@@ -91,7 +91,7 @@ public class HarnessConfiguration {
         String apiKey = vaultService.getSecret("anthropic/api-key");
         
         HarnessConfig config = HarnessConfig.builder()
-            .model("claude-sonnet-4-6")
+            .model("gpt-4o")
             .apiKey(apiKey)
             .tools(List.of(
                 new ReadTool(),

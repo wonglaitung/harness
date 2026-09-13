@@ -29,7 +29,7 @@
  * // Create agent with browser tools
  * List<Tool> tools = BrowserTools.getAll();
  * AgentHarness agent = AgentHarness.builder()
- *     .model("claude-sonnet-4-6")
+ *     .model("gpt-4o")
  *     .tools(tools)
  *     .build();
  *
