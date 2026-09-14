@@ -166,7 +166,45 @@
 
 ## 2026-09-13 提取
 
+## 2026-09-14 提取
+
 ## 注意事项
+
+### 港股分析
+- **2026-09-14 港股Alpha信号全景 — FOMC前48小时三重信号终极共振**
+
+### 港股分析
+- **港交所科技100指数调整生效-智能驾驶首次纳入-被动资金建仓+算力网政策双左侧信号**
+
+### 港股分析
+- **智谱AI(02513)宣布50亿美元融资 — AI赛道产业资本最强右侧确认信号 🔥🔥🔥🔥** - http://finance.eastmoney.com/a/202609143872939782.html
+
+### 港股分析
+- **美债10Y 4.97% T+23 — 利率急刹车，5.0%关口前恐慌终局信号 🔥🔥🔥🔥🔥** - https://finance.yahoo.com/bonds
+
+### 新范式/工具
+- **claude-red — 结构化安全技能库：AI Agent 即领域专家新范式** - https://github.com/trending/python?since=daily (2026-09-14)
+
+### 新范式/工具
+- **LLM Wiki — 持久化增量 Wiki 知识管理新范式** - https://github.com/trending/typescript?since=daily (2026-09-14)
+
+### 新范式/工具
+- **YuE2 — 符号化规划音乐生成：白盒作曲+前沿音质新范式** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **AI Engineer Coach — Agentic Engineering 工程度量新范式** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **OtoDock — Agentic Company OS：多Agent组织化协作新范式** - https://github.com/OtoDock/oto-dock
+
+### 新范式/工具
+- **Automated Alignment Research — 自动对齐研究新范式** - https://www.anthropic.com/research/automated-researchers-mitigate-alignment-failures
+
+### 新范式/工具
+- **Multi-Agent Autoformalization — 多Agent自动形式化新范式** - https://www.anthropic.com/research/formalizing-fermats-last-theorem
+
+### 新范式/工具
+- **YuE2 — 符号化规划音乐生成新范式** - https://map-yue2.github.io/
 
 ### 港股分析
 - **港股IPO募资3600亿突破历史 — 制度红利持续兑现，港交所(00388)最强左侧信号 🔥🔥🔥🔥🔥** - http://finance.eastmoney.com/a/202609123872729143.html
