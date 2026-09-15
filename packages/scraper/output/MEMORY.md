@@ -168,7 +168,30 @@
 
 ## 2026-09-14 提取
 
+## 2026-09-15 提取
+
 ## 注意事项
+
+### 港股分析
+- **AI大模型芯片三次探底-利率恐慌极致错杀-智谱50亿美元融资vs市场恐慌-2026-09-15**
+
+### 港股分析
+- **腾讯(00700)回购314亿 + 百度(09888)回购启动 — 回购潮最强左侧信号** - http://finance.eastmoney.com/a/202609143872987162.html
+
+### 港股分析
+- **美债10Y-4.96-T24回落-利率见顶双确认-FOMC前黄金布局窗口**
+
+### 新范式/工具
+- **OpenMontage — Agentic Video Production System** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **LLM Wiki — 持久化增量 Wiki 知识管理新范式** - https://github.com/nashsu/llm_wiki
+
+### 新范式/工具
+- **Pion — Agent 自主运营公司新范式** - https://andonlabs.com/blog/why-we-built-pion
+
+### 新范式/工具
+- **YuE2：符号化规划音乐生成 — 白盒作曲+前沿音质新范式** - https://github.com/multimodal-art-projection/YuE
 
 ### 港股分析
 - **2026-09-14 港股Alpha信号全景 — FOMC前48小时三重信号终极共振**
