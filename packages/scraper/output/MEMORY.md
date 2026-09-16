@@ -170,7 +170,33 @@
 
 ## 2026-09-15 提取
 
+## 2026-09-16 提取
+
 ## 注意事项
+
+### 港股分析
+- **黄金股集体走低 — 实际利率飙升下的左侧逆向机会 🔥**
+
+### 港股分析
+- **港股再融资超3000亿+38% — AI军备竞赛配售潮产业资本信号 🔥🔥**
+
+### 港股分析
+- **中证港股通人工智能指数提前发布 — AI政策松绑左侧信号 🔥🔥🔥**
+
+### 港股分析
+- **美债10Y 5.00% T+25 — 突破终极关口，昨日见顶判断被证伪 🔴🔴🔴🔴🔴**
+
+### 新范式/工具
+- **OpenArm — 开源 7DOF 人形臂 + 标准化"OpenArm Cell"物理 AI 可复现评测平台** - https://github.com/enactic/OpenArm
+
+### 新范式/工具
+- **TradingAgents — 模拟交易公司分工的多 Agent 金融交易框架** - https://github.com/TauricResearch/TradingAgents
+
+### 新范式/工具
+- **System One Models (Jev) — 并行采样+类型安全结构化决策的新模型类别** - https://typesafe.ai/blog/introducing-system-one-models-and-jev
+
+### 新范式/工具
+- **System One Models — 并行采样+类型安全结构化决策的新模型类别** - https://typesafe.ai/blog/introducing-system-one-models-and-jev
 
 ### 港股分析
 - **AI大模型芯片三次探底-利率恐慌极致错杀-智谱50亿美元融资vs市场恐慌-2026-09-15**
