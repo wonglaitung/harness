@@ -1,0 +1,1 @@
+来源 OpenAI 官方博客，发布于 2026-09（<1 月）。满足概念创新（agent 基础设施商品化为托管 API）+ 采用广度（Codex harness 生态）。代表"Agent 基础设施即服务"新范式。核心线索：https://openai.com/index/introducing-the-agents-api

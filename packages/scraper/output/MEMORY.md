@@ -174,7 +174,30 @@
 
 ## 2026-09-17 提取
 
+## 2026-09-18 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股上市机制优化进入新窗口 — 政策松绑左侧信号 + 四方精创IPO叫停分化警示**
+
+### 港股分析
+- **美债10Y 4.95%逼近5%终极关口 — 科网股左侧逆向布局窗口**
+
+### 港股分析
+- **南向资金连续9日净买入+国际长钱基石投资近年高位 — 双流入右侧超强确认**
+
+### 新范式/工具
+- **OpenAI Agents API — 云 Agent 基础设施即服务** - https://openai.com/index/introducing-the-agents-api
+
+### 新范式/工具
+- **QorL — 4B 模型生成比 Postgres 快 81% 的查询计划** - https://rohanbansal.com/qorl
+
+### 新范式/工具
+- **BrowserSkill — AI Agent 复用真实登录态浏览器的新范式** - https://github.com/Tencent/BrowserSkill
+
+### 新范式/工具
+- **Bend — 通过证明阻止 AI 错误的编程语言** - https://bend-lang.com/
 
 ### 港股分析
 - **锂电池汽车股集体错杀---宁德时代赛力斯基本面利空---左侧逆向机会与风险**

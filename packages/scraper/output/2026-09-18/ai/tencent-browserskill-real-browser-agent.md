@@ -1,0 +1,1 @@
+GitHub Trending TypeScript 日榜第一，单日 +1350 stars。首发时间极新（<1 月）。满足概念创新（真实登录态复用 + 标签页借用）+ 社区共鸣（1350 stars/日）+ 采用广度（支持 8+ harness）。核心线索：https://github.com/Tencent/BrowserSkill

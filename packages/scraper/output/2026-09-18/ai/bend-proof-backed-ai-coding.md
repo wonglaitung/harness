@@ -1,0 +1,1 @@
+HN 219 分，标题"A language that blocks AI mistakes via proof"。Bend 2 是全新语言（Bend 1/HVM 不兼容），首发时间 <6 个月。满足概念创新（laws+proof 新概念词）+ 社区共鸣（HN 219）。">社区热度：HN 219 分，GitHub 见 bend-lang/bend。核心线索：https://bend-lang.com/
