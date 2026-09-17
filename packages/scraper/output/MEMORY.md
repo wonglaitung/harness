@@ -172,7 +172,33 @@
 
 ## 2026-09-16 提取
 
+## 2026-09-17 提取
+
 ## 注意事项
+
+### 港股分析
+- **锂电池汽车股集体错杀---宁德时代赛力斯基本面利空---左侧逆向机会与风险**
+
+### 港股分析
+- **南向资金连续两日净买入-港股通调入效应爆发-双向右侧确认**
+
+### 港股分析
+- **联想集团00992---CFO估值修复喊话---估值仅戴尔1-7---左侧信号**
+
+### 港股分析
+- **美债10Y 5.01%突破终极关口---科网股左侧逆向布局窗口---外资公允低估+南向逆势加仓**
+
+### 新范式/工具
+- **Soup — 4GB 显存微调 8B 模型的 Layer Streaming 新范式** - https://github.com/MakazhanAlpamys/Soup
+
+### 新范式/工具
+- **Soup — Layer Streaming：4GB 显存微调 8B 模型的新范式** - https://github.com/MakazhanAlpamys/Soup
+
+### 新范式/工具
+- **OpenViking — Agent 的"上下文数据库"新范式** - https://github.com/volcengine/OpenViking
+
+### 新范式/工具
+- **System One Models / Jev — 类型安全结构化决策的新模型类别** - https://typesafe.ai/blog/introducing-system-one-models-and-jev
 
 ### 港股分析
 - **黄金股集体走低 — 实际利率飙升下的左侧逆向机会 🔥**
