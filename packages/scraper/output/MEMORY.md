@@ -176,7 +176,30 @@
 
 ## 2026-09-18 提取
 
+## 2026-09-19 提取
+
 ## 注意事项
+
+### 港股分析
+- **九毛九(09922)股价跌至0.985港元 — 极端超跌左侧逆向（附价值陷阱警示）** - http://finance.eastmoney.com/a/202609173877496168.html
+
+### 港股分析
+- **美债10Y 5.00%历史高位 — 科网股左侧逆向布局窗口** - https://finance.yahoo.com/bonds
+
+### 港股分析
+- **港股上市机制优化(18C章门槛下调+同股不同权松绑) — 政策松绑左侧信号** - http://finance.eastmoney.com/a/202609173877671687.html
+
+### 港股分析
+- **智谱(02513) 南向68亿港元抄底 — AI大模型左侧+右侧共振最强信号** - http://finance.eastmoney.com/a/202609183878410410.html
+
+### 新范式/工具
+- **Knowledge Work Plugins — Agent 插件即岗位专家分发单元** - https://github.com/anthropics/knowledge-work-plugins
+
+### 新范式/工具
+- **OpenJev / SemIf — Semantic Ifs（语义条件：直接读 logits 做决策）** - https://openjev.com/
+
+### 新范式/工具
+- **Cactus Needle 3 — Intelligence Laddering（智能阶梯：单组权重即成梯队模型）** - https://cactuscompute.com/needle
 
 ### 港股分析
 - **港股上市机制优化进入新窗口 — 政策松绑左侧信号 + 四方精创IPO叫停分化警示**
