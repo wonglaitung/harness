@@ -178,7 +178,27 @@
 
 ## 2026-09-19 提取
 
+## 2026-09-20 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向连续10日净买入-AI大模型芯片右侧确认-2026-09-20**
+
+### 港股分析
+- **微亿智造港股IPO获证监会备案-机器人智造政策松绑左侧信号**
+
+### 港股分析
+- **联想集团00992-CFO估值修复喊话-估值仅戴尔1-7-左侧信号**
+
+### 新范式/工具
+- **Pass^k 一致性指标与 Consistency Guidelines — Agent 可靠性评估新范式** - https://huggingface.co/blog/ibm-research/altk-evolve-consistency
+
+### 新范式/工具
+- **CUA-S1 — 计算机使用的 System One 专用决策模型** - https://github.com/trycua/cua
+
+### 新范式/工具
+- **PageIndex — 无向量、推理式 RAG：树索引+LLM 推理替代向量检索** - https://github.com/VectifyAI/PageIndex
 
 ### 港股分析
 - **九毛九(09922)股价跌至0.985港元 — 极端超跌左侧逆向（附价值陷阱警示）** - http://finance.eastmoney.com/a/202609173877496168.html
