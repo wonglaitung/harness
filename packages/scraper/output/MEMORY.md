@@ -186,7 +186,30 @@
 
 ## 2026-09-23 提取
 
+## 2026-09-24 提取
+
 ## 注意事项
+
+### 港股分析
+- **南向资金连续12日净买入加持股19.54%---右侧确认信号追踪**
+
+### 港股分析
+- **港股内房股集体大涨---万科涨11融创涨8---政策松绑左侧信号**
+
+### 港股分析
+- **AI大模型双雄再次暴跌---智谱跌10%-MINIMAX跌5%---左侧逆向第三次探底**
+
+### 港股分析
+- **美债10Y突破5.11%历史新高---利率见顶判断再度证伪---防御模式最高级别**
+
+### 新范式/工具
+- **JevBench — 类型化决策模型（System One / Jev 类）的可复现基准** - https://benchmarkheaven.com/jev-models
+
+### 新范式/工具
+- **Strands Agents — "Harness-as-a-Product" 模型驱动的 Agent 运行时** - https://github.com/strands-agents/harness-sdk
+
+### 新范式/工具
+- **CLI-Anything — "Making ALL Software Agent-Native"** - https://github.com/HKUDS/CLI-Anything
 
 ### 港股分析
 - **港股半导体AI硬件板块分化-澜起科技涨11pct-中际旭创跌3pct-轮动信号**
