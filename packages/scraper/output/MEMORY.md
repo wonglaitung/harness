@@ -188,7 +188,33 @@
 
 ## 2026-09-24 提取
 
+## 2026-09-25 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股通净买入29亿南向右侧确认延续---但利率新高与中秋假期双重对冲**
+
+### 港股分析
+- **美债10Y 5.16%再创新高---利率压制逻辑持续防御模式升级**
+
+### 港股分析
+- **诺诚健华礼来33.5亿美元BD合作---创新药出海左侧信号生物医药催化**
+
+### 港股分析
+- **险资港股通ETF监管口径明确---政策松绑左侧信号增量长线资金入市**
+
+### 新范式/工具
+- **Whiteboard — 人与 Agent 共同架构软件的画布 IDE** - https://github.com/devdotfast/whiteboard
+
+### 新范式/工具
+- **Univer — Office Harness for AI Agents（AI Agent 的办公文档操作台）** - https://github.com/dream-num/univer
+
+### 新范式/工具
+- **Contrastive Language Models (CLM) — 对比式决策模型新范式** - https://news.ycombinator.com/
+
+### 新范式/工具
+- **Hindsight — "Agent Memory That Learns"** - https://github.com/vectorize-io/hindsight
 
 ### 港股分析
 - **南向资金连续12日净买入加持股19.54%---右侧确认信号追踪**
