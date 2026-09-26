@@ -190,7 +190,48 @@
 
 ## 2026-09-25 提取
 
+## 2026-09-26 提取
+
 ## 注意事项
+
+### 港股分析
+- **生物医药CXO板块逆势走高 — 金斯瑞涨9%药明系走强 — 医药政策右侧确认信号**
+
+### 港股分析
+- **险资港股通ETF监管口径明确 — 增量长线资金左侧信号 — 红利防御首选**
+
+### 港股分析
+- **险资港股通ETF监管口径明确---增量长线资金左侧信号---红利防御首选**
+
+### 港股分析
+- **内房股回调---万科跌近6-前期政策松绑左侧信号被利率利空击穿---价值陷阱警示**
+
+### 港股分析
+- **美债10Y-5-18-再创新高---利率压制第六次证伪见顶---防御模式最高级别**
+
+### 港股分析
+- **生物医药CXO板块逆势走高---金斯瑞涨9-药明系走强---右侧确认信号**
+
+### 新范式/工具
+- **gzipt（压缩即预测）** - https://nathan.rs/posts/gzip-lm/
+
+### 新范式/工具
+- **PageIndex（无向量、推理式 RAG）** - https://github.com/VectifyAI/PageIndex
+
+### 新范式/工具
+- **System One Models / Jev（类型化决策模型）** - https://typesafe.ai/blog/introducing-system-one-models-and-jev
+
+### 新范式/工具
+- **Mini-AGI（持续学习字节级模型）** - https://github.com/volotat/mini-AGI/
+
+### 新范式/工具
+- **Paperclip — Agentic Organization OS（Agent 的公司）** - https://github.com/paperclip-agent/paperclip
+
+### 新范式/工具
+- **Hindsight — Agent Memory That Learns** - https://github.com/vectorize-io/hindsight
+
+### 新范式/工具
+- **Ollaya / Typed Decision Models (System One / Jev-class)** - https://ollaya.dev/（HN 311 points）
 
 ### 港股分析
 - **港股通净买入29亿南向右侧确认延续---但利率新高与中秋假期双重对冲**
