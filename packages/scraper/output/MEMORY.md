@@ -192,7 +192,27 @@
 
 ## 2026-09-26 提取
 
+## 2026-09-27 提取
+
 ## 注意事项
+
+### 港股分析
+- **生物医药CXO逆势防御成长---金斯瑞+9%药明系走强---利率恐慌下稀缺避风港**
+
+### 港股分析
+- **险资港股通ETF监管松绑+利率5.18%新高---红利防御双左侧共振升级**
+
+### 港股分析
+- **美债10Y 5.18%高位僵持---利率第七次证伪见顶---防御模式延续**
+
+### 新范式/工具
+- **Paperclip — Agent 公司编排新范式** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Hindsight — Agent Memory That Learns 新范式** - https://github.com/trending/python
+
+### 新范式/工具
+- **Jev / System One Models — 类型化决策模型新范式** - https://news.ycombinator.com/
 
 ### 港股分析
 - **生物医药CXO板块逆势走高 — 金斯瑞涨9%药明系走强 — 医药政策右侧确认信号**
