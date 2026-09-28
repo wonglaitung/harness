@@ -194,7 +194,42 @@
 
 ## 2026-09-27 提取
 
+## 2026-09-28 提取
+
 ## 注意事项
+
+### 港股分析
+- **生物医药CXO逆势走高---金斯瑞涨9%药明系走强---利率恐慌下稀缺防御成长**
+
+### 港股分析
+- **险资港股通ETF监管松绑9-28再次明确---红利防御双左侧共振延续**
+
+### 港股分析
+- **罗博特科H股IPO(436港元历史第5高)---AI算力光互联最强左侧信号**
+
+### 新范式/工具
+- **AgentRun — Agent 工作流 DSL：类型化决策（Jev）编排可复用流程** - https://github.com/Parcha-ai/agentrun
+
+### 新范式/工具
+- **Atlas — Agent 版本控制：编码 Agent 的源码控制与共享记忆** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **Ember-1 — "专业化智能"：学会高效思考的模型（省 40% token）** - https://fireworks.ai/blog/ember-1
+
+### 新范式/工具
+- **DSec — 弹性沙箱基础设施：Agentic Training 的计算隔离新范式** - https://arxiv.org/abs/2609.22978
+
+### 新范式/工具
+- **AgentRun — Agent 工作流 DSL：用类型化决策（Jev）编排可复用的 Agent 流程** - https://github.com/Parcha-ai/agentrun
+
+### 新范式/工具
+- **Ember-1 — "专业化智能"：学会高效思考的模型，同质量少 40% token** - https://fireworks.ai/blog/ember-1
+
+### 新范式/工具
+- **Atlas — "Agent 版本控制"：编码 Agent 的源码控制与共享记忆** - https://github.com/trending/typescript
+
+### 新范式/工具
+- **DSec — Elastic Sandbox Infrastructure for Agentic Training（弹性沙箱计算基础设施）** - https://arxiv.org/abs/2609.22978
 
 ### 港股分析
 - **生物医药CXO逆势防御成长---金斯瑞+9%药明系走强---利率恐慌下稀缺避风港**
