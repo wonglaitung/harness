@@ -353,29 +353,61 @@ class MockHarness:
         logger.info(f"Saved recording to {path}")
 
     def load_recording(self, path: Path) -> None:
-        """Load recording from file for playback."""
+        """Load recording from file for playback.
+
+        Supports both the RecordingHarness ``interactions`` format and the
+        legacy MockHarness ``recordings`` format.
+        """
         with open(path) as f:
             data = json.load(f)
 
-        # Convert recordings back to responses
-        responses = []
-        for rec in data["recordings"]:
-            if rec["type"] == "llm_response":
-                resp_data = rec["response"]
-                responses.append(
-                    MockResponse(
-                        content=resp_data["content"],
-                        tool_calls=[
-                            ToolCall.from_dict(tc) for tc in resp_data.get("tool_calls", [])
-                        ],
-                        stop_reason=StopReason(resp_data["stop_reason"]),
+        responses: list[MockResponse] = []
+        tool_results: dict[str, str] = {}
+
+        if "interactions" in data:
+            for rec in data.get("interactions", []):
+                if rec.get("type") == "llm_response":
+                    resp_data = rec.get("data", {})
+                    responses.append(
+                        MockResponse(
+                            content=resp_data.get("content", ""),
+                            tool_calls=[
+                                ToolCall.from_dict(tc)
+                                for tc in resp_data.get("tool_calls", [])
+                            ],
+                            stop_reason=StopReason(
+                                resp_data.get("stop_reason", "end_turn")
+                            ),
+                        )
                     )
-                )
+                elif rec.get("type") == "tool_result":
+                    result_data = rec.get("data", {})
+                    name = result_data.get("tool_name")
+                    if name:
+                        tool_results[name] = result_data.get("result", "")
+        else:
+            for rec in data.get("recordings", []):
+                if rec.get("type") == "llm_response":
+                    resp_data = rec.get("response", {})
+                    responses.append(
+                        MockResponse(
+                            content=resp_data.get("content", ""),
+                            tool_calls=[
+                                ToolCall.from_dict(tc)
+                                for tc in resp_data.get("tool_calls", [])
+                            ],
+                            stop_reason=StopReason(
+                                resp_data.get("stop_reason", "end_turn")
+                            ),
+                        )
+                    )
 
         self.set_responses(responses)
+        if tool_results:
+            self._tool_results.update(tool_results)
 
         if "config" in data and "tool_results" in data["config"]:
-            self._tool_results = data["config"]["tool_results"]
+            self._tool_results.update(data["config"]["tool_results"])
 
         logger.info(f"Loaded recording from {path}")
 

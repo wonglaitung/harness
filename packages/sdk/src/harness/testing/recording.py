@@ -13,9 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from harness.core.hooks import LifecycleHook
+from harness.types import HookContext, HookPoint, HookResult, ToolCall
+
 if TYPE_CHECKING:
     from harness.sdk.harness import AgentHarness
-    from harness.types import LLMResponse, LoopResult, ToolCall
+    from harness.types import LLMResponse, LoopResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,48 @@ class RecordingConfig:
     auto_save: bool = True
     include_metadata: bool = True
     max_recording_size: int = 100  # Max interactions per recording
+
+
+class _RecordingHook(LifecycleHook):
+    def __init__(self, recorder: RecordingHarness) -> None:
+        self.recorder = recorder
+
+    @property
+    def hook_points(self) -> list[HookPoint]:
+        return [
+            HookPoint.BEFORE_LLM_CALL,
+            HookPoint.AFTER_LLM_CALL,
+            HookPoint.AFTER_TOOL_EXECUTE,
+        ]
+
+    async def execute(self, context: HookContext) -> HookResult:
+        if context.hook_point == HookPoint.BEFORE_LLM_CALL:
+            messages = [
+                message.to_api_format()
+                if hasattr(message, "to_api_format")
+                else message
+                for message in (context.messages or [])
+            ]
+            self.recorder.record_llm_request(messages, None, None)
+        elif context.hook_point == HookPoint.AFTER_LLM_CALL:
+            if context.llm_response is not None:
+                self.recorder.record_llm_response(context.llm_response)
+        elif context.hook_point == HookPoint.AFTER_TOOL_EXECUTE:
+            if context.tool_name:
+                call = ToolCall(
+                    id="",
+                    name=context.tool_name,
+                    arguments=context.tool_args or {},
+                )
+                self.recorder.record_tool_call(call)
+                result = context.tool_result
+                self.recorder.record_tool_result(
+                    call.id,
+                    call.name,
+                    result.content if result else "",
+                    bool(result.success) if result else False,
+                )
+        return HookResult.continue_()
 
 
 class RecordingHarness:
@@ -68,11 +113,22 @@ class RecordingHarness:
         self.config = config or RecordingConfig()
         self._interactions: list[dict[str, Any]] = []
         self._current_session_id: str | None = None
+        if hasattr(self.harness, "add_hook"):
+            self.harness.add_hook(_RecordingHook(self))
 
     def start_recording(self, session_id: str | None = None) -> None:
         """Start recording."""
         self._current_session_id = session_id or "recording"
         self._interactions.clear()
+
+    async def run(self, prompt: Any, session_id: str | None = None, **kwargs: Any):
+        """Run the wrapped harness and record the interaction."""
+        self.start_recording(session_id)
+        result = await self.harness.run(prompt, session_id=session_id, **kwargs)
+        self.record_loop_result(result)
+        if self.config.auto_save:
+            self.save_recording(self._current_session_id or "recording")
+        return result
 
     def record_llm_request(
         self,
