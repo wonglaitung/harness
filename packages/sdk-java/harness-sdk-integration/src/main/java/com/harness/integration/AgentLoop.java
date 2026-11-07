@@ -277,7 +277,7 @@ public class AgentLoop {
             }
 
             // 3. BEFORE_LLM_CALL hook
-            HookContext beforeLlmContext = buildHookContext(currentSession, iteration.get(), null, null);
+            HookContext beforeLlmContext = buildHookContext(HookPoint.BEFORE_LLM_CALL, currentSession, iteration.get(), null, null);
             if (hookShouldAbort(HookPoint.BEFORE_LLM_CALL, beforeLlmContext)) {
                 emitStreamEvent(onEvent, StreamEvent.error(
                     "Interrupted by hook", streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
@@ -329,7 +329,7 @@ public class AgentLoop {
             }
 
             // 5. AFTER_LLM_CALL hook
-            HookContext afterLlmContext = buildHookContext(currentSession, iteration.get(), response, null);
+            HookContext afterLlmContext = buildHookContext(HookPoint.AFTER_LLM_CALL, currentSession, iteration.get(), response, null);
             executeHooksWithContext(HookPoint.AFTER_LLM_CALL, afterLlmContext);
 
             emitProgress(onProgress, ProgressEventType.llmCallEnd(iteration.get(), response));
@@ -367,7 +367,7 @@ public class AgentLoop {
                 for (ToolCall call : response.toolCalls()) {
 
                     // BEFORE_TOOL_EXECUTE hook
-                    HookContext toolContext = buildHookContext(currentSession, iteration.get(), response, call);
+                    HookContext toolContext = buildHookContext(HookPoint.BEFORE_TOOL_EXECUTE, currentSession, iteration.get(), response, call);
                     if (hookShouldAbort(HookPoint.BEFORE_TOOL_EXECUTE, toolContext)) {
                         emitStreamEvent(onEvent, StreamEvent.error(
                             "Interrupted by hook", streamEventSeq.incrementAndGet(), "agent-err-" + currentSession.id()));
@@ -657,13 +657,14 @@ public class AgentLoop {
      * Build hook context.
      */
     private HookContext buildHookContext(
+        HookPoint point,
         com.harness.types.Session session,
         int iteration,
         LLMResponse response,
         ToolCall toolCall
     ) {
         return new HookContext(
-            HookPoint.BEFORE_LLM_CALL, // Will be overridden by caller
+            point,
             session.id(),
             iteration,
             session.messages(),

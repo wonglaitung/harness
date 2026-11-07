@@ -1,10 +1,15 @@
 package com.harness.core;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.harness.types.LLMResponse;
 import com.harness.types.Message;
@@ -32,6 +37,8 @@ import com.harness.types.ToolCall;
  * </pre>
  */
 public class MockHarness {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<MockResponse> responses = new ArrayList<>();
     private final Map<String, String> toolResults = new HashMap<>();
@@ -144,6 +151,53 @@ public class MockHarness {
         totalIterations = 0;
         responses.clear();
         toolResults.clear();
+    }
+
+    /**
+     * Load a RecordingHarness {@code interactions} recording for playback.
+     */
+    @SuppressWarnings("unchecked")
+    public void loadRecording(Path path) throws IOException {
+        JsonNode root = MAPPER.readTree(path.toFile());
+
+        List<MockResponse> loadedResponses = new ArrayList<>();
+        Map<String, String> loadedToolResults = new HashMap<>();
+
+        for (JsonNode rec : root.path("interactions")) {
+            String type = rec.path("type").asText();
+            JsonNode data = rec.path("data");
+            if ("llm_response".equals(type)) {
+                loadedResponses.add(toMockResponse(data));
+            } else if ("tool_result".equals(type)) {
+                String name = data.path("tool_name").asText();
+                if (!name.isEmpty()) {
+                    loadedToolResults.put(name, data.path("result").asText());
+                }
+            }
+        }
+
+        setResponses(loadedResponses);
+        toolResults.putAll(loadedToolResults);
+    }
+
+    private static MockResponse toMockResponse(JsonNode data) {
+        String content = data.path("content").asText();
+        List<ToolCall> toolCalls = new ArrayList<>();
+        for (JsonNode tc : data.path("tool_calls")) {
+            Map<String, Object> arguments = tc.has("arguments") && tc.get("arguments").isObject()
+                    ? MAPPER.convertValue(tc.get("arguments"), Map.class)
+                    : Map.of();
+            toolCalls.add(new ToolCall(
+                    tc.path("id").asText(),
+                    tc.path("name").asText(),
+                    arguments));
+        }
+
+        StopReason stopReason = StopReason.fromValue(data.path("stop_reason").asText());
+        int inputTokens = data.path("usage").path("input_tokens").asInt(100);
+        int outputTokens = data.path("usage").path("output_tokens").asInt(50);
+
+        return new MockResponse(content, toolCalls, stopReason, inputTokens, outputTokens);
     }
 
     /**

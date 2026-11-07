@@ -66,7 +66,10 @@ public class Reconciler {
                 safe = safe.replace(claim, "[已隔离:无溯源]");
             }
         }
-        if (unsourced.isEmpty() || safe.strip().equals(content.strip())) {
+        if (unsourced.isEmpty()) {
+            return content;
+        }
+        if (safe.strip().equals(content.strip())) {
             return "[内容未通过确定性闸门（含错误级发现），已隔离，不交付原始内容]";
         }
         return safe;

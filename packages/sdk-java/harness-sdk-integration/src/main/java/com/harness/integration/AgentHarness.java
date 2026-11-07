@@ -30,6 +30,7 @@ import com.harness.skills.SkillRegistry;
 import com.harness.mcp.McpManager;
 import com.harness.mcp.McpServerConfig;
 import com.harness.mcp.McpToolInfo;
+import com.harness.recording.HookAwareHarness;
 import com.harness.types.LoopResult;
 import com.harness.types.Session;
 import com.harness.types.TokenUsage;
@@ -60,7 +61,7 @@ import com.harness.types.TokenUsage;
  * LoopResult result = agent.run("Read the file and summarize it").join();
  * </pre>
  */
-public class AgentHarness {
+public class AgentHarness implements HookAwareHarness {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentHarness.class);
 

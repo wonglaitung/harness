@@ -1,8 +1,14 @@
 package com.harness.recording;
 
+import com.harness.core.HookContext;
+import com.harness.core.HookPoint;
+import com.harness.core.HookResult;
+import com.harness.core.LifecycleHook;
 import com.harness.types.LLMResponse;
 import com.harness.types.LoopResult;
+import com.harness.types.Message;
 import com.harness.types.ToolCall;
+import com.harness.types.ToolResult;
 import com.harness.types.TokenUsage;
 
 import org.slf4j.Logger;
@@ -17,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Wraps AgentHarness to record all interactions.
@@ -68,6 +75,42 @@ public class RecordingHarness {
     public RecordingHarness(Object harness, RecordingConfig config) {
         this.harness = harness;
         this.config = config != null ? config : new RecordingConfig.Builder().build();
+        if (harness instanceof HookAwareHarness hookAware) {
+            hookAware.addHook(new RecordingHook(this));
+        }
+    }
+
+    /**
+     * Run the wrapped harness while recording all interactions.
+     *
+     * @param prompt User prompt
+     * @return LoopResult
+     */
+    public CompletableFuture<LoopResult> run(String prompt) {
+        return run(prompt, null);
+    }
+
+    /**
+     * Run the wrapped harness while recording all interactions.
+     *
+     * @param prompt User prompt
+     * @param sessionId Optional session ID
+     * @return LoopResult
+     */
+    public CompletableFuture<LoopResult> run(String prompt, String sessionId) {
+        if (!(harness instanceof HookAwareHarness hookAware)) {
+            throw new IllegalStateException("Wrapped harness does not support hooks/run");
+        }
+
+        startRecording(sessionId);
+
+        return hookAware.run(prompt, sessionId).thenApply(result -> {
+            recordLoopResult(result);
+            if (config.isAutoSave()) {
+                saveRecording(currentSessionId != null ? currentSessionId : "recording");
+            }
+            return result;
+        });
     }
 
     /**
@@ -311,6 +354,67 @@ public class RecordingHarness {
      */
     public List<RecordedInteraction> getInteractions() {
         return new ArrayList<>(interactions);
+    }
+
+    /**
+     * Lifecycle hook that automatically records LLM and tool interactions.
+     */
+    private static class RecordingHook implements LifecycleHook {
+        private final RecordingHarness recorder;
+
+        RecordingHook(RecordingHarness recorder) {
+            this.recorder = recorder;
+        }
+
+        @Override
+        public List<HookPoint> hookPoints() {
+            return List.of(
+                    HookPoint.BEFORE_LLM_CALL,
+                    HookPoint.AFTER_LLM_CALL,
+                    HookPoint.AFTER_TOOL_EXECUTE);
+        }
+
+        @Override
+        public HookResult execute(HookContext context) {
+            switch (context.hookPoint()) {
+                case BEFORE_LLM_CALL -> {
+                    List<Map<String, Object>> messages = new ArrayList<>();
+                    if (context.messages() != null) {
+                        for (Message message : context.messages()) {
+                            Map<String, Object> msg = new HashMap<>();
+                            msg.put("role", message.role());
+                            msg.put("content", message.content());
+                            messages.add(msg);
+                        }
+                    }
+                    recorder.recordLlmRequest(messages, null, null);
+                }
+                case AFTER_LLM_CALL -> {
+                    if (context.llmResponse() != null) {
+                        recorder.recordLlmResponse(context.llmResponse());
+                    }
+                }
+                case AFTER_TOOL_EXECUTE -> {
+                    if (context.toolName() != null) {
+                        ToolCall call = new ToolCall(
+                                "",
+                                context.toolName(),
+                                context.toolArgs() != null ? context.toolArgs() : Map.of());
+                        recorder.recordToolCall(call);
+                        ToolResult result = context.toolResult();
+                        recorder.recordToolResult(
+                                call.id(),
+                                call.name(),
+                                result != null ? result.content() : "",
+                                result != null && result.success());
+                    }
+                }
+                default -> {
+                    // Not subscribed
+                }
+            }
+            return HookResult.continue_();
+        }
     }
 
     /**
