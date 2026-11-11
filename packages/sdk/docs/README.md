@@ -46,6 +46,7 @@
 - [18-testing.md](./18-testing.md) - 测试策略（含 RecordingHarness）
 - [19-examples.md](./19-examples.md) - 使用示例
 - [20-deterministic-gate.md](./20-deterministic-gate.md) - Deterministic Gate 确定性闸门（三层验证、声明式规则、治理率指标）
+- [21-hkma-agentic-governance.md](./21-hkma-agentic-governance.md) - HKMA Agentic AI 治理对齐方案 P0（执行网关、必经步骤、Kill Switch、事件留痕）
 
 ### 开发规范
 
