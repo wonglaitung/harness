@@ -42,7 +42,7 @@ NON_SYMBOL_WORDS = {
     "value", "op", "policy", "sdk", "api", "ui", "cli", "jsonl", "sha256", "uuid",
     "hmac", "cors", "dns", "url", "http", "https", "localhost", "git", "npm",
     "node", "pip", "python3", "read_only", "search", "run", "draft", "post",
-    "read", "write", "edit", "bash",
+    "read", "write", "edit",
     # 占位符字面量（治理块里是"被拒绝的值"，不是代码符号）
     "TODO", "TBD", "FIXME", "XXX",
 }
@@ -208,10 +208,12 @@ def test_bare_section_numbers_resolve(doc_lines: list[str]) -> None:
             # 排除非章节号：版本号 / 编码名 / URL / 纯小数
             if re.search(r"(sha|utf|ascii|https?|v\d)\s*$", before, re.I):
                 continue
-            if re.match(r"^\s*\d*\.?\d*\s*$", after) and not re.search(r"[§（(]\s*$", before):
+            numeric_tail = re.match(r"^\s*\d*\.?\d*\s*$", after)
+            chapter_ctx = re.search(r"[§（(]\s*$", before)
+            cite_ctx = re.search(r"见|参见|依据|按|据|第|§|节", before)
+            if numeric_tail and not chapter_ctx and not cite_ctx:
                 # 后面不是章节语境（如 "sha256:9f2c"、小数）→ 排除
-                if not re.search(r"见|参见|依据|按|据|第|§|节", before):
-                    continue
+                continue
             assert num in sections, (
                 f"L{i}: 裸编号引用 {num} 不指向任何章节（上下文："
                 f"{(before + num + after).strip()!r}）"
@@ -223,7 +225,7 @@ def test_bare_section_numbers_resolve(doc_lines: list[str]) -> None:
 # --------------------------------------------------------------------------
 
 def test_yaml_blocks_parse(doc_text: str) -> None:
-    for i, block in enumerate(re.findall(r"```yaml\n(.*?)```", doc_text, re.S), 1):
+    for block in re.findall(r"```yaml\n(.*?)```", doc_text, re.S):
         if block.startswith("---\n"):
             body = block[len("---\n"): block.rstrip().rfind("---")]
             yaml.safe_load(body)
@@ -232,7 +234,7 @@ def test_yaml_blocks_parse(doc_text: str) -> None:
 
 
 def test_json_blocks_parse(doc_text: str) -> None:
-    for i, block in enumerate(re.findall(r"```json\n(.*?)```", doc_text, re.S), 1):
+    for block in re.findall(r"```json\n(.*?)```", doc_text, re.S):
         json.loads(block)
 
 
@@ -562,7 +564,9 @@ def test_new_env_var_names_are_consistent(doc_lines: list[str], sdk_source: str)
         for env in re.findall(r"HARNESS_[A-Z_]+", "\n".join(doc_lines))
         if env not in sdk_source
     }
-    assert new_envs, "未发现待新增的环境变量——检查规则可能失效"
+    if not new_envs:
+        # 全部环境变量均已实现——此时"名称一致性"改由源码存在性保证
+        return
 
     for env in sorted(new_envs):
         # 必须用词边界匹配：`HARNESS_STRIC` 是 `HARNESS_STRICT` 的前缀，
@@ -611,7 +615,6 @@ def test_require_strict_env_var_behaviour(doc_lines: list[str]) -> None:
     # 实现是 raise，不是设置 strict=True
     assert "raise RuntimeError" in harness_src, "实现已变，文档描述须同步更新"
 
-    text = "\n".join(doc_lines)
     section = _section_by_title(doc_lines, "模式开关")
     assert re.search(
         r"断言", section

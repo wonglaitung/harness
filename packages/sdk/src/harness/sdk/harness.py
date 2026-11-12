@@ -223,6 +223,12 @@ class AgentHarness:
         # (write/edit/bash) are gated before mutating state.
         self._loop.gate = self._gate
 
+        # Agent 治理（设计稿 §4.3 / §6.4）：strict 下治理块是硬门槛。
+        # **惰性装配**：工具可在构造之后注册（register_tool），构造期注册表尚未完整，
+        # 规则 1（工具须在注册表中）无法判定。首次使用时编译一次并缓存。
+        self._governance = None
+        self._governance_setup = None
+
         # F: observability — lightweight counters for governance outcomes so the
         # interception rate, failure distribution and review backlog are queryable.
         from harness.gate.metrics import GateMetrics
@@ -535,6 +541,64 @@ class AgentHarness:
         Kept for backward compatibility with explicit loading scenarios.
         """
         self._skill_loader.load_defaults()
+
+    def _governance_enabled(self) -> bool:
+        """治理是否启用。`governance_enabled` 显式覆盖，否则跟随 `strict`。"""
+        if self.config.governance_enabled is not None:
+            return self.config.governance_enabled
+        return self.config.strict
+
+    def _build_governance(self):
+        """装配 Agent 治理策略（设计稿 §4.3 / §6.4）。
+
+        strict=False → 完全不触碰治理路径（零迁移）。
+        strict=True  → 治理块缺失或校验不过 → **拒绝执行**（fail-closed）。
+
+        惰性：首次调用时编译并缓存。工具注册在构造之后（`register_tool`），
+        构造期注册表尚未完整，规则 1 无法判定。
+        """
+        from harness.governance.assembly import GovernanceSetup, assemble_governance
+
+        if not self._governance_enabled():
+            return GovernanceSetup(policy=None)
+
+        agent_id = self.config.governance_agent_id
+        if not agent_id:
+            raise RuntimeError(
+                "strict=True 需要指定治理身份（governance_agent_id）。"
+                "治理身份由部署方预先指定，不随运行时技能命中变化"
+                "（否则提示词注入可改变本次运行的授权集）。"
+            )
+
+        known = {t.name for t in self._tool_registry.get_all()}
+        setup = assemble_governance(
+            list(self._skill_metadata),
+            agent_id=agent_id,
+            known_tool_names=known,
+        )
+        if setup.policy is None:
+            raise RuntimeError(
+                "治理装配失败（strict 模式下治理块是硬门槛）：\n  - "
+                + "\n  - ".join(setup.errors)
+            )
+        logger.info(
+            "[AgentHarness] 治理已装配：agent_id=%s tools=%d steps=%d material=%s",
+            setup.policy.agent_id,
+            len(setup.policy.tools),
+            len(setup.policy.workflow.steps),
+            setup.policy.material,
+        )
+        return setup
+
+    def governance_policy(self):
+        """取得治理策略（惰性编译并缓存）。
+
+        Raises:
+            RuntimeError: strict 模式下治理块缺失或校验不过（fail-closed）。
+        """
+        if self._governance is None:
+            self._governance = self._build_governance()
+        return self._governance.policy
 
     def _require_strict_if_env(self) -> None:
         """Fail fast when ops require governance but it is off."""

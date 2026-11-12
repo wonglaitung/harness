@@ -129,6 +129,11 @@ class Skill:
     enabled: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
     source_path: str | None = None
+    # 治理块原文（frontmatter 的 `governance` 段）。
+    # 保持原文而非解析后的对象：解析与校验由 harness.governance 负责，
+    # 且 `to_file` 必须能原样回写——客户端技能编辑器保存一次即抹掉授权书
+    # 是设计稿 §9.4 明确要防的事。
+    governance: dict[str, Any] | None = None
 
     @classmethod
     def from_file(cls, path: Path) -> Skill:
@@ -199,6 +204,7 @@ class Skill:
             enabled=frontmatter.get("enabled", True),
             metadata=frontmatter.get("metadata", {}),
             source_path=str(path),
+            governance=frontmatter.get("governance"),
         )
 
     def to_file(self, path: Path) -> None:
@@ -239,6 +245,9 @@ class Skill:
 
         if self.metadata:
             frontmatter["metadata"] = self.metadata
+
+        if self.governance is not None:
+            frontmatter["governance"] = self.governance
 
         content = (
             f"---\n{yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)}"

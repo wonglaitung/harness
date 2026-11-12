@@ -380,6 +380,14 @@ class HarnessConfig:
     state: StateConfig | None = None
     review: ReviewConfig | None = None
 
+    # Agent 治理（设计稿 §4.3 / §6.4.1）。
+    # governance_agent_id: 治理身份，由部署方预先指定——**不随运行时技能命中变化**
+    #   （否则提示词注入可改变本次运行的授权集）。
+    #   None 且 strict=True 时拒绝启动（fail-closed）。
+    governance_agent_id: str | None = None
+    governance_enabled: bool | None = None  # 显式覆盖；None 时跟随 strict
+    governance_approval_timeout_seconds: int = 300
+
     # Memory scoring settings (Retrieval Strength and Archive)
     memory_scoring: MemoryScoringConfig | None = None
 
@@ -472,11 +480,16 @@ class HarnessConfig:
         # Override provider if explicitly set
         provider = os.getenv("HARNESS_PROVIDER", provider)
 
+        strict_env = os.getenv("HARNESS_STRICT")
+        governance_agent_id = os.getenv("HARNESS_GOVERNANCE_AGENT_ID")
+
         return cls(
             api_key=api_key,
             model=os.getenv("HARNESS_MODEL", "gpt-4o"),
             provider=provider,
             base_url=os.getenv("HARNESS_BASE_URL"),
+            strict=strict_env == "1" if strict_env else False,
+            governance_agent_id=governance_agent_id,
             max_iterations=int(os.getenv("HARNESS_MAX_ITERATIONS", "10")),
             system_prompt=os.getenv("HARNESS_SYSTEM_PROMPT", ""),
             memory_dir=os.getenv("HARNESS_MEMORY_DIR", ".harness/memory"),

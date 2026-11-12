@@ -30,7 +30,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -62,6 +62,10 @@ class SkillMetadata:
     path: Path
     triggers: dict[str, list[str]] = field(default_factory=dict)
     version: str = "1.0.0"
+    # 治理块原文（frontmatter 的 `governance` 段）。
+    # Level 1 就要能读到：strict 下"治理块缺失即拒绝"必须在**启动期**判定，
+    # 那时只加载了 Level 1 元数据。
+    governance: dict[str, Any] | None = None
 
     # Cached full skill (loaded on demand)
     _skill: Skill | None = field(default=None, repr=False)
@@ -222,6 +226,7 @@ class ProgressiveSkillLoader:
             path=path,
             triggers=frontmatter.get("triggers", {}),
             version=frontmatter.get("version", "1.0.0"),
+            governance=frontmatter.get("governance"),
         )
 
     def load_full_content(self, metadata: SkillMetadata) -> Skill:
