@@ -4,7 +4,7 @@
 > 部署前提：**桌面单机；客户端每次启动同步技能源码**
 > 依据：HKMA《Discussion Paper on Agentic A.I. Governance in the Banking Sector》（2026-11，非约束性讨论文件）
 > 原则：讨论文件不是监管条文；关键裁决由确定性代码完成，LLM 不参与放行或阻断。
-> 步骤语义参照：GitHub Actions 内层 step 语义（`if` / `id` / `outputs` / `outcome` / `conclusion`），差异见 §7.6。
+> 步骤语法：**沿用 GitHub Actions（workflow YAML）**，只做减法与三处必要差异——详见 §7.6。
 
 ---
 
@@ -199,6 +199,8 @@ flowchart LR
 ### 5.2 字段
 
 字段分两类：**执行期强制**（网关在运行路径上消费）与**仅登记备查**（供事后追溯与人工复核，不影响放行/阻断）。仅登记备查的字段在 P0 不产生任何执行效力。
+
+> **步骤语法沿用 GitHub Actions（workflow YAML）**：`workflow.steps` 的字段名、`if:` 表达式、`steps.<id>.outputs` 引用、`outcome` / `conclusion` 取值均与 GHA 一致，开发同事无需学习新语法。沿用清单与三处差异见 §7.6 / §7.7。
 
 ```yaml
 ---
@@ -544,7 +546,7 @@ class ToolConstraints:
 
 > ⚠️ **标题更正**：本章抓的是"偏离**已声明程序**"，不是"偏离业务意图"。语义性偏离不在 P0（§1.3）。
 
-步骤语义**对齐 GitHub Actions 内层 step**（`id` / `if` / `outputs` / `outcome` / `conclusion` / 隐含 `success()`），以便开发同事用熟悉的心智模型维护治理块。与 GHA 的三处语义差异见 §7.6。
+步骤语法与语义**沿用 GitHub Actions 内层 step**（`id` / `if` / `outputs` / `outcome` / `conclusion` / 隐含 `success()`），以便开发同事用熟悉的心智模型维护治理块。沿用的字段与上下文见 §7.6.1，依赖的关键语义见 §7.6.2，减法范围见 §7.6.3，三处必要差异见 §7.7。
 
 ### 7.1 步骤链
 
@@ -583,11 +585,10 @@ workflow:
 | 概念 | GHA 对应 | 说明 |
 |---|---|---|
 | 事实 | `steps.<id>.outputs.<name>` | 工具声明产出（§5.2 `tools[].outputs`），步骤自动暴露 |
-| 步骤结论 | `steps.<id>.outcome` | 取值 `success` / `failure` / `skipped`（`outcome` 不含 `cancelled`） |
-| 步骤最终结论 | `steps.<id>.conclusion` | 取值 `success` / `failure` / `skipped` / `cancelled`（含 `cancelled`） |
+| 步骤结论 | `steps.<id>.outcome` / `.conclusion` | 取值 `success` / `failure` / `cancelled` / `skipped`（GHA 官方定义：两者取值集合相同，差异只在 `continue-on-error` 生效时显现——`outcome` 为改写前的原值，`conclusion` 为改写后的最终值） |
 | 条件 | `if:` | GHA 表达式子集（§5.3.3） |
 
-**产出缺失即失败**（与 GHA 不同，§7.6 D3）：若工具声明了产出 `aml_hit` 却没产出，该 step 判 `failure` → 后续 step 不可达。GHA 在此处给空串，于是 `== 'true'` 为假 → 分支不激活 → 人工复核被静默跳过 → **合规洞**。CI 里"跳过=可见的红"，治理里必须是"阻断"。
+**产出缺失即失败**（与 GHA 不同，§7.7 D3）：若工具声明了产出 `aml_hit` 却没产出，该 step 判 `failure` → 后续 step 不可达。GHA 在此处给空串，于是 `== 'true'` 为假 → 分支不激活 → 人工复核被静默跳过 → **合规洞**。CI 里"跳过=可见的红"，治理里必须是"阻断"。
 
 **MCP 工具的产出**：MCP 工具当前只返回字符串 `content`，需在包装器中对可解析 JSON 的 content 额外挂 `metadata["json"]`，否则其产出恒缺失 → 恒判失败（过度阻断）。因此治理相关工具必须能返回结构化结果，这是**接入方的前置要求**。
 
@@ -671,7 +672,64 @@ GHA 内层 step **没有 XOR 构造，也没有 default**——多选一与穷�
 
 非穷尽这一洞被汇聚点断言堵住（fail-closed）。**重叠这一洞无法静态证明**（GHA 也证明不了），只能靠：linter 提示"条件分支组建议显式互斥"、治理层既有闸门兜底（`payment`/`write` 本就要过 §6.6 审批）、事件日志记录两个分支都 success → §8.2 可检出并升级复核。**稿内不宣称"互斥由构造保证"**。
 
-### 7.6 与 GitHub Actions 的三处语义差异
+### 7.6 语法沿用 GitHub Actions
+
+> **本章的步骤语法与语义直接沿用 GitHub Actions（workflow YAML）。** 开发同事维护治理块时，用的是 GHA 的既有心智模型与既有文档，无需学习新语法；本方案只做**减法**（子集）与**三处必要差异**（§7.7）。
+>
+> **只借语法与语义，不引依赖**——不引入 GitHub Actions 运行时、不引入 actionlint 依赖，只在本仓库内实现对应的校验器（§12 实施计划）。
+
+#### 7.6.1 沿用的字段与上下文
+
+| GitHub Actions | 本方案 | 说明 |
+|---|---|---|
+| step 的 `id` | step 的 `id` | 原样；`steps.<id>.outputs.<name>` 的引用锚点 |
+| step 的 `if` | step 的 `if` | 原样；GHA 表达式**子集**（§5.3.3） |
+| step 的 `timeout-minutes` | step 的 `timeout-minutes` | 原样 |
+| step 的 `continue-on-error` | step 的 `continue-on-error` | 原样字段名；语义收窄为只管重入（§5.3.4 规则 22） |
+| `steps.<id>.outputs.<name>` | 事实引用 | 原样语法；产出由工具声明（§5.2） |
+| `steps.<id>.outcome` / `.conclusion` | 步骤结论 | 原样；取值 `success` / `failure` / `cancelled` / `skipped` |
+| 隐含 `success()` 条件 | 步骤链推进规则 | 原样语义：前序失败 → 后续 step 不可达 |
+| `if` 不含状态函数时隐式 `success() && cond` | 守卫求值 | 原样语义 |
+| 状态函数 `success()` / `failure()` / `always()` / `cancelled()` | 状态函数 | 原样可用 |
+| 表达式运算符与函数 | 同名子集 | `== != < <= > >= && \|\| !`；`contains() startsWith() endsWith() format() join() toJSON() fromJSON()` |
+| 上下文 `env` | `env` | 原样 |
+| 上下文 `steps` | `steps` | 原样（**只含已执行的 step**） |
+| 上下文 `github` / `secrets` / `matrix` / `runner` / `needs` / `jobs` / `inputs` / `vars` | **不提供** | 与治理无关，或带副作用（`secrets` / `hashFiles()` 读文件系统＝能力泄漏） |
+
+**GHA 官方文档（供开发查证语义）**：
+
+| 主题 | 链接 |
+|---|---|
+| workflow 语法总览 | https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions |
+| 表达式求值 | https://docs.github.com/en/actions/reference/workflows-and-actions/expressions |
+| 上下文（`steps` / `env` / `needs` 等） | https://docs.github.com/en/actions/reference/workflows-and-actions/contexts |
+| 条件与状态函数 | https://docs.github.com/en/actions/using-jobs/using-conditions-to-control-job-execution |
+
+#### 7.6.2 沿用的关键语义（为什么这些必须一致）
+
+| 语义 | GHA 行为 | 本方案依赖它的原因 |
+|---|---|---|
+| **前序 step 被跳过不阻断后续**（内层 step） | `skipped` 不算失败，后续 step 照跑 | "AML 未命中 → 人工复核跳过 → 照常出报告"——若跳过会阻断，正常业务流程会被误停 |
+| **前序 step 失败阻断后续** | 隐含 `success()` 失效 | "AML 失败 → 报告步骤不可达"——失败必须阻断 |
+| **`if` 为假的 step 结论是 `skipped`** | `conclusion = skipped` | 汇聚点据此判断"分支未激活"（§7.5） |
+| **`outcome` / `conclusion` 四值** | `success` / `failure` / `cancelled` / `skipped` | 步骤状态可与 GHA 一一对应，便于复盘对照 |
+| **产出全为字符串** | `steps.<id>.outputs.<x>` 是 string | 强制 `== 'true'` 写法，避免 GHA 常见的"非空即真"陷阱（§5.3.3 规则 15） |
+| **`steps` 上下文只含已执行的 step** | 已 run 的 step 才有 id | 保证"事实还没产生就不会被引用"（§7.3 守卫求值时机） |
+
+#### 7.6.3 减法：P0 不提供的 GHA 能力
+
+| GHA 能力 | 本方案 | 原因 |
+|---|---|---|
+| job 层 `needs`（DAG 依赖） | ❌ | 步骤链为线性；并行 / 汇聚语义 P0 不支持（§1.3） |
+| job 层 `outputs`（映射到 `steps.<id>.outputs`） | ❌ | 内层 step 本就不声明 outputs，本方案由工具产出、步骤自动暴露 |
+| `strategy.matrix` / `include` / `exclude` | ❌ | 与治理无关 |
+| `runs-on` / `container` / `services` | ❌ | 桌面单机，无 runner 概念 |
+| `concurrency` | ❌ | 单机单实例（§9.8） |
+| `permissions` / `secrets` / `env`（job 级） | ❌（仅保留 step 级 `env`） | `secrets` 属凭证管理，超出本方案范围 |
+| 复用工作流（`workflow_call` / `uses` at job level） | ❌ | 不引依赖 |
+| `timeout-minutes` at job 级 / `defaults` | ❌ | 无 job 概念 |
+
+### 7.7 与 GitHub Actions 的三处语义差异
 
 | # | 差异 | 为什么不能消除 |
 |---|---|---|
@@ -679,7 +737,7 @@ GHA 内层 step **没有 XOR 构造，也没有 default**——多选一与穷�
 | **D2** | `complete: all \| any \| <tool_name>`（文档原有词汇） | `all` ≡ GHA 默认（全成功才完成）；`<tool_name>` ≡ GHA 的 `continue-on-error` 组合。**仅 `any` 非 GHA**——GHA 无"至少一个成功"语义，且其 `continue-on-error` 组合在"全部失败"时会判成功，与 `any` 不等价 |
 | **D3** | 声明的产出未产出 → step 判 `failure` | GHA 给空串，`== 'true'` 为假 → 分支不激活 → 人工复核被静默跳过（**合规洞**）。这是我们比 GHA **更严**的一处，且属工具契约层，不污染步骤词汇 |
 
-**没有借用 GHA 的部分**：不使用 job 层 `needs`（P0 步骤链线性）、不使用 job 层 `outputs` 映射（内层 step 本就不声明 outputs）、不引入 XOR / default 构造。
+**没有借用 GHA 的部分**：不使用 job 层 `needs`（P0 步骤链线性）、不使用 job 层 `outputs` 映射（内层 step 本就不声明 outputs）、不引入 XOR / default 构造。详见 §7.6.3。
 
 **GHA 内层 step 与 job 的 skip 语义不对称**（本方案依赖的关键差异）：
 
@@ -690,11 +748,11 @@ GHA 内层 step **没有 XOR 构造，也没有 default**——多选一与穷�
 
 本方案用**内层 step**语义，正是为了天然获得"跳过不阻断"——GHA 常见的"依赖被跳过导致下游也被跳过"是 job 层特有的陷阱。
 
-### 7.7 为什么用开发声明的绑定，而不是让模型声明当前步骤
+### 7.8 为什么用开发声明的绑定，而不是让模型声明当前步骤
 
 - 模型声明不可靠（漏写、漂移），会把 P0 变成概率控制。
 - 工具与步骤的绑定由开发声明，机器可确定性判定，是确定性闸门而非模型自述。
-- 这与状态机的 **guard 语义同源**（不让被监护者自证状态，把转换条件写死在代码里）。
+- 这与状态机的 **guard 语义同源**（不让被监护者自证状态，把转换条件写死在代码里），也与 GHA 的 `if:` 守卫同源。
 - 代价：步骤必须能被工具调用刻画。纯推理步骤不设为独立 step，或由一个显式工具表达。
 
 ---
@@ -911,7 +969,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | `CircuitBreaker` / `StuckDetector` | 循环级异常 |
 | `ReviewQueue` | 人工复核与交付隔离复核（**不用于工具调用审批**，那是 §6.6 的独立机制） |
 
-**不复用**：编排引擎（LangGraph / Airflow / Temporal）、策略语言（Cedar / OPA）、GitHub Actions 运行时——**只借语义，不引依赖**（§7.6）。
+**不复用**：编排引擎（LangGraph / Airflow / Temporal）、策略语言（Cedar / OPA）、GitHub Actions 运行时——**只借语法与语义，不引依赖**（§7.6）。
 
 ### 11.2 范围外
 
@@ -1031,7 +1089,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 凭证与密钥 | 满足 | 不新增密钥存储；撤权回调由接入方实现；日志不落密钥 |
 | 输入校验与防注入 | 满足 | 治理块 Schema 校验（22 条，§5.3）；表达式仅 GHA 安全子集（禁 `hashFiles` / `secrets`）；工具参数确定性校验；外部内容走既有注入检测 |
 | 最小权限 | 满足 | 工具白名单 + capability 分级 + 路径与主机范围 + 治理身份不随技能命中变化（§5.4.1） |
-| 依赖安全 | 满足 | 不新增运行时依赖；步骤语义参照 GHA 但**不引入 GHA 依赖**，仅借语义 |
+| 依赖安全 | 满足 | 不新增运行时依赖；步骤语法沿用 GHA 但**不引入 GHA 依赖**，仅借语法与语义（§7.6） |
 | 输出编码 | 满足 | 事件日志统一 JSON 序列化与转义；单行 ≤ 2KB |
 | 密码学原语 | **部分满足** | 仅用 SHA-256 做参数哈希（`args_hash`）与版本标识；不做哈希链 / HMAC / 外部锚定（§10.3）。**风险**：日志非防篡改，事后无法自证未被改写。**缓解**：单机部署、保留期短、日志只作复盘不作证据（§10.3 已如实声明） |
 
@@ -1137,9 +1195,9 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 治理身份 | 由部署方指定，**不随运行时技能命中变化**（§5.4.1） |
 | 多治理块合成 | 白名单取交集、约束取并集、限额取最严、审批取并集、material 取并集（§5.4.2） |
 | 签发语义 | 治理块以 PR 合并为签发动作，`approved_by` 记录（§5.2） |
-| 步骤语义参照 | **GitHub Actions 内层 step**（`id`/`if`/`outputs`/`outcome`/`conclusion`/隐含 `success()`）；不引入 GHA 依赖，仅借语义 |
+| 步骤语法沿用 | **GitHub Actions（workflow YAML）**内层 step：`id`/`if`/`outputs`/`outcome`/`conclusion`/隐含 `success()` 原样沿用，表达式取 GHA 子集；不引入 GHA 依赖，仅借语法与语义（§7.6） |
 | 步骤链形态 | **线性**，不用 job 层 `needs`；并行 / 汇聚 / 回退 / 循环均 P0 不支持（§1.3） |
-| 与 GHA 的差异 | D1 `tools:` 而非 `uses:`；D2 仅 `complete: any` 非 GHA；D3 产出缺失判 failure（比 GHA 更严）（§7.6） |
+| 与 GHA 的差异 | D1 `tools:` 而非 `uses:`；D2 仅 `complete: any` 非 GHA；D3 产出缺失判 failure（比 GHA 更严）（§7.7） |
 | 条件分支 | `if:` + **汇聚点显式断言 `steps.<id>.outcome`**（强制，缺失即编译期拒绝）；互斥性不宣称构造保证（§7.5） |
 | 步骤状态 | `success` / `skipped` / `failure` / `cancelled`；**skipped 不阻断后续**（GHA 内层 step 语义） |
 | 失败即终点 | step `failure` → 后续不可达 → run `ERROR`；不重做（§7.3） |
