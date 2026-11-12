@@ -307,6 +307,102 @@ def test_step_fields_are_validated(doc_lines: list[str]) -> None:
         )
 
 
+def test_authoring_section_covers_all_nine_steps(doc_lines: list[str]) -> None:
+    """§5.5「如何准备治理块」必须给出完整推导路径与工具化入口。
+
+    设计稿若只给示例与校验规则（而不给"怎么写出来"），开发同事只能照抄
+    示例猜——这是设计稿与可实施规格之间的缺口。
+    """
+    section = _section(doc_lines, r"^### 5\.5 ", r"^---$")
+    assert section, "缺少 §5.5「如何准备治理块」"
+
+    # 九步推导路径：①..⑨ 必须在**推导表**中各出现且不重复
+    # （只数推导表的行首列——样例表（§5.5.5）里也有 ①..⑨，不能混进来）
+    derivation = _section(doc_lines, r"^#### 5\.5\.1 ", r"^#### 5\.5\.2 ")
+    step_rows = re.findall(r"^\|\s*([①②③④⑤⑥⑦⑧⑨])\s*\|", derivation, re.M)
+    assert sorted(step_rows) == sorted("①②③④⑤⑥⑦⑧⑨"), (
+        f"§5.5.1 推导路径步骤不全或重复：{step_rows}"
+    )
+
+    # 机器兜什么 / 人兜什么
+    assert "机器" in section and "人" in section, "§5.5 缺少人机分工说明"
+
+    # 工具化入口
+    assert "harness governance init" in section, "§5.5 缺少骨架生成命令"
+    assert "harness governance check" in section, "§5.5 缺少校验命令"
+
+    # 必须诚实说明"过了检查不等于合规"
+    assert re.search(r"不等于合规|≠ *合规", section), (
+        "§5.5 未声明'机器兜形式、人兜内容'——"
+        "会让读者误以为通过校验即合规"
+    )
+
+
+def test_cli_commands_are_in_implementation_plan(doc_lines: list[str]) -> None:
+    """§5.5 承诺的 CLI 命令必须在 §12 实施计划中有对应工作项。"""
+    plan = _section(doc_lines, r"^## 12\. ", r"^## 13\. ")
+    for cmd in ("harness governance init", "harness governance check"):
+        assert cmd in plan, f"§12 实施计划缺少 `{cmd}` 工作项"
+
+
+def test_authoring_sample_matches_governance_example(doc_lines: list[str]) -> None:
+    """§5.5.5 样例的推导结果必须与 §5.2 的治理块一致。
+
+    §5.5.5 声称"最终产物即 §5.2 的治理块"。若两者漂移（如 §5.2 加了
+    一个步骤而样例没提），开发按样例推导出来的块与示例对不上——
+    同一份稿子里出现两个"标准答案"。
+    """
+    governance = _governance_block("\n".join(doc_lines))
+    example_steps = [s["id"] for s in governance.get("workflow", {}).get("steps", [])]
+    example_tools = [t["name"] for t in governance.get("tools", [])]
+
+    sample = _section(doc_lines, r"^#### 5\.5\.5 ", r"^---$")
+    assert sample, "缺少 §5.5.5 完整样例"
+
+    # 推导表的**结论列**（最后一列）须逐项点名 §5.2 的每个 step / tool。
+    # 只看结论列——推导列与其它段落里也会出现这些名字，不能混进来。
+    conclusion_col: list[str] = []
+    for line in sample.split("\n"):
+        if not line.startswith("| ") or "---" in line:
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 3:
+            conclusion_col.append(cells[-1])
+    conclusions = "\n".join(conclusion_col)
+
+    for step_id in example_steps:
+        assert step_id in conclusions, (
+            f"§5.5.5 推导表的结论列未点名 §5.2 的步骤 `{step_id}`——"
+            f"推导过程与最终示例漂移"
+        )
+
+    for tool in example_tools:
+        assert tool in conclusions, (
+            f"§5.5.5 推导表的结论列未点名 §5.2 的工具 `{tool}`——"
+            f"推导过程与最终示例漂移"
+        )
+
+
+def test_rule_count_claims_match_actual(doc_text: str, doc_lines: list[str]) -> None:
+    """文中"§5.3 的 N 条"这类计数声明，须与实际规则条数一致。"""
+    section = _section(doc_lines, r"^### 5\.3 ", r"^### 5\.4 ")
+    actual = len(
+        [
+            line
+            for line in section.split("\n")
+            if re.match(r"^\d+\. ", line)
+        ]
+    )
+    for m in re.finditer(r"§5\.3 的 (\d+) 条", doc_text):
+        assert int(m.group(1)) == actual, (
+            f"文中声明 §5.3 有 {m.group(1)} 条规则，实际 {actual} 条"
+        )
+    for m in re.finditer(r"§5\.3 全部 (\d+) 条", doc_text):
+        assert int(m.group(1)) == actual, (
+            f"文中声明 §5.3 全部 {m.group(1)} 条，实际 {actual} 条"
+        )
+
+
 # --------------------------------------------------------------------------
 # 5. 事实核对：文档声称已有的机制须真实存在
 # --------------------------------------------------------------------------
@@ -361,15 +457,31 @@ def test_all_class_like_symbols_resolve(doc_lines: list[str], sdk_source: str) -
 
 
 def test_env_var_claims_match_source(doc_lines: list[str], sdk_source: str) -> None:
-    """文档提到的 HARNESS_* 环境变量：要么源码存在，要么明确标注为需新增。"""
+    """文档提到的 HARNESS_* 环境变量：要么源码存在，要么明确标注为需新增。
+
+    "需新增"的标注允许出现在**同一章节**内（而非相邻几行）——同一节里
+    先声明"该环境变量需新增"、后文再提到它，是正常写法。
+    """
+    # 计算每行所属的二级章节（`## N. 标题`）
+    section_of: list[int] = []
+    current = -1
+    for line in doc_lines:
+        if re.match(r"^## \d+\. ", line):
+            current += 1
+        section_of.append(current)
+
     for i, line in enumerate(doc_lines, 1):
         for env in re.findall(r"HARNESS_[A-Z_]+", line):
             if env in sdk_source:
                 continue
-            # 允许在同段（相邻行）内声明为新增
-            window = "\n".join(doc_lines[max(0, i - 4): i + 4])
+            sec = section_of[i - 1]
+            window = "\n".join(
+                doc_lines[j]
+                for j in range(len(doc_lines))
+                if section_of[j] == sec
+            )
             assert re.search(r"新增|增加", window), (
-                f"L{i}: 环境变量 `{env}` 在源码中不存在，且未标注为需新增——"
+                f"L{i}: 环境变量 `{env}` 在源码中不存在，且其所在章节未标注为需新增——"
                 f"开发者照文档配置会静默失效"
             )
 

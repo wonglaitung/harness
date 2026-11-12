@@ -82,6 +82,10 @@
 | 桌面单机 | 不需要分布式一致、Redis、外部锚定、远程控制面 |
 | 工具返回值可信（由开发同事实现） | 条件分支的事实源可信；无需对工具输出做签名或交叉校验 |
 
+> **前提①的精确边界**：「视为准确」= **声明的内容属实**（工具行为确如 `capability` 所述、步骤确为业务必经、参数上限确为业务上限）。
+> 它**不覆盖覆盖完备性**——"该有的危险工具有没有列进来""必经步骤有没有漏写"无法机器判定，只能靠评审与灰度（§5.5.3）。
+> **有治理块 ≠ 合规**；治理块是授权书的**形式**，内容由签字的人负责（§5.5）。
+
 由此得出核心原则：
 
 > **信任登记，怀疑执行。** 风险来自 AI 的行为选择，不来自开发者的填表动机。
@@ -369,6 +373,15 @@ governance:
 22. `idempotent: false` 的工具**不得**出现在 workflow 级 `shared_tools`（共享工具可在任意 step 调用 → 非幂等副作用面不可控）。
 23. step 的 `continue-on-error` 为布尔，缺省 `false`；它只影响**重入**时是否允许再次执行该 step 的非幂等工具（§7.3），不影响首次执行。
 
+#### 5.3.5 引用闭合
+
+这两条把"声明与使用互相闭合"变成**编译期**可判定，避免运行期才暴露且报错误导（§5.5.1 步骤①）。
+
+24. **step 引用的工具必须在白名单内**：每个 step 的 `tools` 中每个工具名，都必须出现在 `governance.tools[].name` 中。
+    > 否则该工具在流水线第 2 步（白名单）被拒 → 该 step 永远无法完成 → 后续 step 不可达 → run `INCOMPLETE`。报错信息会误导（"我在 step 里明明声明了它"）。
+25. **白名单里的工具必须有归属**：每个 `governance.tools[].name`，必须出现在某个 step 的 `tools` 中，或出现在 `workflow.shared_tools` 中。
+    > 否则它既不可达（不在任何 step）也不属于共享工具——实际永远调不到，且报错信息同样误导。
+
 ### 5.4 治理身份与多治理块合成
 
 一次 run 可能同时激活多个技能，每个技能带一份治理块。**哪份生效、怎么合**必须由机制确定，不能靠"信任登记"带过。
@@ -400,6 +413,109 @@ SDK 的技能按用户输入匹配（`match_skills`，单次最多 3 个 + 显�
 | `material` | **取并集**（任一份为 true 即 true） | material 收紧限额与复核，取宽会漏 |
 
 合成结果构成该 run 的 `PolicySnapshot`（§4.4）。合成在**编译期**完成一次，不在运行时动态合并。
+
+### 5.5 如何准备治理块
+
+本节面向**开发同事**：拿到一个业务需求，如何产出一份合规的治理块。
+
+#### 5.5.1 推导路径
+
+治理块不是"照着示例填表"，而是从业务需求**推导**出来的。九步中，**机器只能代劳 3 步**，其余 6 步必须由人基于业务知识判断——这个分工必须先讲清楚，否则会误以为"过了校验就合规"。
+
+| 步 | 做什么 | 谁来判断 | 产出 |
+|---|---|---|---|
+| ① | **圈定工具**：这个 Agent 能用哪些工具？ | ✅ 机器（从工具注册表导出） | 工具清单 |
+| ② | **定能力分级**：每个工具属于 `read`/`write`/`payment`/`destructive`？ | ❌ **人** | capability |
+| ③ | **定幂等性**：重复调用会不会产生额外业务效果？ | ❌ **人** | idempotent |
+| ④ | **画业务步骤链**：业务上必须依次做哪几步？ | ❌ **人** | workflow.steps |
+| ⑤ | **定完成条件**：每步做到什么程度算完成？ | ◐ 机器出骨架，人确认 | `complete` |
+| ⑥ | **定分支条件**：什么情况下走哪条路？判据来自哪个产出？ | ❌ **人** | `if` + `outputs` |
+| ⑦ | **定参数约束**：哪些参数有业务上限？ | ❌ **人** | 约束（§6.4） |
+| ⑧ | **定限额与审批**：调用次数上限？哪些要人工批？ | ◐ 机器出默认值，人调整 | `limits` / `approval_required_for` |
+| ⑨ | **补产出声明**：哪些工具的输出要拿来当判断依据？ | ❌ **人** | `tools[].outputs` |
+
+**顺序建议**：① 先定（工具清单是其余一切的基础）→ ②③④ 是核心（决定"这个 Agent 能做什么、按什么顺序做"）→ ⑤⑥⑦⑧⑨ 补细节。②③④ 若拿不准，**先按最严的一档填**（`destructive` > `payment` > `write` > `read`，`idempotent: false`），上线前再按实际放宽。
+
+#### 5.5.2 三个必须由人做的判断
+
+这三项机器无法代劳，且**填错的代价直接落在合规上**。给出可操作的判断准则：
+
+**② `capability` 怎么选——按"最坏后果"分级**
+
+| 档位 | 判据（任一命中即归此档，取最高） | 后果 |
+|---|---|---|
+| `destructive` | 删除 / 批量变更 / 不可逆且影响面广 | 强制人工审批 + 事后事件 |
+| `payment` | 资金 / 额度 / 对外结算 | 强制人工审批 + 金额上限 |
+| `write` | 修改状态、写入文件、提交工单 | 按 `approval_required_for` 声明才审批 |
+| `read` | 只读取，不改变任何状态 | 默认不审批 |
+
+> 拿不准就往严的一档填。`capability` **只影响审批强度与事件完整度**，不会让正常任务被拦（除非该工具本身不该被这个 Agent 调用）——往严填的代价是多一次审批，不是停摆。
+
+**③ `idempotent` 怎么判——看"重复调用的业务效果"**
+
+- 幂等（`true`）：重复调用**不产生额外业务效果**。如查询、筛查（同样输入同样结论）、写日志。
+- 非幂等（`false`）：重复调用**产生额外业务效果**。如生成草稿（第二份）、提交工单（下单两次）、转账（转两次）。
+
+> 判错的后果：判成 `true` → 重入时产生二次副作用（§7.3 本该拒绝却放行）；判成 `false` → 正常的补数据重试被拒。**不确定就填 `false`**：多拒一次重试，比多一次副作用安全。
+
+**④ 步骤链怎么画——按"业务上不可跳过"来定**
+
+只有**业务上必须发生、且顺序有依赖**的环节才设为 step。判据：跳过它，业务结果就不对（不是"不够好"）。
+
+- 不满足 → 不要设 step（否则过度阻断，§17 风险）
+- 满足 → 设 step；步内工具可并行/可换序
+
+> 纯推理环节（如"分析数据得出结论"）不设独立 step——它无法被工具调用刻画（§7.7）。要么由一个显式工具表达，要么并入相邻 step。
+
+**⑥ 分支条件的 `if` 怎么写——判据必须来自工具产出**
+
+- ✅ 合法：`if: ${{ steps.aml_check.outputs.aml_hit == 'true' }}`（判据来自工具产出，机器可复现）
+- ❌ 非法：让模型判断该不该复核——违反"LLM 不参与放行/阻断"（§1.3）
+
+> 分支的**业务含义**由人保证（"AML 命中就要复核"），但**分支的判据来源**被强制限定为工具产出（§5.3.3 规则 13）。
+
+#### 5.5.3 机器兜什么、人兜什么
+
+| | 兜住的问题 | 兜的手段 |
+|---|---|---|
+| **机器**（编译期 fail-closed） | 必填字段缺失、未知字段、引用不闭合（step 用了白名单外的工具）、表达式语法错 / 用了危险函数（`hashFiles` / `secrets`）、capability 或 idempotent 未声明、汇聚点缺断言 | §5.3 的 25 条规则 + `harness governance check` |
+| **人**（评审 + 灰度） | 危险工具有没有漏列、必经步骤有没有漏写、capability 分得对不对、幂等性判得对不对、分支的业务含义对不对 | PR 评审（签发人 `approved_by`）+ 非 material Agent 灰度（§17） |
+
+> ⚠️ **过了 `check` 不等于合规。** `check` 只保证**形式完备**：字段齐、引用闭合、表达式安全、该声明的都声明了。它**不能**判断"该有的危险工具有没有列进来""必经步骤有没有漏写"。后者是前提①（§2.2）信任登记人的部分——**只能靠评审与灰度**。
+
+#### 5.5.4 工具化
+
+P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜底"：
+
+| 命令 | 作用 | 失败行为 |
+|---|---|---|
+| `harness governance init <skill>` | 从工具注册表 + 技能 frontmatter 生成治理块**骨架**：填好 `agent_id` / `version` / `approved_by` 占位 / 工具清单；`capability` 与 `idempotent` 留 `TODO` 并在 stderr 列出待填项；按 §5.5.1 给出九步清单 | 不写文件（骨架含 `TODO` 时视为未完成） |
+| `harness governance check <skill>` | 跑 §5.3 的 25 条规则 + §5.5.3 的"机器兜"清单 | 非零退出，逐条报 `file:line` + 违反的规则号 |
+
+两者均为 P0-1 实施项（§12）。`init` 生成的骨架**必然带 `TODO`**，必须经 `check` 通过才可提交——两者配套使用。
+
+#### 5.5.5 完整样例：从业务需求到治理块
+
+以 §5.2 的示例为例，走完九步（**最终产物即 §5.2 的治理块**，此处只演示推导过程）：
+
+**需求**（业务方一句话）："从核心系统与授权外部源组装信贷报告初稿，供信用分析师复核。"
+
+| 步 | 推导 | 结论 |
+|---|---|---|
+| ① | 业务涉及：读核心系统、查文档库、跑 AML 筛查、写报告、提交复核、记日志 | 6 个工具：`core_banking_api:read_only` / `internal_doc_store:search` / `aml_screening:run` / `report_writer:draft` / `review_submit:post` / `note_logger` |
+| ② | 前两个是读 → `read`；AML 筛查会写筛查记录 → `write`；写报告 → `write`；提交复核 → `write`；记日志 → `write` | 无 `payment` / `destructive` → **无需强制审批** |
+| ③ | 查询类幂等；筛查同样输入同样结论 → 幂等；**写报告不幂等**（第二份草稿）；提交复核幂等（同一请求重复提交被拒）；记日志幂等 | 只有 `report_writer:draft` 为 `idempotent: false` |
+| ④ | 业务上不可跳过的环节：收集数据 → AML 筛查（合规必需）→（若命中）人工复核 → 出报告。**出报告依赖筛查结论**，故为 step | 4 个 step：`collect_data` → `aml_check` → `manual_review` → `draft_report` |
+| ⑤ | `collect_data` 要两个工具都成功 → `all`；其余单工具 step | `collect_data` 用 `complete: all`，其余用默认 |
+| ⑥ | "是否复核"判据 = AML 筛查是否命中 → 该结论必须由工具产出。**AML 工具返回 `aml_hit`**（metadata） | `aml_screening:run` 声明 `outputs: [{name: aml_hit, from: metadata, path: aml_hit}]`；`manual_review` 用 `if: ${{ steps.aml_check.outputs.aml_hit == 'true' }}` |
+| ⑦ | 核心系统只读 `/data/credit`；只连内部主机 | `allowed_paths: ["/data/credit"]` / `allowed_hosts: ["core-bank.internal"]` |
+| ⑧ | 一次跑完的报告组装，工具调用数十次量级；写报告要人批 | `limits` 取默认；`approval_required_for: [draft_report]` |
+| ⑨ | 只有 AML 筛查的输出被用作判断依据 | 其余五个工具不声明 `outputs`；`note_logger` 放 `workflow.shared_tools`（任意 step 可调，但不是完成证据） |
+
+**推导过程中的两个关键判断**（都是人做的，机器无从代劳）：
+
+- **④ 为什么"出报告"不能被跳过**：跳过它业务结果不对（无交付物）→ 设 step。而"分析数据得出结论"不设 step（无法被工具调用刻画）。
+- **② 为什么 AML 筛查是 `write` 而非 `read`**：它会写筛查记录（改变状态）→ `write`。若误判为 `read`，则**不触发任何审批**——这类误判正是 §5.5.3 里"机器兜不住"的那一类。
 
 ---
 
@@ -1039,38 +1155,40 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 ### P0-1　治理声明与运行上下文
 
 1. **治理块承载**：`Skill.from_file` / `Skill.to_file` / `SkillMetadata` 三处扩展，贯通 `governance` 字段（§5.2）。`to_file` 必须**回写治理块**，否则客户端技能编辑器保存一次即抹掉授权书。
-2. **`PolicySnapshot` 编译**：解析治理块 → 白名单 / 约束 / 步骤链 / 限额 / 审批项 / material；含 §5.3 的 23 条校验与 §5.4 的多块合成。
+2. **`PolicySnapshot` 编译**：解析治理块 → 白名单 / 约束 / 步骤链 / 限额 / 审批项 / material；含 §5.3 的 25 条校验与 §5.4 的多块合成。
 3. **运行上下文**（§4.4）：`run_id` 生成、`PolicySnapshot` 按治理身份绑定、步骤游标与计数的 per-run 生命周期、随 `ToolContext.metadata` 送达执行路径。
 4. **治理块 linter**：结构 / 表达式 / 治理三类规则（§5.3、§14）。
-5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
+5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取**需新增**的环境变量 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
+6. **CLI `harness governance init <skill>`**（§5.5.4）：从工具注册表 + 技能 frontmatter 生成治理块骨架——填好 `agent_id` / `version` / `approved_by` 占位 / 工具清单，`capability` 与 `idempotent` 留 `TODO` 并在 stderr 列出待填项，附九步清单（§5.5.1）。骨架含 `TODO` 时不写文件。
+7. **CLI `harness governance check <skill>`**（§5.5.4）：跑 §5.3 的 25 条规则；非零退出，逐条报 `file:line` + 违反的规则号。与 6 配套——`init` 产出必须经 `check` 通过才可提交。
 
-**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言 → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错。
+**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 24/25）** → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错；`init` 生成的骨架必然带 `TODO` 且 `check` 报出待填项。
 
 ### P0-2　执行网关与业务约束
 
-6. `Tool.capability` / `Tool.constraints` / `Tool.idempotent` 与注册期校验（§6.3、§6.4）。
-7. `ToolExecutor` 内统一校验流水线（11 步，§6.2），含沙箱与文件校验从 `ToolGateHook` 迁入、side-effect 闸门合并。
-8. 白名单、路径与主机范围接入。
-9. **运行期审批机制**（§6.6）：审批请求落盘、参数哈希绑定、等待与超时、CLI `approve`/`reject`、审批记录进事件流。
+8. `Tool.capability` / `Tool.constraints` / `Tool.idempotent` 与注册期校验（§6.3、§6.4）。
+9. `ToolExecutor` 内统一校验流水线（11 步，§6.2），含沙箱与文件校验从 `ToolGateHook` 迁入、side-effect 闸门合并。
+10. 白名单、路径与主机范围接入。
+11. **运行期审批机制**（§6.6）：审批请求落盘、参数哈希绑定、等待与超时、CLI `approve`/`reject`、审批记录进事件流。
 
 **验收**：未登记工具、未声明 capability、越界参数、路径越界一律拒绝；Hook 改写参数后仍以终态参数校验；审批未落盘 → 拒绝（fail-closed）；审批超时 → 拒绝并记录。
 
 ### P0-3　步骤链、条件分支与限额信号
 
-10. 步骤游标与状态机（§7.3）：`success` / `skipped` / `failure` / `cancelled` 四态、跳步拒绝、重入按 `idempotent` 分流。
-11. 条件求值（§7.2）：事实抽取、产出缺失判失败、`guard_unresolved` 信号。
-12. 治理限额（run 总次数、速率、token）与信号计数、升级动作（§8）。
-13. `LoopState` 新增 `INCOMPLETE`（末端 step 为 `skipped` 时 run 结论非成功，§7.3）。
+12. 步骤游标与状态机（§7.3）：`success` / `skipped` / `failure` / `cancelled` 四态、跳步拒绝、重入按 `idempotent` 分流。
+13. 条件求值（§7.2）：事实抽取、产出缺失判失败、`guard_unresolved` 信号。
+14. 治理限额（run 总次数、速率、token）与信号计数、升级动作（§8）。
+15. `LoopState` 新增 `INCOMPLETE`（末端 step 为 `skipped` 时 run 结论非成功，§7.3）。
 
 **验收**：跳过 AML 直接出报告被拒；AML 未命中时人工复核被跳过且报告正常产出；AML 失败时后续不可达；末端 step 被跳过时 run 为 `INCOMPLETE`；连续拒绝或跳步达阈值自动 suspend。
 
 ### P0-4　Kill Switch、事件日志与客户端接入
 
-14. 控制文件读写（原子替换）、CLI `suspend/resume/status`、四处检查点接入（**不走 Hook**，§9.3）。
-15. 审批 CLI 与客户端 UI 审批入口（复用 CLI 判定逻辑）。
-16. 事件日志（`~/.harness/audit/governance/<日期>/<pid>.jsonl`，同步 append + flush，`run_id` 贯穿、脱敏、判定/结果两段、OTel 字段）。
-17. 桌面客户端：启动检查（读失败按 `suspended`）、UI 停止按钮、run 级退出标记、技能编辑器保留治理块、**strict 设置项**。
-18. **部署形态检测与告警**（§9.8）：strict 下检测非单实例/服务端部署并告警。
+16. 控制文件读写（原子替换）、CLI `suspend/resume/status`、四处检查点接入（**不走 Hook**，§9.3）。
+17. 审批 CLI 与客户端 UI 审批入口（复用 CLI 判定逻辑）。
+18. 事件日志（`~/.harness/audit/governance/<日期>/<pid>.jsonl`，同步 append + flush，`run_id` 贯穿、脱敏、判定/结果两段、OTel 字段）。
+19. 桌面客户端：启动检查（读失败按 `suspended`）、UI 停止按钮、run 级退出标记、技能编辑器保留治理块、**strict 设置项**。
+20. **部署形态检测与告警**（§9.8）：strict 下检测非单实例/服务端部署并告警。
 
 **验收**：CLI 暂停后客户端在下一个检查点停止；一次 run 可按 `run_id` 还原轨迹（含每 step 的 outcome/conclusion）；控制文件损坏 → 按 `suspended` 处理而非放行。
 
@@ -1116,7 +1234,8 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 - **静态**：`ruff`、`mypy`。
 - **功能**：
-  - **治理块正反例**：缺必填字段、未知字段、capability 缺失、`idempotent` 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言（§5.3 全部 23 条）。
+  - **治理块正反例**：缺必填字段、未知字段、capability 缺失、`idempotent` 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 24/25）**（§5.3 全部 25 条）。
+  - **CLI 工具化**（§5.5.4）：`init` 生成的骨架必带 `TODO` 且列出待填项；`check` 对 §5.3 全部 25 条逐条报 `file:line` + 规则号并以非零退出；`init` → 填 `TODO` → `check` 通过的闭环可跑通。
   - **表达式类**（照搬 GHA《Common Mistakes》）：`== 'true'` 之外的布尔写法、output 直接当布尔、`${{ }}` 只包一半、`if:` 裸 `!` 开头、引用 `hashFiles()` / `secrets` 上下文。
   - **网关绕过用例**：Hook `MODIFY_ARGS` 改写参数后仍按终态校验；MCP 工具走同一路径。
   - **步骤机**：跳步、重入（幂等放行 / 非幂等拒绝）、同 step 多工具、`complete` 三种取值、产出缺失判失败、`skipped` 不阻断、`failure` 阻断后续。
@@ -1144,7 +1263,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 维度 | 结论 | 说明 |
 |---|---|---|
 | 凭证与密钥 | 满足 | 不新增密钥存储；撤权回调由接入方实现；日志不落密钥 |
-| 输入校验与防注入 | 满足 | 治理块 Schema 校验（23 条，§5.3）；表达式仅 GHA 安全子集（禁 `hashFiles` / `secrets`）；工具参数确定性校验；外部内容走既有注入检测 |
+| 输入校验与防注入 | 满足 | 治理块 Schema 校验（25 条，§5.3）；表达式仅 GHA 安全子集（禁 `hashFiles` / `secrets`）；工具参数确定性校验；外部内容走既有注入检测 |
 | 最小权限 | 满足 | 工具白名单 + capability 分级 + 路径与主机范围 + 治理身份不随技能命中变化（§5.4.1） |
 | 依赖安全 | 满足 | 不新增运行时依赖；步骤语法沿用 GHA 但**不引入 GHA 依赖**，仅借语法与语义（§7.6） |
 | 输出编码 | 满足 | 事件日志统一 JSON 序列化与转义；单行 ≤ 2KB |
@@ -1175,7 +1294,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 |---|---|---|
 | A 数据主权与可信源 | 治理块为唯一事实源；外部内容按不可信处理；事实源可信（前提④） | 治理块**可写性**未隔离（agent 若能写技能目录则可改自身授权书）——客户端编辑器路径已列入 §12 实施计划 |
 | B 边界与权限 | 执行网关 + 白名单 + capability + 路径与主机范围 + 治理身份不随输入变化 | — |
-| C 校验过滤网 | 治理块 Schema（23 条）+ 业务参数约束 + 步骤游标判定 + 条件分支汇聚点断言 + 既有 gate | — |
+| C 校验过滤网 | 治理块 Schema（25 条）+ 业务参数约束 + 步骤游标判定 + 条件分支汇聚点断言 + 引用闭合（规则 24/25）+ 既有 gate | — |
 | D 交付对账 | 既有 `DeterministicGate` / `Reconciler` | — |
 | E 韧性 | 限额 + 熔断 + Kill Switch + 控制面 fail-closed | — |
 | F 可观测 | 事件日志（判定/结果两段）+ `run_id` 贯穿 + 步骤 `outcome`/`conclusion` | 无实时看板（P1 治理指标） |
@@ -1191,6 +1310,8 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 网关增加延迟 | 策略预编译；约束求值纯本地；事件日志同步单行写入 |
 | 约束配置错误导致误拦 | 注册期校验；治理块变更经 PR 评审（签发人 `approved_by`） |
 | 步骤建模不准（一步多工具 / 一工具多步） | `complete` 可选 `all` / `any` / 指定工具；共享工具走 workflow 级 `shared_tools` |
+| **引用不闭合**（step 用了白名单外的工具 / 白名单工具无归属） | **可机器检测** → §5.3.5 规则 24/25 编译期拒绝（原稿缺失，本轮补齐） |
+| **内容不完备**（漏列危险工具 / 漏写必经步骤 / capability 分错 / 幂等性判错） | **不可机器检测** → 只能靠 PR 评审（`approved_by`）+ 非 material Agent 灰度 + P1 语义漂移信号（§18.1）。§5.5.3 明确写出"机器兜形式、人兜内容"，不让读者误以为过了 `check` 就合规 |
 | 步骤过严导致正常任务被拦 | 先在非 material Agent 灰度，再放开到 material |
 | **事实源不可信**（工具返回 `aml_hit=false` 绕过复核） | 前提④ 显式承认该信任面；工具为开发同事实现（同前提①）；治理相关工具须返回结构化产出 |
 | **条件分支非穷尽**（都没命中 → 静默放行） | 汇聚点断言**强制**（§5.3.3 规则 18），缺失即编译期拒绝 |
@@ -1256,6 +1377,9 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 多治理块合成 | 白名单取交集、约束取并集、限额取最严、审批取并集、material 取并集（§5.4.2） |
 | 签发语义 | 治理块以 PR 合并为签发动作，`approved_by` 记录（§5.2） |
 | 步骤语法沿用 | **GitHub Actions（workflow YAML）**内层 step：`id`/`if`/`outputs`/`outcome`/`conclusion`/隐含 `success()` 原样沿用，表达式取 GHA 子集；不引入 GHA 依赖，仅借语法与语义（§7.6） |
+| 治理块编写路径 | 九步推导（§5.5.1），机器代劳 3 步 / 人判断 6 步；CLI `governance init`（骨架）+ `governance check`（25 条）均入 P0-1 |
+| 前提①的边界 | 「视为准确」= 声明内容属实；**覆盖完备性不可机器判定**，靠评审 + 灰度（§5.5.3）；有治理块 ≠ 合规 |
+| 引用闭合 | step.tools ⊆ governance.tools 且 governance.tools ⊆ ∪step.tools ∪ shared_tools，编译期拒绝（§5.3.5 规则 24/25） |
 | 步骤链形态 | **线性**，不用 job 层 `needs`；并行 / 汇聚 / 回退 / 循环均 P0 不支持（§1.3） |
 | 与 GHA 的差异 | D1 `tools:` 而非 `uses:`；D2 仅 `complete: any` 非 GHA；D3 产出缺失判 failure（比 GHA 更严）（§7.7） |
 | 条件分支 | `if:` + **汇聚点显式断言 `steps.<id>.outcome`**（强制，缺失即编译期拒绝）；互斥性不宣称构造保证（§7.5） |
