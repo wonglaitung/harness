@@ -203,6 +203,8 @@ flowchart LR
 | 限额与信号计数 | per-run 实例，随 run 上下文创建与销毁 |
 | 生命周期 | run 开始时创建，run 结束时随事件日志落盘；不留跨 run 状态 |
 
+运行上下文的创建与销毁各对应一个事件：run 开始写 `run_start`（携带 `run_id` / `agent_id` / 治理身份），run 结束写 `run_end`（携带 run 结论 `COMPLETED` / `ERROR` / `INTERRUPTED` / `INCOMPLETE`）。这两个事件是**复盘的锚点**——按 `run_id` 还原轨迹时，先定位 `run_start` / `run_end`，中间的 `tool_call_*` 才能归入同一次执行。
+
 **运行上下文如何送达执行路径**：`ToolExecutor` 是每 harness 一个、被多 session 共享的对象，不能在其上挂 per-run 状态。运行上下文随 `ToolContext` 传入（`ToolContext.metadata`），网关在每次调用时从中取出本次 run 的快照绑定与游标。这样 `ToolExecutor.execute()` 仍是**唯一入口**（§6.1），而状态是 per-call 的。
 
 **重编译边界**：**下次启动**。同一 run 内治理块不变；客户端下次启动同步新源码 → 重编译 → 新快照生效（前提②）。这使"变更随下次启动生效"有了确定的技术含义（§2.3）。
@@ -335,36 +337,37 @@ governance:
 
 1. `tools[].name` 必须存在于工具注册表；`capability` 必填，取值 `read / write / payment / destructive`。
 2. `tools[].idempotent` 必填（布尔）——重入判定依赖它，不允许缺省猜测。
-3. `tools[].outputs[].name` 全局唯一；`from` 取 `metadata` / `content_json`；`path` 为点路径。
+3. `tools[].outputs[]`：`name` 全局唯一（跨工具）；`from` 取 `metadata` / `content_json`；`path` 为点路径且非空；`from: content_json` 时该工具的结果必须含可解析 JSON（否则其产出恒缺失 → 恒判失败，§7.2）。
 4. `material` 缺省 `false`，为开发声明的布尔标签，**不参与审批判定**。
-5. **未知字段拒绝**（防拼写错误绕过）。
-6. `approval_required_for` 只能引用已声明 step 或工具；`payment` / `destructive` 的强制审批不可关闭（见 §6.3），因此不得用该字段关闭它们。
+5. `owners` 必须同时含 `accountable` 与 `technical` 且均为非空字符串（责任人缺失即问责链断裂，§16 A–H）。
+6. **未知字段拒绝**（防拼写错误绕过）。
+7. `approval_required_for` 只能引用已声明 step 或工具；`payment` / `destructive` 的强制审批不可关闭（见 §6.3），因此不得用该字段关闭它们。
 
 #### 5.3.2 步骤链结构
 
-7. 每个 step 至少绑定一个工具；step `id` 全局唯一且非空。
-8. 每个工具**默认只属于一个 step**；跨步骤共用的工具放 workflow 级 `shared_tools`，且不作为任何 step 的完成证据。
-9. `complete` 取 `all`（默认）/ `any` / `<tool_name>`。
-10. `timeout-minutes` 为正数。
-11. `if` 引用的 step 必须**在本 step 之前**（GHA 内层 step 的上下文只含已执行的 step）。
-12. `if` 引用的 `steps.<id>.outputs.<name>`：`<id>` 必须是已声明 step，且该 step 的工具确实声明了 `<name>` 的产出。
+8. 每个 step 至少绑定一个工具；step `id` 全局唯一且非空。
+9. 每个工具**默认只属于一个 step**；跨步骤共用的工具放 workflow 级 `shared_tools`，且不作为任何 step 的完成证据。
+10. `complete` 取 `all`（默认）/ `any` / `<tool_name>`。
+11. `timeout-minutes` 为正数。
+12. `if` 引用的 step 必须**在本 step 之前**（GHA 内层 step 的上下文只含已执行的 step）。
+13. `if` 引用的 `steps.<id>.outputs.<name>`：`<id>` 必须是已声明 step，且该 step 的工具确实声明了 `<name>` 的产出。
 
 #### 5.3.3 条件表达式（GHA 内层 step 语义）
 
-13. 表达式为 GHA 表达式**子集**：运算符 `== != < <= > >= && || !`；函数 `contains() startsWith() endsWith() format() join() toJSON() fromJSON() success() failure() always() cancelled()`；上下文仅 `steps.*.outputs.*`、`steps.*.outcome`、`steps.*.conclusion`、`env.*`。
-14. **禁止** `github` / `secrets` / `matrix` / `runner` 上下文与 `hashFiles()` 函数（后者读文件系统＝能力泄漏）。
-15. 产出**全为字符串**，比较须写 `== 'true'` 而非 `== true`；把 output 直接当布尔用（`if: steps.x.outputs.y`）拒绝。
-16. `${{ }}` 必须包住**整个**表达式；只包一半会退化成 `format()` 恒真——拒绝该写法。
-17. `if:` 以 `!` 开头必须加引号（否则 YAML 解析失败）——校验器直接拒绝裸 `!` 开头。
-18. **汇聚点纪律（强制）**：若存在带 `if` 的 step，则其后继 step 的 `if` 必须显式引用这些分支 step 的 `steps.<id>.outcome`。缺失 → 编译期拒绝。
+14. 表达式为 GHA 表达式**子集**：运算符 `== != < <= > >= && || !`；函数 `contains() startsWith() endsWith() format() join() toJSON() fromJSON() success() failure() always() cancelled()`；上下文仅 `steps.*.outputs.*`、`steps.*.outcome`、`steps.*.conclusion`、`env.*`。
+15. **禁止** `github` / `secrets` / `matrix` / `runner` 上下文与 `hashFiles()` 函数（后者读文件系统＝能力泄漏）。
+16. 产出**全为字符串**，比较须写 `== 'true'` 而非 `== true`；把 output 直接当布尔用（`if: steps.x.outputs.y`）拒绝。
+17. `${{ }}` 必须包住**整个**表达式；只包一半会退化成 `format()` 恒真——拒绝该写法。
+18. `if:` 以 `!` 开头必须加引号（否则 YAML 解析失败）——校验器直接拒绝裸 `!` 开头。
+19. **汇聚点纪律（强制）**：若存在带 `if` 的 step，则其后继 step 的 `if` 必须显式引用这些分支 step 的 `steps.<id>.outcome`。缺失 → 编译期拒绝。
     > 理由：GHA 内层 step 的语义是"前一步被**跳过**不阻断后续"，若汇聚点无条件执行，则分支条件非穷尽时会静默放行（两个分支都没命中 → 什么都没做 → 照样出结果）。显式断言是唯一能挡住该静默放行的机制（§7.5）。
 
 #### 5.3.4 治理专有
 
-19. `payment` / `destructive` 工具必须被 `approval_required_for` 覆盖或由 capability 规则强制（§6.3）。
-20. `complete: any` 的 step 不得包含 `destructive` 工具（否则可绕过该工具的审批关卡）。
-21. `idempotent: false` 的工具**不得**出现在 workflow 级 `shared_tools`（共享工具可在任意 step 调用 → 非幂等副作用面不可控）。
-22. step 的 `continue-on-error` 为布尔，缺省 `false`；它只影响**重入**时是否允许再次执行该 step 的非幂等工具（§7.3），不影响首次执行。
+20. `payment` / `destructive` 工具必须被 `approval_required_for` 覆盖或由 capability 规则强制（§6.3）。
+21. `complete: any` 的 step 不得包含 `destructive` 工具（否则可绕过该工具的审批关卡）。
+22. `idempotent: false` 的工具**不得**出现在 workflow 级 `shared_tools`（共享工具可在任意 step 调用 → 非幂等副作用面不可控）。
+23. step 的 `continue-on-error` 为布尔，缺省 `false`；它只影响**重入**时是否允许再次执行该 step 的非幂等工具（§7.3），不影响首次执行。
 
 ### 5.4 治理身份与多治理块合成
 
@@ -431,6 +434,9 @@ SDK 的技能按用户输入匹配（`match_skills`，单次最多 3 个 + 显�
 ```
 
 第 9 步与第 11 步是**两条事件**，不是一条：`decision` 在执行前定，`duration_ms` 只有执行后才知道（§10.1）。
+
+- 第 9 步写 **`tool_call_decision`**（判定事件：allow / deny + 原因）
+- 第 11 步写 **`tool_call_result`**（结果事件：结果 + 耗时 + step 状态推进）
 
 ### 6.3 能力分级与校验深度
 
@@ -612,6 +618,8 @@ workflow:
 
 **产出缺失即失败**（与 GHA 不同，§7.7 D3）：若工具声明了产出 `aml_hit` 却没产出，该 step 判 `failure` → 后续 step 不可达。GHA 在此处给空串，于是 `== 'true'` 为假 → 分支不激活 → 人工复核被静默跳过 → **合规洞**。CI 里"跳过=可见的红"，治理里必须是"阻断"。
 
+**事实来源与记录**：事实只在**工具执行成功**时产生，由网关抽取并记录为 **`fact_observed`** 事件（只记事实名与类型，不记事实值）。同名事实最新值覆盖，但每次观测都留痕。
+
 **MCP 工具的产出**：MCP 工具当前只返回字符串 `content`，需在包装器中对可解析 JSON 的 content 额外挂 `metadata["json"]`，否则其产出恒缺失 → 恒判失败（过度阻断）。因此治理相关工具必须能返回结构化结果，这是**接入方的前置要求**。
 
 ### 7.3 游标判定
@@ -632,6 +640,8 @@ GHA 的 runner 靠**位置**推进；我们是 **pull**（模型提议调哪个�
 ```
 
 求值顺序与 GHA 一致：**先判 `if` 再决定是否执行该 step**（规则 c 在规则 b 之后、规则 d 之前——因为 `if` 为假时该 step 根本不该跑，完成条件无从谈起）。
+
+**跳过的留痕**：规则 c 触发时写 **`step_skipped`** 事件（携带 `step_id` 与跳过原因）。这是**正常路径而非违规**——但必须留痕，否则复盘时"这段流程为什么没有 AML 复核"无从回答，与 `step_violation`（跳步被拒）混淆。
 
 **守卫求值时机**：只在**前驱全部 resolved 后**才求值（与 GHA 求值顺序一致），因此不会出现"事实还没产生就被判 false"。
 
@@ -798,13 +808,15 @@ GHA 内层 step **没有 XOR 构造，也没有 default**——多选一与穷�
 | `consecutive_failures` | 连续工具失败 | 沿用熔断思路，降级或中止 |
 | `step_violations` | 跳步尝试（调用更晚 step 的工具） | 计数；达阈值自动 suspend |
 | `step_reentry` | 已完成 step 被重复调用 | 计数；达阈值告警 |
-| `same_args_repeat` | 同参数重复调用 | 复用 `CircuitBreaker` |
+| `same_args_repeat` | 同参数重复调用 | 复用 `CircuitBreaker`（阈值由既有 `CircuitBreaker` 配置决定，**不受治理块覆盖**） |
 | `out_of_scope_attempts` | 反复尝试未登记工具 | 计数；达阈值自动 suspend + 复核 |
 | `guard_unresolved` | 条件求值失败（类型不符 / 路径缺失 / JSON 解析失败） | 计数；达阈值升级人工复核 |
 | `approval_timeout` | 审批请求超时 | 计数；`material` 时额外进 `ReviewQueue` |
 | `branch_overlap` | 同一分支组内多个 step 同时 `success`（条件重叠） | 计数；达阈值升级人工复核 |
 
-阈值取安全默认值，可在治理块 `limits.signal_thresholds` 按信号名覆盖（§5.2 已列出全部字段名；§5.3.1 规则 5 会拒绝未声明的字段）。语义信号（由 LLM 判断"是否偏离意图"）不在 P0：LLM 不参与放行与阻断。
+阈值取安全默认值，可在治理块 `limits.signal_thresholds` 按信号名覆盖（§5.2 已列出全部字段名；§5.3.1 规则 6 会拒绝未声明的字段）。语义信号（由 LLM 判断"是否偏离意图"）不在 P0：LLM 不参与放行与阻断。
+
+**信号的留痕**：每次信号计数变化写一条 **`signal`** 事件（携带信号名与当前计数）。信号是**检出式**链路（事后可见、不阻断），与网关的**阻断式**判定分开——`signal` 事件的存在不改变任何放行/阻断决策。
 
 ---
 
@@ -953,9 +965,29 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 **字段命名对齐 OpenTelemetry GenAI 语义约定**（`gen_ai.*`），P1 接入 OTel 时无需改名；`run_id` 是本方案自有字段（OTel 无对应），`gen_ai.conversation.id` 可映射 `session_id`。
 
-事件类型：`run_start` / `run_end` / `tool_call_decision` / `tool_call_result` / `constraint_violation` / `step_violation` / `step_reentry` / `step_skipped` / `fact_observed` / `guard_unresolved` / `signal` / `governance_verdict` / `control_plane` / `approval` / `approval_request` / `approval_decision`。
+事件类型与**产出方**（每种事件由谁在何时写——实现时按此对照，避免漏写或重复写）：
+
+| 事件 | 产出方 | 何时写 |
+|---|---|---|
+| `run_start` | harness | run 开始，携带 `run_id` / `agent_id` / 治理身份 |
+| `run_end` | harness | run 结束，携带 run 结论（`COMPLETED` / `ERROR` / `INTERRUPTED` / `INCOMPLETE`） |
+| `tool_call_decision` | 网关 | 每次工具调用的**判定**（执行前，§6.2 第 9 步） |
+| `tool_call_result` | 网关 | 每次工具调用的**结果**（执行后，§6.2 第 11 步），携带 `step_outcome` / `step_conclusion` / `duration_ms` |
+| `constraint_violation` | 网关 | 业务参数约束不满足（§6.4） |
+| `step_violation` | 网关 | 调用了更晚 step 的工具（跳步，§7.3） |
+| `step_reentry` | 网关 | 已完成 step 的工具被重复调用（§7.3） |
+| `step_skipped` | 网关 | step 因 `if` 为假被跳过（§7.3），携带 `step_id` 与跳过原因 |
+| `fact_observed` | 网关 | 工具产出被记录（§7.2），只记事实名与类型 |
+| `guard_unresolved` | 网关 | 条件求值失败（§6.5、§7.2） |
+| `signal` | 网关 | 行为信号计数变化（§8.2），携带信号名与当前计数 |
+| `governance_verdict` | 网关 | 本次 run 的治理侧汇总判定 |
+| `control_plane` | Kill Switch | 控制文件状态变更 / 读取失败（§9.1） |
+| `approval_request` | 网关 | 审批请求落盘（§6.6.1） |
+| `approval_decision` | 网关 | 审批被批准 / 拒绝 / 超时（§6.6.2） |
+| `approval` | 网关 | 审批结果汇总（批准 / 拒绝 / 超时三态合一，含 `approver` / `reason` / `args_hash`） |
 
 > `governance_verdict`（治理侧判定）刻意**不叫** `gate_verdict`——后者是既有 `DeterministicGate`（交付内容把关）的概念，两者不可混用。
+> `approval_request` / `approval_decision` 是**单次审批的生命周期事件**，`approval` 是**汇总事件**（§6.6.2 的等待语义需要汇总态来判定"本次调用是否已获批"）。若实现时不需要区分生命周期，只写 `approval` 即可，但必须能表达"请求已发出"与"已决定"两种状态。
 
 ### 10.2 写入方式
 
@@ -1007,7 +1039,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 ### P0-1　治理声明与运行上下文
 
 1. **治理块承载**：`Skill.from_file` / `Skill.to_file` / `SkillMetadata` 三处扩展，贯通 `governance` 字段（§5.2）。`to_file` 必须**回写治理块**，否则客户端技能编辑器保存一次即抹掉授权书。
-2. **`PolicySnapshot` 编译**：解析治理块 → 白名单 / 约束 / 步骤链 / 限额 / 审批项 / material；含 §5.3 的 22 条校验与 §5.4 的多块合成。
+2. **`PolicySnapshot` 编译**：解析治理块 → 白名单 / 约束 / 步骤链 / 限额 / 审批项 / material；含 §5.3 的 23 条校验与 §5.4 的多块合成。
 3. **运行上下文**（§4.4）：`run_id` 生成、`PolicySnapshot` 按治理身份绑定、步骤游标与计数的 per-run 生命周期、随 `ToolContext.metadata` 送达执行路径。
 4. **治理块 linter**：结构 / 表达式 / 治理三类规则（§5.3、§14）。
 5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
@@ -1084,12 +1116,13 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 - **静态**：`ruff`、`mypy`。
 - **功能**：
-  - **治理块正反例**：缺必填字段、未知字段、capability 缺失、`idempotent` 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言（§5.3 全部 22 条）。
+  - **治理块正反例**：缺必填字段、未知字段、capability 缺失、`idempotent` 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言（§5.3 全部 23 条）。
   - **表达式类**（照搬 GHA《Common Mistakes》）：`== 'true'` 之外的布尔写法、output 直接当布尔、`${{ }}` 只包一半、`if:` 裸 `!` 开头、引用 `hashFiles()` / `secrets` 上下文。
   - **网关绕过用例**：Hook `MODIFY_ARGS` 改写参数后仍按终态校验；MCP 工具走同一路径。
   - **步骤机**：跳步、重入（幂等放行 / 非幂等拒绝）、同 step 多工具、`complete` 三种取值、产出缺失判失败、`skipped` 不阻断、`failure` 阻断后续。
   - **条件分支**：命中 / 未命中 / 非穷尽 / 重叠四态；汇聚点断言缺失 → 编译期拒绝；守卫求值失败 → `guard_unresolved`。
-  - **约束求值**：金额、枚举、范围、必填、路径；含类型不符时的 fail-closed；**断言事件不含实际值**。
+  - **约束求值**：金额、枚举、范围、必填；含类型不符时的 fail-closed；**断言事件不含实际值**。
+  - **权限范围**：路径越界、主机越界、命令越界 → 拒绝（§6.2 步骤 6；与 `PermissionSet` 取交集后仍须在治理块范围内）。
   - **审批**：请求落盘、参数哈希绑定（改参数后审批失效）、超时、被拒、CLI approve/reject、审批记录进事件流。
   - **Kill Switch**：文件缺失视为 active、**损坏文件按 suspended 处理**、suspend 生效、revoke 回调失败仍阻断、原子写（并发读不读到半个文件）。
   - **限额与信号**：速率窗口、连续拒绝阈值、跳步阈值自动 suspend、`guard_unresolved` / `approval_timeout` / `branch_overlap` 计数。
@@ -1111,7 +1144,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 维度 | 结论 | 说明 |
 |---|---|---|
 | 凭证与密钥 | 满足 | 不新增密钥存储；撤权回调由接入方实现；日志不落密钥 |
-| 输入校验与防注入 | 满足 | 治理块 Schema 校验（22 条，§5.3）；表达式仅 GHA 安全子集（禁 `hashFiles` / `secrets`）；工具参数确定性校验；外部内容走既有注入检测 |
+| 输入校验与防注入 | 满足 | 治理块 Schema 校验（23 条，§5.3）；表达式仅 GHA 安全子集（禁 `hashFiles` / `secrets`）；工具参数确定性校验；外部内容走既有注入检测 |
 | 最小权限 | 满足 | 工具白名单 + capability 分级 + 路径与主机范围 + 治理身份不随技能命中变化（§5.4.1） |
 | 依赖安全 | 满足 | 不新增运行时依赖；步骤语法沿用 GHA 但**不引入 GHA 依赖**，仅借语法与语义（§7.6） |
 | 输出编码 | 满足 | 事件日志统一 JSON 序列化与转义；单行 ≤ 2KB |
@@ -1142,7 +1175,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 |---|---|---|
 | A 数据主权与可信源 | 治理块为唯一事实源；外部内容按不可信处理；事实源可信（前提④） | 治理块**可写性**未隔离（agent 若能写技能目录则可改自身授权书）——客户端编辑器路径已列入 §12 实施计划 |
 | B 边界与权限 | 执行网关 + 白名单 + capability + 路径与主机范围 + 治理身份不随输入变化 | — |
-| C 校验过滤网 | 治理块 Schema（22 条）+ 业务参数约束 + 步骤游标判定 + 条件分支汇聚点断言 + 既有 gate | — |
+| C 校验过滤网 | 治理块 Schema（23 条）+ 业务参数约束 + 步骤游标判定 + 条件分支汇聚点断言 + 既有 gate | — |
 | D 交付对账 | 既有 `DeterministicGate` / `Reconciler` | — |
 | E 韧性 | 限额 + 熔断 + Kill Switch + 控制面 fail-closed | — |
 | F 可观测 | 事件日志（判定/结果两段）+ `run_id` 贯穿 + 步骤 `outcome`/`conclusion` | 无实时看板（P1 治理指标） |
