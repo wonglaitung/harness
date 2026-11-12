@@ -170,7 +170,7 @@ def test_table_column_counts_consistent(doc_lines: list[str]) -> None:
 def test_section_references_resolve(doc_lines: list[str]) -> None:
     sections = set()
     for line in doc_lines:
-        m = re.match(r"^(#{2,4})\s+(\d+(?:\.\d+)*)[\.\u3000 ]", line)
+        m = re.match(r"^(#{2,4})\s+(\d+(?:\.\d+)*)(?:\.\s|\s|$)", line)
         if m:
             sections.add(m.group(2))
 
@@ -179,6 +179,41 @@ def test_section_references_resolve(doc_lines: list[str]) -> None:
             assert m.group(1) in sections, f"L{i}: 悬空引用 §{m.group(1)}"
         for m in re.finditer(r"见\s*(\d+(?:\.\d+)*)\s*节", line):
             assert m.group(1) in sections, f"L{i}: 悬空引用 第{m.group(1)}节"
+
+
+def test_bare_section_numbers_resolve(doc_lines: list[str]) -> None:
+    """**不带 § 的裸编号**引用（如"见 6.4"）也必须指向真实章节。
+
+    这类引用藏在代码块里（流水线示意），章节重排后不会被带 § 的
+    重写逻辑覆盖——曾导致 7 处引用在重构后全部失效。单独加检查守住。
+    """
+    sections = set()
+    for line in doc_lines:
+        m = re.match(r"^(#{2,4})\s+(\d+(?:\.\d+)*)(?:\.\s|\s|$)", line)
+        if m:
+            sections.add(m.group(2))
+
+    pattern = re.compile(r"(?<!§)(?<!第 )\b(\d+\.\d+)\b")
+    for i, line in enumerate(doc_lines, 1):
+        # 先去掉带 § 的引用，剩下的才是"裸编号"
+        stripped = re.sub(r"§\s*\d+(?:\.\d+)*", "", line)
+        for m in pattern.finditer(stripped):
+            num = m.group(1)
+            if num in sections:
+                continue
+            before = stripped[max(0, m.start() - 16): m.start()]
+            after = stripped[m.end(): m.end() + 6]
+            # 排除非章节号：版本号 / 编码名 / URL / 纯小数
+            if re.search(r"(sha|utf|ascii|https?|v\d)\s*$", before, re.I):
+                continue
+            if re.match(r"^\s*\d*\.?\d*\s*$", after) and not re.search(r"[§（(]\s*$", before):
+                # 后面不是章节语境（如 "sha256:9f2c"、小数）→ 排除
+                if not re.search(r"见|参见|依据|按|据|第|§|节", before):
+                    continue
+            assert num in sections, (
+                f"L{i}: 裸编号引用 {num} 不指向任何章节（上下文："
+                f"{(before + num + after).strip()!r}）"
+            )
 
 
 # --------------------------------------------------------------------------
