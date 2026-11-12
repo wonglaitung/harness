@@ -43,6 +43,8 @@ NON_SYMBOL_WORDS = {
     "hmac", "cors", "dns", "url", "http", "https", "localhost", "git", "npm",
     "node", "pip", "python3", "read_only", "search", "run", "draft", "post",
     "read", "write", "edit", "bash",
+    # 占位符字面量（治理块里是"被拒绝的值"，不是代码符号）
+    "TODO", "TBD", "FIXME", "XXX",
 }
 
 # 本设计稿新引入、SDK 源码中尚不存在的符号（P0 待实现）。
@@ -690,3 +692,55 @@ def test_traceability_matrix_covers_every_rule(doc_lines: list[str]) -> None:
         assert test_group in test_groups, (
             f"规则 {rule_no} 引用了不存在的 §17 测试组『{test_group}』"
         )
+
+
+def test_failure_summary_covers_every_rule_class(doc_lines: list[str]) -> None:
+    """§12 失败语义总表必须覆盖 §6.3 的全部规则类别。
+
+    §12 是跨章汇总——若某类编译期失败没进汇总表，实施者只看汇总表会漏掉它。
+    """
+    summary = _section_by_title(doc_lines, "失败语义总表")
+    assert summary, "缺少 §12 失败语义总表"
+
+    rules = _section_by_title(doc_lines, "校验规则")
+    rule_nums = [
+        int(m.group(1))
+        for line in rules.split("\n")
+        for m in [re.match(r"^(\d+)\. ", line)]
+        if m
+    ]
+    assert rule_nums, "§6.3 未找到编号规则"
+
+    # 汇总表用区间引用（如"规则 1-13、20-27"），须覆盖全部规则号
+    covered: set[int] = set()
+    # "规则 1-13、20-27"：区间 + 顿号分隔的多个区间
+    for chunk in re.findall(r"规则 ([0-9、\-]+)", summary):
+        for part in chunk.split("、"):
+            m = re.match(r"^(\d+)-(\d+)$", part)
+            if m:
+                covered |= set(range(int(m.group(1)), int(m.group(2)) + 1))
+            elif part.isdigit():
+                covered.add(int(part))
+    # "规则 24/25"：并列单条
+    for m in re.finditer(r"规则 (\d+)/(\d+)", summary):
+        covered.add(int(m.group(1)))
+        covered.add(int(m.group(2)))
+
+    missing = sorted(set(rule_nums) - covered)
+    assert not missing, (
+        f"§12 失败语义总表未覆盖规则 {missing}——汇总表是实施者的唯一入口，不能漏"
+    )
+
+
+def test_failure_summary_points_to_single_definitions(doc_lines: list[str]) -> None:
+    """§12 汇总表的"定义处"列必须指向真实章节，且不得指向自身。"""
+    summary = _section_by_title(doc_lines, "失败语义总表")
+    sections = set()
+    for line in doc_lines:
+        m = re.match(r"^(#{2,4})\s+(\d+(?:\.\d+)*)(?:\.\s|\s|$)", line)
+        if m:
+            sections.add(m.group(2))
+
+    for m in re.finditer(r"\| §(\d+(?:\.\d+)?)(?: 步骤 \d+)? \|", summary):
+        num = m.group(1)
+        assert num in sections, f"§12 汇总表指向不存在的章节 §{num}"
