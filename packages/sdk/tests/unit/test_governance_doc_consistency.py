@@ -86,6 +86,29 @@ def _section(lines: list[str], start_pat: str, end_pat: str) -> str:
     return "\n".join(lines[start:end if end is not None else len(lines)])
 
 
+def _section_by_title(doc_lines: list[str], title_kw: str) -> str:
+    """按**标题文字**定位小节内容（而非章节编号）。
+
+    章节编号会随结构调整而变，硬编码编号会让检查在每次重构后失效。
+    这里按标题里的关键词定位，语义稳定。
+    """
+    start = end = None
+    level = None
+    for i, line in enumerate(doc_lines):
+        m = re.match(r"^(#{2,4}) (.+)$", line)
+        if not m:
+            continue
+        if start is None:
+            if title_kw in m.group(2):
+                start, level = i, len(m.group(1))
+        elif len(m.group(1)) <= level:
+            end = i
+            break
+    if start is None:
+        return ""
+    return "\n".join(doc_lines[start: end if end is not None else len(doc_lines)])
+
+
 def _governance_block(doc_text: str) -> dict:
     """取 §5.2 的治理块示例（YAML frontmatter 形态）。"""
     blocks = re.findall(r"```yaml\n(.*?)```", doc_text, re.S)
@@ -181,7 +204,9 @@ def test_json_blocks_parse(doc_text: str) -> None:
 # --------------------------------------------------------------------------
 
 def test_rule_numbering_is_contiguous(doc_lines: list[str]) -> None:
-    section = _section(doc_lines, r"^#### 5\.3\.1 ", r"^### 5\.4 ")
+    # 锚到"校验规则"整节——它包含全部子节共 25 条；
+    # 若只锚到"通用"子节，只会看到前 7 条，后续断裂查不出来。
+    section = _section_by_title(doc_lines, "校验规则")
     numbers = [
         int(m.group(1))
         for line in section.split("\n")
@@ -193,7 +218,7 @@ def test_rule_numbering_is_contiguous(doc_lines: list[str]) -> None:
 
 
 def test_implementation_plan_numbering_is_contiguous(doc_lines: list[str]) -> None:
-    section = _section(doc_lines, r"^## 12\. ", r"^## 13\. ")
+    section = _section_by_title(doc_lines, "实施计划")
     numbers = [
         int(m.group(1))
         for line in section.split("\n")
@@ -209,7 +234,7 @@ def test_signals_have_threshold_fields(doc_text: str, doc_lines: list[str]) -> N
     governance = _governance_block(doc_text)
     thresholds = set(governance.get("limits", {}).get("signal_thresholds", {}))
 
-    section = _section(doc_lines, r"^### 8\.2 ", r"^---$")
+    section = _section_by_title(doc_lines, "行为信号")
     signal_rows = re.findall(r"^\| `([a-z_]+)` \|(.+)$", section, re.M)
 
     assert signal_rows, "§8.2 未找到信号表"
@@ -232,7 +257,7 @@ def test_every_event_type_has_a_producer(doc_lines: list[str]) -> None:
 
     孤立行会让"实现了但没人引用"或"引用了但表里没有"两类漂移无法被发现。
     """
-    section = _section(doc_lines, r"^### 10\.1 ", r"^### 10\.2 ")
+    section = _section_by_title(doc_lines, "事件模型")
     table_match = re.search(
         r"事件类型与\*\*产出方\*\*.*?\n\n(.*?)\n\n", section, re.S
     )
@@ -251,11 +276,13 @@ def test_every_event_type_has_a_producer(doc_lines: list[str]) -> None:
         r"|`([a-z_]+)`[^`\n]{0,4}事件"
     )
     for sec in (
-        _section(doc_lines, r"^### 6\.5 ", r"^### 6\.6 "),
-        _section(doc_lines, r"^### 6\.6 ", r"^---$"),
-        _section(doc_lines, r"^### 7\.2 ", r"^### 7\.4 "),
-        _section(doc_lines, r"^### 8\.2 ", r"^---$"),
-        _section(doc_lines, r"^### 9\.1 ", r"^### 9\.2 "),
+        _section_by_title(doc_lines, "失败语义"),
+        _section_by_title(doc_lines, "运行期审批机制"),
+        _section_by_title(doc_lines, "条件与事实"),
+        _section_by_title(doc_lines, "游标判定"),
+        _section_by_title(doc_lines, "行为信号"),
+        _section_by_title(doc_lines, "状态与存储"),
+        _section_by_title(doc_lines, "模式开关"),
     ):
         for line in sec.split("\n"):
             if "事件" not in line:
@@ -283,7 +310,7 @@ def test_every_event_type_has_a_producer(doc_lines: list[str]) -> None:
 def test_governance_example_fields_are_validated(doc_lines: list[str]) -> None:
     """§5.2 示例的每个顶层字段，须在 §5.3 至少被提及一次（否则无校验规则）。"""
     governance = _governance_block("\n".join(doc_lines))
-    section = _section(doc_lines, r"^### 5\.3 ", r"^### 5\.4 ")
+    section = _section_by_title(doc_lines, "校验规则")
 
     for field in governance:
         assert field in section, (
@@ -295,7 +322,7 @@ def test_governance_example_fields_are_validated(doc_lines: list[str]) -> None:
 def test_step_fields_are_validated(doc_lines: list[str]) -> None:
     """§5.2 示例的每个 step 字段，须在 §5.3 至少被提及一次。"""
     governance = _governance_block("\n".join(doc_lines))
-    section = _section(doc_lines, r"^### 5\.3 ", r"^### 5\.4 ")
+    section = _section_by_title(doc_lines, "校验规则")
 
     step_fields: set[str] = set()
     for step in governance.get("workflow", {}).get("steps", []):
@@ -313,12 +340,12 @@ def test_authoring_section_covers_all_nine_steps(doc_lines: list[str]) -> None:
     设计稿若只给示例与校验规则（而不给"怎么写出来"），开发同事只能照抄
     示例猜——这是设计稿与可实施规格之间的缺口。
     """
-    section = _section(doc_lines, r"^### 5\.5 ", r"^---$")
+    section = _section_by_title(doc_lines, "如何准备治理块")
     assert section, "缺少 §5.5「如何准备治理块」"
 
     # 九步推导路径：①..⑨ 必须在**推导表**中各出现且不重复
     # （只数推导表的行首列——样例表（§5.5.5）里也有 ①..⑨，不能混进来）
-    derivation = _section(doc_lines, r"^#### 5\.5\.1 ", r"^#### 5\.5\.2 ")
+    derivation = _section_by_title(doc_lines, "推导路径")
     step_rows = re.findall(r"^\|\s*([①②③④⑤⑥⑦⑧⑨])\s*\|", derivation, re.M)
     assert sorted(step_rows) == sorted("①②③④⑤⑥⑦⑧⑨"), (
         f"§5.5.1 推导路径步骤不全或重复：{step_rows}"
@@ -340,7 +367,7 @@ def test_authoring_section_covers_all_nine_steps(doc_lines: list[str]) -> None:
 
 def test_cli_commands_are_in_implementation_plan(doc_lines: list[str]) -> None:
     """§5.5 承诺的 CLI 命令必须在 §12 实施计划中有对应工作项。"""
-    plan = _section(doc_lines, r"^## 12\. ", r"^## 13\. ")
+    plan = _section_by_title(doc_lines, "实施计划")
     for cmd in ("harness governance init", "harness governance check"):
         assert cmd in plan, f"§12 实施计划缺少 `{cmd}` 工作项"
 
@@ -356,7 +383,7 @@ def test_authoring_sample_matches_governance_example(doc_lines: list[str]) -> No
     example_steps = [s["id"] for s in governance.get("workflow", {}).get("steps", [])]
     example_tools = [t["name"] for t in governance.get("tools", [])]
 
-    sample = _section(doc_lines, r"^#### 5\.5\.5 ", r"^---$")
+    sample = _section_by_title(doc_lines, "完整样例")
     assert sample, "缺少 §5.5.5 完整样例"
 
     # 推导表的**结论列**（最后一列）须逐项点名 §5.2 的每个 step / tool。
@@ -385,7 +412,7 @@ def test_authoring_sample_matches_governance_example(doc_lines: list[str]) -> No
 
 def test_rule_count_claims_match_actual(doc_text: str, doc_lines: list[str]) -> None:
     """文中"§5.3 的 N 条"这类计数声明，须与实际规则条数一致。"""
-    section = _section(doc_lines, r"^### 5\.3 ", r"^### 5\.4 ")
+    section = _section_by_title(doc_lines, "校验规则")
     actual = len(
         [
             line
@@ -393,13 +420,13 @@ def test_rule_count_claims_match_actual(doc_text: str, doc_lines: list[str]) -> 
             if re.match(r"^\d+\. ", line)
         ]
     )
-    for m in re.finditer(r"§5\.3 的 (\d+) 条", doc_text):
+    for m in re.finditer(r"§\d+(?:\.\d+)? 的 (\d+) 条", doc_text):
         assert int(m.group(1)) == actual, (
-            f"文中声明 §5.3 有 {m.group(1)} 条规则，实际 {actual} 条"
+            f"文中声明校验规则有 {m.group(1)} 条，实际 {actual} 条"
         )
-    for m in re.finditer(r"§5\.3 全部 (\d+) 条", doc_text):
+    for m in re.finditer(r"§\d+(?:\.\d+)? 全部 (\d+) 条", doc_text):
         assert int(m.group(1)) == actual, (
-            f"文中声明 §5.3 全部 {m.group(1)} 条，实际 {actual} 条"
+            f"文中声明校验规则全部 {m.group(1)} 条，实际 {actual} 条"
         )
 
 
@@ -548,7 +575,7 @@ def test_require_strict_env_var_behaviour(doc_lines: list[str]) -> None:
     assert "raise RuntimeError" in harness_src, "实现已变，文档描述须同步更新"
 
     text = "\n".join(doc_lines)
-    section = _section(doc_lines, r"^### 4\.3 ", r"^### 4\.4 ")
+    section = _section_by_title(doc_lines, "模式开关")
     assert re.search(
         r"断言", section
     ), "§4.3 未把 `HARNESS_REQUIRE_STRICT=1` 描述为断言（fail-fast）"
