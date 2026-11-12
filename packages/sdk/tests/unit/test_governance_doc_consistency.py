@@ -446,7 +446,7 @@ def test_authoring_sample_matches_governance_example(doc_lines: list[str]) -> No
 
 
 def test_rule_count_claims_match_actual(doc_text: str, doc_lines: list[str]) -> None:
-    """文中"§5.3 的 N 条"这类计数声明，须与实际规则条数一致。"""
+    """文中"§N.M 的 K 条"这类计数声明，须与实际规则条数一致。"""
     section = _section_by_title(doc_lines, "校验规则")
     actual = len(
         [
@@ -623,4 +623,70 @@ def test_require_strict_env_var_behaviour(doc_lines: list[str]) -> None:
             f"L{i}: 文档把 `HARNESS_REQUIRE_STRICT=1` 描述为强制开启——"
             f"实现是 fail-fast 断言（strict 未开则启动失败），"
             f"照此配置会让进程起不来"
+        )
+
+
+def test_traceability_matrix_covers_every_rule(doc_lines: list[str]) -> None:
+    """§16.1 可追溯性矩阵必须与 §6.3 的规则**逐条一一对应**。
+
+    没有这张矩阵时，"§6.3 全部 N 条都被测到"只是一句不可验证的声称。
+    矩阵存在后，可机器判定：
+      - 每条规则在矩阵中恰好出现一次（不漏、不少、不重复）
+      - 矩阵引用的 §15 实施项号与 §17 测试组名都真实存在
+    """
+    matrix = _section_by_title(doc_lines, "可追溯性矩阵")
+    assert matrix, "缺少 §16.1 可追溯性矩阵"
+
+    # §6.3 的实际规则号
+    rules_sec = _section_by_title(doc_lines, "校验规则")
+    rule_nums = [
+        int(m.group(1))
+        for line in rules_sec.split("\n")
+        for m in [re.match(r"^(\d+)\. ", line)]
+        if m
+    ]
+    assert rule_nums, "§6.3 未找到编号规则"
+
+    # 矩阵**主表**：位于"校验归属与测试组"小节之下、第一列为纯数字的行。
+    # 后续的"实施项承担的规则"表首列也是数字，必须排除——按小节切片。
+    main_part = matrix.split("#### §15 实施项承担的规则")[0]
+    matrix_rows = [
+        line for line in main_part.split("\n")
+        if re.match(r"^\|\s*\d+\s*\|", line)
+    ]
+    assert matrix_rows, "可追溯性矩阵未找到规则行"
+
+    mapped = []
+    for line in matrix_rows:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        mapped.append(int(cells[0]))
+
+    assert sorted(mapped) == rule_nums, (
+        f"矩阵规则号与 §6.3 不一致：缺 {sorted(set(rule_nums) - set(mapped))}，"
+        f"多 {sorted(set(mapped) - set(rule_nums))}"
+    )
+    assert len(mapped) == len(set(mapped)), "矩阵中规则号重复"
+
+    # 矩阵引用的 §15 实施项号必须存在
+    plan = _section_by_title(doc_lines, "实施计划")
+    plan_nums = {
+        int(m.group(1))
+        for line in plan.split("\n")
+        for m in [re.match(r"^(\d+)\. ", line)]
+        if m
+    }
+    assert plan_nums, "§15 未找到编号实施项"
+
+    test_sec = _section_by_title(doc_lines, "测试策略")
+    test_groups = set(re.findall(r"\*\*(.+?)\*\*", test_sec))
+
+    for line in matrix_rows:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        rule_no, impl_field, test_group = cells[0], cells[3], cells[4]
+        for n in re.findall(r"\d+", impl_field):
+            assert int(n) in plan_nums, (
+                f"规则 {rule_no} 引用了不存在的 §15 实施项 {n}"
+            )
+        assert test_group in test_groups, (
+            f"规则 {rule_no} 引用了不存在的 §17 测试组『{test_group}』"
         )
