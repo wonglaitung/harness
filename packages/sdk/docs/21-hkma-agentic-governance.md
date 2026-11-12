@@ -157,11 +157,33 @@ flowchart LR
 
 ### 4.3 模式开关
 
-| 模式 | 行为 |
-|---|---|
-| `strict=False`（默认） | 治理不激活，行为与现状完全一致 |
-| `strict=True` | 治理全部生效 |
-| `HARNESS_REQUIRE_STRICT=1` | 环境变量强制开启（已有机制） |
+治理有两个开关，职责不同，**不要混用**：
+
+| 开关 | 载体 | 作用 | 单独设置的效果 |
+|---|---|---|---|
+| **启用开关** | `HarnessConfig.strict=True` | **打开**治理 | 治理生效 |
+| **断言开关** | `HARNESS_REQUIRE_STRICT=1`（环境变量） | **断言 strict 必须已开** | strict 未开 → **启动即失败**（`RuntimeError`） |
+
+> ⚠️ `HARNESS_REQUIRE_STRICT=1` **不是启用器**。它只是 fail-fast 断言：设了它但 `strict=False`，SDK 在构造时直接抛错拒绝启动，防止有人把已声明为合规场景的部署悄悄降级。**单独设这个环境变量 ≠ 开启治理**，恰恰相反。
+
+完整组合：
+
+| `strict` | `HARNESS_REQUIRE_STRICT` | 结果 |
+|---|---|---|
+| `False`（默认） | 未设 | 治理不激活，行为与现状完全一致 |
+| `True` | 未设 | 治理全部生效 |
+| `False` | `=1` | ⚠️ **启动失败**（`RuntimeError`） |
+| `True` | `=1` | 治理生效（断言通过） |
+
+**如何打开 `strict`**（P0 需补齐，见 §12）：
+
+| 场景 | 方式 | 状态 |
+|---|---|---|
+| SDK 代码 | `AgentHarness(config=HarnessConfig(strict=True, ...))` | 已有 |
+| SDK 环境变量 | `HARNESS_STRICT=1` → `HarnessConfig.from_env()` 读取 | **需新增**（与既有 `HARNESS_MODEL` 等风格一致） |
+| 桌面客户端 | 客户端设置项新增 `strict` 开关 → 传给 `HarnessConfig` | **需新增**（客户端当前恒为 `strict=False`） |
+
+> **部署前提缺口**：桌面客户端是本方案的主部署形态（§9.4 的一整节客户端要求），但客户端今天既不读 `strict`、也没有该设置项——**治理实现完成后，客户端仍然开不起来**。§12 将其列为 P0-1 工作项。
 
 治理块在 strict 下为**硬门槛**：缺失或校验不过 → 拒绝注册与执行。
 
@@ -855,6 +877,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 2. UI 停止按钮调用 `control.suspend(reason, actor)`；紧急情况可先 `interrupt()`。
 3. 退出时写 **run 级**标记 `last_status=client_shutdown`（§9.1），不改 agent 级状态。
 4. 客户端技能编辑器保存技能文件时**必须保留治理块**（否则用户在 UI 改一次技能即抹掉授权书）——见 §12 实施计划。
+5. **设置项新增 `strict` 开关**并传给 `HarnessConfig(strict=...)`（§4.3）——客户端今天恒为 `strict=False`，没有这个入口治理就开不起来。
 
 ### 9.5 撤销与回退
 
@@ -987,34 +1010,35 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 2. **`PolicySnapshot` 编译**：解析治理块 → 白名单 / 约束 / 步骤链 / 限额 / 审批项 / material；含 §5.3 的 22 条校验与 §5.4 的多块合成。
 3. **运行上下文**（§4.4）：`run_id` 生成、`PolicySnapshot` 按治理身份绑定、步骤游标与计数的 per-run 生命周期、随 `ToolContext.metadata` 送达执行路径。
 4. **治理块 linter**：结构 / 表达式 / 治理三类规则（§5.3、§14）。
+5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
 
-**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言 → 编译期拒绝；多块合成的交集/并集/取严规则可验证。
+**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言 → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错。
 
 ### P0-2　执行网关与业务约束
 
-5. `Tool.capability` / `Tool.constraints` / `Tool.idempotent` 与注册期校验（§6.3、§6.4）。
-6. `ToolExecutor` 内统一校验流水线（11 步，§6.2），含沙箱与文件校验从 `ToolGateHook` 迁入、side-effect 闸门合并。
-7. 白名单、路径与主机范围接入。
-8. **运行期审批机制**（§6.6）：审批请求落盘、参数哈希绑定、等待与超时、CLI `approve`/`reject`、审批记录进事件流。
+6. `Tool.capability` / `Tool.constraints` / `Tool.idempotent` 与注册期校验（§6.3、§6.4）。
+7. `ToolExecutor` 内统一校验流水线（11 步，§6.2），含沙箱与文件校验从 `ToolGateHook` 迁入、side-effect 闸门合并。
+8. 白名单、路径与主机范围接入。
+9. **运行期审批机制**（§6.6）：审批请求落盘、参数哈希绑定、等待与超时、CLI `approve`/`reject`、审批记录进事件流。
 
 **验收**：未登记工具、未声明 capability、越界参数、路径越界一律拒绝；Hook 改写参数后仍以终态参数校验；审批未落盘 → 拒绝（fail-closed）；审批超时 → 拒绝并记录。
 
 ### P0-3　步骤链、条件分支与限额信号
 
-9. 步骤游标与状态机（§7.3）：`success` / `skipped` / `failure` / `cancelled` 四态、跳步拒绝、重入按 `idempotent` 分流。
-10. 条件求值（§7.2）：事实抽取、产出缺失判失败、`guard_unresolved` 信号。
-11. 治理限额（run 总次数、速率、token）与信号计数、升级动作（§8）。
-12. `LoopState` 新增 `INCOMPLETE`（末端 step 为 `skipped` 时 run 结论非成功）。
+10. 步骤游标与状态机（§7.3）：`success` / `skipped` / `failure` / `cancelled` 四态、跳步拒绝、重入按 `idempotent` 分流。
+11. 条件求值（§7.2）：事实抽取、产出缺失判失败、`guard_unresolved` 信号。
+12. 治理限额（run 总次数、速率、token）与信号计数、升级动作（§8）。
+13. `LoopState` 新增 `INCOMPLETE`（末端 step 为 `skipped` 时 run 结论非成功，§7.3）。
 
 **验收**：跳过 AML 直接出报告被拒；AML 未命中时人工复核被跳过且报告正常产出；AML 失败时后续不可达；末端 step 被跳过时 run 为 `INCOMPLETE`；连续拒绝或跳步达阈值自动 suspend。
 
 ### P0-4　Kill Switch、事件日志与客户端接入
 
-13. 控制文件读写（原子替换）、CLI `suspend/resume/status`、四处检查点接入（**不走 Hook**，§9.3）。
-14. 审批 CLI 与客户端 UI 审批入口（复用 CLI 判定逻辑）。
-15. 事件日志（`~/.harness/audit/governance/<日期>/<pid>.jsonl`，同步 append + flush，`run_id` 贯穿、脱敏、判定/结果两段、OTel 字段）。
-16. 桌面客户端：启动检查（读失败按 `suspended`）、UI 停止按钮、run 级退出标记、技能编辑器保留治理块。
-17. **部署形态检测与告警**（§9.8）：strict 下检测非单实例/服务端部署并告警。
+14. 控制文件读写（原子替换）、CLI `suspend/resume/status`、四处检查点接入（**不走 Hook**，§9.3）。
+15. 审批 CLI 与客户端 UI 审批入口（复用 CLI 判定逻辑）。
+16. 事件日志（`~/.harness/audit/governance/<日期>/<pid>.jsonl`，同步 append + flush，`run_id` 贯穿、脱敏、判定/结果两段、OTel 字段）。
+17. 桌面客户端：启动检查（读失败按 `suspended`）、UI 停止按钮、run 级退出标记、技能编辑器保留治理块、**strict 设置项**。
+18. **部署形态检测与告警**（§9.8）：strict 下检测非单实例/服务端部署并告警。
 
 **验收**：CLI 暂停后客户端在下一个检查点停止；一次 run 可按 `run_id` 还原轨迹（含每 step 的 outcome/conclusion）；控制文件损坏 → 按 `suspended` 处理而非放行。
 
@@ -1146,6 +1170,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | **客户端技能编辑器抹掉治理块** | `Skill.to_file` 回写治理块 + 编辑器保留治理块（§12 实施计划） |
 | **治理身份随技能命中变化**（注入可改授权集） | 治理身份由部署方指定，不随运行时匹配变化（§5.4.1） |
 | **strict 存量部署升级即失败** | 列为迁移项，升级说明中明示（§12） |
+| **误设 `HARNESS_REQUIRE_STRICT=1` 导致启动失败** | 该环境变量是断言非启用器，语义已在 §4.3 写清；运维文档说明「先开 strict 再设断言」 |
 | **控制文件损坏 → 熔断静默失效** | 读失败按 `suspended` 处理（fail-closed，§9.1） |
 | **多实例部署下治理被误用为合规结论** | strict 下检测运行形态并告警（§9.8、§12） |
 
@@ -1192,6 +1217,8 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 | 治理对象 | 技能（`skills.md` + 工具集合）；每技能一份治理块 |
 | 治理声明位置 | 只放 `skills.md` frontmatter，不引入 `governance.yaml` |
 | 治理声明准入 | strict 下硬门槛；strict=False 行为不变；strict 语义扩展为**破坏性变更**（§12 迁移项） |
+| 模式开关 | **双开关**：`HarnessConfig.strict=True` 负责**开启**；`HARNESS_REQUIRE_STRICT=1` 是 fail-fast **断言**（strict 未开则启动失败），**不是启用器**（§4.3） |
+| strict 开启路径 | SDK 代码 / `HARNESS_STRICT=1`（新增）/ 客户端设置项（新增）——桌面客户端今天恒为 `strict=False`，需补入口（§4.3、§12） |
 | 治理身份 | 由部署方指定，**不随运行时技能命中变化**（§5.4.1） |
 | 多治理块合成 | 白名单取交集、约束取并集、限额取最严、审批取并集、material 取并集（§5.4.2） |
 | 签发语义 | 治理块以 PR 合并为签发动作，`approved_by` 记录（§5.2） |
