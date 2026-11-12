@@ -744,3 +744,34 @@ def test_failure_summary_points_to_single_definitions(doc_lines: list[str]) -> N
     for m in re.finditer(r"\| §(\d+(?:\.\d+)?)(?: 步骤 \d+)? \|", summary):
         num = m.group(1)
         assert num in sections, f"§12 汇总表指向不存在的章节 §{num}"
+
+
+def test_skill_tools_relation_is_defined(doc_lines: list[str]) -> None:
+    """技能 `tools.allowed` 与治理块 `tools` 的关系必须在稿内写死。
+
+    两份清单并存却不定义关系，实施时会出现"不一致听谁的"的灰色地带——
+    这是真实的语义空洞，必须有明文规则 + 校验规则 + 矩阵条目。
+    """
+    relation = _section_by_title(doc_lines, "治理块 `tools` 与技能")
+    assert relation, "缺少『治理块 tools 与技能 tools.allowed 的关系』定义"
+
+    # 关系必须写明方向（子集）与失败行为（拒绝编译）
+    assert "子集" in relation or "⊆" in relation, "未写明两者的包含方向"
+    assert "拒绝编译" in relation, "未写明违反时的行为"
+
+    # 必须有对应的校验规则
+    rules = _section_by_title(doc_lines, "校验规则")
+    assert re.search(r"tools\.allowed", rules), "§6.3 校验规则未涉及技能 tools.allowed"
+
+
+def test_authoring_cli_section_is_unambiguous(doc_lines: list[str]) -> None:
+    """§13.4 必须明确 CLI 不调用 LLM——避免读者误解为"用工具生成治理块"。
+
+    全文"工具"默认指 Agent 可调用的工具（core_banking_api 等），
+    若不澄清，读者会把"工具化"误读为 Agent 工具参与生成。
+    """
+    sec = _section_by_title(doc_lines, "开发侧 CLI")
+    assert sec, "§13.4 标题未消歧（应含『开发侧 CLI』以区别于 Agent 工具）"
+    assert "不调用 LLM" in sec or "确定性代码" in sec, (
+        "§13.4 未声明命令不调用 LLM——读者可能误解为用 Agent 工具生成治理块"
+    )
