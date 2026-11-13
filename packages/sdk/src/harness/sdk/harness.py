@@ -5,6 +5,7 @@ This is the main interface users interact with to create and run agents.
 """
 
 import logging
+import os
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ from harness.skills import (
 )
 from harness.tools.base import Tool
 from harness.tools.executor import ToolExecutor
+from harness.tools.permissions import PermissionSet
 from harness.tools.registry import ToolRegistry
 from harness.types import (
     CostConfig,
@@ -226,8 +228,10 @@ class AgentHarness:
         # Agent 治理（设计稿 §4.3 / §6.4）：strict 下治理块是硬门槛。
         # **惰性装配**：工具可在构造之后注册（register_tool），构造期注册表尚未完整，
         # 规则 1（工具须在注册表中）无法判定。首次使用时编译一次并缓存。
-        self._governance = None
-        self._governance_setup = None
+        self._governance: Any = None
+        self._governance_setup: Any = None
+        # 治理网关（策略级，跨 run 复用）；per-run 状态在 RunContext 里。
+        self._governance_gateway: Any = None
 
         # F: observability — lightweight counters for governance outcomes so the
         # interception rate, failure distribution and review backlog are queryable.
@@ -548,7 +552,7 @@ class AgentHarness:
             return self.config.governance_enabled
         return self.config.strict
 
-    def _build_governance(self):
+    def _build_governance(self) -> Any:
         """装配 Agent 治理策略（设计稿 §4.3 / §6.4）。
 
         strict=False → 完全不触碰治理路径（零迁移）。
@@ -581,6 +585,12 @@ class AgentHarness:
                 "治理装配失败（strict 模式下治理块是硬门槛）：\n  - "
                 + "\n  - ".join(setup.errors)
             )
+        conflicts = self._check_declaration_conflicts(setup.policy)
+        if conflicts:
+            raise RuntimeError(
+                "治理装配失败（strict 模式下治理块是硬门槛）：\n  - "
+                + "\n  - ".join(conflicts)
+            )
         logger.info(
             "[AgentHarness] 治理已装配：agent_id=%s tools=%d steps=%d material=%s",
             setup.policy.agent_id,
@@ -590,7 +600,7 @@ class AgentHarness:
         )
         return setup
 
-    def governance_policy(self):
+    def governance_policy(self) -> Any:
         """取得治理策略（惰性编译并缓存）。
 
         Raises:
@@ -600,10 +610,86 @@ class AgentHarness:
             self._governance = self._build_governance()
         return self._governance.policy
 
+    def _invalidate_governance(self) -> None:
+        """丢弃已编译的策略与网关（注册表变化后强制重新装配）。
+
+        同时把执行路径上的旧网关摘掉——否则会继续用**过期策略**做判定
+        （新注册的工具永远不可达，或已删除的工具仍然可调）。
+        """
+        self._governance = None
+        self._governance_setup = None
+        if self._governance_gateway is not None:
+            self._governance_gateway = None
+            self._loop.governance_gateway = None
+            self._loop.governance_context = None
+            self._tool_executor.governance = None
+
+    def _check_declaration_conflicts(self, policy: Any) -> list[str]:
+        """核对注册表里工具的代码声明与治理块声明（§7.3 / §6.4.2）。
+
+        两侧都声明了却不一致 → 登记有误，**编译期拒绝**（不能猜哪个对）。
+        """
+        from harness.governance.declarations import check_declaration_conflicts
+
+        problems: list[str] = []
+        for tool in self._tool_registry.get_all():
+            spec = policy.tool_by_name(tool.name)
+            if spec is None:
+                continue
+            for conflict in check_declaration_conflicts(tool, spec):
+                problems.append(f"治理声明冲突：{conflict}")
+        return problems
+
+    def governance_gateway(self) -> Any:
+        """取得治理网关（惰性装配并缓存）。
+
+        网关是**策略级**对象：白名单 / 约束 / 限额等来自编译后的策略，
+        per-run 状态（步骤游标、计数）在 `RunContext` 里，随
+        `ToolContext.metadata` 送达执行路径（§4.4）。
+
+        装配完成后注入两处：
+        - `AgentLoop.governance_gateway`：每个 run 重建运行上下文
+        - `ToolExecutor.governance`：所有工具调用的**单入口**判定（§7.1）
+        """
+        if self._governance_gateway is not None:
+            return self._governance_gateway
+
+        from harness.governance.approval import ApprovalManager
+        from harness.governance.control import ControlPlane
+        from harness.governance.events import GovernanceEventLog
+        from harness.governance.gateway import GovernanceGateway
+        from harness.security.sandbox import LightweightSandbox
+        from harness.security.validation import FileInputValidator
+
+        policy = self.governance_policy()
+        if policy is None:
+            return None
+
+        event_log = GovernanceEventLog()
+        approval = ApprovalManager(
+            timeout_seconds=policy.limits.approval_timeout_seconds,
+        )
+        control = ControlPlane()
+        gateway = GovernanceGateway(
+            policy,
+            approval=approval,
+            permissions=PermissionSet.sandbox(
+                self.config.sandbox_workspace or os.getcwd()
+            ),
+            control=control,
+            event_log=event_log,
+            # 沙箱与文件校验从 `ToolGateHook` 迁入流水线（§7.1 / §7.2 第 6 步）
+            sandbox=LightweightSandbox(),
+            file_validator=FileInputValidator(),
+            working_directory=self.config.sandbox_workspace or os.getcwd(),
+        )
+        self._governance_gateway = gateway
+        self._loop.governance_gateway = gateway
+        self._tool_executor.governance = gateway
+        return gateway
+
     def _require_strict_if_env(self) -> None:
         """Fail fast when ops require governance but it is off."""
-        import os
-
         if os.getenv("HARNESS_REQUIRE_STRICT") == "1" and not self.config.strict:
             raise RuntimeError(
                 "HARNESS_REQUIRE_STRICT=1 but HarnessConfig.strict=False. "
@@ -1164,6 +1250,12 @@ class AgentHarness:
         # Update the loop's context builder reference
         self._loop.context = self._context_builder
 
+        # 治理：strict 下必须在**执行前**装配网关（fail-closed）。
+        # 惰性装配在首次 run 时完成——此时工具注册表已完整（register_tool 可
+        # 在构造后调用），规则 1（工具须在注册表中）才可判定。
+        if self._governance_enabled():
+            self.governance_gateway()
+
         # Get or create session
         session = self._session_manager.get_or_create(session_id)
 
@@ -1274,10 +1366,10 @@ class AgentHarness:
             for t in all_tools
         ]
 
-        async for chunk in self._loop.stream_run(
+        async for chunk in self._stream_with_governance(
             prompt=prompt,
             session=session,
-            tools=tool_defs if tool_defs else None,
+            tool_defs=tool_defs if tool_defs else None,
             on_chunk=on_chunk,
             on_progress=progress_callback,
         ):
@@ -1293,6 +1385,35 @@ class AgentHarness:
                 result.delivered_content = verdict.delivered_content
                 result.reconciliation_report = verdict.reconciliation_report
                 result.final_response = verdict.delivered_content
+
+    async def _stream_with_governance(
+        self,
+        *,
+        prompt,
+        session,
+        tool_defs,
+        on_chunk,
+        on_progress,
+    ):
+        """流式 run 的治理包装：per-run 上下文 + run 事件（§4.4）。
+
+        `stream_run` 是生成器，无法在其内部用 try/finally 收尾，
+        因此在调用侧包一层——保证上下文创建与 `run_end` 事件成对出现。
+        """
+        if self._governance_enabled():
+            self.governance_gateway()
+        self._loop._begin_governance_run()
+        try:
+            async for chunk in self._loop.stream_run(
+                prompt=prompt,
+                session=session,
+                tools=tool_defs,
+                on_chunk=on_chunk,
+                on_progress=on_progress,
+            ):
+                yield chunk
+        finally:
+            self._loop._end_governance_run()
 
     def run_sync(
         self,
@@ -1495,11 +1616,27 @@ class AgentHarness:
         """
         Register a tool with the agent.
 
+        治理开启时做**注册期校验**（设计稿 §7.3）：工具必须声明
+        `capability` 与 `idempotent`——缺声明即拒绝注册，不留 `unknown`
+        后门。MCP 工具在治理块里声明，不走这条路径。
+
         Args:
             tool: Tool instance to register
             category: Category for organization
         """
+        if self._governance_enabled():
+            from harness.governance.declarations import validate_tool_declaration
+
+            problems = validate_tool_declaration(tool)
+            if problems:
+                raise ValueError(
+                    "工具治理声明不完整（治理开启时拒绝注册）："
+                    + "；".join(problems)
+                )
         self._tool_registry.register(tool, category)
+        # 注册表变了 → 已编译的策略可能过期（规则 1 依赖注册表），
+        # 下次 run 重新装配。
+        self._invalidate_governance()
 
     def tool(
         self,

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from harness.governance.schema import (
     GovernanceBlock,
@@ -39,6 +40,14 @@ class PolicySnapshot:
     allowed_paths: tuple[str, ...] = ()
     allowed_hosts: tuple[str, ...] = ()
     approval_required_for: tuple[str, ...] = ()
+    #: 多份治理块时**各自的步骤链**（§6.4.2：各自独立，不合并）。
+    #: 为空时回退到单条 `workflow`。
+    workflows: tuple[WorkflowSpec, ...] = ()
+
+    @property
+    def all_workflows(self) -> tuple[WorkflowSpec, ...]:
+        """本次 run 需要执行的全部步骤链。"""
+        return self.workflows or (self.workflow,)
 
     @property
     def tool_names(self) -> set[str]:
@@ -98,6 +107,83 @@ def _merge_limits(blocks: list[GovernanceBlock]) -> Limits:
     )
 
 
+def _merge_constraints(specs: list[ToolSpec]) -> dict[str, Any]:
+    """业务参数约束取并集（§6.4.2：都生效）。
+
+    同一字段被多份治理块同时声明时**取最严**：
+    - `numeric_ranges`：区间取交集（低界取大、高界取小）
+    - `allowed_values`：取交集（更小的允许集）
+    - `max_amount` / `min_amount`：金额上限取小、下限取大
+    - `max_calls_per_run`：取小
+    其余字段（列表型）取并集。
+    """
+    merged: dict[str, Any] = {}
+    required: list[str] = []
+    deny_paths: list[str] = []
+    ranges: dict[str, tuple[float, float]] = {}
+    allowed_values: dict[str, list[Any]] = {}
+
+    for spec in specs:
+        constraints = spec.constraints or {}
+        for name in constraints.get("required_fields", []) or []:
+            if name not in required:
+                required.append(name)
+        for name in constraints.get("deny_paths", []) or []:
+            if name not in deny_paths:
+                deny_paths.append(name)
+        for name, bounds in (constraints.get("numeric_ranges") or {}).items():
+            low, high = float(bounds[0]), float(bounds[1])
+            current_range = ranges.get(name)
+            if current_range is None:
+                ranges[name] = (low, high)
+            else:
+                ranges[name] = (
+                    max(current_range[0], low),
+                    min(current_range[1], high),
+                )
+        for name, values in (constraints.get("allowed_values") or {}).items():
+            current_values = allowed_values.get(name)
+            allowed_values[name] = (
+                list(values)
+                if current_values is None
+                else [v for v in current_values if v in values]
+            )
+
+    if required:
+        merged["required_fields"] = required
+    if deny_paths:
+        merged["deny_paths"] = deny_paths
+    if ranges:
+        merged["numeric_ranges"] = {k: list(v) for k, v in ranges.items()}
+    if allowed_values:
+        merged["allowed_values"] = allowed_values
+
+    # 金额与次数上限：取最严
+    for spec in specs:
+        constraints = spec.constraints or {}
+        for key, reducer in (
+            ("max_amount", min),
+            ("min_amount", max),
+            ("max_calls_per_run", min),
+        ):
+            value = constraints.get(key)
+            if value is None:
+                continue
+            current = merged.get(key)
+            merged[key] = value if current is None else reducer(current, value)
+    amount_field = next(
+        (
+            (spec.constraints or {}).get("amount_field")
+            for spec in specs
+            if (spec.constraints or {}).get("amount_field")
+        ),
+        None,
+    )
+    if amount_field:
+        merged["amount_field"] = amount_field
+    return merged
+
+
 def _merge_tools(blocks: list[GovernanceBlock]) -> tuple[ToolSpec, ...]:
     """工具白名单取交集；capability 冲突 → 报错。"""
     per_block = [b.tool_names for b in blocks]
@@ -121,7 +207,7 @@ def _merge_tools(blocks: list[GovernanceBlock]) -> tuple[ToolSpec, ...]:
                 capability=base.capability,
                 idempotent=all(s.idempotent for s in specs),
                 outputs=base.outputs,
-                constraints={},
+                constraints=_merge_constraints(specs),
             )
         )
     return tuple(merged)
@@ -143,13 +229,15 @@ def compile_policy(blocks: list[GovernanceBlock]) -> PolicySnapshot:
         )
 
     first = blocks[0]
+    workflows = tuple(b.workflow for b in blocks if b.workflow.steps)
     return PolicySnapshot(
         agent_id=first.agent_id,
         version=first.version,
         tools=_merge_tools(blocks),
         limits=_merge_limits(blocks),
-        # 步骤链各自独立，不合并（设计稿 §6.4.2）
-        workflow=first.workflow,
+        # 步骤链各自独立，不合并（设计稿 §6.4.2）：每份治理块一条链
+        workflow=workflows[0] if workflows else first.workflow,
+        workflows=workflows,
         material=any(b.material for b in blocks),
         allowed_paths=tuple(
             sorted({p for b in blocks for p in b.allowed_paths})

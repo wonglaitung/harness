@@ -45,6 +45,8 @@ def _get_windows_shell() -> tuple[str, list[str]]:
 
 class ReadTool(Tool):
     """Read file contents."""
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -136,6 +138,11 @@ class ReadTool(Tool):
 
 class WriteTool(Tool):
     """Write content to a file."""
+    capability = "write"
+    idempotent = False
+    constraints = {
+        "deny_paths": ["/etc", "~/.ssh", "**/.git/**", "~/.aws"],
+    }
 
     @property
     def name(self) -> str:
@@ -222,6 +229,11 @@ class WriteTool(Tool):
 
 class EditTool(Tool):
     """Edit a file by replacing text."""
+    capability = "write"
+    idempotent = False
+    constraints = {
+        "deny_paths": ["/etc", "~/.ssh", "**/.git/**", "~/.aws"],
+    }
 
     @property
     def name(self) -> str:
@@ -325,6 +337,8 @@ class EditTool(Tool):
 
 class GlobTool(Tool):
     """Find files matching a pattern."""
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -396,6 +410,8 @@ class GlobTool(Tool):
 
 class GrepTool(Tool):
     """Search for text in files."""
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -476,6 +492,8 @@ class GrepTool(Tool):
 
 class BashTool(Tool):
     """Execute shell commands."""
+    capability = "destructive"
+    idempotent = False
 
     # Blocked commands for security
     BLOCKED_COMMANDS = {
@@ -662,6 +680,8 @@ class BashTool(Tool):
 
 class WebSearchTool(Tool):
     """Search the web for information."""
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -798,6 +818,8 @@ class WebSearchTool(Tool):
 
 class WebFetchTool(Tool):
     """Fetch and extract content from a URL."""
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -942,6 +964,8 @@ class WebToMarkdownTool(Tool):
     - Handles tables, lists, headings, links, images
     - Removes ads, navigation, footers
     """
+    capability = "read"
+    idempotent = True
 
     @property
     def name(self) -> str:
@@ -1367,6 +1391,11 @@ class UpdateCoreMemoryTool(Tool):
             tools=[UpdateCoreMemoryTool()],
         )
     """
+    capability = "write"
+    idempotent = False
+    constraints = {
+        "deny_paths": ["/etc", "~/.ssh", "**/.git/**", "~/.aws"],
+    }
 
     @property
     def name(self) -> str:

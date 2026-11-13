@@ -40,7 +40,19 @@ class Tool(ABC):
     1. Define its name, description, and input schema
     2. Implement the execute method
     3. Optionally implement validation
+
+    治理声明（设计稿 §6.3 / §6.4）：`capability` 与 `idempotent` 是治理块的
+    必备字段——**缺声明即拒绝注册**（不保留 `unknown` 后门）。但基类不能强制
+    子类实现（否则所有既有工具都要改），因此这里给"未声明"哨兵，由注册期
+    校验（`harness.governance.gateway`）在 strict 下拒绝。
     """
+
+    #: 能力分级：read / write / payment / destructive。未声明时为 None。
+    capability: str | None = None
+    #: 重复调用是否不产生额外业务效果。未声明时为 None。
+    idempotent: bool | None = None
+    #: 业务参数约束（§6.4）。自研工具在代码里声明；MCP 工具在治理块声明。
+    constraints: dict[str, Any] | None = None
 
     @property
     @abstractmethod

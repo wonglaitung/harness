@@ -146,6 +146,13 @@ class AgentLoop:
 
         # Optional deterministic gate for side-effect tool pre-check (governance).
         self.gate = None
+        # Agent 治理（设计稿 §7.2）：strict 模式下由 AgentHarness 注入。
+        # governance_gateway: 11 步判定网关（策略级，可跨 run 复用）；
+        # governance_context: 本次 run 的运行上下文（run_id / 步骤游标 / 计数），
+        # 随 ToolContext.metadata 送达执行路径（§4.4）——**per-run**，故每次
+        # run 重建。
+        self.governance_gateway: Any = None
+        self.governance_context: Any = None
 
         self.state = LoopState.IDLE
         self._interrupt_flag = False
@@ -304,10 +311,49 @@ class AgentLoop:
         Returns:
             LoopResult: Final result
         """
-        # Wrap with OpenTelemetry tracing if available
-        if is_tracing():
-            return await self._run_with_tracing(prompt, session, tools, on_chunk, on_progress)
-        return await self._run_impl(prompt, session, tools, on_chunk, on_progress)
+        # 治理：每个 run 重建运行上下文（§4.4 的 per-run 生命周期）
+        self._begin_governance_run()
+        try:
+            # Wrap with OpenTelemetry tracing if available
+            if is_tracing():
+                return await self._run_with_tracing(
+                    prompt, session, tools, on_chunk, on_progress
+                )
+            return await self._run_impl(
+                prompt, session, tools, on_chunk, on_progress
+            )
+        finally:
+            self._end_governance_run()
+
+    # -- 治理 run 生命周期（设计稿 §4.4）----------------------------------
+
+    def _begin_governance_run(self) -> None:
+        """新建本次 run 的治理上下文并写 `run_start` 事件。"""
+        gateway = self.governance_gateway
+        if gateway is None:
+            self.governance_context = None
+            return
+        self.governance_context = gateway.new_context()
+        event_log = getattr(gateway, "event_log", None)
+        if event_log is not None:
+            event_log.write_run_start(self.governance_context)
+
+    def _end_governance_run(self) -> None:
+        """写 `run_end` 事件（结论含 INCOMPLETE：末端 step 被跳过）。"""
+        gateway = self.governance_gateway
+        ctx = self.governance_context
+        if gateway is None or ctx is None:
+            return
+        event_log = getattr(gateway, "event_log", None)
+        if event_log is None:
+            return
+        if ctx.cancelled:
+            status = "cancelled"
+        elif ctx.terminal_step_skipped:
+            status = "incomplete"
+        else:
+            status = "completed"
+        event_log.write_run_end(ctx, status)
 
     async def _run_with_tracing(
         self,
@@ -1429,7 +1475,11 @@ class AgentLoop:
             session_id=session.id,
             working_directory=Path(self.config.working_directory or os.getcwd()),
             permissions=PermissionSet.sandbox(self.config.working_directory or os.getcwd()),
-            metadata={"memory_md_path": memory_path},
+            metadata={
+                "memory_md_path": memory_path,
+                # 治理运行上下文（per-run，§4.4）——执行路径据此做治理判定
+                "governance_context": self.governance_context,
+            },
         )
 
         results = []

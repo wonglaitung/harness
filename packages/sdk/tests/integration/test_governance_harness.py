@@ -112,6 +112,9 @@ def test_strict_true_with_agent_id_assembles(tmp_path, monkeypatch):
     from harness.tools.base import Tool
 
     class _Read(Tool):
+        capability = "read"
+        idempotent = True
+
         @property
         def name(self):
             return "core_banking_api:read_only"
@@ -126,6 +129,9 @@ def test_strict_true_with_agent_id_assembles(tmp_path, monkeypatch):
             return ToolResult(tool_call_id="", success=True, content="ok")
 
     class _Aml(Tool):
+        capability = "write"
+        idempotent = True
+
         @property
         def name(self):
             return "aml_screening:run"
