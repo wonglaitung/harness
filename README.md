@@ -514,7 +514,7 @@ HarnessConfig config = HarnessConfig.builder()
 | 包 | 说明 |
 |---|------|
 | [packages/sdk/](packages/sdk/) | harness-sdk — Python SDK |
-| [packages/cli/](packages/cli/) | harness-cli — 治理块生成/校验、审批与控制命令 |
+| [packages/cli/](packages/cli/) | harness-cli — 治理块生成（含 LLM 初稿）/校验、审批与控制命令 |
 | [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK (99.5% 功能同步) |
 | [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |

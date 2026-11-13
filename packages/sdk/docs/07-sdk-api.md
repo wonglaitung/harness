@@ -2484,7 +2484,7 @@ harness doctor --deps      # 审计已安装依赖的已知 CVE
 
 - 优先调用 `uv pip audit`；无 `uv` 时回退 `pip-audit`；二者皆无则提示安装并返回退出码 1。
 - 仅做审计入口，实际修复需人工评审（部署侧）。属防翻车清单「依赖安全」的 SDK 侧闭环（见 [13-orchestrator.md](./13-orchestrator.md) 残余风险表）。
-- 治理块命令（`harness governance init/check/...`）见 [21-hkma-agentic-governance.md](./21-hkma-agentic-governance.md) §13.4；运行时治理仍由 SDK 的 `AgentHarness` + `GovernanceGateway` 强制。
+- 治理块命令（`harness governance init/check/draft/...`）见 [21-hkma-agentic-governance.md](./21-hkma-agentic-governance.md) §13.4；`draft` 用 LLM 生成初稿（需人工确认），运行时治理仍由 SDK 的 `AgentHarness` + `GovernanceGateway` 强制。
 
 ## 下一步
 

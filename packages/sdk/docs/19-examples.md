@@ -944,6 +944,9 @@ AML_NO_OUTPUT=1 python run.py missing_output   # 产出缺失 → step failure
 | `constraint` | `skills/payment.md`（`payment-agent`） | 业务参数越界拒绝（`max_amount=1_000_000`） |
 | `approval` | `skills/payment.md`（`payment-agent`） | `capability: payment` 强制人工审批（阻塞 → 批准/拒绝） |
 
+存量技能没有治理块时，可先用 `harness governance draft <skill>` 让 LLM 生成
+初稿（workflow / outputs 等），人工填完 `TODO` 后再 `check`。
+
 审批与熔断复用同一落点（CLI 在独立包 `harness-cli`；未安装时见 playground
 README 的 `PYTHONPATH` 运行方式）：
 

@@ -211,6 +211,23 @@ python -m harness_cli governance check skills/report.md
 
 ---
 
+### 2.5 存量技能迁移：先生成初稿，再人工确认
+
+存量技能没有治理块时，可以用 LLM 基于正文生成初稿（workflow / outputs /
+business_intent 等），再人工复核：
+
+```bash
+export HARNESS_LLM_BASE_URL=https://your-gateway.example/v1
+export HARNESS_LLM_MODEL=your-model
+export HARNESS_LLM_API_KEY=sk-...
+
+python -m harness_cli governance draft skills/report.md --dry-run
+python -m harness_cli governance draft skills/report.md
+```
+
+`approved_by` / `owners` / `agent_id` 不由模型生成；草稿必须过确定性校验才写入，
+且 `TODO` 未填完前 `check` 仍会拒绝。不想联网时用 `--emit-prompt` 取提示词。
+
 ## 3. 五个场景
 
 ### 3.1 命令
