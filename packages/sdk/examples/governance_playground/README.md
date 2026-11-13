@@ -29,6 +29,11 @@ cd packages/sdk
 pip install -e .          # 或者直接用 /data/harness/.venv/bin/python
 ```
 
+装包后会生成 `harness` 命令，可直接运行 `harness governance ...`；不想装包时，
+在 `packages/sdk` 目录下用模块方式运行：`PYTHONPATH=src python -m harness.cli governance ...`
+（本仓库的 `.venv` 已暴露 `src`，可省略 `PYTHONPATH=src`）。下文统一写
+`python -m harness.cli`，两者等价。
+
 ### 1.2 跑一次
 
 ```bash

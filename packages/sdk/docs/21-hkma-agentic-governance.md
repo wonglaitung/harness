@@ -1182,6 +1182,21 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 | `harness governance init <file\|dir>` | 迁移工具：从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**。填好 `agent_id`（`--agent-id` / `HARNESS_GOVERNANCE_AGENT_ID` / 技能名）/ `version`；**工具清单取自技能 `tools.allowed`**（与 §6.2.1 规则 1 一致，天然满足子集约束）；内置工具的 `capability`/`idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」；按 §13.1 给出九步清单。目录会递归扫描带 frontmatter 的 `.md`，已有治理块跳过；`--dry-run` 只预览不写 | 缺 frontmatter / 读取失败 → 非零退出；已有治理块跳过不覆盖 |
 | `harness governance check <skill>` | 跑 §6.3 的 29 条规则 + §13.3 的"机器兜"清单 | 非零退出，逐条报 `file:line` + 违反的规则号 |
 
+**运行方式**（二选一）：
+
+- **装了包**（`pip install harness-sdk`，或开发模式 `pip install -e packages/sdk`）：安装时 `[project.scripts]` 会生成 `harness` 启动器，直接用
+  ```bash
+  harness governance check ./skills/report.md
+  ```
+- **没装包**（直接用仓库源码）：用模块方式运行，并让 Python 找到 `src`
+  ```bash
+  cd packages/sdk
+  PYTHONPATH=src python -m harness.cli governance check ./skills/report.md
+  ```
+  如果当前环境已通过 editable 安装或 PYTHONPATH 暴露了 src（例如仓库自带的 `.venv`），可省略 `PYTHONPATH=src`。
+
+下文示例统一写作 `harness governance ...`；未装包时把 `harness` 换成 `python -m harness.cli` 即可。
+
 两者均为 P0-1 实施项（§15）。`init` 写入的块**通常带 `TODO`**（`approved_by` / `business_intent` / `owners` 及 MCP 工具声明），必须经 `check` 通过才可提交——两者配套使用。
 
 ### 13.5 完整样例：从业务需求到治理块
