@@ -78,6 +78,7 @@ class LoopState(Enum):
     PARSING_RESPONSE = "parsing"  # 解析响应
     EXECUTING_TOOLS = "executing"  # 执行工具
     COMPLETED = "completed"  # 完成
+    INCOMPLETE = "incomplete"  # 未完成（治理：末端 step 被跳过，§8.3）
     ERROR = "error"  # 错误状态
     INTERRUPTED = "interrupted"  # 被中断
     STUCK = "stuck"  # 陷入停滞

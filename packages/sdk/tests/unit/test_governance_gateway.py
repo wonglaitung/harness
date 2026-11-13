@@ -623,3 +623,142 @@ def test_conventional_temp_write_passes(tmp_path):
     gw, ctx = _shared_gateway(tmp_path, "write", "write")
     decision = gw.check(ctx, "write", {"path": target, "content": "x"})
     assert decision.allowed is True
+
+
+# --------------------------------------------------------------------------
+# 步骤重入（§8.3）
+# --------------------------------------------------------------------------
+
+
+def _run_step(gateway, ctx, tool, step_id, metadata=None):
+    decision = gateway.check(ctx, tool, {})
+    assert decision.allowed, decision.reason
+    gateway.record_result(
+        ctx, tool, success=True, duration_ms=1, step_id=step_id, metadata=metadata or {}
+    )
+
+
+def test_idempotent_step_reentry_allowed(gateway, ctx):
+    _run_step(gateway, ctx, "core_banking_api:read_only", "collect_data")
+    decision = gateway.check(ctx, "core_banking_api:read_only", {})
+    assert decision.allowed is True
+    assert ctx.signal_count("step_reentry") == 1
+
+
+def test_non_idempotent_step_reentry_denied(gateway, ctx):
+    _run_step(gateway, ctx, "core_banking_api:read_only", "collect_data")
+    _run_step(gateway, ctx, "aml_screening:run", "aml_check", {"aml_hit": "false"})
+    _run_step(gateway, ctx, "report_writer:draft", "draft_report")
+    decision = gateway.check(ctx, "report_writer:draft", {})
+    assert decision.allowed is False
+    assert "非幂等" in decision.reason
+    assert decision.rule == "步骤重入"
+
+
+def test_skipped_step_emits_event(gateway, ctx, event_log):
+    _run_step(gateway, ctx, "core_banking_api:read_only", "collect_data")
+    _run_step(gateway, ctx, "aml_screening:run", "aml_check", {"aml_hit": "false"})
+    # 下一次判定推进游标 → manual_review 被跳过
+    gateway.check(ctx, "report_writer:draft", {})
+    skipped = [e for e in _events(event_log) if e["event"] == "step_skipped"]
+    assert any(e["step"] == "manual_review" for e in skipped)
+
+
+def test_branch_overlap_detected(tmp_path):
+    """同链内两个条件 step 同时 success → branch_overlap 信号（§9.2）。"""
+    raw = {
+        "agent_id": "a",
+        "version": "1",
+        "approved_by": "x",
+        "business_intent": "x",
+        "owners": {"accountable": "x", "technical": "x"},
+        "material": False,
+        "tools": [
+            {"name": "t1", "capability": "read", "idempotent": True},
+            {"name": "t2", "capability": "read", "idempotent": True},
+            {"name": "t3", "capability": "read", "idempotent": True},
+            {"name": "t4", "capability": "read", "idempotent": True},
+        ],
+        "workflow": {
+            "steps": [
+                {"id": "a", "tools": ["t1"]},
+                {"id": "b", "if": "${{ steps.a.outcome == 'success' }}", "tools": ["t2"]},
+                {"id": "c", "if": "${{ steps.a.outcome == 'success' }}", "tools": ["t3"]},
+                {"id": "d", "tools": ["t4"]},
+            ]
+        },
+        "limits": {},
+    }
+    policy = compile_policy([parse_governance_block(raw)])
+    gw = GovernanceGateway(policy)
+    ctx = gw.new_context()
+    _run_step(gw, ctx, "t1", "a")
+    _run_step(gw, ctx, "t2", "b")
+    _run_step(gw, ctx, "t3", "c")
+    # 下一次判定推进游标 → b、c 都 success → 检出重叠
+    gw.check(ctx, "t4", {})
+    assert ctx.signal_count("branch_overlap") == 1
+
+
+# --------------------------------------------------------------------------
+# 信号达阈值的升级动作（§9.2）
+# --------------------------------------------------------------------------
+
+
+def _policy_with_thresholds(tmp_path, thresholds):
+    raw = yaml.safe_load(yaml.safe_dump(BLOCK))
+    raw["limits"]["signal_thresholds"] = thresholds
+    return compile_policy([parse_governance_block(raw)])
+
+
+def test_step_violation_threshold_suspends(tmp_path):
+    policy = _policy_with_thresholds(tmp_path, {"step_violations": 1})
+    plane = ControlPlane(directory=tmp_path / "control")
+    log = GovernanceEventLog(directory=tmp_path / "audit")
+    gw = GovernanceGateway(policy, control=plane, event_log=log)
+    ctx = gw.new_context()
+
+    decision = gw.check(ctx, "report_writer:draft", {})  # 跳步
+    assert decision.allowed is False
+    assert plane.read(policy.agent_id).state == SUSPENDED
+
+    # 升级后：后续调用被控制面拒绝
+    follow = gw.check(ctx, "core_banking_api:read_only", {})
+    assert follow.rule == "控制面"
+    actions = [e["action"] for e in _events(log) if e["event"] == "control_plane"]
+    assert "suspended" in actions
+
+
+def test_denial_threshold_enqueues_review(tmp_path):
+    class _Queue:
+        def __init__(self):
+            self.items = []
+
+        def submit(self, item):
+            self.items.append(item)
+            return "review-1"
+
+    policy = _policy_with_thresholds(tmp_path, {"consecutive_denials": 1})
+    queue = _Queue()
+    gw = GovernanceGateway(policy, review_queue=queue)
+    ctx = gw.new_context()
+    gw.check(ctx, "unknown_tool", {})
+    assert queue.items, "达阈值必须升级人工复核"
+
+
+def test_escalation_fires_once(tmp_path):
+    policy = _policy_with_thresholds(tmp_path, {"step_violations": 1})
+    plane = ControlPlane(directory=tmp_path / "control")
+    gw = GovernanceGateway(policy, control=plane)
+    ctx = gw.new_context()
+    gw.check(ctx, "report_writer:draft", {})
+    version = plane.read(policy.agent_id).version
+    gw.check(ctx, "report_writer:draft", {})
+    assert plane.read(policy.agent_id).version == version, "同一信号不重复 suspend"
+
+
+def test_token_limit_denies(gateway, ctx):
+    ctx.token_usage = 10**9
+    decision = gateway.check(ctx, "core_banking_api:read_only", {})
+    assert decision.allowed is False
+    assert "token" in decision.reason

@@ -45,6 +45,7 @@ from harness.types import (
     DocumentTooLargeError,
     LoopResult,
     LoopSnapshot,
+    LoopState,
     ProgressCallback,
     Session,
     StreamEvent,
@@ -668,6 +669,7 @@ class AgentHarness:
         event_log = GovernanceEventLog()
         approval = ApprovalManager(
             timeout_seconds=policy.limits.approval_timeout_seconds,
+            event_log=event_log,
         )
         control = ControlPlane()
         gateway = GovernanceGateway(
@@ -678,6 +680,7 @@ class AgentHarness:
             ),
             control=control,
             event_log=event_log,
+            review_queue=self._review_queue,
             # 沙箱与文件校验从 `ToolGateHook` 迁入流水线（§7.1 / §7.2 第 6 步）
             sandbox=LightweightSandbox(),
             file_validator=FileInputValidator(),
@@ -1403,6 +1406,16 @@ class AgentHarness:
         if self._governance_enabled():
             self.governance_gateway()
         self._loop._begin_governance_run()
+        blocked, reason = self._loop._control_blocked()
+        if blocked:
+            self._loop._cancel_governance_run()
+            self._loop._stream_result = LoopResult(
+                status=LoopState.INTERRUPTED,
+                session=session,
+                error=f"Kill Switch：{reason}",
+            )
+            self._loop._end_governance_run()
+            return
         try:
             async for chunk in self._loop.stream_run(
                 prompt=prompt,
@@ -1413,6 +1426,9 @@ class AgentHarness:
             ):
                 yield chunk
         finally:
+            result = self._loop._stream_result
+            if result is not None:
+                self._loop._finalize_governance_result(result)
             self._loop._end_governance_run()
 
     def run_sync(

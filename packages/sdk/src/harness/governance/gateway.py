@@ -46,6 +46,7 @@ RULE_CONSISTENCY = "治理一致性"
 RULE_WHITELIST = "工具白名单"
 RULE_CAPABILITY = "能力声明"
 RULE_STEP = "步骤游标"
+RULE_REENTRY = "步骤重入"
 RULE_CONSTRAINTS = "业务约束"
 RULE_PERMISSIONS = "权限范围"
 RULE_LIMITS = "限额"
@@ -56,6 +57,17 @@ RULE_APPROVAL = "审批关卡"
 _RULE_SIGNALS = {
     RULE_WHITELIST: "out_of_scope_attempts",
     RULE_STEP: "step_violations",
+}
+
+# 信号 → 达阈值后的升级动作（§9.2）。suspend 写控制面；review 入人工复核队列。
+_SIGNAL_ACTIONS = {
+    "consecutive_denials": "review",
+    "step_violations": "suspend",
+    "step_reentry": "alert",
+    "out_of_scope_attempts": "suspend_review",
+    "guard_unresolved": "review",
+    "approval_timeout": "review",
+    "branch_overlap": "review",
 }
 
 
@@ -87,6 +99,7 @@ class GovernanceGateway:
         permissions: Any | None = None,
         control: Any | None = None,
         event_log: Any | None = None,
+        review_queue: Any | None = None,
         sandbox: Any | None = None,
         file_validator: Any | None = None,
         working_directory: str | os.PathLike[str] | None = None,
@@ -96,6 +109,8 @@ class GovernanceGateway:
         self.permissions = permissions
         self.control = control
         self.event_log = event_log
+        # 人工复核队列（信号达阈值时升级，§9.2）
+        self.review_queue = review_queue
         # 沙箱与文件校验（§7.1：从 `ToolGateHook` 迁入流水线，不留在 Hook）
         self.sandbox = sandbox
         self.file_validator = file_validator
@@ -188,18 +203,83 @@ class GovernanceGateway:
         reason: str,
         rule: str,
     ) -> Decision:
-        """统一的拒绝出口：写事件 + 计信号。"""
+        """统一的拒绝出口：写事件 + 计信号 + 达阈值升级。"""
         self._record_decision(ctx, tool_name, DENY, reason)
         ctx.record_denial()
+        self._bump_consecutive_denials(ctx)
         signal = _RULE_SIGNALS.get(rule)
         if signal:
             count = ctx.bump_signal(signal)
             self._record_signal(ctx, signal, count)
+            self._escalate(ctx, signal)
         return Decision(
             allowed=False,
             reason=reason,
             rule=rule,
             step_id=self._current_step_id(ctx, tool_name),
+        )
+
+    def _bump_consecutive_denials(self, ctx: RunContext) -> None:
+        count = ctx.bump_signal("consecutive_denials")
+        self._record_signal(ctx, "consecutive_denials", count)
+        self._escalate(ctx, "consecutive_denials")
+
+    def _escalate(self, ctx: RunContext, signal: str) -> None:
+        """信号达阈值 → 执行升级动作（§9.2），每个信号每次 run 只触发一次。"""
+        if not ctx.signal_exceeded(signal):
+            return
+        if signal in ctx.escalated:
+            return
+        ctx.escalated.add(signal)
+        action = _SIGNAL_ACTIONS.get(signal, "alert")
+        if action in ("suspend", "suspend_review") and self.control is not None:
+            try:
+                state = self.control.suspend(
+                    self.policy.agent_id,
+                    reason=f"治理信号达阈值：{signal}",
+                    actor="governance",
+                )
+                self._record_control(ctx, state.state, state.reason)
+            except Exception as exc:  # noqa: BLE001 — 升级失败不得放行
+                self._record_control(ctx, "suspend_failed", str(exc))
+        if action in ("review", "suspend_review") or (
+            signal == "approval_timeout" and self.policy.material
+        ):
+            self._enqueue_review(ctx, signal)
+
+    def _enqueue_review(self, ctx: RunContext, signal: str) -> None:
+        """信号升级人工复核（§9.2）。没有队列时只留事件，不静默吞掉。"""
+        if self.review_queue is None:
+            self._record_control(ctx, "review_unavailable", signal)
+            return
+        try:
+            from harness.review.queue import ReviewItem
+
+            item = ReviewItem(
+                gate_findings=[
+                    {
+                        "type": "governance_signal",
+                        "severity": "warning",
+                        "message": f"治理信号达阈值：{signal}",
+                    }
+                ],
+                content="",
+                source=f"governance:{signal}",
+            )
+            item_id = self.review_queue.submit(item)
+            self._record_control(ctx, "review_enqueued", f"{signal}:{item_id}")
+        except Exception as exc:  # noqa: BLE001 — 入队失败留痕，不阻断判定
+            self._record_control(ctx, "review_failed", f"{signal}: {exc}")
+
+    def _record_control(self, ctx: RunContext, action: str, detail: str) -> None:
+        if self.event_log is None:
+            return
+        self.event_log.write(
+            "control_plane",
+            run_id=ctx.run_id,
+            agent_id=self.policy.agent_id,
+            action=action,
+            detail=detail,
         )
 
     def _check_control(self, ctx: RunContext, tool_name: str) -> Decision | None:
@@ -254,16 +334,93 @@ class GovernanceGateway:
     def _check_step(self, ctx: RunContext, tool_name: str) -> Decision | None:
         """4. 步骤游标：目标工具当前是否可达（§8.3）。
 
-        先推进游标（已完成 / 被跳过的 step 让位），再判可达性。
+        顺序：先推进游标（已完成 / 被跳过的 step 让位）并留痕 `step_skipped`，
+        再判重入（§8.3 重入规则），最后判可达性（跳步 / 上游失败）。
         """
+        before = {
+            sid: state.outcome
+            for sid in ctx.step_ids
+            if (state := ctx.step_state(sid)) is not None
+        }
         ctx.advance_cursor()
+        self._record_skipped(ctx, before)
+        self._observe_branch_overlap(ctx)
+
+        # 重入：已 `success` 的 step 被再次调用（§8.3）
+        step = ctx.step_for_tool(tool_name)
+        if step is not None:
+            state = ctx.step_state(step.id)
+            if state is not None and state.outcome == "success":
+                return self._check_reentry(ctx, tool_name, step, state)
+
         kind, reason = ctx.classify_reachability(tool_name)
         if kind == "ok":
             return None
-        rule = RULE_STEP
-        if kind == "skip":
-            return self._deny(ctx, tool_name, reason, rule)
-        return self._deny(ctx, tool_name, reason, rule)
+        return self._deny(ctx, tool_name, reason, RULE_STEP)
+
+    def _check_reentry(
+        self, ctx: RunContext, tool_name: str, step: Any, state: Any
+    ) -> Decision | None:
+        """步骤重入（§8.3）：全幂等则放行，含非幂等工具则拒绝。
+
+        `continue-on-error` 只影响重入是否放行，不影响首次执行（§6.3.4 规则 22）。
+        """
+        count = ctx.bump_signal("step_reentry")
+        self._record_signal(ctx, "step_reentry", count)
+        self._record_reentry(ctx, tool_name, step.id)
+        self._escalate(ctx, "step_reentry")
+
+        idempotent_only = all(
+            (spec.idempotent if spec else False)
+            for spec in (self.policy.tool_by_name(t) for t in step.tools)
+            if spec is not None
+        )
+        if idempotent_only or step.continue_on_error:
+            return None
+        return self._deny(
+            ctx,
+            tool_name,
+            f"step `{step.id}` 已被调用过，且包含非幂等工具，拒绝重入",
+            RULE_REENTRY,
+        )
+
+    def _record_skipped(
+        self, ctx: RunContext, before: dict[str, str | None]
+    ) -> None:
+        """游标推进导致 step 被跳过 → `step_skipped` 事件（正常路径也留痕）。"""
+        if self.event_log is None:
+            return
+        for sid in ctx.step_ids:
+            state = ctx.step_state(sid)
+            if state is None or state.outcome != "skipped":
+                continue
+            if before.get(sid) is not None:
+                continue
+            self.event_log.write(
+                "step_skipped",
+                run_id=ctx.run_id,
+                agent_id=self.policy.agent_id,
+                step=sid,
+                reason="if 条件不成立",
+            )
+
+    def _observe_branch_overlap(self, ctx: RunContext) -> None:
+        """分支重叠检出（§9.2 `branch_overlap`）：同链内多个条件 step 同时 success。
+
+        静态无法证明互斥（§8.5），只能运行期检出并升级复核。
+        """
+        for workflow in self.policy.all_workflows:
+            succeeded = [
+                step.id
+                for step in workflow.steps
+                if step.condition
+                and (state := ctx.step_state(step.id)) is not None
+                and state.outcome == "success"
+            ]
+            if len(succeeded) >= 2 and ctx.signal_count("branch_overlap") == 0:
+                count = ctx.bump_signal("branch_overlap")
+                self._record_signal(ctx, "branch_overlap", count)
+                self._escalate(ctx, "branch_overlap")
 
     def _check_constraints(
         self, ctx: RunContext, tool_name: str, arguments: dict[str, Any]
@@ -447,7 +604,7 @@ class GovernanceGateway:
     def _check_limits(
         self, ctx: RunContext, tool_name: str, timestamp: float
     ) -> Decision | None:
-        """7. 限额：run 总次数 / 速率（§9.1）。"""
+        """7. 限额：run 总次数 / 速率 / token（§9.1）。"""
         if ctx.check_run_limit():
             return self._deny(
                 ctx,
@@ -460,6 +617,13 @@ class GovernanceGateway:
                 ctx,
                 tool_name,
                 "超出速率上限",
+                RULE_LIMITS,
+            )
+        if ctx.check_token_limit():
+            return self._deny(
+                ctx,
+                tool_name,
+                "超出单次 run token 上限",
                 RULE_LIMITS,
             )
         return None
@@ -489,6 +653,7 @@ class GovernanceGateway:
             if "超时" in reason:
                 count = ctx.bump_signal("approval_timeout")
                 self._record_signal(ctx, "approval_timeout", count)
+                self._escalate(ctx, "approval_timeout")
             return decision
         return None
 
@@ -526,6 +691,19 @@ class GovernanceGateway:
             agent_id=self.policy.agent_id,
             signal=signal,
             count=count,
+        )
+
+    def _record_reentry(
+        self, ctx: RunContext, tool_name: str, step_id: str
+    ) -> None:
+        if self.event_log is None:
+            return
+        self.event_log.write(
+            "step_reentry",
+            run_id=ctx.run_id,
+            agent_id=self.policy.agent_id,
+            step=step_id,
+            tool=tool_name,
         )
 
     def record_result(

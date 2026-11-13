@@ -103,6 +103,8 @@ class RunContext:
         self.tool_call_counts: dict[str, int] = {}
         # 行为信号计数
         self.signals: dict[str, int] = {}
+        # 已达阈值并执行过升级动作的信号（避免重复 suspend / 重复入队，§9.2）
+        self.escalated: set[str] = set()
         self._consecutive_denials = 0
         self._consecutive_failures = 0
         # 事实（工具产出）

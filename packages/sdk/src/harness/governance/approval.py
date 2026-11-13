@@ -99,6 +99,8 @@ class ApprovalManager:
     control_dir: Path = field(default_factory=_harness_control_dir)
     timeout_seconds: int = 300
     poll_interval: float = 0.25
+    # 审批事件进 §11 事件流（approval_request / approval_decision）
+    event_log: Any | None = None
     # 便于测试：注入时钟与等待函数
     _clock: Any = field(default=time.monotonic, repr=False)
     _sleep: Any = field(default=time.sleep, repr=False)
@@ -147,7 +149,32 @@ class ApprovalManager:
             encoding="utf-8",
         )
         os.replace(tmp, path)
+        self._record(request, "approval_request", status="pending")
         return request
+
+    def _record(
+        self,
+        request: ApprovalRequest,
+        event: str,
+        *,
+        status: str,
+        actor: str = "",
+        reason: str = "",
+    ) -> None:
+        if self.event_log is None:
+            return
+        self.event_log.write(
+            event,
+            run_id=request.run_id,
+            agent_id=request.agent_id,
+            request_id=request.request_id,
+            tool=request.tool,
+            capability=request.capability,
+            args_hash=request.args_hash,
+            status=status,
+            actor=actor or None,
+            reason=reason or None,
+        )
 
     # -- 等待 -------------------------------------------------------------
 
@@ -194,6 +221,7 @@ class ApprovalManager:
         tmp = request.path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, request.path)
+        self._record(request, "approval_decision", status="timeout")
 
     # -- 对外入口 ---------------------------------------------------------
 
@@ -289,6 +317,13 @@ class ApprovalManager:
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
+        self._record(
+            ApprovalRequest.from_dict(data, path),
+            "approval_decision",
+            status=data["status"],
+            actor=actor,
+            reason=reason,
+        )
         return True
 
     def _find_request(self, request_id: str, run_id: str | None) -> list[Path]:

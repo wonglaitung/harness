@@ -314,18 +314,29 @@ class AgentLoop:
         # 治理：每个 run 重建运行上下文（§4.4 的 per-run 生命周期）
         self._begin_governance_run()
         try:
+            # Kill Switch 检查点①：run 开始（suspended → 不调 LLM，§10.3）
+            blocked, reason = self._control_blocked()
+            if blocked:
+                self._cancel_governance_run()
+                return LoopResult(
+                    status=LoopState.INTERRUPTED,
+                    session=session,
+                    error=f"Kill Switch：{reason}",
+                )
             # Wrap with OpenTelemetry tracing if available
             if is_tracing():
-                return await self._run_with_tracing(
+                result = await self._run_with_tracing(
                     prompt, session, tools, on_chunk, on_progress
                 )
-            return await self._run_impl(
-                prompt, session, tools, on_chunk, on_progress
-            )
+            else:
+                result = await self._run_impl(
+                    prompt, session, tools, on_chunk, on_progress
+                )
+            return self._finalize_governance_result(result)
         finally:
             self._end_governance_run()
 
-    # -- 治理 run 生命周期（设计稿 §4.4）----------------------------------
+    # -- 治理 run 生命周期（设计稿 §4.4 / §10.3）--------------------------
 
     def _begin_governance_run(self) -> None:
         """新建本次 run 的治理上下文并写 `run_start` 事件。"""
@@ -354,6 +365,44 @@ class AgentLoop:
         else:
             status = "completed"
         event_log.write_run_end(ctx, status)
+
+    def _control_blocked(self) -> tuple[bool, str]:
+        """Kill Switch 检查点：读控制面，返回 `(是否阻断, 原因)`（§10.3）。
+
+        **每次都重读文件**——CLI 在别的进程里 suspend 后，本进程必须在
+        下一个检查点看到（§10.4 L2）。
+        """
+        gateway = self.governance_gateway
+        ctx = self.governance_context
+        control = getattr(gateway, "control", None) if gateway is not None else None
+        if control is None or ctx is None:
+            return False, ""
+        state = control.read(ctx.policy.agent_id)
+        if not state.blocking:
+            return False, ""
+        reason = f"状态 {state.state}"
+        if state.reason:
+            reason += f"：{state.reason}"
+        return True, reason
+
+    def _cancel_governance_run(self) -> None:
+        if self.governance_context is not None:
+            self.governance_context.cancel()
+
+    def _finalize_governance_result(self, result: LoopResult) -> LoopResult:
+        """末端 step 被跳过 → run 结论 INCOMPLETE（§8.3）。
+
+        "分支都没命中 → 什么都没做"不能被读成"成功完成"——静默通过是治理
+        场景最危险的失败形态。
+        """
+        ctx = self.governance_context
+        if (
+            ctx is not None
+            and result.status == LoopState.COMPLETED
+            and ctx.terminal_step_skipped
+        ):
+            result.status = LoopState.INCOMPLETE
+        return result
 
     async def _run_with_tracing(
         self,
@@ -551,6 +600,20 @@ class AgentLoop:
                 context = self.context.build(session)
                 (time.time() - context_build_start) * 1000
 
+                # Kill Switch 检查点②：每次 LLM 调用前（§10.3）
+                blocked, control_reason = self._control_blocked()
+                if blocked:
+                    self._cancel_governance_run()
+                    self.state = LoopState.INTERRUPTED
+                    return LoopResult(
+                        status=LoopState.INTERRUPTED,
+                        session=session,
+                        messages=session.messages,
+                        iterations=iteration,
+                        error=f"Kill Switch：{control_reason}",
+                        token_usage=total_usage,
+                    )
+
                 # Call LLM
                 self.state = LoopState.CALLING_LLM
                 llm_call_start = time.time()
@@ -702,6 +765,22 @@ class AgentLoop:
                 # Update usage
                 total_usage.input_tokens += response.usage.input_tokens
                 total_usage.output_tokens += response.usage.output_tokens
+
+                # 治理限额：token 上限（§9.1）。超限即停，不再继续调用。
+                if self.governance_context is not None:
+                    self.governance_context.token_usage = (
+                        total_usage.input_tokens + total_usage.output_tokens
+                    )
+                    if self.governance_context.check_token_limit():
+                        self.state = LoopState.ERROR
+                        return LoopResult(
+                            status=LoopState.ERROR,
+                            session=session,
+                            messages=session.messages,
+                            iterations=iteration,
+                            error="超出单次 run token 上限（治理限额）",
+                            token_usage=total_usage,
+                        )
 
                 # Add assistant message (skip if content is empty and has tool calls)
                 # Empty assistant messages can confuse models in compatibility mode
@@ -1155,6 +1234,21 @@ class AgentLoop:
 
                 context = self.context.build(session)
 
+                # Kill Switch 检查点②：每次 LLM 调用前（§10.3）
+                blocked, control_reason = self._control_blocked()
+                if blocked:
+                    self._cancel_governance_run()
+                    self.state = LoopState.INTERRUPTED
+                    self._stream_result = LoopResult(
+                        status=LoopState.INTERRUPTED,
+                        session=session,
+                        messages=session.messages,
+                        iterations=iteration,
+                        error=f"Kill Switch：{control_reason}",
+                        token_usage=total_usage,
+                    )
+                    return
+
                 self.state = LoopState.CALLING_LLM
                 llm_call_start = time.time()
                 self._emit_progress(
@@ -1198,6 +1292,23 @@ class AgentLoop:
                 except Exception as e:
                     logger.exception(f"Stream error: {type(e).__name__}: {e}")
                     stream_error = str(e)
+
+                # 治理限额：token 上限（§9.1）
+                if self.governance_context is not None and stream_error is None:
+                    self.governance_context.token_usage = (
+                        total_usage.input_tokens + total_usage.output_tokens
+                    )
+                    if self.governance_context.check_token_limit():
+                        self.state = LoopState.ERROR
+                        self._stream_result = LoopResult(
+                            status=LoopState.ERROR,
+                            session=session,
+                            messages=session.messages,
+                            iterations=iteration,
+                            error="超出单次 run token 上限（治理限额）",
+                            token_usage=total_usage,
+                        )
+                        return
 
                 llm_duration = (time.time() - llm_call_start) * 1000
 
@@ -1483,7 +1594,7 @@ class AgentLoop:
         )
 
         results = []
-        for tool_call in tool_calls:
+        for tool_index, tool_call in enumerate(tool_calls):
             # Check step budget before tool call (Phase 25)
             if self._step_budget:
                 budget_result = self._step_budget.check_before_tool_call(tool_call.name)
@@ -1729,6 +1840,23 @@ class AgentLoop:
             )
 
             results.append(result)
+
+            # Kill Switch 检查点③：工具 / 审批完成后（§10.3）。
+            # 防止在审批等待期间被 suspend，批准后仍继续执行。
+            blocked, control_reason = self._control_blocked()
+            if blocked:
+                self._cancel_governance_run()
+                for remaining in tool_calls[tool_index + 1 :]:
+                    results.append(
+                        ToolResult(
+                            tool_call_id=remaining.id,
+                            success=False,
+                            content="",
+                            error=f"Kill Switch：{control_reason}",
+                            tool_name=remaining.name,
+                        )
+                    )
+                break
 
         return results
 
