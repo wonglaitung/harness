@@ -1175,12 +1175,23 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 治理命令**不在运行时 SDK 里**，由独立工具包 `harness-cli` 提供，把"照着示例猜"变成"按路径走 + 机器兜底"。SDK 只保留校验规则与运行时强制路径，CLI 依赖 SDK，反向不成立。
 
-> **本节命令是确定性代码，不调用 LLM。** `init` 只做机械填充（能从工具注册表与技能 frontmatter 读到的字段），**内容判断始终由人做**（§13.3）。内置/自研工具的 `capability` 与 `idempotent` 以**代码声明为准**（§7.3 / §6.4.2），`init` 直接回填（回填即保证与代码一致，不是猜测）；代码里查不到的工具（如 MCP）保留 `TODO`。步骤链、分支语义等"人兜内容"的部分，机器不生成、不猜测。
+> **`init` / `check` 是确定性代码，不调用 LLM；`draft` 是显式的 LLM 草稿入口。** `init` 只做机械填充（能从工具注册表与技能 frontmatter 读到的字段），**内容判断始终由人做**（§13.3）。内置/自研工具的 `capability` 与 `idempotent` 以**代码声明为准**（§7.3 / §6.4.2），`init` 直接回填（回填即保证与代码一致，不是猜测）；代码里查不到的工具（如 MCP）保留 `TODO`。`draft` 用 LLM 基于技能正文生成 `business_intent` / workflow / outputs / limits 等初稿，但**身份与责任字段（`agent_id` / `version` / `approved_by` / `owners`）永不由模型决定**，输出必须通过与 `check` 同源的确定性校验后才能写入。
 
 | 命令 | 作用 | 失败行为 |
 |---|---|---|
 | `harness governance init <file\|dir>` | 迁移工具：从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**。填好 `agent_id`（`--agent-id` / `HARNESS_GOVERNANCE_AGENT_ID` / 技能名）/ `version`；**工具清单取自技能 `tools.allowed`**（与 §6.2.1 规则 1 一致，天然满足子集约束）；内置工具的 `capability`/`idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」；按 §13.1 给出九步清单。目录会递归扫描带 frontmatter 的 `.md`，已有治理块跳过；`--dry-run` 只预览不写 | 缺 frontmatter / 读取失败 → 非零退出；已有治理块跳过不覆盖 |
 | `harness governance check <skill>` | 跑 §6.3 的 29 条规则 + §13.3 的"机器兜"清单 | 非零退出，逐条报 `file:line` + 违反的规则号 |
+| `harness governance draft <file\|dir>` | LLM 初稿：读技能正文 + 工具清单，生成 `business_intent` / `material` / `tools.outputs` / `workflow`（含 `if`）/ `limits` / `approval_required_for` 等**可生成内容**；`approved_by` / `owners` / `agent_id` / `version` 不由模型生成；默认写入，`--dry-run` 预览，`--emit-prompt` 只输出提示词（不联网）；provider/model/base_url 取 `--provider` / `--model` / `--base-url` 或 `HARNESS_LLM_PROVIDER` / `HARNESS_LLM_MODEL` / `HARNESS_LLM_BASE_URL`，API key 用 `HARNESS_LLM_API_KEY` / `OPENAI_API_KEY` | 未声明 `tools.allowed`、调用失败、草稿校验不通过 → 非零退出且**不写文件**；已有治理块跳过 |
+
+`draft` 是 `harness-cli` 新增的能力，LLM 连接信息用新增的环境变量注入：`HARNESS_LLM_PROVIDER` / `HARNESS_LLM_MODEL` / `HARNESS_LLM_BASE_URL` / `HARNESS_LLM_API_KEY`（也兼容 SDK 的 `HARNESS_PROVIDER` / `HARNESS_MODEL` / `HARNESS_BASE_URL` 与 `OPENAI_API_KEY`）。任意 OpenAI 兼容网关：
+
+```bash
+export HARNESS_LLM_PROVIDER=openai
+export HARNESS_LLM_BASE_URL=https://your-gateway.example/v1
+export HARNESS_LLM_MODEL=your-model
+export HARNESS_LLM_API_KEY=sk-...
+harness governance draft ./skills
+```
 
 **运行方式**（二选一）：
 
@@ -1197,7 +1208,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 下文示例统一写作 `harness governance ...`；未装包时把 `harness` 换成 `python -m harness_cli` 即可。
 
-两者均为 P0-1 实施项（§15）。`init` 写入的块**通常带 `TODO`**（`approved_by` / `business_intent` / `owners` 及 MCP 工具声明），必须经 `check` 通过才可提交——两者配套使用。
+`init` / `check` 均为 P0-1 实施项（§15），`draft` 是后续增量能力。`init` / `draft` 写入的块**通常仍带 `TODO`**（`approved_by` / `owners`，以及 LLM 没把握的 MCP 工具声明），必须经 `check` 通过才可提交——三者配套使用。
 
 ### 13.5 完整样例：从业务需求到治理块
 
@@ -1260,6 +1271,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取**需新增**的环境变量 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
 6. **CLI 工具包 `harness-cli`：`harness governance init <file|dir>`**（§13.4）：迁移工具，从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**——填好 `agent_id` / `version` / 工具清单，内置工具的 `capability` 与 `idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」，附九步清单（§13.1）；`--dry-run` 只预览。
 7. **CLI `harness governance check <skill>`**（§13.4）：跑 §6.3 的 29 条规则；非零退出，逐条报 `file:line` + 违反的规则号。与 6 配套——`init` 产出必须经 `check` 通过才可提交。CLI 独立成包，SDK 只保留校验规则与运行时强制路径。
+7b. **CLI `harness governance draft <file|dir>`**（§13.4）：用 LLM 基于存量技能正文生成治理块初稿（workflow / outputs / business_intent 等）；身份与责任字段不由模型生成，草稿必须过确定性校验，人在填完 `TODO` 前 `check` 仍拒绝。
 
 **验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 27/28）** → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错；`init` 写入的块带 `TODO` 且 `check` 报出待填项。
 

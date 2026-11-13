@@ -1,8 +1,9 @@
 """``harness`` 命令入口：argparse + 分发。
 
 治理的强制力在 SDK 运行时（``AgentHarness`` + ``GovernanceGateway``）；
-本包只提供创作期（生成治理块、校验）与运维期（审批、Kill Switch、诊断）
-命令，全部为确定性代码，不调用 LLM。
+本包提供创作期（生成/校验治理块、LLM 初稿）与运维期（审批、Kill Switch、
+诊断）命令。`init` / `check` / 审批 / 控制命令是确定性代码；只有 `draft`
+显式调用 LLM，且输出必须通过与 `check` 同源的校验。
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 
 from harness_cli.doctor import doctor_deps
+from harness_cli.draft import governance_draft
 from harness_cli.governance import (
     governance_check,
     governance_control,
@@ -44,6 +46,42 @@ def _build_parser() -> argparse.ArgumentParser:
 
     check = gov.add_parser("check", help="校验治理块（29 条规则）")
     check.add_argument("skill", help="技能文件路径")
+
+    draft = gov.add_parser(
+        "draft",
+        help="用 LLM 基于技能正文生成治理块初稿（需人工确认）",
+    )
+    draft.add_argument("skill", help="技能文件或目录（递归扫描有 frontmatter 的 .md）")
+    draft.add_argument(
+        "--agent-id",
+        default=None,
+        help="治理身份；缺省取 HARNESS_GOVERNANCE_AGENT_ID，再缺省取技能名",
+    )
+    draft.add_argument("--dry-run", action="store_true", help="只预览，不写文件")
+    draft.add_argument(
+        "--emit-prompt",
+        action="store_true",
+        help="只输出提示词，不调用模型、不写文件",
+    )
+    draft.add_argument(
+        "--provider",
+        default=None,
+        help=(
+            "LLM provider：openai / anthropic"
+            "（缺省读 HARNESS_LLM_PROVIDER / HARNESS_PROVIDER，再缺省 openai）"
+        ),
+    )
+    draft.add_argument(
+        "--model",
+        default=None,
+        help="模型名（缺省读 HARNESS_LLM_MODEL / HARNESS_MODEL，再取 provider 默认模型）",
+    )
+    draft.add_argument(
+        "--base-url",
+        default=None,
+        help="OpenAI 兼容端点（缺省读 HARNESS_LLM_BASE_URL / HARNESS_BASE_URL / OPENAI_BASE_URL）",
+    )
+    draft.add_argument("--timeout", type=float, default=120.0, help="调用超时秒数")
 
     for name, help_text in (("approve", "批准审批请求"), ("reject", "拒绝审批请求")):
         decide = gov.add_parser(name, help=help_text)
@@ -84,6 +122,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         if action == "check":
             return governance_check(args.skill)
+        if action == "draft":
+            return governance_draft(
+                args.skill,
+                agent_id=args.agent_id,
+                dry_run=args.dry_run,
+                emit_prompt=args.emit_prompt,
+                provider=args.provider,
+                model=args.model,
+                base_url=args.base_url,
+                timeout=args.timeout,
+            )
         if action in ("approve", "reject"):
             return governance_decide(
                 args.request_id,
