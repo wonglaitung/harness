@@ -76,6 +76,135 @@ AML_NO_OUTPUT=1 python run.py missing_output   # AML 未产出 aml_hit → step 
 > 想同时看到两份技能，跑完任一场景后查看 `.work/.harness/skills/`——`run.py`
 > 会把 `skills/*.md` 原样复制过去。
 
+## 场景与治理身份（`AGENTS` 映射）
+
+`run.py` 用一张字典把「场景名」映射到「治理身份」（`agent_id`）：
+
+```python
+# run.py:33-38
+AGENTS = {
+    "happy": "report-assembler",
+    "skip": "report-assembler",
+    "missing_output": "report-assembler",
+    "constraint": "payment-agent",
+    "approval": "payment-agent",
+}
+
+scenario = sys.argv[1] if len(sys.argv) > 1 else "happy"
+governance_agent_id=AGENTS[scenario]          # run.py:198
+```
+
+| 命令 | `scenario` | `AGENTS[scenario]` | 生效的治理块 |
+|---|---|---|---|
+| `python run.py happy` | `happy` | `report-assembler` | `skills/report.md` |
+| `python run.py skip` | `skip` | `report-assembler` | `skills/report.md` |
+| `python run.py missing_output` | `missing_output` | `report-assembler` | `skills/report.md` |
+| `python run.py constraint` | `constraint` | `payment-agent` | `skills/payment.md` |
+| `python run.py approval` | `approval` | `payment-agent` | `skills/payment.md` |
+
+这个值最终和技能 frontmatter 里的 `governance.agent_id` 匹配。跑 `approval` 时
+身份是 `payment-agent`，`report.md` 的块（`agent_id: report-assembler`）会被
+**静默忽略**，不参与本次装配。传未知场景会先被 `SCENARIOS` 校验拦下
+（`SystemExit`），不会走到 `KeyError`。
+
+## 治理是怎么被打开的（为什么必须有治理块）
+
+playground 靠三件事让「治理块」成为硬门槛：
+
+1. **打开开关 + 指定身份**（`run.py:194-199`）
+
+   ```python
+   HarnessConfig(
+       strict=True,                              # 打开治理
+       governance_agent_id=AGENTS[scenario],     # 部署方固定身份
+   )
+   ```
+
+   - `strict=True` → `_governance_enabled()` 为真（`harness.py:550`）；
+   - 缺 `governance_agent_id` → `RuntimeError`（fail-closed）。
+
+2. **让技能被加载器发现**（`_prepare_workspace`，`run.py:49`）
+
+   ```python
+   for source in sorted((BASE / "skills").glob("*.md")):
+       shutil.copy2(source, WORK / ".harness" / "skills" / source.name)
+   os.chdir(WORK)                    # 让 ./.harness/skills 指向 .work
+   os.environ["HOME"] = str(HOME)    # 隔离家目录
+   ```
+
+   必须在**导入 harness 之前**执行：加载器的 `DEFAULT_SKILL_PATHS`
+   （`~/.harness/skills`、`./.harness/skills`）在导入时求值（`loader.py:21-24`）。
+
+3. **技能的 `governance.agent_id` 与身份一致**
+
+   ```yaml
+   governance:
+     agent_id: report-assembler   # ← 必须等于 AGENTS[scenario]
+     tools: [...]                 # ← 运行期白名单
+     workflow: { steps: [...] }   # ← 步骤链
+   ```
+
+### 装配时机与失败模式
+
+- 构造 `AgentHarness` 时只读 **Level 1 元数据**（frontmatter，含 `governance`），
+  不编译；
+- 首次 `governance_policy()`（`run.py:206` 显式调用；`run()` 内部也会自动调用，
+  `harness.py:1259`）触发 `_build_governance()`：按 `agent_id` 过滤块 → 跑 29 条
+  校验（含规则 29：块 `tools` ⊆ 技能 `tools.allowed`）→ 核对工具代码声明 →
+  产出 `PolicySnapshot`；
+- 运行时把网关注入 `AgentLoop` 与 `ToolExecutor`，每个 run 建 `RunContext`，
+  工具调用走 11 步流水线。
+
+常见失败：
+
+| 情况 | 结果 |
+|---|---|
+| `governance_agent_id` 没写 | `RuntimeError: strict=True 需要指定治理身份` |
+| 身份对不上任何块（或块被删） | `治理装配失败 … 没有可用治理块（治理块缺失即拒绝，§4.3）` |
+| 块内容不合法（字段/引用/表达式/占位符） | 编译期拒绝，报 `规则 N｜field：message` |
+| 工具代码声明与块声明冲突 | 编译期拒绝（`治理声明冲突`） |
+
+想亲手验证（都不用改仓库代码）：
+
+```bash
+# a) 把 run.py 的 governance_agent_id 改成 "no-such-agent" → 启动失败
+# b) 删掉 skills/report.md 的 governance 块 → 启动失败
+# c) 块内容不合法 → 离线检查同款规则
+python -m harness.cli governance check skills/report.md
+```
+
+## 什么情况下技能必须有治理块
+
+判定口诀：**只要部署打开了治理，就至少需要一份「身份匹配」的治理块；具体到每个
+技能，凡是它的工具要被放行的，就必须被某份治理块声明。**
+
+| 配置 | 是否启用治理 |
+|---|---|
+| `HarnessConfig(strict=True)` | ✅ |
+| `HarnessConfig(governance_enabled=True)`（即使 `strict=False`） | ✅（显式覆盖） |
+| `HARNESS_STRICT=1` + `HarnessConfig.from_env()` | ✅ |
+| `HARNESS_REQUIRE_STRICT=1` 且 `strict=False` | ❌ 启动即报错（强制要求开） |
+| 默认（`strict=False`、`governance_enabled` 未设） | ❌ 零迁移，不需要治理块 |
+
+打开之后：
+
+1. 必须指定 `governance_agent_id`；
+2. 至少一份**被发现的**技能要带治理块且 `agent_id` 与之一致（否则启动失败）；
+3. **工具必须在治理块 `tools` 里声明**（运行期白名单；多份同身份块取交集）。
+   没被声明的工具在 strict 下调用会被拒，表现为「工具不可用」。
+
+具体到单个技能：
+
+- **必须有**：它会调用工具，且这些工具要在治理下被放行（通常就是它自己的块）。
+- **可以没有**：纯提示词、不调工具的技能；或它的工具已由同 `agent_id` 的另一份
+  治理块声明。
+- **写了但身份不符**：被静默忽略（不报错）——这正是「提示词注入不能改变授权集」
+  的实现方式（§6.4.1）。
+
+> 合规层面：项目规约要求 High 风险 / 金融级场景必须开 `strict`，因此这些场景必须
+> 有治理块。需要 payment/destructive 强制审批、步骤链、Kill Switch、事件留痕时也
+> 必须开治理，否则这些机制不生效（没有 policy、`control` 不会注入）。
+
 ## 审批（两个终端）
 
 终端 1 跑起来后会停在等待：
