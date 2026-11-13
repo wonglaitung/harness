@@ -36,6 +36,15 @@ AGENTS = {
     "approval": "payment-agent",
 }
 
+# 每个场景演练的技能文件（治理块来源）
+SKILL_FILES = {
+    "happy": "skills/report.md",
+    "skip": "skills/report.md",
+    "missing_output": "skills/report.md",
+    "constraint": "skills/payment.md",
+    "approval": "skills/payment.md",
+}
+
 
 def _prepare_workspace() -> None:
     """准备隔离的工作区：复制技能 + 切 CWD + 切 HOME（必须在导入 harness 前）。"""
@@ -201,6 +210,7 @@ async def main() -> None:
         f"steps={[s.id for s in policy.workflow.steps]} "
         f"material={policy.material}"
     )
+    print(f"技能文件：{SKILL_FILES[scenario]}")
     print()
     print(f"提示：同一工作区的 CLI 需带 HOME={HOME}")
     print(f"      例：HOME={HOME} python -m harness.cli governance status {policy.agent_id}")

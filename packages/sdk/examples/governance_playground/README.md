@@ -47,13 +47,34 @@ python run.py approval          # payment → 阻塞，等待人工审批
 AML_NO_OUTPUT=1 python run.py missing_output   # AML 未产出 aml_hit → step failure
 ```
 
-| 场景 | 系统行为 | 去哪看证据 |
-|---|---|---|
-| `happy` | 三个工具依次执行，step 依次 `success` | 事件：`tool_call_decision(allow)`、`tool_call_result` |
-| `skip` | `报告草稿` 在 `collect_data` 之前调用 → 拒绝 | 事件：`decision=deny`、`rule=步骤游标`、`signal=step_violations` |
-| `constraint` | 超过 `max_amount` → 拒绝 | 事件：`reason="amount: 金额超出上限"`（不记实际值） |
-| `approval` | 调用阻塞，请求先落盘再等待 | `~/.harness/control/approvals/<run_id>/apr-0000.json` |
-| `missing_output` | 声明了 `aml_hit` 却没产出 → step `failure` → 后续不可达 | 事件：`tool_call_result` 的 `outcome=failure` |
+每个场景使用哪份技能（治理块）：
+
+| 场景 | 使用的技能 / 治理块 | 系统行为 | 去哪看证据 |
+|---|---|---|---|
+| `happy` | `skills/report.md`（`report-assembler`） | 三个工具依次执行，step 依次 `success` | 事件：`tool_call_decision(allow)`、`tool_call_result` |
+| `skip` | `skills/report.md`（`report-assembler`） | `报告草稿` 在 `collect_data` 之前调用 → 拒绝 | 事件：`decision=deny`、`rule=步骤游标`、`signal=step_violations` |
+| `constraint` | `skills/payment.md`（`payment-agent`） | 超过 `max_amount` → 拒绝 | 事件：`reason="amount: 金额超出上限"`（不记实际值） |
+| `approval` | `skills/payment.md`（`payment-agent`） | 调用阻塞，请求先落盘再等待 | `~/.harness/control/approvals/<run_id>/apr-0000.json` |
+| `missing_output` | `skills/report.md`（`report-assembler`） | 声明了 `aml_hit` 却没产出 → step `failure` → 后续不可达 | 事件：`tool_call_result` 的 `outcome=failure` |
+
+两份技能各自覆盖的治理能力：
+
+**`skills/report.md` —— `report-assembler`**（`happy` / `skip` / `missing_output`）
+
+- 步骤链：`collect_data → aml_check → draft_report`，工具归属唯一；
+- `aml_screening:run` 声明产出 `aml_hit`（条件判断的唯一合法来源）；
+- `report_writer:draft` 为 `idempotent: false`（重入会被拒）；
+- 覆盖：正常顺序放行、**跳步拒绝**（`skip`）、**产出缺失判 failure**（`missing_output`）。
+
+**`skills/payment.md` —— `payment-agent`**（`constraint` / `approval`）
+
+- 单步 `disburse` 绑定 `pay:transfer`；
+- `capability: payment` → **强制人工审批**（治理块不可关闭，`approval_required_for` 也为编译期规则 20/25 所需）；
+- 业务约束：`amount_field=amount`、`max_amount=1_000_000`；
+- 覆盖：**业务参数越界拒绝**（`constraint`）、**运行期审批阻塞/放行**（`approval`）。
+
+> 想同时看到两份技能，跑完任一场景后查看 `.work/.harness/skills/`——`run.py`
+> 会把 `skills/*.md` 原样复制过去。
 
 ## 审批（两个终端）
 

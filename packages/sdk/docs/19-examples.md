@@ -934,6 +934,16 @@ python run.py approval         # payment → 阻塞等待人工审批（另开�
 AML_NO_OUTPUT=1 python run.py missing_output   # 产出缺失 → step failure
 ```
 
+每个场景使用的技能（治理块）：
+
+| 场景 | 使用的技能 / 治理块 | 验证的治理能力 |
+|---|---|---|
+| `happy` | `skills/report.md`（`report-assembler`） | 三步链按序放行：`collect_data → aml_check → draft_report` |
+| `skip` | `skills/report.md`（`report-assembler`） | 跳步拒绝（`step_violations`） |
+| `missing_output` | `skills/report.md`（`report-assembler`） | 声明产出 `aml_hit` 未产出 → step `failure`，后续不可达 |
+| `constraint` | `skills/payment.md`（`payment-agent`） | 业务参数越界拒绝（`max_amount=1_000_000`） |
+| `approval` | `skills/payment.md`（`payment-agent`） | `capability: payment` 强制人工审批（阻塞 → 批准/拒绝） |
+
 审批与熔断复用同一落点：
 
 ```bash
