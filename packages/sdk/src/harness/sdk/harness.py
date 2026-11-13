@@ -1301,9 +1301,8 @@ class AgentHarness:
             result.delivered_content = verdict.delivered_content
             result.reconciliation_report = verdict.reconciliation_report
             # D2/D3: always deliver the governance-quarantined content, never the
-            # raw text. Reconciler.redact() is a no-op when there are no unsourced
-            # claims, so this is safe for clean deliveries and mandatory when
-            # claims were isolated/flagged.
+            # raw text. Clean deliveries (passed, no unsourced claims) are not
+            # touched by the gate; failed or unsourced deliveries are quarantined.
             result.final_response = verdict.delivered_content
 
         return result

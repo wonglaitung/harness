@@ -88,10 +88,13 @@ class DeterministicGate:
 
         passed = not any(f.severity == GateSeverity.ERROR for f in findings)
 
-        # Delivery-time enforcement: never hand back the raw content. Unsourced
-        # claims are quarantined; if nothing is redactable the whole delivery is
-        # held back so the raw result is not silently leaked.
-        delivered_content = self.reconciler.redact(content, report)
+        # Delivery-time enforcement: unsourced claims are redacted even when the
+        # verdict only carries a WARNING; failed verdicts with nothing to redact
+        # are held back entirely (`hold_back=True`). Clean deliveries pass
+        # through untouched.
+        delivered_content = self.reconciler.redact(
+            content, report, hold_back=not passed
+        )
 
         verdict = GateVerdict(
             passed=passed,

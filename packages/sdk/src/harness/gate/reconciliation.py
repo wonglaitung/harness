@@ -15,6 +15,8 @@ from harness.gate.validators import _CLAIM_PATTERN
 
 _CLAIM_RE = _CLAIM_PATTERN
 
+_QUARANTINE_NOTICE = "[内容未通过确定性闸门（含错误级发现），已隔离，不交付原始内容]"
+
 
 @dataclass
 class Reconciler:
@@ -54,14 +56,23 @@ class Reconciler:
         }
 
     @staticmethod
-    def redact(content: str, report: dict[str, Any]) -> str:
+    def redact(
+        content: str, report: dict[str, Any], *, hold_back: bool = False
+    ) -> str:
         """Produce a delivery-safe version by quarantining unsourced claims.
 
         Each claim that could not be grounded against the trusted source set is
-        replaced with a visible ``[已隔离:无溯源]`` marker. When nothing in the
-        content can be grounded (no claims could be redacted but the verdict still
-        failed), a hard quarantine notice is returned so the raw content is never
-        silently delivered.
+        replaced with a visible ``[已隔离:无溯源]`` marker.
+
+        Args:
+            content: 待交付内容
+            report: `reconcile()` 的报告
+            hold_back: 交付**未通过闸门**时由调用方传 True。此时若没有任何
+                可隔离的声明（空报告，或声明不在内容中），整段硬隔离，避免
+                原始内容被静默交付。通过闸门且无无溯源声明时保持原样。
+
+        Returns:
+            可交付内容（可能已标注/隔离）。
         """
         unsourced = (report or {}).get("unsourced_claims") or []
         safe = content
@@ -69,7 +80,7 @@ class Reconciler:
             if claim and claim in safe:
                 safe = safe.replace(claim, "[已隔离:无溯源]")
         if not unsourced:
-            return content
+            return _QUARANTINE_NOTICE if hold_back else content
         if safe.strip() == content.strip():
-            return "[内容未通过确定性闸门（含错误级发现），已隔离，不交付原始内容]"
+            return _QUARANTINE_NOTICE
         return safe

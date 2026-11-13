@@ -100,10 +100,39 @@ def test_redact_replaces_unsourced_claims() -> None:
     assert "3.2亿元" not in safe
 
 
+def test_clean_delivery_without_claims_is_untouched() -> None:
+    """通过闸门且无声明 → 交付内容原样，不得被误隔离。"""
+    verdict = _gate().check("已完成。", sources=[])
+    assert verdict.passed is True
+    assert verdict.delivered_content == "已完成。"
+
+
+def test_failed_without_claims_quarantines() -> None:
+    """失败但没有可隔离的声明 → 整段硬隔离（D3）。"""
+    from harness.gate.models import FindingType, GateFinding, GateSeverity
+
+    def always_fail(content: str, sources: list[str]):
+        return [
+            GateFinding(
+                id="logic:always",
+                type=FindingType.LOGIC,
+                severity=GateSeverity.ERROR,
+                message="blocked",
+            )
+        ]
+
+    gate = DeterministicGate(
+        validators=[LogicReconciler(rules=[always_fail])], reconciler=Reconciler()
+    )
+    verdict = gate.check("已完成的说明文字。", sources=[])
+    assert verdict.passed is False
+    assert "已隔离" in verdict.delivered_content
+    assert "已完成的说明文字。" not in verdict.delivered_content
+
+
 def test_redact_quarantines_when_nothing_redactable() -> None:
-    r = Reconciler()
     report = {"unsourced_claims": []}
-    safe = Reconciler.redact("任意内容", report)
+    safe = Reconciler.redact("任意内容", report, hold_back=True)
     assert "已隔离" in safe
 
 
