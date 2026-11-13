@@ -601,6 +601,15 @@ class AgentHarness:
         )
         return setup
 
+    @property
+    def last_run_id(self) -> str | None:
+        """最近一次 run 的治理 run_id（治理未启用时为 None）。
+
+        客户端退出时用它写 run 级标记（`ControlPlane.mark_run`，§10.1/§10.4）。
+        """
+        ctx = getattr(self._loop, "governance_context", None)
+        return getattr(ctx, "run_id", None)
+
     def governance_policy(self) -> Any:
         """取得治理策略（惰性编译并缓存）。
 
@@ -1409,10 +1418,12 @@ class AgentHarness:
         blocked, reason = self._loop._control_blocked()
         if blocked:
             self._loop._cancel_governance_run()
-            self._loop._stream_result = LoopResult(
-                status=LoopState.INTERRUPTED,
-                session=session,
-                error=f"Kill Switch：{reason}",
+            self._loop._stream_result = self._loop._finalize_governance_result(
+                LoopResult(
+                    status=LoopState.INTERRUPTED,
+                    session=session,
+                    error=f"Kill Switch：{reason}",
+                )
             )
             self._loop._end_governance_run()
             return

@@ -109,14 +109,22 @@ class GovernanceEventLog:
         step_id: str | None = None,
         duration_ms: int | None = None,
         outcome: str | None = None,
+        capability: str | None = None,
+        call_id: str | None = None,
+        agent_version: str | None = None,
+        skill_version: str | None = None,
     ) -> None:
-        """写判定事件（流水线第 9 步）。字段对齐 OTel `gen_ai.*`。"""
+        """写判定事件（流水线第 9 步）。字段对齐 OTel `gen_ai.*`（§11.1）。"""
         self.write(
             TOOL_CALL_DECISION,
             run_id=getattr(ctx, "run_id", None),
             agent_id=_agent_id(ctx),
+            agent_version=agent_version,
+            skill_version=skill_version,
             **{"gen_ai.operation.name": "execute_tool"},
             **{"gen_ai.tool.name": tool},
+            **({"gen_ai.tool.call.id": call_id} if call_id else {}),
+            capability=capability,
             decision=decision,
             reason=reason or None,
             step=step_id,
@@ -135,6 +143,7 @@ class GovernanceEventLog:
         step_id: str | None = None,
         outcome: str | None = None,
         error: str | None = None,
+        call_id: str | None = None,
     ) -> None:
         """写结果事件（流水线第 11 步）。"""
         self.write(
@@ -143,6 +152,7 @@ class GovernanceEventLog:
             agent_id=_agent_id(ctx),
             **{"gen_ai.operation.name": "execute_tool"},
             **{"gen_ai.tool.name": tool},
+            **({"gen_ai.tool.call.id": call_id} if call_id else {}),
             success=success,
             duration_ms=duration_ms,
             step=step_id,

@@ -153,6 +153,8 @@ class AgentLoop:
         # run 重建。
         self.governance_gateway: Any = None
         self.governance_context: Any = None
+        # 本次 run 的最终状态（run_end 的结论来源，§11.1）
+        self._governance_run_status: LoopState | None = None
 
         self.state = LoopState.IDLE
         self._interrupt_flag = False
@@ -318,10 +320,12 @@ class AgentLoop:
             blocked, reason = self._control_blocked()
             if blocked:
                 self._cancel_governance_run()
-                return LoopResult(
-                    status=LoopState.INTERRUPTED,
-                    session=session,
-                    error=f"Kill Switch：{reason}",
+                return self._finalize_governance_result(
+                    LoopResult(
+                        status=LoopState.INTERRUPTED,
+                        session=session,
+                        error=f"Kill Switch：{reason}",
+                    )
                 )
             # Wrap with OpenTelemetry tracing if available
             if is_tracing():
@@ -341,6 +345,7 @@ class AgentLoop:
     def _begin_governance_run(self) -> None:
         """新建本次 run 的治理上下文并写 `run_start` 事件。"""
         gateway = self.governance_gateway
+        self._governance_run_status = None
         if gateway is None:
             self.governance_context = None
             return
@@ -350,7 +355,11 @@ class AgentLoop:
             event_log.write_run_start(self.governance_context)
 
     def _end_governance_run(self) -> None:
-        """写 `run_end` 事件（结论含 INCOMPLETE：末端 step 被跳过）。"""
+        """写治理侧汇总判定与 `run_end` 事件。
+
+        结论取自**实际 run 状态**（§4.4 / §11.1）：`ERROR` 不能记成 completed，
+        Kill Switch 中断应记 interrupted。异常退出（无状态）按 error 记。
+        """
         gateway = self.governance_gateway
         ctx = self.governance_context
         if gateway is None or ctx is None:
@@ -358,13 +367,22 @@ class AgentLoop:
         event_log = getattr(gateway, "event_log", None)
         if event_log is None:
             return
-        if ctx.cancelled:
-            status = "cancelled"
-        elif ctx.terminal_step_skipped:
-            status = "incomplete"
-        else:
-            status = "completed"
+        status = self._governance_status_name(self._governance_run_status)
+        write_verdict = getattr(gateway, "write_run_verdict", None)
+        if callable(write_verdict):
+            write_verdict(ctx, status)
         event_log.write_run_end(ctx, status)
+
+    @staticmethod
+    def _governance_status_name(status: LoopState | None) -> str:
+        """LoopState → run_end 结论（§11.1 的四个取值）。"""
+        if status == LoopState.COMPLETED:
+            return "completed"
+        if status == LoopState.INCOMPLETE:
+            return "incomplete"
+        if status == LoopState.INTERRUPTED:
+            return "interrupted"
+        return "error"
 
     def _control_blocked(self) -> tuple[bool, str]:
         """Kill Switch 检查点：读控制面，返回 `(是否阻断, 原因)`（§10.3）。
@@ -393,7 +411,7 @@ class AgentLoop:
         """末端 step 被跳过 → run 结论 INCOMPLETE（§8.3）。
 
         "分支都没命中 → 什么都没做"不能被读成"成功完成"——静默通过是治理
-        场景最危险的失败形态。
+        场景最危险的失败形态。最终状态留给 `_end_governance_run` 写 run_end。
         """
         ctx = self.governance_context
         if (
@@ -402,6 +420,7 @@ class AgentLoop:
             and ctx.terminal_step_skipped
         ):
             result.status = LoopState.INCOMPLETE
+        self._governance_run_status = result.status
         return result
 
     async def _run_with_tracing(

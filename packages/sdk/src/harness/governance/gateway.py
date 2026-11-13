@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
 from harness.governance.constraints import evaluate_constraints
 from harness.governance.context import RunContext
 from harness.governance.policy import PolicySnapshot
+
+# 当前判定对应的工具调用 id（ContextVar：to_thread 下按调用隔离）
+_CALL_ID: ContextVar[str | None] = ContextVar("governance_call_id", default=None)
 
 # 判定结果
 ALLOW = "allow"
@@ -131,6 +135,7 @@ class GovernanceGateway:
         arguments: dict[str, Any],
         *,
         now: float | None = None,
+        call_id: str | None = None,
     ) -> Decision:
         """对一次工具调用做完整判定（流水线第 1-9 步）。
 
@@ -138,7 +143,20 @@ class GovernanceGateway:
             `Decision`。`allowed=False` 时 `reason` 说明原因（写进事件，不含实际值）。
         """
         timestamp = time.monotonic() if now is None else now
+        token = _CALL_ID.set(call_id)
+        try:
+            return self._check_pipeline(ctx, tool_name, arguments, timestamp)
+        finally:
+            _CALL_ID.reset(token)
 
+    def _check_pipeline(
+        self,
+        ctx: RunContext,
+        tool_name: str,
+        arguments: dict[str, Any],
+        timestamp: float,
+    ) -> Decision:
+        """流水线 1-9 步（同步；审批等待由调用方放到线程里执行）。"""
         # 0. 控制面检查点（Kill Switch，§10.3「每次工具执行前」）
         decision = self._check_control(ctx, tool_name)
         if decision is not None:
@@ -344,6 +362,7 @@ class GovernanceGateway:
         }
         ctx.advance_cursor()
         self._record_skipped(ctx, before)
+        self._record_guard_unresolved(ctx)
         self._observe_branch_overlap(ctx)
 
         # 重入：已 `success` 的 step 被再次调用（§8.3）
@@ -356,6 +375,8 @@ class GovernanceGateway:
         kind, reason = ctx.classify_reachability(tool_name)
         if kind == "ok":
             return None
+        if kind == "skip":
+            self._record_step_violation(ctx, tool_name, reason)
         return self._deny(ctx, tool_name, reason, RULE_STEP)
 
     def _check_reentry(
@@ -430,6 +451,7 @@ class GovernanceGateway:
         constraints = spec.constraints if spec else None
         result = evaluate_constraints(arguments, constraints)
         if not result.ok:
+            self._record_constraint_violation(ctx, tool_name, result)
             return self._deny(
                 ctx,
                 tool_name,
@@ -655,7 +677,9 @@ class GovernanceGateway:
                 self._record_signal(ctx, "approval_timeout", count)
                 self._escalate(ctx, "approval_timeout")
             return decision
-        return None
+        # Kill Switch 检查点：审批**完成后**再次读控制面（§10.3）。
+        # 否则等待期间被 suspend，批准后仍会执行工具。
+        return self._check_control(ctx, tool_name)
 
     # -- 事件 -------------------------------------------------------------
 
@@ -672,6 +696,7 @@ class GovernanceGateway:
     ) -> None:
         if self.event_log is None:
             return
+        spec = self.policy.tool_by_name(tool_name)
         self.event_log.write_decision(
             ctx,
             tool_name,
@@ -680,6 +705,11 @@ class GovernanceGateway:
             step_id=step_id or self._current_step_id(ctx, tool_name),
             duration_ms=duration_ms,
             outcome=outcome,
+            capability=spec.capability if spec else None,
+            call_id=_CALL_ID.get(),
+            # 治理块版本即技能版本（同一份 frontmatter，§6.2）
+            agent_version=self.policy.version,
+            skill_version=self.policy.version,
         )
 
     def _record_signal(self, ctx: RunContext, signal: str, count: int) -> None:
@@ -691,6 +721,72 @@ class GovernanceGateway:
             agent_id=self.policy.agent_id,
             signal=signal,
             count=count,
+        )
+
+    def _record_constraint_violation(
+        self, ctx: RunContext, tool_name: str, result: Any
+    ) -> None:
+        """约束违规事件（§7.4 / §11.1）：只记**字段名**与结论，不记实际值。"""
+        if self.event_log is None:
+            return
+        fields = [violation.field_name for violation in result.violations]
+        self.event_log.write(
+            "constraint_violation",
+            run_id=ctx.run_id,
+            agent_id=self.policy.agent_id,
+            tool=tool_name,
+            step=self._current_step_id(ctx, tool_name),
+            fields=fields or None,
+            fail_closed=result.error is not None,
+        )
+
+    def _record_step_violation(
+        self, ctx: RunContext, tool_name: str, reason: str
+    ) -> None:
+        """跳步事件（§8.3 / §11.1）。"""
+        if self.event_log is None:
+            return
+        self.event_log.write(
+            "step_violation",
+            run_id=ctx.run_id,
+            agent_id=self.policy.agent_id,
+            tool=tool_name,
+            step=self._current_step_id(ctx, tool_name),
+            reason=reason,
+        )
+
+    def _record_guard_unresolved(self, ctx: RunContext) -> None:
+        """条件求值失败事件（§8.2 / §11.1）：按 fail-closed 视为 if 为假。"""
+        if self.event_log is None:
+            ctx.guard_unresolved_steps.clear()
+            return
+        while ctx.guard_unresolved_steps:
+            step_id = ctx.guard_unresolved_steps.pop(0)
+            self.event_log.write(
+                "guard_unresolved",
+                run_id=ctx.run_id,
+                agent_id=self.policy.agent_id,
+                step=step_id,
+                reason="条件求值失败，按 if 为假处理（fail-closed）",
+            )
+            self._escalate(ctx, "guard_unresolved")
+
+    def write_run_verdict(self, ctx: RunContext, status: str) -> None:
+        """本次 run 的治理侧汇总判定（§11.1，不叫 gate_verdict）。"""
+        if self.event_log is None:
+            return
+        steps = {
+            sid: (state.outcome or "pending")
+            for sid in ctx.step_ids
+            if (state := ctx.step_state(sid)) is not None
+        }
+        self.event_log.write(
+            "governance_verdict",
+            run_id=ctx.run_id,
+            agent_id=self.policy.agent_id,
+            status=status,
+            steps=steps,
+            signals=dict(ctx.signals) or None,
         )
 
     def _record_reentry(
@@ -716,6 +812,7 @@ class GovernanceGateway:
         step_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         error: str | None = None,
+        call_id: str | None = None,
     ) -> None:
         """执行后写结果事件（流水线第 11 步）并推进 step 状态。
 
@@ -726,7 +823,7 @@ class GovernanceGateway:
         step_id = step_id or self._current_step_id(ctx, tool_name)
         spec = self.policy.tool_by_name(tool_name)
         declared = {o.name for o in (spec.outputs if spec else ())}
-        outputs = extract_outputs(metadata or {}, declared)
+        outputs, output_types = extract_outputs(metadata or {}, declared)
 
         outcome = "success" if success else "failure"
         result_error = error
@@ -743,7 +840,9 @@ class GovernanceGateway:
             elif step_id:
                 ctx.record_tool_success(step_id, tool_name, outputs)
                 for name in outputs:
-                    self._record_fact(ctx, tool_name, name, step_id)
+                    self._record_fact(
+                        ctx, tool_name, name, step_id, output_types.get(name, "unknown")
+                    )
         elif step_id:
             ctx.record_tool_failure(step_id, tool_name)
 
@@ -756,12 +855,18 @@ class GovernanceGateway:
                 step_id=step_id,
                 outcome=outcome,
                 error=result_error,
+                call_id=call_id,
             )
         if outcome == "success":
             ctx.record_success()
 
     def _record_fact(
-        self, ctx: RunContext, tool_name: str, name: str, step_id: str | None
+        self,
+        ctx: RunContext,
+        tool_name: str,
+        name: str,
+        step_id: str | None,
+        value_type: str,
     ) -> None:
         """事实观测事件：只记事实名与类型，不记事实值（§8.2 / §11.3）。"""
         if self.event_log is None:
@@ -773,6 +878,7 @@ class GovernanceGateway:
             tool=tool_name,
             step=step_id,
             fact=name,
+            fact_type=value_type,
         )
 
 
@@ -788,10 +894,27 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+def _value_type(value: Any) -> str:
+    """事实值的类型名（事件只记类型，不记值，§11.3）。"""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    return type(value).__name__
+
+
 def extract_outputs(
     metadata: dict[str, Any], declared: set[str]
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, str]]:
     """从工具结果里抽取事实（§8.2）。
+
+    Returns:
+        ``(outputs, types)``。``outputs`` 是声明产出的字符串化值，
+        ``types`` 是各产出的原始类型名（只用于留痕，不参与判定）。
 
     来源优先级：
 
@@ -803,24 +926,28 @@ def extract_outputs(
     未声明字段影响分支判定。
     """
     outputs: dict[str, str] = {}
+    types: dict[str, str] = {}
     raw = metadata.get("outputs")
     if isinstance(raw, dict):
         for name, value in raw.items():
             if name in declared:
                 outputs[name] = _as_text(value)
+                types[name] = _value_type(value)
     if not outputs:
         raw_json = metadata.get("json")
         if isinstance(raw_json, dict):
             for name, value in raw_json.items():
                 if name in declared:
                     outputs[name] = _as_text(value)
+                    types[name] = _value_type(value)
     for name in declared:
         if name in outputs:
             continue
         value = metadata.get(name)
         if isinstance(value, (str, int, float, bool)):
             outputs[name] = _as_text(value)
-    return outputs
+            types[name] = _value_type(value)
+    return outputs, types
 
 
 # -- 路径 / 主机判定 ------------------------------------------------------

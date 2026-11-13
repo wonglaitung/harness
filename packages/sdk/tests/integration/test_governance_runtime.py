@@ -215,3 +215,67 @@ async def test_completed_run_without_skip_stays_completed(tmp_path):
         LoopResult(status=LoopState.COMPLETED, session=Session(id="s1"))
     )
     assert result.status == LoopState.COMPLETED
+
+
+# --------------------------------------------------------------------------
+# run_end 结论与 governance_verdict（§4.4 / §11.1）
+# --------------------------------------------------------------------------
+
+
+def _events(gateway) -> list[dict]:
+    import json
+
+    path = next(gateway.event_log.directory.rglob("*.jsonl"))
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _event(gateway, name: str) -> dict:
+    matches = [e for e in _events(gateway) if e["event"] == name]
+    assert matches, f"缺少事件 {name}"
+    return matches[-1]
+
+
+async def test_run_end_completed_and_verdict(tmp_path):
+    gateway = _gateway(tmp_path)
+    loop = _loop(gateway)
+    await loop.run("hi", Session(id="s1"))
+
+    assert _event(gateway, "run_end")["status"] == "completed"
+    verdict = _event(gateway, "governance_verdict")
+    assert verdict["status"] == "completed"
+    assert set(verdict["steps"]) == {"collect_data", "aml_check"}
+
+
+async def test_run_end_error_on_token_limit(tmp_path):
+    gateway = _gateway(tmp_path, block={"limits": {
+        "max_tool_calls_per_run": 50,
+        "max_calls_per_minute": 20,
+        "max_tokens_per_run": 1,
+    }})
+    loop = _loop(gateway)
+    result = await loop.run("hi", Session(id="s1"))
+    assert result.status == LoopState.ERROR
+    assert _event(gateway, "run_end")["status"] == "error"
+
+
+async def test_run_end_interrupted_on_kill_switch(tmp_path):
+    gateway = _gateway(tmp_path)
+    gateway.control.suspend("credit-paper-assembler", reason="test")
+    loop = _loop(gateway)
+    result = await loop.run("hi", Session(id="s1"))
+    assert result.status == LoopState.INTERRUPTED
+    assert _event(gateway, "run_end")["status"] == "interrupted"
+
+
+async def test_run_end_incomplete_when_terminal_step_skipped(tmp_path):
+    gateway = _gateway(tmp_path)
+    loop = _loop(gateway)
+    ctx = gateway.new_context()
+    loop.governance_context = ctx
+    ctx.step_state("aml_check").outcome = "skipped"
+    result = loop._finalize_governance_result(
+        LoopResult(status=LoopState.COMPLETED, session=Session(id="s1"))
+    )
+    loop._end_governance_run()
+    assert result.status == LoopState.INCOMPLETE
+    assert _event(gateway, "run_end")["status"] == "incomplete"

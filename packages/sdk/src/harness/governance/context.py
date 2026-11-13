@@ -103,6 +103,8 @@ class RunContext:
         self.tool_call_counts: dict[str, int] = {}
         # 行为信号计数
         self.signals: dict[str, int] = {}
+        # 条件求值失败的 step（供网关写 guard_unresolved 事件）
+        self.guard_unresolved_steps: list[str] = []
         # 已达阈值并执行过升级动作的信号（避免重复 suspend / 重复入队，§9.2）
         self.escalated: set[str] = set()
         self._consecutive_denials = 0
@@ -204,9 +206,10 @@ class RunContext:
                     )
                 except ExpressionError:
                     # 无法判定 → fail-closed：视为 if 为假（不激活），
-                    # 但记录信号（由调用方处理）
+                    # 但记录信号与待留痕的 step（由网关写事件）
                     active = False
                     self.bump_signal("guard_unresolved")
+                    self.guard_unresolved_steps.append(step_id)
                 if not active:
                     state.outcome = OUTCOME_SKIPPED
                     state.conclusion = OUTCOME_SKIPPED

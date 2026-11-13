@@ -75,8 +75,14 @@ class ToolExecutor:
                     error="治理网关拒绝：本次调用缺少运行上下文（fail-closed）",
                     tool_name=tool_call.name,
                 )
-            decision = self.governance.check(
-                gov_ctx, tool_call.name, tool_call.arguments
+            # 审批关卡可能阻塞等待；放到工作线程，避免卡住事件循环（§7.5.2）。
+            # 网关判定本身是同步的，同一 run 的工具调用在 loop 内是顺序执行的。
+            decision = await asyncio.to_thread(
+                self.governance.check,
+                gov_ctx,
+                tool_call.name,
+                tool_call.arguments,
+                call_id=tool_call.id,
             )
             if not decision.allowed:
                 return ToolResult(
@@ -120,13 +126,18 @@ class ToolExecutor:
             result.tool_call_id = tool_call.id
             result.tool_name = tool_call.name
             self._record_governance_result(
-                gov_ctx, tool_call.name, result, started
+                gov_ctx, tool_call.name, result, started, call_id=tool_call.id
             )
             return result
 
         except TimeoutError:
             self._record_governance_result(
-                gov_ctx, tool_call.name, None, started, error="工具执行超时"
+                gov_ctx,
+                tool_call.name,
+                None,
+                started,
+                error="工具执行超时",
+                call_id=tool_call.id,
             )
             return ToolResult(
                 tool_call_id=tool_call.id,
@@ -138,7 +149,12 @@ class ToolExecutor:
 
         except Exception as e:
             self._record_governance_result(
-                gov_ctx, tool_call.name, None, started, error=str(e)
+                gov_ctx,
+                tool_call.name,
+                None,
+                started,
+                error=str(e),
+                call_id=tool_call.id,
             )
             return ToolResult(
                 tool_call_id=tool_call.id,
@@ -156,6 +172,7 @@ class ToolExecutor:
         started: float,
         *,
         error: str | None = None,
+        call_id: str | None = None,
     ) -> None:
         """流水线第 11 步：结果事件 + step 状态推进。"""
         if self.governance is None or gov_ctx is None:
@@ -170,6 +187,7 @@ class ToolExecutor:
             duration_ms=duration_ms,
             metadata=metadata,
             error=error or (result.error if result is not None else None),
+            call_id=call_id,
         )
 
     async def execute_batch(

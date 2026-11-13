@@ -45,7 +45,16 @@ BLOCK = {
         },
         {"name": "report_writer:draft", "capability": "write", "idempotent": False},
         {"name": "review_submit:post", "capability": "write", "idempotent": True},
-        {"name": "pay:transfer", "capability": "payment", "idempotent": False},
+        {
+            "name": "pay:transfer",
+            "capability": "payment",
+            "idempotent": False,
+            "constraints": {
+                "required_fields": ["amount"],
+                "amount_field": "amount",
+                "max_amount": 1_000_000,
+            },
+        },
     ],
     "workflow": {
         "shared_tools": ["pay:transfer"],
@@ -762,3 +771,83 @@ def test_token_limit_denies(gateway, ctx):
     decision = gateway.check(ctx, "core_banking_api:read_only", {})
     assert decision.allowed is False
     assert "token" in decision.reason
+
+
+# --------------------------------------------------------------------------
+# 事件留痕（§11.1）
+# --------------------------------------------------------------------------
+
+
+def test_decision_event_has_otel_and_capability_fields(gateway, ctx, event_log):
+    gateway.check(ctx, "core_banking_api:read_only", {}, call_id="call-1")
+    event = [e for e in _events(event_log) if e["event"] == "tool_call_decision"][-1]
+    assert event["gen_ai.tool.call.id"] == "call-1"
+    assert event["capability"] == "read"
+    assert event["agent_version"] == "1.2.0"
+    assert event["skill_version"] == "1.2.0"
+
+
+def test_constraint_violation_event_records_field_names_only(gateway, ctx, event_log):
+    decision = gateway.check(ctx, "pay:transfer", {"amount": 2_000_000})
+    assert decision.allowed is False
+    event = [e for e in _events(event_log) if e["event"] == "constraint_violation"][-1]
+    assert event["fields"] == ["amount"]
+    raw = json.dumps(event, ensure_ascii=False)
+    assert "2000000" not in raw and "2_000_000" not in raw
+
+
+def test_step_violation_event(gateway, ctx, event_log):
+    gateway.check(ctx, "report_writer:draft", {})
+    event = [e for e in _events(event_log) if e["event"] == "step_violation"][-1]
+    assert event["tool"] == "report_writer:draft"
+    assert "跳步" in event["reason"]
+
+
+def test_guard_unresolved_event(tmp_path):
+    block = {
+        "agent_id": "a",
+        "version": "1",
+        "approved_by": "x",
+        "business_intent": "x",
+        "owners": {"accountable": "x", "technical": "x"},
+        "material": False,
+        "tools": [
+            {"name": "t1", "capability": "read", "idempotent": True},
+            {"name": "t2", "capability": "read", "idempotent": True},
+            {"name": "t3", "capability": "read", "idempotent": True},
+        ],
+        "workflow": {
+            "steps": [
+                {"id": "a", "tools": ["t1"]},
+                {"id": "b", "if": "${{ steps.a.outputs.missing == 'true' }}", "tools": ["t2"]},
+                {"id": "c", "tools": ["t3"]},
+            ]
+        },
+        "limits": {},
+    }
+    policy = compile_policy([parse_governance_block(block)])
+    log = GovernanceEventLog(directory=tmp_path / "audit")
+    gw = GovernanceGateway(policy, event_log=log)
+    ctx = gw.new_context()
+    _run_step(gw, ctx, "t1", "a")  # 不产出 missing
+    gw.check(ctx, "t3", {})        # 推进游标 → b 的条件求值失败
+    event = [e for e in _events(log) if e["event"] == "guard_unresolved"][-1]
+    assert event["step"] == "b"
+    assert ctx.signal_count("guard_unresolved") == 1
+
+
+def test_fact_observed_records_type_not_value(gateway, ctx, event_log):
+    _run_step(gateway, ctx, "core_banking_api:read_only", "collect_data")
+    _run_step(gateway, ctx, "aml_screening:run", "aml_check", {"aml_hit": True})
+    event = [e for e in _events(event_log) if e["event"] == "fact_observed"][-1]
+    assert event["fact"] == "aml_hit"
+    assert event["fact_type"] == "boolean"
+    assert "true" not in json.dumps(event, ensure_ascii=False).lower().replace('"boolean"', "")
+
+
+def test_governance_verdict_summary(gateway, ctx, event_log):
+    _run_step(gateway, ctx, "core_banking_api:read_only", "collect_data")
+    gateway.write_run_verdict(ctx, "completed")
+    event = [e for e in _events(event_log) if e["event"] == "governance_verdict"][-1]
+    assert event["status"] == "completed"
+    assert event["steps"]["collect_data"] is not None

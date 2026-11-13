@@ -475,6 +475,8 @@ def test_strict_run_auto_assembles_gateway(tmp_path, monkeypatch):
     asyncio.run(_run())
     assert harness._tool_executor.governance is not None
     assert harness._loop.governance_gateway is not None
+    # 客户端退出标记需要最近一次 run 的 id（§10.1/§10.4）
+    assert harness.last_run_id == harness._loop.governance_context.run_id
 
 
 def test_register_after_run_invalidates_policy(tmp_path, monkeypatch):
@@ -546,3 +548,138 @@ async def test_stream_path_creates_run_context_in_strict(tmp_path, monkeypatch):
     assert "run_start" in kinds
     assert "run_end" in kinds
     assert all(e["run_id"] == run_id for e in events if "run_id" in e)
+
+
+# --------------------------------------------------------------------------
+# 审批等待不阻塞事件循环 + 审批完成后再查控制面（§7.5.2 / §10.3）
+# --------------------------------------------------------------------------
+
+PAY_BLOCK = {
+    "agent_id": "payment-agent",
+    "version": "1.0.0",
+    "approved_by": "PR #1",
+    "business_intent": "放款",
+    "owners": {"accountable": "x", "technical": "x"},
+    "material": True,
+    "tools": [
+        {
+            "name": "pay:transfer",
+            "capability": "payment",
+            "idempotent": False,
+            "constraints": {"required_fields": ["amount"]},
+        }
+    ],
+    "workflow": {"steps": [{"id": "disburse", "tools": ["pay:transfer"]}]},
+    "limits": {
+        "max_tool_calls_per_run": 5,
+        "max_calls_per_minute": 5,
+        "max_tokens_per_run": 1000,
+    },
+    "approval_required_for": ["pay:transfer"],
+}
+
+
+class _Pay(Tool):
+    capability = "payment"
+    idempotent = False
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    @property
+    def name(self) -> str:
+        return "pay:transfer"
+
+    @property
+    def description(self) -> str:
+        return "pay"
+
+    async def execute(self, arguments, context) -> ToolResult:
+        self.calls.append(arguments)
+        return ToolResult(tool_call_id="", success=True, content="paid")
+
+
+def _payment_executor(tmp_path, timeout_seconds=1):
+    from harness.governance.approval import ApprovalManager
+    from harness.governance.control import ControlPlane
+
+    policy = compile_policy(
+        [parse_governance_block(yaml.safe_load(yaml.safe_dump(PAY_BLOCK)))]
+    )
+    registry = ToolRegistry()
+    pay = _Pay()
+    registry.register(pay)
+    executor = ToolExecutor(registry, ExecutorConfig(timeout=5))
+    control_dir = tmp_path / "control"
+    plane = ControlPlane(directory=control_dir)
+    manager = ApprovalManager(
+        control_dir=control_dir, timeout_seconds=timeout_seconds, poll_interval=0.01
+    )
+    log = GovernanceEventLog(directory=tmp_path / "audit")
+    gateway = GovernanceGateway(
+        policy, approval=manager, control=plane, event_log=log
+    )
+    executor.governance = gateway
+    return executor, gateway, manager, plane, pay
+
+
+async def test_approval_wait_does_not_block_event_loop(tmp_path):
+    """审批等待期间事件循环仍在跑（§7.5.2「不阻塞事件循环」）。"""
+    import asyncio
+
+    executor, gateway, _, _, pay = _payment_executor(tmp_path, timeout_seconds=1)
+    ctx = gateway.new_context()
+
+    ticks = 0
+
+    async def ticker() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    task = asyncio.create_task(ticker())
+    try:
+        result = await executor.execute(
+            ToolCall(id="1", name="pay:transfer", arguments={"amount": 1}),
+            _context(executor, ctx),
+        )
+    finally:
+        task.cancel()
+
+    assert result.success is False  # 无人审批 → 超时拒绝
+    assert pay.calls == []
+    assert ticks >= 10, f"事件循环被阻塞（ticks={ticks}）"
+
+
+async def test_suspend_during_approval_blocks_execution(tmp_path):
+    """审批完成后再查控制面：等待期间被 suspend，批准也不执行（§10.3）。"""
+    import threading
+    import time
+
+    executor, gateway, manager, plane, pay = _payment_executor(
+        tmp_path, timeout_seconds=5
+    )
+    ctx = gateway.new_context()
+
+    def approve_then_suspend() -> None:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            pending = manager.list_pending()
+            if pending:
+                plane.suspend("payment-agent", reason="during approval")
+                manager.decide(pending[0].request_id, approved=True, actor="tester")
+                return
+            time.sleep(0.01)
+
+    thread = threading.Thread(target=approve_then_suspend, daemon=True)
+    thread.start()
+    result = await executor.execute(
+        ToolCall(id="1", name="pay:transfer", arguments={"amount": 1}),
+        _context(executor, ctx),
+    )
+    thread.join(timeout=5)
+
+    assert result.success is False
+    assert "控制面" in (result.error or "")
+    assert pay.calls == [], "审批通过但已被 suspend，不得执行工具"
