@@ -1175,14 +1175,14 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜底"。
 
-> **本节命令是确定性代码，不调用 LLM。** `init` 只做机械填充（能从工具注册表与技能 frontmatter 读到的字段），**内容判断始终由人做**（§13.3）。治理块里凡是"人兜内容"的部分——capability 分级、幂等性、步骤链、分支语义——机器不生成、不猜测。
+> **本节命令是确定性代码，不调用 LLM。** `init` 只做机械填充（能从工具注册表与技能 frontmatter 读到的字段），**内容判断始终由人做**（§13.3）。内置/自研工具的 `capability` 与 `idempotent` 以**代码声明为准**（§7.3 / §6.4.2），`init` 直接回填（回填即保证与代码一致，不是猜测）；代码里查不到的工具（如 MCP）保留 `TODO`。步骤链、分支语义等"人兜内容"的部分，机器不生成、不猜测。
 
 | 命令 | 作用 | 失败行为 |
 |---|---|---|
-| `harness governance init <skill>` | 从工具注册表 + 技能 frontmatter 生成治理块**骨架**：填好 `agent_id` / `version` / `approved_by` 占位；**工具清单取自技能 `tools.allowed`**（与 §6.2.1 规则 1 一致，天然满足子集约束）；`capability` 与 `idempotent` 留 `TODO` 并在 stderr 列出待填项；按 §13.1 给出九步清单 | 不写文件（骨架含 `TODO` 时视为未完成，§6.3.4 规则 26） |
+| `harness governance init <file\|dir>` | 迁移工具：从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**。填好 `agent_id`（`--agent-id` / `HARNESS_GOVERNANCE_AGENT_ID` / 技能名）/ `version`；**工具清单取自技能 `tools.allowed`**（与 §6.2.1 规则 1 一致，天然满足子集约束）；内置工具的 `capability`/`idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」；按 §13.1 给出九步清单。目录会递归扫描带 frontmatter 的 `.md`，已有治理块跳过；`--dry-run` 只预览不写 | 缺 frontmatter / 读取失败 → 非零退出；已有治理块跳过不覆盖 |
 | `harness governance check <skill>` | 跑 §6.3 的 29 条规则 + §13.3 的"机器兜"清单 | 非零退出，逐条报 `file:line` + 违反的规则号 |
 
-两者均为 P0-1 实施项（§15）。`init` 生成的骨架**必然带 `TODO`**，必须经 `check` 通过才可提交——两者配套使用。
+两者均为 P0-1 实施项（§15）。`init` 写入的块**通常带 `TODO`**（`approved_by` / `business_intent` / `owners` 及 MCP 工具声明），必须经 `check` 通过才可提交——两者配套使用。
 
 ### 13.5 完整样例：从业务需求到治理块
 
@@ -1243,10 +1243,10 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 3. **运行上下文**（§4.4）：`run_id` 生成、`PolicySnapshot` 按治理身份绑定、步骤游标与计数的 per-run 生命周期、随 `ToolContext.metadata` 送达执行路径。
 4. **治理块 linter**：结构 / 表达式 / 治理三类规则（§6.3、§17）。
 5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取**需新增**的环境变量 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
-6. **CLI `harness governance init <skill>`**（§13.4）：从工具注册表 + 技能 frontmatter 生成治理块骨架——填好 `agent_id` / `version` / `approved_by` 占位 / 工具清单，`capability` 与 `idempotent` 留 `TODO` 并在 stderr 列出待填项，附九步清单（§13.1）。骨架含 `TODO` 时不写文件。
+6. **CLI `harness governance init <file|dir>`**（§13.4）：迁移工具，从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**——填好 `agent_id` / `version` / 工具清单，内置工具的 `capability` 与 `idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」，附九步清单（§13.1）；`--dry-run` 只预览。
 7. **CLI `harness governance check <skill>`**（§13.4）：跑 §6.3 的 29 条规则；非零退出，逐条报 `file:line` + 违反的规则号。与 6 配套——`init` 产出必须经 `check` 通过才可提交。
 
-**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 27/28）** → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错；`init` 生成的骨架必然带 `TODO` 且 `check` 报出待填项。
+**验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 27/28）** → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错；`init` 写入的块带 `TODO` 且 `check` 报出待填项。
 
 ### P0-2　执行网关与业务约束
 
@@ -1386,7 +1386,7 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 - **静态**：`ruff`、`mypy`。
 - **功能**：
   - **治理块正反例**：逐条覆盖 §6.3 的全部 29 条校验规则（**规则 → 实施项 → 测试组的逐条映射见 §16.1**）：缺必填字段、未知字段、capability 缺失、`idempotent` 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、引用不闭合（规则 27/28）、`material: true` 缺 `workflow`（规则 24）等。
-  - **CLI 工具化**（§13.4）：`init` 生成的骨架必带 `TODO` 且列出待填项；`check` 对 §6.3 全部 29 条逐条报 `file:line` + 规则号并以非零退出；`init` → 填 `TODO` → `check` 通过的闭环可跑通。
+  - **CLI 工具化**（§13.4）：`init` 写入的块带 `TODO` 且列出待填项（内置工具声明自动回填）；`check` 对 §6.3 全部 29 条逐条报 `file:line` + 规则号并以非零退出；`init` → 填 `TODO` → `check` 通过的闭环可跑通。
   - **表达式类**（照搬 GHA《Common Mistakes》）：`== 'true'` 之外的布尔写法、output 直接当布尔、`${{ }}` 只包一半、`if:` 裸 `!` 开头、引用 `hashFiles()` / `secrets` 上下文。
   - **网关绕过用例**：Hook `MODIFY_ARGS` 改写参数后仍按终态校验；MCP 工具走同一路径。
   - **步骤机**：跳步、重入（幂等放行 / 非幂等拒绝）、同 step 多工具、`complete` 三种取值、产出缺失判失败、`skipped` 不阻断、`failure` 阻断后续。

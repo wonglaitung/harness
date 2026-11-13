@@ -7,7 +7,9 @@ platform auditor so remediation stays a human-reviewed, deploy-side concern.
 
 治理 CLI（设计稿 §13.4 / §7.5.3 / §10.2）：
 
-- ``harness governance init <skill>``    生成治理块骨架（含 TODO，不写文件）
+- ``harness governance init <file|dir>`` 迁移工具：生成治理块并写入，能自动填的
+  自动填（内置工具的能力/幂等性来自代码声明），只能人填的保留 TODO 并在报告里
+  标「需手工补充」；``--dry-run`` 只预览不写
 - ``harness governance check <skill>``   跑 §6.3 的校验规则，逐条报 file:line
 - ``harness governance approve/reject <request_id>``  运行期审批
 - ``harness governance suspend/resume/status <agent_id>``  Kill Switch
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -144,18 +147,86 @@ def _allowed_tools(skill: Any) -> list[str]:
     return list(allowed)
 
 
-def _init_skeleton(skill: Any) -> str:
-    allowed = _allowed_tools(skill) or ["TODO_tool_name"]
-    tools_yaml = "\n".join(
-        f"    - name: {name}\n      capability: TODO\n      idempotent: TODO"
-        for name in allowed
-    )
-    # 骨架只做机械绑定：把工具清单放进唯一 step，避免无谓的规则 27/28
-    # 噪音（业务步骤链必须由人画，§13.4）。
-    step_tools = ", ".join(allowed)
-    return (
+def _builtin_tool_declarations() -> dict[str, tuple[str, bool]]:
+    """内置工具的 `(capability, idempotent)` 声明。
+
+    自研/内置工具的治理声明以**代码为准**（§7.3 / §6.4.2），因此迁移工具
+    可以直接回填，不需要人再抄一遍。MCP 工具只能在治理块里声明，代码侧
+    查不到，调用方应保留 TODO 并在报告里标「需手工补充」。
+    """
+    import inspect
+
+    from harness.tools import builtins as builtin_tools
+    from harness.tools.base import Tool
+
+    declarations: dict[str, tuple[str, bool]] = {}
+    for _, cls in inspect.getmembers(builtin_tools, inspect.isclass):
+        if not issubclass(cls, Tool) or cls is Tool:
+            continue
+        try:
+            tool = cls()
+        except Exception:  # noqa: BLE001 — 无默认构造的工具不参与回填
+            continue
+        capability = getattr(tool, "capability", None)
+        idempotent = getattr(tool, "idempotent", None)
+        if capability and isinstance(idempotent, bool):
+            declarations[tool.name] = (capability, idempotent)
+    return declarations
+
+
+def _yaml_scalar(value: str) -> str:
+    """安全地写一个 YAML 标量（普通名字保持可读，特殊字符才加引号）。"""
+    if re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _init_block(
+    skill: Any,
+    agent_id: str,
+    declarations: dict[str, tuple[str, bool]],
+) -> tuple[str, list[str], list[str]]:
+    """生成治理块文本，并返回 `(文本, 需手工补充, 需确认)`。"""
+    allowed = _allowed_tools(skill)
+    todo = [
+        "approved_by",
+        "business_intent",
+        "owners.accountable",
+        "owners.technical",
+    ]
+    review = [
+        "workflow.steps（当前为单 step 机械绑定，业务步骤链需人工确认）",
+    ]
+
+    if allowed:
+        tool_lines: list[str] = []
+        for name in allowed:
+            declaration = declarations.get(name)
+            capability: str
+            idempotent: str | bool
+            if declaration is None:
+                capability, idempotent = "TODO", "TODO"
+                todo.append(f"tools[{name}].capability/idempotent")
+            else:
+                capability, idempotent = declaration
+            rendered_idempotent = (
+                str(idempotent).lower() if isinstance(idempotent, bool) else str(idempotent)
+            )
+            tool_lines.append(
+                f"    - name: {_yaml_scalar(name)}\n"
+                f"      capability: {capability}\n"
+                f"      idempotent: {rendered_idempotent}"
+            )
+        tools_yaml = "\n".join(tool_lines)
+        step_tools = ", ".join(_yaml_scalar(name) for name in allowed)
+    else:
+        todo.append("tools（技能未声明 tools.allowed，需手工补充）")
+        tools_yaml = "    - name: TODO_tool_name\n      capability: TODO\n      idempotent: TODO"
+        step_tools = "TODO_tool_name"
+
+    text = (
         "governance:\n"
-        f"  agent_id: {getattr(skill, 'name', 'TODO_agent_id')}\n"
+        f"  agent_id: {_yaml_scalar(agent_id)}\n"
         "  version: 0.1.0\n"
         "  approved_by: TODO\n"
         "  business_intent: TODO\n"
@@ -174,12 +245,53 @@ def _init_skeleton(skill: Any) -> str:
         "    max_calls_per_minute: 20\n"
         "    max_tokens_per_run: 200000\n"
     )
+    return text, todo, review
+
+
+def _insert_governance(text: str, block: str) -> str | None:
+    """把治理块插到 frontmatter 末尾；不重渲染 YAML，保留原有注释。"""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            head = lines[:index]
+            if head and not head[-1].endswith("\n"):
+                head[-1] += "\n"
+            return "".join(head) + block + "".join(lines[index:])
+    return None
+
+
+def _skill_files(path: Path) -> list[Path]:
+    """技能文件：单个文件直接返回；目录递归找带 frontmatter 的 `.md`。"""
+    if path.is_file():
+        return [path]
+    if not path.is_dir():
+        return []
+    files: list[Path] = []
+    for candidate in sorted(path.rglob("*.md")):
+        relative = candidate.relative_to(path)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        try:
+            frontmatter = _split_frontmatter(candidate.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        if frontmatter is None:
+            continue
+        try:
+            data = yaml.safe_load(frontmatter[0])
+        except yaml.YAMLError:
+            continue
+        if isinstance(data, dict) and data.get("name"):
+            files.append(candidate)
+    return files
 
 
 NINE_STEPS = (
     "① 圈定工具（机器：取自技能 tools.allowed）\n"
-    "② 定能力分级：read/write/payment/destructive（人）\n"
-    "③ 定幂等性（人；不确定填 false）\n"
+    "② 定能力分级：read/write/payment/destructive（内置工具自动回填，MCP 需人填）\n"
+    "③ 定幂等性（内置工具自动回填，MCP 需人填）\n"
     "④ 画业务步骤链（人）\n"
     "⑤ 定完成条件（机器出骨架，人确认）\n"
     "⑥ 定分支条件：判据必须来自工具产出（人）\n"
@@ -189,35 +301,93 @@ NINE_STEPS = (
 )
 
 
-def governance_init(skill_path: str) -> int:
-    """生成治理块骨架。含 TODO 时**不写文件**（§13.4）。"""
-    path = Path(skill_path)
-    try:
-        skill = _load_skill(path)
-    except Exception as exc:  # noqa: BLE001 — 命令行入口统一报错
-        print(f"无法读取技能文件 {path}：{exc}", file=sys.stderr)
-        return 1
-    if getattr(skill, "governance", None):
-        print(
-            f"{path} 已存在治理块；init 不覆盖已有授权书。",
-            file=sys.stderr,
-        )
-        return 1
-
-    skeleton = _init_skeleton(skill)
-    print(skeleton)
+def _init_report(
+    path: Path, todo: list[str], review: list[str], *, dry_run: bool
+) -> None:
+    prefix = "预览" if dry_run else "写入"
+    if todo:
+        print(f"{path} 需手工补充：{'、'.join(todo)}", file=sys.stderr)
+    else:
+        print(f"{path} 无 TODO", file=sys.stderr)
+    for item in review:
+        print(f"{path} 需确认：{item}", file=sys.stderr)
     print(
-        "骨架含 TODO，**未写入文件**（规则 26：占位符视为未完成）。\n"
-        "请把下列 `governance:` 块并入技能 frontmatter 后逐项填写：",
+        f"{prefix}后请跑 `harness governance check {path}` 复核（规则 26 会拒绝 TODO）。",
         file=sys.stderr,
     )
+
+
+def governance_init(
+    skill_path: str,
+    *,
+    agent_id: str | None = None,
+    dry_run: bool = False,
+) -> int:
+    """迁移工具：生成并写入治理块（§13.4）。
+
+    - 能自动填的自动填：工具清单取自 `tools.allowed`，内置工具的
+      `capability`/`idempotent` 取自代码声明；
+    - 只能人填的保留 `TODO`，在报告里逐项标「需手工补充」；
+    - 默认写入；`--dry-run` 只预览。写入不整体重渲染 YAML，保留原注释。
+    """
+    path = Path(skill_path)
+    targets = _skill_files(path)
+    if not targets:
+        print(f"未找到技能文件：{path}", file=sys.stderr)
+        return 1
+
+    declarations = _builtin_tool_declarations()
+    resolved_agent_id = (
+        agent_id or os.getenv("HARNESS_GOVERNANCE_AGENT_ID") or ""
+    )
+    failed = 0
     print(NINE_STEPS, file=sys.stderr)
-    if not _allowed_tools(skill):
-        print(
-            "注意：技能未声明 tools.allowed，工具清单需要人工补齐（§6.2.1）。",
-            file=sys.stderr,
-        )
-    return 0
+
+    for target in targets:
+        try:
+            skill = _load_skill(target)
+            text = target.read_text(encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 — 命令行入口统一报错
+            print(f"无法读取技能文件 {target}：{exc}", file=sys.stderr)
+            failed += 1
+            continue
+
+        if getattr(skill, "governance", None):
+            print(f"{target} 跳过：已存在治理块（init 不覆盖已有授权书）")
+            continue
+
+        target_agent_id = resolved_agent_id or getattr(skill, "name", "TODO_agent_id")
+        block, todo, review = _init_block(skill, target_agent_id, declarations)
+        if not resolved_agent_id:
+            review.insert(
+                0,
+                f"agent_id（当前取技能名 `{target_agent_id}`，请确认治理身份）",
+            )
+
+        if dry_run:
+            print(f"--- {target} ---")
+            print(block, end="")
+            _init_report(target, todo, review, dry_run=True)
+            continue
+
+        updated = _insert_governance(text, block)
+        if updated is None:
+            print(f"{target}:1: 缺少 YAML frontmatter，无法写入治理块", file=sys.stderr)
+            failed += 1
+            continue
+        try:
+            target.write_text(updated, encoding="utf-8")
+        except OSError as exc:
+            print(f"写入失败 {target}：{exc}", file=sys.stderr)
+            failed += 1
+            continue
+
+        print(f"{target} 已写入治理块")
+        _init_report(target, todo, review, dry_run=False)
+        if not todo and governance_check(str(target)) != 0:
+            failed += 1
+
+    return 1 if failed else 0
 
 
 def governance_check(skill_path: str) -> int:
@@ -366,8 +536,17 @@ def _build_parser() -> argparse.ArgumentParser:
     governance = sub.add_parser("governance", help="治理块与运行期治理")
     gov = governance.add_subparsers(dest="governance_command")
 
-    init = gov.add_parser("init", help="生成治理块骨架（含 TODO，不写文件）")
-    init.add_argument("skill", help="技能文件路径")
+    init = gov.add_parser(
+        "init",
+        help="迁移工具：生成并写入治理块（默认写入，--dry-run 预览）",
+    )
+    init.add_argument("skill", help="技能文件或目录（递归扫描有 frontmatter 的 .md）")
+    init.add_argument(
+        "--agent-id",
+        default=None,
+        help="治理身份；缺省取 HARNESS_GOVERNANCE_AGENT_ID，再缺省取技能名",
+    )
+    init.add_argument("--dry-run", action="store_true", help="只预览，不写文件")
 
     check = gov.add_parser("check", help="校验治理块（29 条规则）")
     check.add_argument("skill", help="技能文件路径")
@@ -404,7 +583,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "governance":
         action = args.governance_command
         if action == "init":
-            return governance_init(args.skill)
+            return governance_init(
+                args.skill,
+                agent_id=args.agent_id,
+                dry_run=args.dry_run,
+            )
         if action == "check":
             return governance_check(args.skill)
         if action in ("approve", "reject"):
