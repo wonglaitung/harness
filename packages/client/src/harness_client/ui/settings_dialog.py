@@ -174,6 +174,37 @@ class SettingsDialog(QDialog):
         )
         general_layout.addRow(self.auto_update_memory_check)
 
+        # Governance (strict) — 设计稿 §4.3：没有这个入口，客户端开不了治理
+        governance_group = QGroupBox("治理（strict）")
+        governance_layout = create_standard_form_layout()
+
+        self.strict_check = QCheckBox("启用治理（strict）")
+        self.strict_check.setToolTip(
+            "启用后必须为每个技能提供治理块（授权书），否则拒绝启动与工具调用。\n"
+            "同时启用执行网关、步骤链、审批、Kill Switch 与事件留痕。"
+        )
+        governance_layout.addRow(self.strict_check)
+
+        self.governance_agent_id_edit = QLineEdit()
+        self.governance_agent_id_edit.setPlaceholderText("例如: credit-paper-assembler")
+        self.governance_agent_id_edit.setToolTip(
+            "部署方预先指定的治理身份（agent_id）。\n"
+            "必须与技能 frontmatter 中 governance.agent_id 一致；启用治理时必填。"
+        )
+        governance_layout.addRow("治理身份:", self.governance_agent_id_edit)
+
+        governance_help = QLabel(
+            "启用治理后，技能必须带治理块；暂停/恢复与审批可通过 "
+            "`harness governance` CLI 操作。"
+        )
+        governance_help.setWordWrap(True)
+        governance_help.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_XS};"
+        )
+        governance_layout.addRow(governance_help)
+        governance_group.setLayout(governance_layout)
+        general_layout.addRow(governance_group)
+
         # Temperature slider (模型参数 - 高级设置)
         self.temperature_label = QLabel("Temperature: 0.3")
         self.temperature_slider = QSlider(Qt.Orientation.Horizontal)
@@ -556,6 +587,8 @@ class SettingsDialog(QDialog):
             "stream": self.stream_check.isChecked(),
             "max_iterations": self.max_iterations_spin.value(),
             "auto_update_memory": self.auto_update_memory_check.isChecked(),
+            "strict": self.strict_check.isChecked(),
+            "governance_agent_id": self.governance_agent_id_edit.text().strip(),
             "work_dir": self.work_dir_edit.text(),
             "remember_dir": self.remember_dir_check.isChecked(),
             "theme_mode": self._get_theme_mode(),
@@ -612,6 +645,10 @@ class SettingsDialog(QDialog):
             self.max_iterations_spin.setValue(settings["max_iterations"])
         if "auto_update_memory" in settings:
             self.auto_update_memory_check.setChecked(settings["auto_update_memory"])
+        if "strict" in settings:
+            self.strict_check.setChecked(settings["strict"])
+        if "governance_agent_id" in settings:
+            self.governance_agent_id_edit.setText(settings["governance_agent_id"])
         if "work_dir" in settings:
             self.work_dir_edit.setText(settings["work_dir"])
         if "theme_mode" in settings:

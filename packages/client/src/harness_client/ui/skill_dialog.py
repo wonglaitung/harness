@@ -27,6 +27,34 @@ from harness_client.ui.dialog_styles import (
 )
 
 
+def apply_form_data(base, data: dict):
+    """把编辑器表单字段合并到已有 Skill。
+
+    **保留**表单未覆盖的字段（`governance` / `tools` / `parameters` /
+    `metadata` / `source_path` 等）——否则保存一次就抹掉授权书，正是设计稿
+    §9.4 / §10.4 明确要防的事。`base` 为 None 表示新建技能。
+    """
+    from dataclasses import replace
+
+    from harness import Skill, SkillTrigger
+
+    fields = {
+        "name": data["name"],
+        "version": data["version"],
+        "description": data["description"],
+        "content": data["content"],
+        "enabled": data["enabled"],
+        "author": data.get("author", ""),
+        "triggers": SkillTrigger(
+            keywords=data["keywords"],
+            patterns=data["patterns"],
+        ),
+    }
+    if base is not None:
+        return replace(base, **fields)
+    return Skill(**fields)
+
+
 class SkillEditDialog(QDialog):
     """Dialog for creating and editing skill files."""
 
@@ -37,6 +65,7 @@ class SkillEditDialog(QDialog):
         self.setMaximumWidth(520)  # Prevent dialog from becoming too wide
         self.setStyleSheet(get_dialog_stylesheet())
         self.skill_path = skill_path
+        self._source_skill = None
         self._setup_ui()
 
         if skill_path and skill_path.exists():
@@ -155,6 +184,7 @@ class SkillEditDialog(QDialog):
             from harness import Skill
 
             skill = Skill.from_file(path)
+            self._source_skill = skill
 
             self.name_edit.setText(skill.name)
             self.version_edit.setText(skill.version)
@@ -206,20 +236,7 @@ class SkillEditDialog(QDialog):
             return False
 
         try:
-            from harness import Skill, SkillTrigger
-
-            skill = Skill(
-                name=data["name"],
-                version=data["version"],
-                description=data["description"],
-                content=data["content"],
-                enabled=data["enabled"],
-                triggers=SkillTrigger(
-                    keywords=data["keywords"],
-                    patterns=data["patterns"],
-                ),
-            )
-
+            skill = apply_form_data(self._source_skill, data)
             skill.to_file(path)
             return True
 

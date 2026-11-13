@@ -51,6 +51,9 @@ class ChatConfig:
     temperature: float = 0.3  # Lower = more deterministic
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
     auto_update_memory: bool = True  # Allow agent to autonomously update Core Memory
+    # Governance (strict) — 设计稿 §4.3 / §10.4
+    strict: bool = False
+    governance_agent_id: str = ""
 
     # Routing configuration (智能路由，根据请求复杂度选择模型)
     enable_routing: bool = False  # 是否启用路由
@@ -232,7 +235,27 @@ class ChatController:
                 system_prompt=self.config.system_prompt,
                 sandbox_workspace=str(self.work_dir),
                 memory_md_path=get_config_dir() / "MEMORY.md",
+                strict=self.config.strict,
+                governance_agent_id=(self.config.governance_agent_id.strip() or None),
             )
+
+            # 治理：启动时先校验配置与控制面（§4.3 / §10.4）
+            if sdk_config.strict:
+                if not sdk_config.governance_agent_id:
+                    raise ValueError(
+                        "已启用治理（strict），但未配置治理身份 agent_id。\n"
+                        "请在「设置 → 治理」中填写部署方指定的 agent_id。"
+                    )
+                from harness.governance.control import ControlPlane
+
+                control_state = ControlPlane().read(sdk_config.governance_agent_id)
+                if control_state.blocking:
+                    raise RuntimeError(
+                        f"Agent 已被治理控制面置为 `{control_state.state}`，拒绝启动执行。"
+                        f"{('原因：' + control_state.reason) if control_state.reason else ''}\n"
+                        "确认后可执行：harness governance resume "
+                        f"{sdk_config.governance_agent_id} --reason \"...\""
+                    )
 
             logger.info(
                 f"SDK config: provider={sdk_config.provider}, "

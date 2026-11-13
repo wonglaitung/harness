@@ -475,8 +475,48 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("正在停止...", 2000)
             self.chat_panel.set_streaming_state(False)
             self._is_processing = False
+            # 放在最后：suspend 的提示会覆盖“正在停止...”（§10.4 L1）
+            self._suspend_governance("客户端停止按钮")
         else:
             self.statusbar.showMessage("没有正在进行的任务", 2000)
+
+    def _suspend_governance(self, reason: str) -> None:
+        """UI 停止 → 控制面 suspend（§10.4 L1）。治理未启用时无操作。"""
+        settings = self.settings_manager.get()
+        agent_id = (getattr(settings, "governance_agent_id", "") or "").strip()
+        if not getattr(settings, "strict", False) or not agent_id:
+            return
+        try:
+            from harness.governance.control import ControlPlane
+
+            ControlPlane().suspend(agent_id, reason=reason, actor="client")
+            logger.warning("Governance agent suspended from UI: %s (%s)", agent_id, reason)
+            self.statusbar.showMessage(
+                f"已暂停治理 Agent `{agent_id}`；恢复请用 CLI："
+                f"harness governance resume {agent_id}",
+                6000,
+            )
+        except Exception as exc:  # noqa: BLE001 — UI 操作失败不能中断停止流程
+            logger.warning("Failed to suspend governance agent: %s", exc)
+
+    def _mark_run_exit(self) -> None:
+        """客户端退出写 run 级标记（§10.1/§10.4），不改 agent 级状态。"""
+        settings = self.settings_manager.get()
+        agent_id = (getattr(settings, "governance_agent_id", "") or "").strip()
+        if not getattr(settings, "strict", False):
+            return
+        agent = getattr(self.chat_controller, "agent", None)
+        run_id = getattr(agent, "last_run_id", None) if agent is not None else None
+        if not run_id:
+            return
+        try:
+            from harness.governance.control import RUN_CLIENT_SHUTDOWN, ControlPlane
+
+            ControlPlane().mark_run(
+                run_id, RUN_CLIENT_SHUTDOWN, agent_id=agent_id
+            )
+        except Exception as exc:  # noqa: BLE001 — 退出路径不得抛错
+            logger.warning("Failed to mark run exit: %s", exc)
 
     def _on_response_received(self, response: str):
         """Handle response from agent."""
@@ -704,6 +744,10 @@ class MainWindow(QMainWindow):
         dialog.stream_check.setChecked(current.stream)
         dialog.max_iterations_spin.setValue(current.max_iterations)
         dialog.auto_update_memory_check.setChecked(current.auto_update_memory)
+        dialog.strict_check.setChecked(getattr(current, "strict", False))
+        dialog.governance_agent_id_edit.setText(
+            getattr(current, "governance_agent_id", "")
+        )
         if current.work_dir:
             dialog.work_dir_edit.setText(current.work_dir)
         dialog.remember_dir_check.setChecked(current.remember_dir)
@@ -824,6 +868,8 @@ class MainWindow(QMainWindow):
             stream=settings.get("stream", True),
             max_iterations=settings.get("max_iterations", 20),
             auto_update_memory=settings.get("auto_update_memory", True),
+            strict=settings.get("strict", False),
+            governance_agent_id=settings.get("governance_agent_id", ""),
             work_dir=settings.get("work_dir", ""),
             remember_dir=settings.get("remember_dir", True),
             theme_mode=settings.get("theme_mode", "auto"),
@@ -855,6 +901,8 @@ class MainWindow(QMainWindow):
             max_iterations=settings.get("max_iterations", 20),
             tool_result_role=settings.get("tool_result_role", "tool"),
             auto_update_memory=settings.get("auto_update_memory", True),
+            strict=settings.get("strict", False),
+            governance_agent_id=settings.get("governance_agent_id", ""),
             # Routing settings
             enable_routing=settings.get("enable_routing", False),
             high_model=settings.get("high_model", ""),
@@ -910,6 +958,8 @@ class MainWindow(QMainWindow):
             temperature=settings.temperature,
             tool_result_role=settings.tool_result_role,
             auto_update_memory=settings.auto_update_memory,
+            strict=getattr(settings, "strict", False),
+            governance_agent_id=getattr(settings, "governance_agent_id", ""),
             # Routing settings
             enable_routing=getattr(settings, "enable_routing", False),
             high_model=getattr(settings, "high_model", ""),
@@ -1465,6 +1515,9 @@ class MainWindow(QMainWindow):
             unregister_theme_listener(self._theme_callback)
         except Exception:
             pass
+
+        # 写 run 级退出标记（治理启用时），不改 agent 级状态
+        self._mark_run_exit()
 
         # Stop any ongoing chat
         self.chat_controller.stop()

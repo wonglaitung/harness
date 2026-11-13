@@ -57,6 +57,8 @@
   "stream": true,
   "auto_save": true,
   "auto_update_memory": true,
+  "strict": false,
+  "governance_agent_id": "",
   "work_dir": "",
   "remember_dir": true,
   "theme_mode": "auto",
@@ -83,6 +85,8 @@
 | `stream` | bool | `true` | 是否启用流式输出 |
 | `auto_save` | bool | `true` | 自动保存会话 |
 | `auto_update_memory` | bool | `true` | 允许 Agent 自主更新 Core Memory |
+| `strict` | bool | `false` | 启用治理（strict）：执行网关、步骤链、审批、Kill Switch、事件留痕 |
+| `governance_agent_id` | string | `""` | 治理身份（部署方指定）；`strict: true` 时必填，须与技能 `governance.agent_id` 一致 |
 | `work_dir` | string | `""` | 工作目录（空 = 当前目录） |
 | `remember_dir` | bool | `true` | 记住上次工作目录 |
 | `theme_mode` | string | `"auto"` | 主题模式：`auto`/`light`/`dark` |
@@ -93,6 +97,25 @@
 | `router_url` | string | `""` | HTTP 路由服务 URL |
 | `input_cost_per_1m` | float | `3.0` | 每 1M 输入 token 成本（美元） |
 | `output_cost_per_1m` | float | `15.0` | 每 1M 输出 token 成本（美元） |
+
+### 治理（strict）设置
+
+启用治理后，客户端会：
+
+1. 把 `strict` / `governance_agent_id` 传给 `HarnessConfig`（`docs/21-hkma-agentic-governance.md` §4.3）；
+2. **启动前读控制面**：`~/.harness/control/<agent_id>.json` 为 `suspended`/`revoked`（或文件损坏）时拒绝执行；
+3. **停止按钮**除中断当前任务外，还会 `control.suspend(agent_id)`（§10.4 L1）；恢复用 CLI：
+
+   ```bash
+   harness governance resume <agent_id> --reason "已复核"
+   harness governance status <agent_id>
+   ```
+
+4. **退出时**写 run 级标记（`~/.harness/control/runs/<run_id>.json`，`client_shutdown`），不改 agent 级状态；
+5. **技能编辑器保存时保留治理块与 `tools` 声明**，不会因一次编辑抹掉授权书。
+
+> `strict: true` 但没有匹配的治理块时，SDK 会拒绝启动——这是设计上的硬门槛，不是客户端缺陷。
+> 审批的批准/拒绝与 Kill Switch 的恢复都通过 `harness governance ...` CLI 操作（与客户端共用同一落点目录）。
 
 ### auto_update_memory 设置
 

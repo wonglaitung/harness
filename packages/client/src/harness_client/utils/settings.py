@@ -72,6 +72,9 @@ class AppSettings:
     stream: bool = True
     max_iterations: int = 10  # 业界标准默认值（与 SDK 一致）
     auto_update_memory: bool = True  # Allow agent to autonomously update Core Memory
+    # Governance (strict) settings — see docs/21-hkma-agentic-governance.md §4.3
+    strict: bool = False
+    governance_agent_id: str = ""
     work_dir: str = ""
     remember_dir: bool = True
     theme_mode: str = "auto"  # "auto", "light", "dark"
@@ -109,6 +112,8 @@ class AppSettings:
             stream=data.get("stream", True),
             max_iterations=data.get("max_iterations", 10),
             auto_update_memory=data.get("auto_update_memory", True),
+            strict=data.get("strict", False),
+            governance_agent_id=data.get("governance_agent_id", ""),
             work_dir=data.get("work_dir", ""),
             remember_dir=data.get("remember_dir", True),
             theme_mode=data.get("theme_mode", "auto"),
