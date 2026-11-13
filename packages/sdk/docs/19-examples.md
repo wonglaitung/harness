@@ -917,3 +917,34 @@ MOCK=1 python examples/multi_agent_workflow.py
 python examples/multi_agent_blackboard.py
 ```
 
+
+## 治理手工演练（governance playground）
+
+想**手动**观察治理的放行 / 拒绝 / 审批 / 熔断 / 留痕（而不是只看自动化测试），
+用可运行的演练环境 `examples/governance_playground/`。它用 Mock LLM 串出工具
+调用序列，不联网、不读写真实 `~/.harness`。
+
+```bash
+cd packages/sdk/examples/governance_playground
+
+python run.py happy            # 正常流程
+python run.py skip             # 跳步 → 被网关拒绝
+python run.py constraint       # 金额越界 → 业务约束拒绝
+python run.py approval         # payment → 阻塞等待人工审批（另开终端 approve）
+AML_NO_OUTPUT=1 python run.py missing_output   # 产出缺失 → step failure
+```
+
+审批与熔断复用同一落点：
+
+```bash
+HOME=$PWD/.work/home python -m harness.cli governance approve apr-0000 --actor alice
+HOME=$PWD/.work/home python -m harness.cli governance suspend report-assembler --reason "手工测试"
+HOME=$PWD/.work/home python -m harness.cli governance status  report-assembler
+```
+
+场景表、预期输出、事件日志查看方式、以及如何自己改场景，见
+[`examples/governance_playground/README.md`](../examples/governance_playground/README.md)。
+
+> 自动化回归仍在 `tests/unit/test_governance*.py` 与
+> `tests/integration/test_governance_*.py`；设计依据见
+> [21-hkma-agentic-governance.md](./21-hkma-agentic-governance.md)。
