@@ -514,6 +514,7 @@ HarnessConfig config = HarnessConfig.builder()
 | 包 | 说明 |
 |---|------|
 | [packages/sdk/](packages/sdk/) | harness-sdk — Python SDK |
+| [packages/cli/](packages/cli/) | harness-cli — 治理块生成/校验、审批与控制命令 |
 | [packages/sdk-java/](packages/sdk-java/) | harness-sdk-java — Java SDK (99.5% 功能同步) |
 | [packages/client/](packages/client/) | harness-client — Windows 桌面客户端 |
 | [packages/cloud/](packages/cloud/) | harness-cloud — Docker 沙箱云服务 |
@@ -553,6 +554,9 @@ cd harness
 # Python SDK 开发
 uv sync --all-packages
 PYTHONPATH=packages/sdk/src uv run pytest packages/sdk/tests/ -v
+
+# 治理 CLI 开发（依赖 SDK）
+PYTHONPATH=packages/cli/src:packages/sdk/src uv run pytest packages/cli/tests/ -v
 
 # Java SDK 构建（使用 snap gradle）
 cd packages/sdk-java

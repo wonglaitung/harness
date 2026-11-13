@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.cli import main
+from harness_cli.main import main
 
 GOOD_SKILL = """---
 name: good-skill

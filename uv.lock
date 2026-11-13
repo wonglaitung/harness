@@ -22,6 +22,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "harness-cli",
     "harness-client",
     "harness-cloud",
     "harness-monorepo",
@@ -1680,6 +1681,30 @@ sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
 ]
+
+[[package]]
+name = "harness-cli"
+version = "0.1.0"
+source = { editable = "packages/cli" }
+dependencies = [
+    { name = "harness-sdk" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "harness-sdk", editable = "packages/sdk" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "harness-client"

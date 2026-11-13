@@ -944,12 +944,13 @@ AML_NO_OUTPUT=1 python run.py missing_output   # 产出缺失 → step failure
 | `constraint` | `skills/payment.md`（`payment-agent`） | 业务参数越界拒绝（`max_amount=1_000_000`） |
 | `approval` | `skills/payment.md`（`payment-agent`） | `capability: payment` 强制人工审批（阻塞 → 批准/拒绝） |
 
-审批与熔断复用同一落点：
+审批与熔断复用同一落点（CLI 在独立包 `harness-cli`；未安装时见 playground
+README 的 `PYTHONPATH` 运行方式）：
 
 ```bash
-HOME=$PWD/.work/home python -m harness.cli governance approve apr-0000 --actor alice
-HOME=$PWD/.work/home python -m harness.cli governance suspend report-assembler --reason "手工测试"
-HOME=$PWD/.work/home python -m harness.cli governance status  report-assembler
+HOME=$PWD/.work/home python -m harness_cli governance approve apr-0000 --actor alice
+HOME=$PWD/.work/home python -m harness_cli governance suspend report-assembler --reason "手工测试"
+HOME=$PWD/.work/home python -m harness_cli governance status  report-assembler
 ```
 
 场景表、预期输出、事件日志查看方式、以及如何自己改场景，见

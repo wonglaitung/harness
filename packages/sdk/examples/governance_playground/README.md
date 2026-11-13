@@ -26,13 +26,14 @@
 
 ```bash
 cd packages/sdk
-pip install -e .          # 或者直接用 /data/harness/.venv/bin/python
+pip install -e .          # 运行时 SDK
+pip install -e ../cli     # 治理 CLI（生成/检查/审批/控制）
 ```
 
 装包后会生成 `harness` 命令，可直接运行 `harness governance ...`；不想装包时，
-在 `packages/sdk` 目录下用模块方式运行：`PYTHONPATH=src python -m harness.cli governance ...`
-（本仓库的 `.venv` 已暴露 `src`，可省略 `PYTHONPATH=src`）。下文统一写
-`python -m harness.cli`，两者等价。
+用模块方式运行：`PYTHONPATH=src:../cli/src python -m harness_cli governance ...`
+（在 `packages/sdk` 下；若只装 SDK 没装 CLI，则必须显式给 CLI 的 `src`）。
+下文统一写 `python -m harness_cli`，与 `harness` 等价。
 
 ### 1.2 跑一次
 
@@ -84,7 +85,7 @@ os.environ["HOME"] = str(HOME)    # 隔离家目录
 所以运行时数据全部落在 `.work/`；同时另一个终端的 CLI 必须带**同一个 HOME**：
 
 ```bash
-HOME=$PWD/.work/home python -m harness.cli governance status report-assembler
+HOME=$PWD/.work/home python -m harness_cli governance status report-assembler
 ```
 
 ---
@@ -174,7 +175,7 @@ governance_agent_id=AGENTS[scenario]          # run.py:198
 # a) 把 run.py 的 governance_agent_id 改成 "no-such-agent" → 启动失败
 # b) 删掉 skills/report.md 的 governance 块 → 启动失败
 # c) 块内容不合法 → 离线检查同款规则
-python -m harness.cli governance check skills/report.md
+python -m harness_cli governance check skills/report.md
 ```
 
 ### 2.4 一般规则：什么情况下技能必须有治理块
@@ -272,9 +273,9 @@ python run.py approval
 ```bash
 cd packages/sdk/examples/governance_playground
 
-HOME=$PWD/.work/home python -m harness.cli governance approve apr-0000 --actor alice
+HOME=$PWD/.work/home python -m harness_cli governance approve apr-0000 --actor alice
 # 或者
-HOME=$PWD/.work/home python -m harness.cli governance reject  apr-0000 --actor bob --reason "额度不足"
+HOME=$PWD/.work/home python -m harness_cli governance reject  apr-0000 --actor bob --reason "额度不足"
 ```
 
 `apr-0000` 里的 `args_hash` 是审批绑定的参数指纹：批准后若参数被改动，审批失效。
@@ -286,13 +287,13 @@ HOME=$PWD/.work/home python -m harness.cli governance reject  apr-0000 --actor b
 cd packages/sdk/examples/governance_playground
 
 # 先停
-HOME=$PWD/.work/home python -m harness.cli governance suspend report-assembler --reason "手工测试"
+HOME=$PWD/.work/home python -m harness_cli governance suspend report-assembler --reason "手工测试"
 python run.py happy
 # run 结论：interrupted；错误：Kill Switch：状态 suspended：手工测试（且未调用 LLM）
 
 # 查看与恢复
-HOME=$PWD/.work/home python -m harness.cli governance status report-assembler
-HOME=$PWD/.work/home python -m harness.cli governance resume report-assembler --reason "已复核"
+HOME=$PWD/.work/home python -m harness_cli governance status report-assembler
+HOME=$PWD/.work/home python -m harness_cli governance resume report-assembler --reason "已复核"
 ```
 
 运行中 suspend 也一样：下一个检查点（LLM 前 / 工具前 / 工具后）即停。
@@ -338,7 +339,7 @@ cat .work/home/.harness/control/report-assembler.json
 - **校验治理块**：
 
   ```bash
-  python -m harness.cli governance check skills/report.md
+  python -m harness_cli governance check skills/report.md
   # 把 capability 改成 destroy 再看输出：`file:line 规则 N｜field：message`，退出码 1
   ```
 

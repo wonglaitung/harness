@@ -213,7 +213,7 @@ async def main() -> None:
     print(f"技能文件：{SKILL_FILES[scenario]}")
     print()
     print(f"提示：同一工作区的 CLI 需带 HOME={HOME}")
-    print(f"      例：HOME={HOME} python -m harness.cli governance status {policy.agent_id}")
+    print(f"      例：HOME={HOME} python -m harness_cli governance status {policy.agent_id}")
     print()
     print(f"=== 场景：{scenario} ===")
 

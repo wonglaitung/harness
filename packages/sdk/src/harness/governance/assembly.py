@@ -14,14 +14,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from harness.governance import (
+from harness.governance.policy import PolicySnapshot, compile_policy
+from harness.governance.schema import (
     GovernanceBlock,
     GovernanceError,
-    PolicySnapshot,
-    compile_policy,
-    validate_governance_block,
+    parse_governance_block,
 )
-from harness.governance.schema import parse_governance_block
+from harness.governance.validation import validate_governance_block
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class GovernanceSetup:
     skill_agents: dict[str, str] = field(default_factory=dict)
 
 
-def _skill_allowed_tools(skill: Any) -> set[str] | None:
+def skill_allowed_tools(skill: Any) -> set[str] | None:
     """技能的 `tools.allowed`（治理块 tools 的上界，§6.2.1）。
 
     None 表示技能未声明 → 不设上界。
@@ -99,7 +98,7 @@ def assemble_governance(
             continue
         result = validate_governance_block(
             block,
-            skill_allowed_tools=_skill_allowed_tools(skill),
+            skill_allowed_tools=skill_allowed_tools(skill),
             known_tool_names=known_tool_names,
         )
         if not result.ok:

@@ -658,7 +658,7 @@ class ToolConstraints:
 | 入口 | 说明 |
 |---|---|
 | CLI（**首选**） | `harness governance approve <request_id> --actor <who> [--reason ...]` / `reject`。脚本化、可测试，CI 与运维友好 |
-| 客户端 UI | 读同一落点目录，展示待批列表；**复用 CLI 的判定逻辑**，不另写一套 |
+| 客户端 UI | 读同一落点目录，展示待批列表；**复用 SDK 的审批逻辑**（`ApprovalManager`），CLI 与 UI 共用同一实现 |
 | Python API | `await agent.control.approve(request_id, actor=...)` / `reject(...)` |
 
 审批记录（批准/拒绝/超时）全部进 §11 事件流（`approval` 事件），含 `approver`、`decision`、`reason`、`args_hash`。
@@ -1173,7 +1173,7 @@ await agent.control.suspend(reason="AML step bypassed", actor="developer:emp-409
 
 ### 13.4 开发侧 CLI（治理块的生成与校验）
 
-P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜底"。
+治理命令**不在运行时 SDK 里**，由独立工具包 `harness-cli` 提供，把"照着示例猜"变成"按路径走 + 机器兜底"。SDK 只保留校验规则与运行时强制路径，CLI 依赖 SDK，反向不成立。
 
 > **本节命令是确定性代码，不调用 LLM。** `init` 只做机械填充（能从工具注册表与技能 frontmatter 读到的字段），**内容判断始终由人做**（§13.3）。内置/自研工具的 `capability` 与 `idempotent` 以**代码声明为准**（§7.3 / §6.4.2），`init` 直接回填（回填即保证与代码一致，不是猜测）；代码里查不到的工具（如 MCP）保留 `TODO`。步骤链、分支语义等"人兜内容"的部分，机器不生成、不猜测。
 
@@ -1184,18 +1184,18 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 
 **运行方式**（二选一）：
 
-- **装了包**（`pip install harness-sdk`，或开发模式 `pip install -e packages/sdk`）：安装时 `[project.scripts]` 会生成 `harness` 启动器，直接用
+- **装了 CLI 包**（`pip install harness-cli`，会同时安装 `harness-sdk`）：安装时 `[project.scripts]` 会生成 `harness` 启动器，直接用
   ```bash
   harness governance check ./skills/report.md
   ```
-- **没装包**（直接用仓库源码）：用模块方式运行，并让 Python 找到 `src`
+- **没装包**（直接用仓库源码）：用模块方式运行，并让 Python 找到 CLI 与 SDK 的 `src`
   ```bash
-  cd packages/sdk
-  PYTHONPATH=src python -m harness.cli governance check ./skills/report.md
+  PYTHONPATH=packages/cli/src:packages/sdk/src python -m harness_cli \
+      governance check ./skills/report.md
   ```
-  如果当前环境已通过 editable 安装或 PYTHONPATH 暴露了 src（例如仓库自带的 `.venv`），可省略 `PYTHONPATH=src`。
+  如果当前环境已安装 `harness-cli`（editable 或普通安装），可省略 PYTHONPATH。
 
-下文示例统一写作 `harness governance ...`；未装包时把 `harness` 换成 `python -m harness.cli` 即可。
+下文示例统一写作 `harness governance ...`；未装包时把 `harness` 换成 `python -m harness_cli` 即可。
 
 两者均为 P0-1 实施项（§15）。`init` 写入的块**通常带 `TODO`**（`approved_by` / `business_intent` / `owners` 及 MCP 工具声明），必须经 `check` 通过才可提交——两者配套使用。
 
@@ -1258,8 +1258,8 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 3. **运行上下文**（§4.4）：`run_id` 生成、`PolicySnapshot` 按治理身份绑定、步骤游标与计数的 per-run 生命周期、随 `ToolContext.metadata` 送达执行路径。
 4. **治理块 linter**：结构 / 表达式 / 治理三类规则（§6.3、§17）。
 5. **strict 开启路径**（§4.3）：`HarnessConfig.from_env()` 读取**需新增**的环境变量 `HARNESS_STRICT=1`；客户端 `AppSettings` 增加 `strict` 开关并传入 `HarnessConfig`。**没有这一步，桌面客户端开不了治理**。
-6. **CLI `harness governance init <file|dir>`**（§13.4）：迁移工具，从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**——填好 `agent_id` / `version` / 工具清单，内置工具的 `capability` 与 `idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」，附九步清单（§13.1）；`--dry-run` 只预览。
-7. **CLI `harness governance check <skill>`**（§13.4）：跑 §6.3 的 29 条规则；非零退出，逐条报 `file:line` + 违反的规则号。与 6 配套——`init` 产出必须经 `check` 通过才可提交。
+6. **CLI 工具包 `harness-cli`：`harness governance init <file|dir>`**（§13.4）：迁移工具，从工具注册表 + 技能 frontmatter 生成治理块并**默认写入**——填好 `agent_id` / `version` / 工具清单，内置工具的 `capability` 与 `idempotent` 从代码声明回填，查不到的保留 `TODO` 并在 stderr 标「需手工补充」，附九步清单（§13.1）；`--dry-run` 只预览。
+7. **CLI `harness governance check <skill>`**（§13.4）：跑 §6.3 的 29 条规则；非零退出，逐条报 `file:line` + 违反的规则号。与 6 配套——`init` 产出必须经 `check` 通过才可提交。CLI 独立成包，SDK 只保留校验规则与运行时强制路径。
 
 **验收**：治理块缺字段、未知字段、capability 缺失、产出未声明、`if` 引用不存在 step、汇聚点缺断言、**引用不闭合（规则 27/28）** → 编译期拒绝；多块合成的交集/并集/取严规则可验证；`HARNESS_STRICT=1` 与客户端设置项均能开启治理；`HARNESS_REQUIRE_STRICT=1` + `strict=False` 仍按现状抛错；`init` 写入的块带 `TODO` 且 `check` 报出待填项。
 
@@ -1284,7 +1284,7 @@ P0 提供两个 CLI 命令，把"照着示例猜"变成"按路径走 + 机器兜
 ### P0-4　Kill Switch、事件日志与客户端接入
 
 16. 控制文件读写（原子替换）、CLI `suspend/resume/status`、四处检查点接入（**不走 Hook**，§10.3）。
-17. 审批 CLI 与客户端 UI 审批入口（复用 CLI 判定逻辑）。
+17. 审批 CLI 与客户端 UI 审批入口（复用 SDK 的 `ApprovalManager`，不另写一套）。
 18. 事件日志（`~/.harness/audit/governance/<日期>/<pid>.jsonl`，同步 append + flush，`run_id` 贯穿、脱敏、判定/结果两段、OTel 字段）。
 19. 桌面客户端：启动检查（读失败按 `suspended`）、UI 停止按钮、run 级退出标记、技能编辑器保留治理块、**strict 设置项**。
 20. **部署形态检测与告警**（§10.8）：strict 下检测非单实例/服务端部署并告警。

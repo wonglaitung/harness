@@ -2474,14 +2474,17 @@ if not verdict.passed:
 
 ## CLI（harness 命令行）— M6-dep
 
-SDK 随包提供一个极简 CLI（`[project.scripts] harness = "harness.cli:main"`），用于依赖安全审计。SDK **不内置 CVE 数据库**，而是委托平台审计器，使修复保持人工评审、部署侧负责的边界：
+CLI 已从运行时 SDK 拆到独立工具包 `harness-cli`（`[project.scripts] harness = "harness_cli.main:main"`），用于依赖安全审计与治理块生成/校验。SDK **不内置 CVE 数据库**，而是委托平台审计器，使修复保持人工评审、部署侧负责的边界：
 
 ```bash
+pip install harness-cli     # 或 pip install -e packages/cli
+
 harness doctor --deps      # 审计已安装依赖的已知 CVE
 ```
 
 - 优先调用 `uv pip audit`；无 `uv` 时回退 `pip-audit`；二者皆无则提示安装并返回退出码 1。
 - 仅做审计入口，实际修复需人工评审（部署侧）。属防翻车清单「依赖安全」的 SDK 侧闭环（见 [13-orchestrator.md](./13-orchestrator.md) 残余风险表）。
+- 治理块命令（`harness governance init/check/...`）见 [21-hkma-agentic-governance.md](./21-hkma-agentic-governance.md) §13.4；运行时治理仍由 SDK 的 `AgentHarness` + `GovernanceGateway` 强制。
 
 ## 下一步
 

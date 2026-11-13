@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from harness.governance.assembly import skill_allowed_tools
 from harness.governance.context import RunContext
 from harness.governance.policy import PolicySnapshot, compile_policy
 from harness.governance.schema import (
@@ -44,5 +45,6 @@ __all__ = [
     "ValidationResult",
     "WorkflowSpec",
     "compile_policy",
+    "skill_allowed_tools",
     "validate_governance_block",
 ]

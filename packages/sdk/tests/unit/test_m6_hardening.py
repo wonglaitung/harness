@@ -175,18 +175,3 @@ async def test_review_sink_called_on_resolve() -> None:
     assert resolution.decision == ReviewDecision.CONFIRM
     assert resolved_item.item_id == item.item_id
 
-
-# --------------------------------------------------------------------------
-# M6-dep: CLI smoke test
-# --------------------------------------------------------------------------
-def test_cli_help_returns_zero() -> None:
-    from harness.cli import main
-
-    assert main([]) == 0
-
-
-def test_cli_doctor_no_auditor_returns_one(monkeypatch) -> None:
-    from harness import cli
-
-    monkeypatch.setattr(cli.shutil, "which", lambda _x: None)
-    assert cli.doctor_deps() == 1

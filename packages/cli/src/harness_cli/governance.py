@@ -1,11 +1,4 @@
-"""Minimal CLI for the Harness SDK.
-
-M6-dep: ships a ``harness doctor --deps`` command that audits the installed
-dependency tree for known vulnerabilities (via ``uv pip audit`` or
-``pip-audit``). The SDK keeps no built-in CVE database — it delegates to the
-platform auditor so remediation stays a human-reviewed, deploy-side concern.
-
-治理 CLI（设计稿 §13.4 / §7.5.3 / §10.2）：
+"""治理相关的创作期/运维期命令（设计稿 §13.4 / §7.5.3 / §10.2）。
 
 - ``harness governance init <file|dir>`` 迁移工具：生成治理块并写入，能自动填的
   自动填（内置工具的能力/幂等性来自代码声明），只能人填的保留 TODO 并在报告里
@@ -14,21 +7,15 @@ platform auditor so remediation stays a human-reviewed, deploy-side concern.
 - ``harness governance approve/reject <request_id>``  运行期审批
 - ``harness governance suspend/resume/status <agent_id>``  Kill Switch
 
-全部为确定性代码，不调用 LLM。
-
-Example:
-    harness doctor --deps
-    harness governance check ./skills/report.md
+全部为确定性代码，不调用 LLM；治理的强制力在 SDK 运行时
+（`AgentHarness` + `GovernanceGateway`），这些命令只负责生成与运维。
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -424,11 +411,11 @@ def governance_check(skill_path: str) -> int:
         print(f"{path}:1: 解析失败：{exc}", file=sys.stderr)
         return 1
 
-    from harness.governance.assembly import _skill_allowed_tools
+    from harness.governance import skill_allowed_tools
 
     result = validate_governance_block(
         block,
-        skill_allowed_tools=_skill_allowed_tools(skill),
+        skill_allowed_tools=skill_allowed_tools(skill),
         known_tool_names=None,  # 离线：规则 1 的注册表校验需要运行时信息
     )
     if result.ok:
@@ -496,121 +483,3 @@ def governance_control(
         state = plane.resume(agent_id, reason=reason, actor=actor)
     print(json.dumps(state.to_dict(), ensure_ascii=False, indent=2))
     return 0
-
-
-# ---------------------------------------------------------------------------
-# 入口
-# ---------------------------------------------------------------------------
-
-
-def doctor_deps() -> int:
-    """Audit dependencies for known CVEs.
-
-    Returns an int exit code suitable for ``sys.exit``.
-    """
-    if shutil.which("uv"):
-        cmd = ["uv", "pip", "audit"]
-    elif shutil.which("pip-audit"):
-        cmd = ["pip-audit"]
-    else:
-        print(
-            "No dependency auditor found. Install 'uv' or 'pip-audit' to run "
-            "dependency CVE checks (harness does not bundle a CVE database)."
-        )
-        return 1
-    try:
-        return subprocess.call(cmd)
-    except FileNotFoundError:
-        return 1
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="harness", description="Harness SDK CLI")
-    sub = parser.add_subparsers(dest="command")
-
-    doctor = sub.add_parser("doctor", help="Run diagnostics")
-    doctor.add_argument(
-        "--deps", action="store_true", help="Audit dependencies for known CVEs"
-    )
-
-    governance = sub.add_parser("governance", help="治理块与运行期治理")
-    gov = governance.add_subparsers(dest="governance_command")
-
-    init = gov.add_parser(
-        "init",
-        help="迁移工具：生成并写入治理块（默认写入，--dry-run 预览）",
-    )
-    init.add_argument("skill", help="技能文件或目录（递归扫描有 frontmatter 的 .md）")
-    init.add_argument(
-        "--agent-id",
-        default=None,
-        help="治理身份；缺省取 HARNESS_GOVERNANCE_AGENT_ID，再缺省取技能名",
-    )
-    init.add_argument("--dry-run", action="store_true", help="只预览，不写文件")
-
-    check = gov.add_parser("check", help="校验治理块（29 条规则）")
-    check.add_argument("skill", help="技能文件路径")
-
-    for name, help_text in (("approve", "批准审批请求"), ("reject", "拒绝审批请求")):
-        decide = gov.add_parser(name, help=help_text)
-        decide.add_argument("request_id", help="审批请求 id（如 apr-0001）")
-        decide.add_argument("--actor", default="", help="操作人（自由文本）")
-        decide.add_argument("--reason", default="", help="原因")
-        decide.add_argument("--run-id", default=None, help="限定 run（可选）")
-
-    for name, help_text in (
-        ("suspend", "暂停 Agent"),
-        ("resume", "恢复 Agent"),
-        ("status", "查看 Agent 控制状态"),
-    ):
-        control = gov.add_parser(name, help=help_text)
-        control.add_argument("agent_id", help="治理身份 agent_id")
-        control.add_argument("--reason", default="", help="原因")
-        control.add_argument("--actor", default="", help="操作人（自由文本）")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    if args.command == "doctor":
-        if args.deps:
-            return doctor_deps()
-        parser.print_help()
-        return 0
-
-    if args.command == "governance":
-        action = args.governance_command
-        if action == "init":
-            return governance_init(
-                args.skill,
-                agent_id=args.agent_id,
-                dry_run=args.dry_run,
-            )
-        if action == "check":
-            return governance_check(args.skill)
-        if action in ("approve", "reject"):
-            return governance_decide(
-                args.request_id,
-                approved=action == "approve",
-                actor=args.actor,
-                reason=args.reason,
-                run_id=args.run_id,
-            )
-        if action in ("suspend", "resume", "status"):
-            return governance_control(
-                args.agent_id,
-                action,
-                reason=args.reason,
-                actor=args.actor,
-            )
-        parser.parse_args(["governance", "--help"])
-        return 0
-
-    parser.print_help()
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
