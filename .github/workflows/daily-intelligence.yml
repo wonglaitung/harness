@@ -75,6 +75,7 @@ jobs:
           *) url="$endpoint/chat/completions" ;;
         esac
         echo "Probe URL: $url"
+        rm -f /tmp/llm_probe.json  # 避免 curl 失败时把上一次的返回体当成本次结果
         status=$(curl -sS -o /tmp/llm_probe.json -w "%{http_code}" --max-time 30 \
           -H "Authorization: Bearer $HARNESS_LLM_API_KEY" \
           -H "Content-Type: application/json" \
@@ -84,26 +85,32 @@ jobs:
         echo "HTTP $status"
         head -c 500 /tmp/llm_probe.json || true
         echo
-        # 把诊断结果落到 output/diagnostics/，随产物一起提交，便于事后追溯
-        mkdir -p packages/scraper/output/diagnostics
-        {
-          echo "time_utc: $(date -u +%FT%TZ)"
-          echo "base_url: $HARNESS_LLM_BASE_URL"
-          echo "model: $HARNESS_LLM_MODEL"
-          echo "session_header_set: $([ -n "$HARNESS_LLM_SESSION_ID" ] && echo yes || echo no)"
-          echo "http_status: $status"
-          echo "body: $(head -c 800 /tmp/llm_probe.json)"
-        } > packages/scraper/output/diagnostics/llm_probe.txt
-        cp /tmp/llm_probe.json packages/scraper/output/diagnostics/llm_probe.json || true
-        cat packages/scraper/output/diagnostics/llm_probe.txt
-        case "$status" in
-          200) echo "OK: LLM 端点可用" ;;
-          401|403) echo "FAIL: 鉴权失败——检查 LLM_API_KEY 是否过期或与端点不匹配" ;;
-          400) echo "FAIL: 请求被拒——若返回 MissingSessionID 说明会话头未生效" ;;
-          404) echo "FAIL: 端点或模型不存在——检查 BASE_URL / MODEL" ;;
-          429) echo "FAIL: 限流或额度用尽" ;;
-          *) echo "WARN: 其它错误，见上方返回体" ;;
-        esac
+        # 诊断只在失败时落盘，避免每次运行都把日志提交进仓库；
+        # 成功时清掉上一次失败留下的诊断文件。
+        if [ "$status" = "200" ]; then
+          rm -f packages/scraper/output/diagnostics/llm_probe.txt \
+                packages/scraper/output/diagnostics/llm_probe.json
+          echo "OK: LLM 端点可用"
+        else
+          mkdir -p packages/scraper/output/diagnostics
+          {
+            echo "time_utc: $(date -u +%FT%TZ)"
+            echo "base_url: $HARNESS_LLM_BASE_URL"
+            echo "model: $HARNESS_LLM_MODEL"
+            echo "session_header_set: $([ -n "$HARNESS_LLM_SESSION_ID" ] && echo yes || echo no)"
+            echo "http_status: $status"
+            echo "body: $(head -c 800 /tmp/llm_probe.json)"
+          } > packages/scraper/output/diagnostics/llm_probe.txt
+          cp /tmp/llm_probe.json packages/scraper/output/diagnostics/llm_probe.json || true
+          cat packages/scraper/output/diagnostics/llm_probe.txt
+          case "$status" in
+            401|403) echo "FAIL: 鉴权失败——检查 LLM_API_KEY 是否过期或与端点不匹配" ;;
+            400) echo "FAIL: 请求被拒——若返回 MissingSessionID 说明会话头未生效" ;;
+            404) echo "FAIL: 端点或模型不存在——检查 BASE_URL / MODEL" ;;
+            429) echo "FAIL: 限流或额度用尽" ;;
+            *) echo "FAIL: 其它错误，见上方返回体" ;;
+          esac
+        fi
 
     - name: Run AI intelligence scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
@@ -114,9 +121,14 @@ jobs:
         set +e
         uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 > /tmp/ai_intelligence.log 2>&1
         rc=$?
-        mkdir -p packages/scraper/output/diagnostics
-        { echo "skill: ai-intelligence"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/ai_intelligence.log; } > packages/scraper/output/diagnostics/ai_intelligence.log.txt
-        tail -n 80 /tmp/ai_intelligence.log
+        if [ "$rc" -ne 0 ]; then
+          mkdir -p packages/scraper/output/diagnostics
+          { echo "skill: ai-intelligence"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/ai_intelligence.log; } > packages/scraper/output/diagnostics/ai_intelligence.log.txt
+          tail -n 80 /tmp/ai_intelligence.log
+        else
+          rm -f packages/scraper/output/diagnostics/ai_intelligence.log.txt
+          echo "OK: ai-intelligence 完成（不写诊断日志）"
+        fi
         exit $rc
       continue-on-error: true
 
@@ -127,9 +139,14 @@ jobs:
         set +e
         uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 > /tmp/hk_stocks.log 2>&1
         rc=$?
-        mkdir -p packages/scraper/output/diagnostics
-        { echo "skill: hk-stocks-alpha"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/hk_stocks.log; } > packages/scraper/output/diagnostics/hk_stocks.log.txt
-        tail -n 80 /tmp/hk_stocks.log
+        if [ "$rc" -ne 0 ]; then
+          mkdir -p packages/scraper/output/diagnostics
+          { echo "skill: hk-stocks-alpha"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/hk_stocks.log; } > packages/scraper/output/diagnostics/hk_stocks.log.txt
+          tail -n 80 /tmp/hk_stocks.log
+        else
+          rm -f packages/scraper/output/diagnostics/hk_stocks.log.txt
+          echo "OK: hk-stocks-alpha 完成（不写诊断日志）"
+        fi
         exit $rc
       continue-on-error: true
 
