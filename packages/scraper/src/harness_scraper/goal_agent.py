@@ -136,6 +136,7 @@ class GoalAgent:
             model=config.llm.model,
             api_key=config.llm.api_key,
             base_url=config.llm.base_url,
+            extra_headers=config.llm.extra_headers,
             provider="openai",
             tools=tools,
             system_prompt=system_prompt,

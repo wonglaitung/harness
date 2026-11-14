@@ -57,6 +57,11 @@ jobs:
         echo "HARNESS_LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> $GITHUB_ENV
         echo "HARNESS_LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
         echo "HARNESS_LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
+        # opencode zen/go 端点要求会话标识头（缺失返回 400 MissingSessionID）：
+        # 优先用仓库 secret，缺省用本次 run id 派生一个稳定值。
+        echo "HARNESS_LLM_SESSION_ID=${{ secrets.OPENCODE_SESSION_ID || format('harness-scraper-{0}', github.run_id) }}" >> $GITHUB_ENV
+        # 其他网关自定义头（JSON 对象，可选）
+        echo "HARNESS_LLM_EXTRA_HEADERS=${{ secrets.LLM_EXTRA_HEADERS }}" >> $GITHUB_ENV
 
     - name: Run AI intelligence scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}

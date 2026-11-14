@@ -27,6 +27,7 @@ class AnthropicClient(LLMClient):
         config: LLMConfig | None = None,
         api_key: str | None = None,
         model: str = "claude-sonnet-4-6",
+        extra_headers: dict[str, str] | None = None,
         **kwargs,
     ):
         if config is None:
@@ -41,6 +42,8 @@ class AnthropicClient(LLMClient):
             )
 
         # Lazy import to avoid dependency issues
+        # 额外请求头（如网关要求的会话标识头）。
+        self._extra_headers = {**(config.extra_headers or {}), **(extra_headers or {})}
         self._client = None
 
     def _get_client(self):
@@ -48,11 +51,14 @@ class AnthropicClient(LLMClient):
         if self._client is None:
             import anthropic
 
-            self._client = anthropic.AsyncAnthropic(
-                api_key=self._api_key,
+            client_kwargs: dict[str, Any] = {
+                "api_key": self._api_key,
                 # Hard wall-clock limit on every request (E3: no soft-only timeout).
-                timeout=self.config.timeout,
-            )
+                "timeout": self.config.timeout,
+            }
+            if self._extra_headers:
+                client_kwargs["default_headers"] = self._extra_headers
+            self._client = anthropic.AsyncAnthropic(**client_kwargs)
         return self._client
 
     @property

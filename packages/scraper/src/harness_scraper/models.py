@@ -42,6 +42,10 @@ class LLMConfig(BaseModel):
     model: str = Field(description="模型名称", default="gpt-4o-mini")
     temperature: float = Field(description="生成温度", default=0.1)
     max_tokens: int = Field(description="最大输出 token", default=2000)
+    extra_headers: dict[str, str] = Field(
+        description="额外的 LLM 请求头（如 opencode zen/go 的 x-opencode-session）",
+        default_factory=dict,
+    )
 
 
 class SourceConfig(BaseModel):

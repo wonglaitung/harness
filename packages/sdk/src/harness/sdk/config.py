@@ -302,6 +302,34 @@ class ReviewConfig:
     url: str | None = None  # redis URL
 
 
+def extra_headers_from_env() -> dict[str, str]:
+    """从环境变量读取额外的 LLM 请求头。
+
+    - ``HARNESS_LLM_EXTRA_HEADERS``：JSON 对象，如 ``{"x-opencode-session": "s1"}``；
+    - ``HARNESS_LLM_SESSION_ID``：会话标识，等价于 ``x-opencode-session`` 头。
+      opencode zen/go 端点缺少该头会返回 400 MissingSessionID。
+
+    解析失败直接抛错——静默忽略会让"配了但没生效"，排障时最难查。
+    """
+    import json
+    import os
+
+    headers: dict[str, str] = {}
+    raw = os.getenv("HARNESS_LLM_EXTRA_HEADERS", "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"HARNESS_LLM_EXTRA_HEADERS 不是合法 JSON：{exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("HARNESS_LLM_EXTRA_HEADERS 必须是 JSON 对象")
+        headers.update({str(key): str(value) for key, value in parsed.items()})
+    session_id = os.getenv("HARNESS_LLM_SESSION_ID", "").strip()
+    if session_id:
+        headers.setdefault("x-opencode-session", session_id)
+    return headers
+
+
 @dataclass
 class HarnessConfig:
     """
@@ -316,6 +344,8 @@ class HarnessConfig:
     api_key: str | None = None
     provider: str = "auto"  # "anthropic", "openai", "auto" for auto-detect
     base_url: str | None = None  # For custom endpoints (e.g., local LLM, Azure)
+    # 额外 LLM 请求头（如 opencode zen/go 的 `x-opencode-session`）
+    extra_headers: dict[str, str] = field(default_factory=dict)
 
     # Compatibility settings
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode for proxy APIs)
@@ -456,6 +486,8 @@ class HarnessConfig:
         - HARNESS_MODEL: Model name (default: gpt-4o)
         - HARNESS_PROVIDER: Provider (openai/anthropic/auto)
         - HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
+        - HARNESS_LLM_EXTRA_HEADERS: 额外请求头（JSON 对象）
+        - HARNESS_LLM_SESSION_ID: 会话标识（等价于 `x-opencode-session` 头）
         - HARNESS_MAX_ITERATIONS: Max loop iterations
         - HARNESS_SYSTEM_PROMPT: System prompt
         - HARNESS_MEMORY_DIR: Memory directory
@@ -488,6 +520,7 @@ class HarnessConfig:
             model=os.getenv("HARNESS_MODEL", "gpt-4o"),
             provider=provider,
             base_url=os.getenv("HARNESS_BASE_URL"),
+            extra_headers=extra_headers_from_env(),
             strict=strict_env == "1" if strict_env else False,
             governance_agent_id=governance_agent_id,
             max_iterations=int(os.getenv("HARNESS_MAX_ITERATIONS", "10")),
@@ -503,6 +536,7 @@ class HarnessConfig:
             "api_key": self.api_key,
             "provider": self.provider,
             "base_url": self.base_url,
+            "extra_headers": self.extra_headers,
             "context_window": self._context_window,
             "max_tokens": self._max_tokens,
             "memory_dir": self.memory_dir,

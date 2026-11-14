@@ -32,6 +32,7 @@ class OpenAIClient(LLMClient):
         api_key: str | None = None,
         model: str = "gpt-4o",
         base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
         **kwargs,
     ):
         if config is None:
@@ -46,6 +47,9 @@ class OpenAIClient(LLMClient):
             )
 
         self._base_url = base_url or os.environ.get("OPENAI_BASE_URL")
+        # 额外请求头：opencode zen/go 端点要求 `x-opencode-session`，
+        # 缺失会返回 400 MissingSessionID（见 §14 网关兼容）。
+        self._extra_headers = {**(config.extra_headers or {}), **(extra_headers or {})}
         self._client = None
 
         # Global thread pool for this client, avoid frequent create/destroy
@@ -70,9 +74,11 @@ class OpenAIClient(LLMClient):
             logger.info("Creating OpenAI client instance...")
             import openai
 
-            client_kwargs = {"api_key": self._api_key}
+            client_kwargs: dict[str, Any] = {"api_key": self._api_key}
             if self._base_url:
                 client_kwargs["base_url"] = self._base_url
+            if self._extra_headers:
+                client_kwargs["default_headers"] = self._extra_headers
             # Hard wall-clock limit on every request (E3: no soft-only timeout).
             client_kwargs["timeout"] = self.config.timeout
 

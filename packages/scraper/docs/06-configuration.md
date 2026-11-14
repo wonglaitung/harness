@@ -298,6 +298,8 @@ pip install akshare>=1.12.0 yfinance>=0.2.0 pandas>=2.0.0
 | `HARNESS_LLM_MODEL` | `llm.model` |
 | `HARNESS_LLM_TEMPERATURE` | `llm.temperature` |
 | `HARNESS_LLM_MAX_TOKENS` | `llm.max_tokens` |
+| `HARNESS_LLM_SESSION_ID` | `llm.extra_headers` 的 `x-opencode-session` |
+| `HARNESS_LLM_EXTRA_HEADERS` | `llm.extra_headers`（JSON 对象，如 `{"x-tenant": "hk"}`） |
 
 ### 使用示例
 
@@ -305,6 +307,9 @@ pip install akshare>=1.12.0 yfinance>=0.2.0 pandas>=2.0.0
 # 设置环境变量
 export HARNESS_LLM_API_KEY="sk-xxx"
 export HARNESS_LLM_MODEL="gpt-4o"
+# opencode zen/go 端点必须带会话标识头（缺失返回 400 MissingSessionID）
+export HARNESS_LLM_SESSION_ID="scraper-1"
+export HARNESS_LLM_EXTRA_HEADERS='{"x-tenant": "hk"}'  # 可选：其它自定义头
 
 # 运行（配置文件中的值会被覆盖）
 harness-scraper

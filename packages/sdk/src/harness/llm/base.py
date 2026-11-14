@@ -11,7 +11,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from harness.types import Chunk, ChunkType, LLMResponse
@@ -38,6 +38,10 @@ class LLMConfig:
     # Some proxy APIs don't support Anthropic's "tool" role
     # Set to "user" to convert tool results to user messages
     tool_result_role: str = "tool"  # "tool" (native) or "user" (compatibility mode)
+
+    # 额外请求头（如 opencode zen/go 的 `x-opencode-session`：缺该头会返回
+    # 400 MissingSessionID；网关/代理也可能要求自定义头）。
+    extra_headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

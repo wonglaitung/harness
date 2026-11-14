@@ -48,6 +48,8 @@ llm:
   base_url: "https://api.openai.com/v1"
   api_key: ""  # 或设置 HARNESS_LLM_API_KEY 环境变量
   model: "gpt-4o-mini"
+  # extra_headers: {"x-opencode-session": "..."}  # 或用 HARNESS_LLM_SESSION_ID /
+  # HARNESS_LLM_EXTRA_HEADERS 环境变量（opencode zen/go 端点必须带会话标识头）
 
 sources:
   rss:

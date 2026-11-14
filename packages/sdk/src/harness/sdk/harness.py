@@ -104,6 +104,7 @@ class AgentHarness:
         config: HarnessConfig | None = None,
         llm_client: LLMClient | None = None,
         routing: RoutingConfig | None = None,
+        extra_headers: dict[str, str] | None = None,
         **kwargs,
     ):
         """
@@ -114,6 +115,8 @@ class AgentHarness:
             api_key: API key (or set environment variable)
             provider: LLM provider - "openai"(推荐), "anthropic", or "custom"
             base_url: Custom API endpoint (for third-party providers, local LLMs, Azure, etc.)
+            extra_headers: Extra HTTP headers for LLM requests (e.g. opencode
+                zen/go requires `x-opencode-session`)
             tools: List of tools to make available
             config: Full configuration object
             llm_client: Custom LLM client instance (overrides provider detection)
@@ -123,12 +126,20 @@ class AgentHarness:
         # Merge config
         if config:
             self.config = config
+            if extra_headers:
+                from dataclasses import replace
+
+                self.config = replace(
+                    config,
+                    extra_headers={**config.extra_headers, **extra_headers},
+                )
         else:
             self.config = HarnessConfig(
                 model=model,
                 api_key=api_key,
                 provider=provider,
                 base_url=base_url,
+                extra_headers=extra_headers or {},
                 routing=routing,
                 **kwargs,
             )
@@ -421,6 +432,7 @@ class AgentHarness:
         provider: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> LLMClient:
         """
         Create an LLM client based on config.
@@ -435,6 +447,7 @@ class AgentHarness:
             provider: Provider type - "anthropic", "openai", or "auto" (uses model_presets)
             api_key: API key (defaults to config.api_key)
             base_url: API base URL (defaults to config.base_url)
+            extra_headers: Extra request headers (defaults to config.extra_headers)
 
         Returns:
             LLMClient instance (AnthropicClient or OpenAIClient)
@@ -448,6 +461,9 @@ class AgentHarness:
         effective_provider = provider or self.config.provider
         effective_api_key = api_key or self.config.api_key
         effective_base_url = base_url or self.config.base_url
+        effective_extra_headers = (
+            extra_headers if extra_headers is not None else self.config.extra_headers
+        )
         max_tokens = self.config.get_max_tokens()
 
         # Use model_presets for provider auto-detection
@@ -465,6 +481,7 @@ class AgentHarness:
                 max_tokens=max_tokens,
                 temperature=self.config.temperature,
                 tool_result_role=self.config.tool_result_role,
+                extra_headers=effective_extra_headers,
             )
         else:
             # OpenAI format (including third-party compatible APIs)
@@ -474,6 +491,7 @@ class AgentHarness:
                 base_url=effective_base_url,
                 max_tokens=max_tokens,
                 temperature=self.config.temperature,
+                extra_headers=effective_extra_headers,
             )
 
     def _create_routing_client(self) -> LLMClient:
@@ -488,12 +506,14 @@ class AgentHarness:
             provider=routing_config.high_provider,
             api_key=routing_config.high_api_key,
             base_url=routing_config.high_base_url,
+            extra_headers=self.config.extra_headers,
         )
         low_client = self._create_llm_client(
             model=routing_config.low_model,
             provider=routing_config.low_provider,
             api_key=routing_config.low_api_key,
             base_url=routing_config.low_base_url,
+            extra_headers=self.config.extra_headers,
         )
 
         return RoutingLLMClient(

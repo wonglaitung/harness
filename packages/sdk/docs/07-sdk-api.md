@@ -730,6 +730,8 @@ def from_env(cls) -> AgentHarness:
     - HARNESS_MODEL: 模型名称（默认: gpt-4o）
     - HARNESS_PROVIDER: 提供商（openai/anthropic/auto）
     - HARNESS_BASE_URL: 自定义 API 端点（支持任意 OpenAI 兼容提供者）
+    - HARNESS_LLM_EXTRA_HEADERS: 额外请求头（JSON 对象）
+    - HARNESS_LLM_SESSION_ID: 会话标识（等价于 `x-opencode-session` 头）
     - HARNESS_MAX_ITERATIONS: 最大迭代次数
     - HARNESS_SYSTEM_PROMPT: 系统提示词
     - HARNESS_MEMORY_DIR: 记忆目录
@@ -741,6 +743,8 @@ def from_env(cls) -> AgentHarness:
         os.environ["OPENAI_API_KEY"] = "your-api-key"
         os.environ["HARNESS_BASE_URL"] = "https://api.your-provider.com/v1"
         os.environ["HARNESS_MODEL"] = "gpt-4o"
+        # opencode zen/go 端点要求会话标识头（缺失返回 400 MissingSessionID）
+        os.environ["HARNESS_LLM_SESSION_ID"] = "my-session"
 
         agent = AgentHarness.from_env()
         ```

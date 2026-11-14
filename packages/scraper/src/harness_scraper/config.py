@@ -58,6 +58,12 @@ def load_config(config_path: Path | str | None = None) -> ScraperConfig:
 
 def _merge_llm_config(yaml_llm: dict) -> LLMConfig:
     """Merge LLM config with environment variables"""
+    # 网关/代理可能要求额外请求头（opencode zen/go 需要 `x-opencode-session`，
+    # 缺失会返回 400 MissingSessionID）；SDK 侧已提供统一解析入口。
+    from harness.sdk.config import extra_headers_from_env
+
+    headers = dict(yaml_llm.get("extra_headers", {}) or {})
+    headers.update(extra_headers_from_env())
     return LLMConfig(
         provider=os.getenv("HARNESS_LLM_PROVIDER", yaml_llm.get("provider", "openai")),
         base_url=os.getenv("HARNESS_LLM_BASE_URL", yaml_llm.get("base_url", "https://api.openai.com/v1")),
@@ -65,6 +71,7 @@ def _merge_llm_config(yaml_llm: dict) -> LLMConfig:
         model=os.getenv("HARNESS_LLM_MODEL", yaml_llm.get("model", "gpt-4o-mini")),
         temperature=float(os.getenv("HARNESS_LLM_TEMPERATURE", yaml_llm.get("temperature", "0.1"))),
         max_tokens=int(os.getenv("HARNESS_LLM_MAX_TOKENS", yaml_llm.get("max_tokens", "8192"))),  # 8K default
+        extra_headers=headers,
     )
 
 
