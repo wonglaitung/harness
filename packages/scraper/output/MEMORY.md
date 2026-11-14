@@ -205,6 +205,33 @@
 ## 注意事项
 
 ### 港股分析
+- **港股2027均值回归叙事---抽水端压力缓和+十年未连两年杀估值+盈利低基数---中期左侧布局框架**
+
+### 港股分析
+- **港股业绩K型分化---新秀丽绩后涨6%创年内新高 vs B0SS直聘暴跌超20%---业绩兑现定价时代**
+
+### 港股分析
+- **汽车智能化回购集群---耐世特易控智驾首次回购+奇瑞均胜跟进---左侧集群信号**
+
+### 港股分析
+- **港股回购潮2.0---全行业全市值梯队扩散---耐世特易控智驾华沿机器人首次回购（最强左侧信号）**
+
+### 新范式/工具
+- **Apron Chat Protocol（极简自托管聊天协议 + Agent 原生规格分发）** - https://apron.chat/
+
+### 新范式/工具
+- **Modern Web Guidance（现代 Web 平台技能库）** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **Headroom — Context Compression Layer for AI Agents（Agent 上下文压缩层）** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **Decision Models（决策模型）— State + Questions → Decisions + Probabilities** - https://huggingface.co/blog/decision
+
+### 新范式/工具
+- **LLMON — LLM Object Notation（LLM 原生标记语言）** - https://huggingface.co/blog/ibm-granite/llmon-an-llm-native-markup-language-now-in-granite
+
+### 港股分析
 - **2026-11-14-港股alpha信号全景---五重信号共振但宏观否决---左侧机会与风险排序**
 
 ### 港股分析
