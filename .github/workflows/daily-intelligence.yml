@@ -109,11 +109,14 @@ jobs:
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running AI Intelligence (Goal-Driven) ==="
-        set -o pipefail
-        uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/ai_intelligence.log
-        rc=${PIPESTATUS[0]}
+        # GitHub 默认用 `bash -e`，失败会直接退出——先关掉 errexit，
+        # 保证失败时也能把日志落盘（否则诊断文件永远写不出来）。
+        set +e
+        uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 > /tmp/ai_intelligence.log 2>&1
+        rc=$?
         mkdir -p packages/scraper/output/diagnostics
-        { echo "skill: ai-intelligence"; echo "exit_code: $rc"; echo "--- tail ---"; tail -n 60 /tmp/ai_intelligence.log; } > packages/scraper/output/diagnostics/ai_intelligence.log.txt
+        { echo "skill: ai-intelligence"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/ai_intelligence.log; } > packages/scraper/output/diagnostics/ai_intelligence.log.txt
+        tail -n 80 /tmp/ai_intelligence.log
         exit $rc
       continue-on-error: true
 
@@ -121,11 +124,12 @@ jobs:
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'hk-stocks-alpha' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running HK Stocks Alpha (Goal-Driven) ==="
-        set -o pipefail
-        uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/hk_stocks.log
-        rc=${PIPESTATUS[0]}
+        set +e
+        uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 > /tmp/hk_stocks.log 2>&1
+        rc=$?
         mkdir -p packages/scraper/output/diagnostics
-        { echo "skill: hk-stocks-alpha"; echo "exit_code: $rc"; echo "--- tail ---"; tail -n 60 /tmp/hk_stocks.log; } > packages/scraper/output/diagnostics/hk_stocks.log.txt
+        { echo "skill: hk-stocks-alpha"; echo "exit_code: $rc"; echo "--- log (tail 400) ---"; tail -n 400 /tmp/hk_stocks.log; } > packages/scraper/output/diagnostics/hk_stocks.log.txt
+        tail -n 80 /tmp/hk_stocks.log
         exit $rc
       continue-on-error: true
 
