@@ -84,6 +84,18 @@ jobs:
         echo "HTTP $status"
         head -c 500 /tmp/llm_probe.json || true
         echo
+        # 把诊断结果落到 output/diagnostics/，随产物一起提交，便于事后追溯
+        mkdir -p packages/scraper/output/diagnostics
+        {
+          echo "time_utc: $(date -u +%FT%TZ)"
+          echo "base_url: $HARNESS_LLM_BASE_URL"
+          echo "model: $HARNESS_LLM_MODEL"
+          echo "session_header_set: $([ -n "$HARNESS_LLM_SESSION_ID" ] && echo yes || echo no)"
+          echo "http_status: $status"
+          echo "body: $(head -c 800 /tmp/llm_probe.json)"
+        } > packages/scraper/output/diagnostics/llm_probe.txt
+        cp /tmp/llm_probe.json packages/scraper/output/diagnostics/llm_probe.json || true
+        cat packages/scraper/output/diagnostics/llm_probe.txt
         case "$status" in
           200) echo "OK: LLM 端点可用" ;;
           401|403) echo "FAIL: 鉴权失败——检查 LLM_API_KEY 是否过期或与端点不匹配" ;;
@@ -99,6 +111,10 @@ jobs:
         echo "=== Running AI Intelligence (Goal-Driven) ==="
         set -o pipefail
         uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/ai_intelligence.log
+        rc=${PIPESTATUS[0]}
+        mkdir -p packages/scraper/output/diagnostics
+        { echo "skill: ai-intelligence"; echo "exit_code: $rc"; echo "--- tail ---"; tail -n 60 /tmp/ai_intelligence.log; } > packages/scraper/output/diagnostics/ai_intelligence.log.txt
+        exit $rc
       continue-on-error: true
 
     - name: Run HK stocks scraper (Goal-Driven)
@@ -107,6 +123,10 @@ jobs:
         echo "=== Running HK Stocks Alpha (Goal-Driven) ==="
         set -o pipefail
         uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/hk_stocks.log
+        rc=${PIPESTATUS[0]}
+        mkdir -p packages/scraper/output/diagnostics
+        { echo "skill: hk-stocks-alpha"; echo "exit_code: $rc"; echo "--- tail ---"; tail -n 60 /tmp/hk_stocks.log; } > packages/scraper/output/diagnostics/hk_stocks.log.txt
+        exit $rc
       continue-on-error: true
 
     - name: Verify generated output
