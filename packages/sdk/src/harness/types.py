@@ -30,6 +30,7 @@ class ProgressEventType(Enum):
     TEXT_CHUNK = "text_chunk"  # 流式文本块
     ITERATION = "iteration"  # 迭代计数
     ERROR = "error"  # 错误发生
+    WARNING = "warning"  # 警告（如工具输出被注入清洗）
     STREAM_BACKPRESSURE = "stream_backpressure"  # 流式输出背压
     STUCK_DETECTED = "stuck_detected"  # 检测到停滞状态
     ROUTER_DECISION = "router_decision"  # 路由决策（CPU Router）

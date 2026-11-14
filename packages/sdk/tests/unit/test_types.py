@@ -9,6 +9,7 @@ from harness.types import (
     LoopResult,
     LoopState,
     Message,
+    ProgressEventType,
     Session,
     StopReason,
     TokenUsage,
@@ -212,3 +213,8 @@ class TestLoopResult:
         )
         assert not result.is_success
         assert result.error == "Something went wrong"
+
+
+def test_progress_event_type_has_warning():
+    """回归：工具输出被注入清洗时会发 ProgressEventType.WARNING。"""
+    assert ProgressEventType.WARNING.value == "warning"

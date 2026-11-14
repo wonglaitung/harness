@@ -135,7 +135,7 @@ jobs:
 
     - name: Verify generated output
       run: |
-        date_str=$(date +%Y%m%d)
+        date_str=$(date +%Y-%m-%d)
         if [ -d "packages/scraper/output/$date_str" ] && [ -n "$(ls -A "packages/scraper/output/$date_str" 2>/dev/null)" ]; then
           echo "OK: 已生成 $date_str 的产出"
         else
