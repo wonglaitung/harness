@@ -55,7 +55,8 @@ jobs:
         echo "RECIPIENT_EMAIL=${{ secrets.RECIPIENT_EMAIL }}" >> $GITHUB_ENV
         # LLM configuration (HARNESS_LLM_* for scraper)
         echo "HARNESS_LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> $GITHUB_ENV
-        echo "HARNESS_LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}" >> $GITHUB_ENV
+        # 未配置 secret 时回退到 OpenCode Zen（OpenAI 兼容端点）
+        echo "HARNESS_LLM_BASE_URL=${{ secrets.LLM_BASE_URL || 'https://opencode.ai/zen/v1' }}" >> $GITHUB_ENV
         echo "HARNESS_LLM_MODEL=${{ secrets.LLM_MODEL }}" >> $GITHUB_ENV
         # opencode zen/go 端点要求会话标识头（缺失返回 400 MissingSessionID）：
         # 优先用仓库 secret，缺省用本次 run id 派生一个稳定值。
