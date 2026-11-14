@@ -4,6 +4,7 @@ OpenAI LLM client implementation.
 
 import asyncio
 import concurrent.futures
+import json
 import logging
 import os
 from collections.abc import AsyncIterator, Callable
@@ -68,6 +69,63 @@ class OpenAIClient(LLMClient):
 
         logger.info(f"OpenAI module pre-imported, version: {openai.__version__}")
 
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """把内部会话消息转成 OpenAI Chat Completions 格式。
+
+        内部消息把 ``tool_call_id`` 放在 ``metadata`` 里，assistant 的
+        ``tool_calls`` 也不在标准位置；OpenAI 兼容端点要求：
+
+        - ``role=tool`` 必须带顶层 ``tool_call_id``；
+        - 触发工具调用的 assistant 消息必须带 ``tool_calls``。
+
+        缺任一项都会被严格端点拒绝（如 400 ``missing field tool_call_id``）。
+        """
+        converted: list[dict[str, Any]] = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content")
+            metadata = msg.get("metadata") or {}
+
+            if role == "tool":
+                converted.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": metadata.get("tool_call_id", ""),
+                        "content": content if content is not None else "",
+                    }
+                )
+                continue
+
+            tool_calls = metadata.get("tool_calls")
+            if role == "assistant" and tool_calls:
+                converted.append(
+                    {
+                        "role": "assistant",
+                        "content": content or "",
+                        "tool_calls": [
+                            {
+                                "id": call["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": call["name"],
+                                    "arguments": json.dumps(
+                                        call.get("arguments") or {},
+                                        ensure_ascii=False,
+                                    ),
+                                },
+                            }
+                            for call in tool_calls
+                        ],
+                    }
+                )
+                continue
+
+            item: dict[str, Any] = {"role": role, "content": content}
+            if isinstance(content, list):
+                item["content"] = self._convert_multimodal_content(content)
+            converted.append(item)
+        return converted
+
     def _get_client(self):
         """Get or create the OpenAI client."""
         if self._client is None:
@@ -107,16 +165,8 @@ class OpenAIClient(LLMClient):
         if system:
             formatted_messages.append({"role": "system", "content": system})
 
-        # Convert multimodal content to OpenAI format
-        for msg in messages:
-            converted_msg = msg.copy()
-            content = msg.get("content")
-
-            # If content is a list (multimodal), convert format
-            if isinstance(content, list):
-                converted_msg["content"] = self._convert_multimodal_content(content)
-
-            formatted_messages.append(converted_msg)
+        # Convert internal messages (tool_call_id / tool_calls / multimodal)
+        formatted_messages.extend(self._convert_messages(messages))
 
         # Build request parameters
         params: dict[str, Any] = {
@@ -273,7 +323,7 @@ class OpenAIClient(LLMClient):
         formatted_messages = []
         if system:
             formatted_messages.append({"role": "system", "content": system})
-        formatted_messages.extend(messages)
+        formatted_messages.extend(self._convert_messages(messages))
 
         params: dict[str, Any] = {
             "model": self.config.model,

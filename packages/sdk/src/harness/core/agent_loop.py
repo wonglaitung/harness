@@ -801,14 +801,24 @@ class AgentLoop:
                             token_usage=total_usage,
                         )
 
-                # Add assistant message (skip if content is empty and has tool calls)
-                # Empty assistant messages can confuse models in compatibility mode
-                if response.content or not response.is_tool_use:
-                    assistant_msg = Message(
-                        role="assistant",
-                        content=response.content,
+                # 工具调用的 assistant 消息必须写入历史（OpenAI 协议要求
+                # tool 结果前面有对应的 tool_calls 消息）；纯文本空消息仍跳过。
+                if response.is_tool_use:
+                    session.add_message(
+                        Message(
+                            role="assistant",
+                            content=response.content,
+                            metadata={
+                                "tool_calls": [
+                                    call.to_dict() for call in response.tool_calls
+                                ]
+                            },
+                        )
                     )
-                    session.add_message(assistant_msg)
+                elif response.content:
+                    session.add_message(
+                        Message(role="assistant", content=response.content)
+                    )
 
                 # Check if we need tools
                 if response.is_tool_use:
@@ -1363,9 +1373,20 @@ class AgentLoop:
                     duration_ms=llm_duration,
                 )
 
-                if full_text or not tool_calls:
-                    assistant_msg = Message(role="assistant", content=full_text)
-                    session.add_message(assistant_msg)
+                if tool_calls:
+                    session.add_message(
+                        Message(
+                            role="assistant",
+                            content=full_text,
+                            metadata={
+                                "tool_calls": [call.to_dict() for call in tool_calls]
+                            },
+                        )
+                    )
+                elif full_text:
+                    session.add_message(
+                        Message(role="assistant", content=full_text)
+                    )
 
                 if tool_calls:
                     self.state = LoopState.EXECUTING_TOOLS
@@ -2215,9 +2236,22 @@ class AgentLoop:
                 total_usage.input_tokens += response.usage.input_tokens
                 total_usage.output_tokens += response.usage.output_tokens
 
-                # Add assistant message
-                assistant_msg = Message(role="assistant", content=response.content)
-                session.add_message(assistant_msg)
+                # Add assistant message（工具调用时带上 tool_calls，供 OpenAI 协议回放）
+                session.add_message(
+                    Message(
+                        role="assistant",
+                        content=response.content,
+                        metadata=(
+                            {
+                                "tool_calls": [
+                                    call.to_dict() for call in response.tool_calls
+                                ]
+                            }
+                            if response.is_tool_use
+                            else {}
+                        ),
+                    )
+                )
 
                 # Check if we need tools
                 if response.is_tool_use:
