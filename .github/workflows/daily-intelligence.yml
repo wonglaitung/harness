@@ -153,6 +153,7 @@ jobs:
         ls -la packages/scraper/output/$date_str/stocks/ 2>/dev/null || echo "No stocks files"
 
     - name: Commit generated files and memory
+      if: always()
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
