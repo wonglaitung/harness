@@ -1,389 +1,251 @@
 skill: ai-intelligence
 exit_code: 1
 --- log (tail 400) ---
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 123634'}}
-21:56:08 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:08 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
-21:56:08 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:10 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:10 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:11 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
-21:56:11 [INFO] harness.loop.goal_loop: Context reset 1/3
-21:56:11 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
-21:56:11 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:11 [INFO] harness.core.agent_loop: _run_impl called, prompt length=665, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:11 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
-21:56:11 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
-21:56:11 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:11 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
-21:56:11 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:13 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:13 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:13 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
-21:56:13 [INFO] harness.core.agent_loop: LLM response: content_len=98, stop_reason=StopReason.TOOL_USE, tool_calls=3
-21:56:13 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=1/10, projected_total=1/200
-21:56:16 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=2/10, projected_total=2/200
-21:56:16 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=3/10, projected_total=3/200
-21:56:16 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=5
-21:56:16 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:16 [INFO] harness.llm.openai: OpenAI API request: messages=6, tools=6
-21:56:16 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:17 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 400 Bad Request"
-21:56:17 [ERROR] harness.llm.openai: OpenAI API error: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
+22:34:33 [INFO] harness_scraper.goal_agent: Loaded skill from repo: /home/runner/work/harness/harness/packages/scraper/skills/ai-intelligence.md
+22:34:33 [INFO] harness_scraper.goal_agent: Loaded skill: ai-intelligence
+22:34:33 [INFO] harness_scraper.goal_agent: Auto-selected tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:34:33 [INFO] harness.llm.openai: OpenAIClient.__init__: api_key=********, base_url=https://opencode.ai/zen/v1
+22:34:33 [INFO] harness.llm.openai: OpenAI module pre-imported, version: 2.38.0
+22:34:35 [INFO] harness.sdk.harness: [AgentHarness] _load_skill_metadata called, id=128522679835536
+22:34:35 [INFO] harness.sdk.harness: [AgentHarness] Total skills in _skill_metadata: 0, unique names: 0
+22:34:35 [INFO] harness_scraper.goal_agent: Running GoalAgent with goal: 提取 AI 行业情报，找到 3 个以上的新范式项目：
+
+1. 抓取 OpenAI 和 Hugging...
+22:34:35 [INFO] harness.loop.goal_loop: Starting goal loop: 提取 AI 行业情报，找到 3 个以上的新范式项目：
+
+1. 抓取 OpenAI 和 HuggingFace RSS 博客
+2. 抓取 Hacker News 高分帖子（>150 points）
+3....
+22:34:35 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
+22:34:35 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:34:35 [INFO] harness.core.agent_loop: _run_impl called, prompt length=694, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:34:35 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
+22:34:35 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
+22:34:35 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:34:35 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
+22:34:35 [INFO] harness.llm.openai: sync_call: Starting API request
+22:34:35 [INFO] harness.llm.openai: Creating OpenAI client instance...
+22:34:35 [INFO] harness.llm.openai: OpenAI client created (sync mode for compatibility)
+22:34:41 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:34:41 [INFO] harness.llm.openai: sync_call: API request completed
+22:34:41 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:34:41 [INFO] harness.core.agent_loop: LLM response: content_len=70, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:34:41 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=1/10, projected_total=1/200
+22:34:41 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=2/10, projected_total=2/200
+22:34:41 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=3/10, projected_total=3/200
+22:34:44 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=4/10, projected_total=4/200
+22:34:47 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=6
+22:34:47 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:34:47 [INFO] harness.llm.openai: OpenAI API request: messages=7, tools=6
+22:34:47 [INFO] harness.llm.openai: sync_call: Starting API request
+22:34:51 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:34:51 [INFO] harness.llm.openai: sync_call: API request completed
+22:34:51 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:34:51 [INFO] harness.core.agent_loop: LLM response: content_len=55, stop_reason=StopReason.TOOL_USE, tool_calls=2
+22:34:51 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=1/10, projected_total=5/200
+22:34:52 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=2/10, projected_total=6/200
+22:34:54 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=9
+22:34:54 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:34:54 [INFO] harness.llm.openai: OpenAI API request: messages=10, tools=6
+22:34:54 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:00 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:00 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:00 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:35:00 [INFO] harness.core.agent_loop: LLM response: content_len=78, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:35:00 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=1/10, projected_total=7/200
+22:35:01 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://huggingface.co/blog/ibm-granite/llmon-an-llm-native-markup-language-now-in-granite
+22:35:01 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=2/10, projected_total=8/200
+22:35:01 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://openai.com/index/introducing-chatgpt-wallet
+22:35:01 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=3/10, projected_total=9/200
+22:35:01 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/GoogleChrome/modern-web-guidance/main/README.md
+22:35:01 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=4/10, projected_total=10/200
+22:35:01 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/a2ui-project/a2ui/main/README.md
+22:35:01 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=14
+22:35:01 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:01 [INFO] harness.llm.openai: OpenAI API request: messages=15, tools=6
+22:35:01 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:11 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:11 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:11 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:35:11 [INFO] harness.core.agent_loop: LLM response: content_len=91, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:35:11 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=1/10, projected_total=11/200
+22:35:11 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/CopilotKit/OpenBot/main/README.md
+22:35:11 [ERROR] harness.core.agent_loop: Loop exception: AttributeError: WARNING
 Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
-21:56:17 [ERROR] harness.core.agent_loop: LLM call exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 837, in _run_impl
+    tool_results = await self._execute_tools(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 1836, in _execute_tools
+    ProgressEventType.WARNING,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/enum.py", line 786, in __getattr__
+    raise AttributeError(name) from None
+AttributeError: WARNING
+22:35:11 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:11 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
+22:35:11 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:16 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:16 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:16 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
+22:35:16 [INFO] harness.loop.goal_loop: Context reset 1/3
+22:35:16 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
+22:35:16 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:35:16 [INFO] harness.core.agent_loop: _run_impl called, prompt length=665, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:35:16 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
+22:35:16 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
+22:35:16 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:16 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
+22:35:16 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:18 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:18 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:18 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:35:18 [INFO] harness.core.agent_loop: LLM response: content_len=23, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:35:18 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=1/10, projected_total=1/200
+22:35:19 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=2/10, projected_total=2/200
+22:35:19 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=3/10, projected_total=3/200
+22:35:22 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=4/10, projected_total=4/200
+22:35:25 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=6
+22:35:25 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:25 [INFO] harness.llm.openai: OpenAI API request: messages=7, tools=6
+22:35:25 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:31 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:31 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:32 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:35:32 [INFO] harness.core.agent_loop: LLM response: content_len=29, stop_reason=StopReason.TOOL_USE, tool_calls=6
+22:35:32 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=1/10, projected_total=5/200
+22:35:32 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://openai.com/index/introducing-chatgpt-wallet
+22:35:32 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=2/10, projected_total=6/200
+22:35:32 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://huggingface.co/blog/ibm-granite/llmon-an-llm-native-markup-language-now-in-granite
+22:35:32 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=3/10, projected_total=7/200
+22:35:32 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://huggingface.co/blog/decision
+22:35:32 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=4/10, projected_total=8/200
+22:35:33 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://huggingface.co/blog/qvac/botpsy
+22:35:33 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=5/10, projected_total=9/200
+22:35:33 [INFO] harness_scraper.tools.fetch_url: Fetched content via Jina Reader from https://apron.chat/
+22:35:33 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=6/10, projected_total=10/200
+22:35:33 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/GoogleChrome/modern-web-guidance/main/README.md
+22:35:33 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=13
+22:35:33 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:33 [INFO] harness.llm.openai: OpenAI API request: messages=14, tools=6
+22:35:33 [INFO] harness.llm.openai: sync_call: Starting API request
+22:35:44 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:35:44 [INFO] harness.llm.openai: sync_call: API request completed
+22:35:44 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:35:44 [INFO] harness.core.agent_loop: LLM response: content_len=37, stop_reason=StopReason.TOOL_USE, tool_calls=2
+22:35:44 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=1/10, projected_total=11/200
+22:35:45 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=2/10, projected_total=12/200
+22:35:46 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=16
+22:35:46 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:35:46 [INFO] harness.llm.openai: OpenAI API request: messages=17, tools=6
+22:35:46 [INFO] harness.llm.openai: sync_call: Starting API request
+22:36:47 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:36:47 [INFO] harness.llm.openai: sync_call: API request completed
+22:36:47 [INFO] harness.llm.openai: OpenAI response received: finish_reason=length
+22:36:47 [INFO] harness.core.agent_loop: LLM response: content_len=17257, stop_reason=StopReason.MAX_TOKENS, tool_calls=0
+22:36:47 [INFO] harness.core.agent_loop: Loop completed, iterations=3, content_len=17257
+22:36:47 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:36:47 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
+22:36:47 [INFO] harness.llm.openai: sync_call: Starting API request
+22:36:51 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:36:51 [INFO] harness.llm.openai: sync_call: API request completed
+22:36:51 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
+22:36:51 [INFO] harness.loop.goal_loop: Context reset 2/3
+22:36:51 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
+22:36:51 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:36:51 [INFO] harness.core.agent_loop: _run_impl called, prompt length=1681, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:36:51 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
+22:36:51 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
+22:36:51 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:36:51 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
+22:36:51 [INFO] harness.llm.openai: sync_call: Starting API request
+22:36:56 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:36:56 [INFO] harness.llm.openai: sync_call: API request completed
+22:36:56 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:36:56 [INFO] harness.core.agent_loop: LLM response: content_len=0, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:36:56 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=1/10, projected_total=1/200
+22:36:58 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=2/10, projected_total=2/200
+22:37:01 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=3/10, projected_total=3/200
+22:37:02 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=4/10, projected_total=4/200
+22:37:03 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=6
+22:37:03 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:37:03 [INFO] harness.llm.openai: OpenAI API request: messages=7, tools=6
+22:37:03 [INFO] harness.llm.openai: sync_call: Starting API request
+22:37:13 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:37:13 [INFO] harness.llm.openai: sync_call: API request completed
+22:37:13 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:37:13 [INFO] harness.core.agent_loop: LLM response: content_len=28, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:37:13 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=1/10, projected_total=5/200
+22:37:13 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/GoogleChrome/modern-web-guidance/main/README.md
+22:37:13 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=2/10, projected_total=6/200
+22:37:13 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/NVIDIA/SkillEvaluator/main/README.md
+22:37:13 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=3/10, projected_total=7/200
+22:37:13 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/CopilotKit/OpenBot/main/README.md
+22:37:13 [ERROR] harness.core.agent_loop: Loop exception: AttributeError: WARNING
 Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
-21:56:17 [ERROR] harness.core.agent_loop: Loop exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 837, in _run_impl
+    tool_results = await self._execute_tools(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 1836, in _execute_tools
+    ProgressEventType.WARNING,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/enum.py", line 786, in __getattr__
+    raise AttributeError(name) from None
+AttributeError: WARNING
+22:37:13 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:37:13 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
+22:37:13 [INFO] harness.llm.openai: sync_call: Starting API request
+22:37:18 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:37:18 [INFO] harness.llm.openai: sync_call: API request completed
+22:37:18 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
+22:37:18 [INFO] harness.loop.goal_loop: Context reset 3/3
+22:37:18 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
+22:37:18 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:37:18 [INFO] harness.core.agent_loop: _run_impl called, prompt length=665, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
+22:37:18 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
+22:37:18 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
+22:37:18 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:37:18 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
+22:37:18 [INFO] harness.llm.openai: sync_call: Starting API request
+22:37:22 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:37:22 [INFO] harness.llm.openai: sync_call: API request completed
+22:37:22 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:37:22 [INFO] harness.core.agent_loop: LLM response: content_len=95, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:37:22 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=1/10, projected_total=1/200
+22:37:24 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=2/10, projected_total=2/200
+22:37:27 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=3/10, projected_total=3/200
+22:37:27 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=4/10, projected_total=4/200
+22:37:27 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=6
+22:37:27 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:37:27 [INFO] harness.llm.openai: OpenAI API request: messages=7, tools=6
+22:37:27 [INFO] harness.llm.openai: sync_call: Starting API request
+22:37:33 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:37:33 [INFO] harness.llm.openai: sync_call: API request completed
+22:37:33 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
+22:37:33 [INFO] harness.core.agent_loop: LLM response: content_len=83, stop_reason=StopReason.TOOL_USE, tool_calls=4
+22:37:33 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=1/10, projected_total=5/200
+22:37:33 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/GoogleChrome/modern-web-guidance-src/main/README.md
+22:37:33 [INFO] harness.core.step_budget: Step budget check: tool=fetch_url, projected_step=2/10, projected_total=6/200
+22:37:33 [INFO] harness_scraper.tools.fetch_url: Fetched README from https://raw.githubusercontent.com/CopilotKit/OpenBot/main/README.md
+22:37:33 [ERROR] harness.core.agent_loop: Loop exception: AttributeError: WARNING
 Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 119740'}}
-21:56:17 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:17 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
-21:56:17 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:20 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:20 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:20 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
-21:56:20 [INFO] harness.loop.goal_loop: Context reset 2/3
-21:56:20 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
-21:56:20 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:20 [INFO] harness.core.agent_loop: _run_impl called, prompt length=665, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:20 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
-21:56:20 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
-21:56:20 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:20 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
-21:56:20 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:22 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:22 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:22 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
-21:56:22 [INFO] harness.core.agent_loop: LLM response: content_len=24, stop_reason=StopReason.TOOL_USE, tool_calls=4
-21:56:22 [INFO] harness.core.step_budget: Step budget check: tool=fetch_rss, projected_step=1/10, projected_total=1/200
-21:56:22 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=2/10, projected_total=2/200
-21:56:27 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=3/10, projected_total=3/200
-21:56:29 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=4/10, projected_total=4/200
-21:56:30 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=6
-21:56:30 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:30 [INFO] harness.llm.openai: OpenAI API request: messages=7, tools=6
-21:56:30 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:31 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 400 Bad Request"
-21:56:31 [ERROR] harness.llm.openai: OpenAI API error: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-21:56:31 [ERROR] harness.core.agent_loop: LLM call exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-21:56:31 [ERROR] harness.core.agent_loop: Loop exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[3]: missing field `tool_call_id` at line 1 column 120733'}}
-21:56:31 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:31 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
-21:56:31 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:33 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:33 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:33 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
-21:56:33 [INFO] harness.loop.goal_loop: Context reset 3/3
-21:56:33 [INFO] harness.skills.injector: [SkillInjector] Active skills: []
-21:56:33 [INFO] harness.sdk.harness: Tool registry has 6 tools: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:33 [INFO] harness.core.agent_loop: _run_impl called, prompt length=665, tools=6: ['fetch_rss', 'fetch_hn', 'fetch_show_hn', 'fetch_github_trending', 'fetch_url', 'save_one_pager']
-21:56:33 [INFO] harness.core.agent_loop: Starting loop, max_iterations=25
-21:56:33 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=1
-21:56:33 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:33 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=6
-21:56:33 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:36 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:36 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:36 [INFO] harness.llm.openai: OpenAI response received: finish_reason=tool_calls
-21:56:36 [INFO] harness.core.agent_loop: LLM response: content_len=0, stop_reason=StopReason.TOOL_USE, tool_calls=4
-21:56:36 [INFO] harness.core.step_budget: Step budget check: tool=fetch_hn, projected_step=1/10, projected_total=1/200
-21:56:38 [INFO] harness.core.step_budget: Step budget check: tool=fetch_show_hn, projected_step=2/10, projected_total=2/200
-21:56:39 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=3/10, projected_total=3/200
-21:56:40 [INFO] harness.core.step_budget: Step budget check: tool=fetch_github_trending, projected_step=4/10, projected_total=4/200
-21:56:40 [INFO] harness.core.agent_loop: Calling LLM, attempt=1, messages=5
-21:56:40 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:40 [INFO] harness.llm.openai: OpenAI API request: messages=6, tools=6
-21:56:40 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:40 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 400 Bad Request"
-21:56:40 [ERROR] harness.llm.openai: OpenAI API error: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-21:56:40 [ERROR] harness.core.agent_loop: LLM call exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-21:56:40 [ERROR] harness.core.agent_loop: Loop exception: BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-Traceback (most recent call last):
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 676, in _run_impl
-    response = await self.llm.call(
-               ^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 160, in call
-    response = future.result()
-               ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/concurrent/futures/thread.py", line 58, in run
-    result = self.fn(*self.args, **self.kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/packages/sdk/src/harness/llm/openai.py", line 147, in sync_call
-    result = client.chat.completions.create(**params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_utils/_utils.py", line 298, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1215, in create
-    return self._post(
-           ^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1332, in post
-    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/harness/harness/.venv/lib/python3.11/site-packages/openai/_base_client.py", line 1105, in request
-    raise self._make_status_error_from_response(err.response) from None
-openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_error', 'message': 'Upstream request failed: [invalid_request_error] Failed to deserialize the JSON body into the target type: messages[2]: missing field `tool_call_id` at line 1 column 121524'}}
-21:56:40 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
-21:56:40 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
-21:56:40 [INFO] harness.llm.openai: sync_call: Starting API request
-21:56:44 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
-21:56:44 [INFO] harness.llm.openai: sync_call: API request completed
-21:56:44 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
-21:56:44 [INFO] harness.loop.goal_loop: Context reset 4/3
-21:56:44 [WARNING] harness.loop.goal_loop: Max context resets (3) exceeded
-21:56:44 [WARNING] harness_scraper.goal_agent: Goal not achieved: GoalStatus.MAX_RESETS after 4 iterations
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 837, in _run_impl
+    tool_results = await self._execute_tools(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/harness/harness/packages/sdk/src/harness/core/agent_loop.py", line 1836, in _execute_tools
+    ProgressEventType.WARNING,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/enum.py", line 786, in __getattr__
+    raise AttributeError(name) from None
+AttributeError: WARNING
+22:37:33 [INFO] harness.llm.openai: OpenAI call starting: model=deepseek-v4.1-flash, base_url=https://opencode.ai/zen/v1
+22:37:33 [INFO] harness.llm.openai: OpenAI API request: messages=2, tools=0
+22:37:33 [INFO] harness.llm.openai: sync_call: Starting API request
+22:37:35 [INFO] httpx: HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 200 OK"
+22:37:35 [INFO] harness.llm.openai: sync_call: API request completed
+22:37:35 [INFO] harness.llm.openai: OpenAI response received: finish_reason=stop
+22:37:35 [INFO] harness.loop.goal_loop: Context reset 4/3
+22:37:35 [WARNING] harness.loop.goal_loop: Max context resets (3) exceeded
+22:37:35 [WARNING] harness_scraper.goal_agent: Goal not achieved: GoalStatus.MAX_RESETS after 8 iterations
 
 🎯 Goal: 提取 AI 行业情报，找到 3 个以上的新范式项目：
 
@@ -396,8 +258,8 @@ openai.BadRequestError: Error code: 400 - {'error': {'type': 'invalid_request_er
 
 === Result ===
 Status: GoalStatus.MAX_RESETS
-Iterations: 4
-Elapsed: 49.8s
+Iterations: 8
+Elapsed: 181.0s
 ❌ Goal not achieved: GoalStatus.MAX_RESETS
 
 No files generated
