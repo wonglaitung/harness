@@ -64,19 +64,60 @@ jobs:
         # 其他网关自定义头（JSON 对象，可选）
         echo "HARNESS_LLM_EXTRA_HEADERS=${{ secrets.LLM_EXTRA_HEADERS }}" >> $GITHUB_ENV
 
+    - name: Preflight LLM connectivity
+      run: |
+        echo "=== LLM 连通性预检 ==="
+        echo "Base URL: $HARNESS_LLM_BASE_URL"
+        echo "Model: $HARNESS_LLM_MODEL"
+        endpoint="${HARNESS_LLM_BASE_URL%/}"
+        case "$endpoint" in
+          */chat/completions) url="$endpoint" ;;
+          *) url="$endpoint/chat/completions" ;;
+        esac
+        echo "Probe URL: $url"
+        status=$(curl -sS -o /tmp/llm_probe.json -w "%{http_code}" --max-time 30 \
+          -H "Authorization: Bearer $HARNESS_LLM_API_KEY" \
+          -H "Content-Type: application/json" \
+          -H "x-opencode-session: ${HARNESS_LLM_SESSION_ID:-preflight}" \
+          "$url" \
+          -d "{\"model\":\"$HARNESS_LLM_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":16}")
+        echo "HTTP $status"
+        head -c 500 /tmp/llm_probe.json || true
+        echo
+        case "$status" in
+          200) echo "OK: LLM 端点可用" ;;
+          401|403) echo "FAIL: 鉴权失败——检查 LLM_API_KEY 是否过期或与端点不匹配" ;;
+          400) echo "FAIL: 请求被拒——若返回 MissingSessionID 说明会话头未生效" ;;
+          404) echo "FAIL: 端点或模型不存在——检查 BASE_URL / MODEL" ;;
+          429) echo "FAIL: 限流或额度用尽" ;;
+          *) echo "WARN: 其它错误，见上方返回体" ;;
+        esac
+
     - name: Run AI intelligence scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'ai-intelligence' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running AI Intelligence (Goal-Driven) ==="
-        uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800
+        set -o pipefail
+        uv run python packages/scraper/scripts/run_goal.py --skill ai-intelligence --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/ai_intelligence.log
       continue-on-error: true
 
     - name: Run HK stocks scraper (Goal-Driven)
       if: ${{ github.event.inputs.skill == 'all' || github.event.inputs.skill == 'hk-stocks-alpha' || github.event.inputs.skill == '' }}
       run: |
         echo "=== Running HK Stocks Alpha (Goal-Driven) ==="
-        uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800
+        set -o pipefail
+        uv run python packages/scraper/scripts/run_goal.py --skill hk-stocks-alpha --max-iterations ${{ github.event.inputs.max_iterations || '25' }} --timeout 1800 2>&1 | tee /tmp/hk_stocks.log
       continue-on-error: true
+
+    - name: Verify generated output
+      run: |
+        date_str=$(date +%Y%m%d)
+        if [ -d "packages/scraper/output/$date_str" ] && [ -n "$(ls -A "packages/scraper/output/$date_str" 2>/dev/null)" ]; then
+          echo "OK: 已生成 $date_str 的产出"
+        else
+          echo "FAIL: $date_str 没有产出——抓取步骤失败，请看上方 LLM 预检与抓取日志"
+          exit 1
+        fi
 
     - name: Send intelligence emails
       if: ${{ github.event.inputs.send_email == 'true' || github.event.inputs.send_email == '' }}
