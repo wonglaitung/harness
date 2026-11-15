@@ -202,7 +202,21 @@
 
 ## 2026-11-14 提取
 
+## 2026-11-15 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **OpenBot — AI Coworker 工作区：Agent 即员工的基础设施单元** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **SkillEvaluator — Agent Skill 的「有无对比」效果度量范式** - https://github.com/NVIDIA/SkillEvaluator
+
+### 新范式/工具
+- **Plannotator** - https://github.com/plannotator/plannotator
+
+### 新范式/工具
+- **A2UI (Agent-to-User Interface)** - https://github.com/a2ui-project/a2ui
 
 ### 港股分析
 - **港股2027均值回归叙事---抽水端压力缓和+十年未连两年杀估值+盈利低基数---中期左侧布局框架**
