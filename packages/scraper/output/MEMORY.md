@@ -204,7 +204,54 @@
 
 ## 2026-11-15 提取
 
+## 2026-11-16 提取
+
 ## 注意事项
+
+### 港股分析
+- **康方生物单日暴跌24.54%---医药股集体重挫---左侧逆向机会还是价值陷阱**
+
+### 港股分析
+- **南向持股19.53%+277只超20%---右侧确认延续但未加速---持股高位即中性**
+
+### 港股分析
+- **港股回购潮持续---极兔单日7798万+中远海控跟进---自有资金托举估值底盘**
+
+### 港股分析
+- **新世界发展 249 亿港元全额包销供股、低开 45.48% — 「抽水端缓和」叙事当日被击穿**
+
+### 港股分析
+- **高盛将港股评级上调至「超配」— 逆势上调的外资定价权转折 — 右侧信号首次出现**
+
+### 新范式/工具
+- **COG-second-brain — V-model 验证生命周期：Worker 永不给自己打分** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **ffmpeg-skill — SPEC 契约自生产：Agent 工具的 schema 从单一真相源运行时派生，且输出必须被测量** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **AutoSwarm — 异构 Agent 联邦调度层：不造新 Agent，让所有 Agent 组成一支队伍** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **Model Integration Contract (MIC，模型集成契约)** - https://huggingface.co/blog/transformers-mic
+
+### 新范式/工具
+- **Checkpoint Forensics（检查点取证）** - https://unemploymentlabs.com/checkpoint-forensics
+
+### 新范式/工具
+- **XYBench — XY 问题基准：测量模型「纠正错误前提」的能力** - https://huggingface.co/blog/allenai/xybench
+
+### 新范式/工具
+- **ChatGPT Wallet — Payment Token 隔离的 Agent 支付范式** - https://openai.com/index/introducing-chatgpt-wallet
+
+### 新范式/工具
+- **agweb — 永不抢焦点的 Agent 专用浏览器** - https://github.com/paul-nameless/agweb
+
+### 新范式/工具
+- **AG-UI (Agent-User Interaction Protocol)** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **HOPE — Higher-Order Pruning of Experts：MoE 专家剪枝从"独立打分"到"协作分组"** - https://huggingface.co/blog/amazon/higher-order-pruning-experts
 
 ### 新范式/工具
 - **OpenBot — AI Coworker 工作区：Agent 即员工的基础设施单元** - https://github.com/trending/typescript?since=daily
