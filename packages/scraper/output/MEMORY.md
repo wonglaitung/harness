@@ -206,7 +206,48 @@
 
 ## 2026-11-16 提取
 
+## 2026-11-17 提取
+
 ## 注意事项
+
+### 港股分析
+- **2026-11-17-港股alpha信号全景---五重信号共振但宏观否决---左侧机会排序与仓位纪律**
+
+### 港股分析
+- **港股回购潮30---111家454亿港元---君实生物年内首次回购---广度达标深度未升级（左侧信号持续）**
+
+### 港股分析
+- **SemiAnalysis大幅下修AI算力需求预测---光通信股集体走弱---AI基建叙事首次被权威机构质疑（左侧风险警示）**
+
+### 港股分析
+- **南向持股19.56%创高位+278只超20%---右侧确认延续但流入放缓---仓位高位即中性**
+
+### 港股分析
+- **阿里-5%至85.2港元创2025年1月以来最低---百度-6.1%营收六连降---科网股左侧逆向窗口vs基本面恶化风险**
+
+### 港股分析
+- **美债10Y 5.12%高位僵持+2Y-4.12%曲线正常化---降息预期彻底关闭---宏观否决维持最高级别**
+
+### 港股分析
+- **高盛上调港股至超配---评级落地次日即被价格背离---右侧信号"有名无实"警示**
+
+### 新范式/工具
+- **Token Pooling-Aware Training — 部署期有损压缩感知训练** - https://huggingface.co/blog/token-pooling
+
+### 新范式/工具
+- **Claude-BugHunter — Disclosure-Mined Skill Corpus（披露报告挖掘出的可审计技能语料）** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **Palette — Design-Language Distillation（自有设计语言的蒸馏）：设计师/编码者角色拆分 + PresentBench 可行性基准** - https://huggingface.co/blog/ibm-research/palette-deck-building
+
+### 新范式/工具
+- **Granite Switch — Model-as-Software Versioning（模型按软件语义版本化）+ Adapter-Composed Model** - https://huggingface.co/blog/ibm-granite/granite-switch-4-1-1
+
+### 新范式/工具
+- **BotPsy — Sub-Billion Agentic Model（亚十亿参数专用 Agent 模型）** - https://huggingface.co/blog/qvac/botpsy
+
+### 新范式/工具
+- **iFixAi — Independent Agent Auditing（独立 Agent 审计）** - https://github.com/trending/python?since=daily
 
 ### 港股分析
 - **康方生物单日暴跌24.54%---医药股集体重挫---左侧逆向机会还是价值陷阱**
