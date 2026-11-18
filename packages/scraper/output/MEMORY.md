@@ -213,6 +213,99 @@
 ## 注意事项
 
 ### 港股分析
+- **2026-11-18 港股左侧Alpha机会清单——3个合格信号统一裁决与仓位纪律**
+
+### 港股分析
+- **2026-11-18 港股Alpha信号全景 — 高盛超配落地次日遇财报周，半导体接棒黄金杀跌，宏观否决仍为最高约束**
+
+### 港股分析
+- **互联网龙头财报周密集交卷---腾讯百度京东阿里四连发---事件驱动窗口与业绩地雷双重风险**
+
+### 港股分析
+- **高盛超配重申+南向持股19.58%创新高---右侧确认强化---但已进入"有名无实"待验证期**
+
+### 港股分析
+- **港股黄金股集体重挫4-5.7pct---金价自高点回落19pct---左侧假机会警示而非逆向买点**
+
+### 港股分析
+- **港股半导体逆势走强---英伟达财报倍增催化---AI算力链轮动反转右侧共振**
+
+### 新范式/工具
+- **M3E Canvas — 设计稿即 Prompt 编译器（Prompt-as-Design-Artifact）** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **Claude Trading Skills — 决策门控工作流清单（Decision-Gate Workflow Manifest）** - https://github.com/trending/python?since=daily (703 stars today)
+
+### 新范式/工具
+- **ZigZag — 拒绝订阅的本地制造链 + 机器即 MCP 端点** - https://news.ycombinator.com/show (Show HN 742 points)
+
+### 新范式/工具
+- **AI Pentest Orchestrators — The Autonomous OODA-Loop Harness（自主 OODA 回路即攻击单位）** - https://blog.cloudflare.com/adapting-to-ai-penetration-testing-orchestrators/
+
+### 新范式/工具
+- **Trusted Agent Delegation — The Intermediation Principle（中介原则：Agent 作为可问责中介的身份层）** - https://blog.cloudflare.com/trusted-agent-delegation/
+
+### 新范式/工具
+- **Kitesurf — Browser Engine as an Edge Primitive（浏览器引擎降级为边缘原语）** - https://blog.cloudflare.com/kitesurf-open-source/
+
+### 新范式/工具
+- **AgenticOS — Subscription-Bridged Agent Teammates（订阅桥接式 Agent 同事）** - https://github.com/vstorm-co/agenticos
+
+### 新范式/工具
+- **Agav — Harness Economics：把「成本」变成与准确率并列的一等基准维度（省 49.1% 但准确率更低，且如实公布）** - https://github.com/prapaa-ai/agav
+
+### 新范式/工具
+- **Dograh — Agent-Operable Software：软件自带「安装 Agent」，skill 运行时读真源而非硬编码步骤** - https://github.com/dograh-hq/dograh
+
+### 新范式/工具
+- **HealthAdminBench** - https://som-shahlab.github.io/health-admin-bench-website/
+
+### 新范式/工具
+- **CUA Agent Kit (Discover-then-Codify)** - https://openai.com/index/advancing-computer-use-for-healthcare-teams
+
+### 新范式/工具
+- **Deliverable-Grade Evals — 交付物级合取判定 + 每任务成本（长时序专业工作基准集群）** - https://openai.com/index/introducing-gpt-6-2-astra-sol
+
+### 新范式/工具
+- **DeepSeek-V3 in 190 lines of pure JAX — 可读参考实现作为论文验证（Reproducibility-as-Verification）** - https://github.com/Vaibhaav-Tiwari/deepseek-v3-jax
+
+### 新范式/工具
+- **dots (OpenAI) — 常驻 Agent 拥有独立云电脑 + Agent 身份成为组织一级主体** - https://openai.com/index/introducing-dots/
+
+### 新范式/工具
+- **FrontierHarness Eval v1.1 — Harness-Model 配对律：换模型必须重选 harness** - https://runta.com/blog/introducing-frontierharness-eval-v1-1/
+
+### 新范式/工具
+- **Yogurt — 本地采集 + 只读 MCP 暴露：会议记忆的「无 Bot 本地方案」** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Humanizer — 公共分类法即技能规格（Encyclopedia-as-Skill-Spec）** - https://github.com/blader/humanizer
+
+### 新范式/工具
+- **Mistral Large 4 (Le Chonk) — 开放权重即防御能力（Reproduce-then-Patch 作为可验证奖励）** - https://huggingface.co/blog/mistral-large4
+
+### 新范式/工具
+- **turbo-browser-mcp — 调用经济 + 提交守卫：把「每个动作一次调用」改成「每次调用一批动作」** - https://github.com/Tthanh2k6/turbo-browser-mcp
+
+### 新范式/工具
+- **db-branch — 数据库分支作为 Agent 沙箱原语（ZFS CoW + 内置 MCP + TTL 自动回收）** - https://github.com/db-branch/db-branch
+
+### 新范式/工具
+- **OpenCode Browse — Tab Handoff 协议：把「人类持钥」做成 Agent 浏览的一等环节** - https://news.ycombinator.com/ (HN 324 points, 2026-11-18)
+
+### 新范式/工具
+- **AgentX Harness — Trace-Replay 式 Agent 服务基准：用真实的 agent 会话轨迹替代合成 prompt** - https://runanywhere.ai/blog/glm-5-3-flash-trainium2-nki-megakernels
+
+### 新范式/工具
+- **TrnRT — Megakernel-per-Layer-Half：把 decode 编译成少数巨型内核的 Trainium2 推理范式** - https://news.ycombinator.com/item?id=trnrt
+
+### 新范式/工具
+- **StarSling — Agent-Native CI：会自我优化的 CI，以及「评审不可自改」机制** - https://starsling.dev/
+
+### 新范式/工具
+- **Gemini Decisions API — 零输出 Token 的「决策评分端点」** - https://blog.google/innovation-and-ai/technology/developers-tools/gemini-decisions-api/
+
+### 港股分析
 - **港股红利资产股息率优势收窄 — 防御底仓的降级警示（券商口径转向）**
 
 ### 港股分析
