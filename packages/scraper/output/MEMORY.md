@@ -208,7 +208,93 @@
 
 ## 2026-11-17 提取
 
+## 2026-11-18 提取
+
 ## 注意事项
+
+### 港股分析
+- **港股红利资产股息率优势收窄 — 防御底仓的降级警示（券商口径转向）**
+
+### 港股分析
+- **安克创新(00668.HK) +6.34% 报98.9港元 — 消费电子出海个股右侧最强验证**
+
+### 港股分析
+- **港股光伏股继续走低---钧达-495-新特-329-福莱特-299---产能出清未完成的左侧假机会警示**
+
+### 港股分析
+- **港股缩量调整---券商转向红利资产防御价值---高股息相对优势收窄需控比重的左侧信号兑现度评估**
+
+### 港股分析
+- **港股IPO非公开递表时代---募资预测上调至4800-5000亿---港交所制度红利左侧信号**
+
+### 港股分析
+- **港股金饰股集体走高---周生生+4%-老铺黄金+3.64%---黄金消费板块性右侧共振**
+
+### 港股分析
+- **2026-11-18 港股Alpha信号全景 — 五重信号：消费/金饰轮动接棒AI，港交所制度红利，光伏与配售端双风险**
+
+### 新范式/工具
+- **Codex Security — 扫描产物即审计记录：Rubric-as-Input + 跨 worktree 去重** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **GBrain — Brain-First 指令注入：组织级共享记忆从「可选工具」变成「强制前置」** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **LFM3 / d1-2B — 决策作为第一等模态的单一骨干模型树** - https://huggingface.co/blog/LiquidAI/lfm3
+
+### 新范式/工具
+- **CWE-bench v2 — 反记忆化确定性安全基准（验证器必须拒绝已知补丁）** - https://huggingface.co/blog/cwe-bench
+
+### 新范式/工具
+- **Project ProtoStar — AI-Ready 作为机构契约（MoU 驱动的科研数据就绪性）** - https://huggingface.co/blog/announcing-project-protostar
+
+### 新范式/工具
+- **Decision Wire-Format Convergence（决策原语成为独立 API 层 + Any-slot 抽象）** - https://huggingface.co/blog/anydecisionmodel
+
+### 新范式/工具
+- **Embedded Assessments（驻场式独立评估）** - https://openai.com/index/our-first-phase-of-embedded-assessments
+
+### 新范式/工具
+- **T1DMAI — N-of-1 Model Zoo（个人即基准：单受试者模型牧场 + 合成预训练→LoRA 个性化）** - https://news.ycombinator.com/show
+
+### 新范式/工具
+- **Router-as-Distribution-Layer — 路由即开放权重的分发层（HF × OpenRouter 合并推理路由）** - https://huggingface.co/blog/openrouter
+
+### 新范式/工具
+- **Elephant-Goldfish Model (EGM)** - https://github.com/google/elephant-goldfish-model
+
+### 新范式/工具
+- **Stitch Design Skills — 设计⇄代码双向回环（Design-of-Record）** - https://github.com/google-labs-code/stitch-skills
+
+### 新范式/工具
+- **FreeLLMAPI — 免费层聚合即容量池 + 签名目录新鲜度分层** - https://github.com/tashfeenahmed/freellmapi
+
+### 新范式/工具
+- **Phonon TTS — 设备端语音即默认（65MB flow-matching TTS + 单模型十后端运行时）** - https://huggingface.co/blog/phonon-tts
+
+### 新范式/工具
+- **Claude Code Verification Loops — 验证回路即委派单位 + Check Integrity（检查不可自改）** - https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/
+
+### 新范式/工具
+- **Kapso — Bank of Lessons（教训银行：经验即 git 可版本化的域资产）** - https://news.ycombinator.com/item?id=50471281
+
+### 新范式/工具
+- **Dharma Field Extractor — Schema-as-Output-Contract（模式即输出契约）与「宁可 null 不可编造」** - https://huggingface.co/blog/Dharma-AI/dharma-field-extractor
+
+### 新范式/工具
+- **SimReady Foundation — 仿真就绪性契约（Profile → Features → Requirements）** - https://huggingface.co/blog/nvidia/simready-central-assets-robotics-ai-factories
+
+### 新范式/工具
+- **Sutra-OS — 本体即 API + 决策与执行分离** - https://github.com/0nelight/sutra-os
+
+### 新范式/工具
+- **ThinkingBox-Training — 可执行终态即奖励函数 + 离线策略相对难度** - https://huggingface.co/blog/microsoft/thinkingbox-training
+
+### 新范式/工具
+- **VocabX — 成本感知词表特化（按 token 价格而非频次重建词表）** - https://huggingface.co/blog/Dharma-AI/vocabx-vocabulary-specialization
+
+### 新范式/工具
+- **PaperOrchestra — 论文即构建产物（Research-Artifact Compiler）** - https://github.com/trending/python?since=daily
 
 ### 港股分析
 - **2026-11-17-港股alpha信号全景---五重信号共振但宏观否决---左侧机会排序与仓位纪律**
