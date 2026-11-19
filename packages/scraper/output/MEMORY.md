@@ -210,7 +210,42 @@
 
 ## 2026-11-18 提取
 
+## 2026-11-19 提取
+
 ## 注意事项
+
+### 港股分析
+- **腾讯控股(00700.HK) — Q3营收+8%落入低个位数，绩后跌超3%创近期新低 — "绩后错杀"左侧机会 vs "增长失速"价值陷阱的双向裁决**
+
+### 港股分析
+- **2026-11-19 港股Alpha全景 — 半导体裂变三重裁决，美债5.07%否决延续，左侧机会清单与仓位纪律**
+
+### 港股分析
+- **华虹宏力(01347.HK) +10% 报84.7港元 — 晶圆代工逆势暴涨，与GPU崩塌构成"估值剪刀差"左侧机会**
+
+### 港股分析
+- **半导体内部裂变---GPU概念崩塌天数智芯-17.8%-vs-晶圆代工华虹+10%---昨日右侧共振判断被证伪与左侧机会重定位**
+
+### 港股分析
+- **2026-11-19 港股Alpha扫描 — 无异动可交易标的，美债10Y 5.07%宏观否决维持最高级别，官方转入观望**
+
+### 新范式/工具
+- **T3 Code — Agent Control Plane（跨 Agent 控制平面：一个服务端 + 全端同线程）** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **MoE Expert Streaming — 跨层共享 Slot Pool + 磁盘专家层（experts_offload）** - https://huggingface.co/blog/moe-expert-streaming
+
+### 新范式/工具
+- **Codex Sandbox — 沙箱即 Harness 原语（权限配置 + 逐命令协商）** - https://openai.com/index/inside-the-codex-sandbox
+
+### 新范式/工具
+- **Mastra Factory — 看板即软件工厂：Agentic Kanban 作为组织级软件基底** - https://news.ycombinator.com/item?id=50548660
+
+### 新范式/工具
+- **DaisyRose-27B — Error-Targeted Task Forging + 全异步解耦 RL** - https://www.radixark.com/blog/daisyrose-27b
+
+### 新范式/工具
+- **Energy-Based Reasoners (EBR) — 能量函数即推理控制器** - https://energy-based-reasoners.github.io/
 
 ### 港股分析
 - **2026-11-18 港股左侧Alpha机会清单——3个合格信号统一裁决与仓位纪律**
