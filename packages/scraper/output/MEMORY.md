@@ -212,7 +212,48 @@
 
 ## 2026-11-19 提取
 
+## 2026-11-20 提取
+
 ## 注意事项
+
+### 港股分析
+- **2026-11-20 港股Alpha全景 — 网易-19%业绩暴雷引爆科网裂变，南向覆盖首次收缩，三左侧候选逐一裁决**
+
+### 新范式/工具
+- **Time-Series Foundation Model as a Stream-Native SQL Primitive（时序基础模型降为流处理器的内置 SQL 函数）** - https://huggingface.co/blog/ibm-research/time-series-powered-streamhouse
+
+### 新范式/工具
+- **Harness-Portable Plugin Compilation（跨 Harness 插件编译：Markdown 单一真源 + 适配器生成 + CI 校验能力降级）** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **PPA-Bounded RTL Rewrite（PPA 约束下的 RTL 重写：模型作为微架构师，EDA 作等价性裁判）** - https://openai.com/index/advancing-chip-design-with-our-models
+
+### 新范式/工具
+- **Self-Convened Verification Cohort（自组验证小队：模型复制体自成研究组并交叉验算）** - https://www.anthropic.com/research/claude-black-hole-physics
+
+### 新范式/工具
+- **Dual-Mode Agent Assignee（双模 Agent 指派位）** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **Harness-as-npm-Package（Harness 即可分发的 npm 包）** - https://github.com/trending/typescript?since=daily
+
+### 新范式/工具
+- **Agent Workday & RSI Disclosure Stack（智能体工作日 + 递归自我改进披露度量栈）** - https://openai.com/index/research-acceleration-jagged-frontier
+
+### 新范式/工具
+- **GOLD — Tokenizer-Agnostic On-Policy Distillation（分词器无关的在线蒸馏）** - https://huggingface.co/blog/rumble-2-flash
+
+### 新范式/工具
+- **Duration-as-Scheduling-Signal（调度前时长预测：把 FLOPs 闭式估算换成仅用提交配置的监督回归）** - https://huggingface.co/blog/Dharma-AI/predicting-fine-tuning-time
+
+### 新范式/工具
+- **Mei — Models Engineering Index（双效应联合拟合 + 成本即一等维度的工程能力指数）** - https://git-aarvin.github.io/mei/
+
+### 新范式/工具
+- **Scorer-Driven Training-Free Behavior Steering（打分器驱动的免训练行为调控）** - https://github.com/trending/python?since=daily
+
+### 新范式/工具
+- **Agent Factory（智能体工厂：任务状态机 + 派发循环 + 云执行 + 订阅唤醒）** - https://openai.com/index/how-openai-performance-factory-keeps-chatgpt-fast
 
 ### 港股分析
 - **腾讯控股(00700.HK) — Q3营收+8%落入低个位数，绩后跌超3%创近期新低 — "绩后错杀"左侧机会 vs "增长失速"价值陷阱的双向裁决**
