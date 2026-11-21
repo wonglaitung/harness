@@ -214,7 +214,21 @@
 
 ## 2026-11-20 提取
 
+## 2026-11-21 提取
+
 ## 注意事项
+
+### 新范式/工具
+- **Dettato — 音频转 MIDI 效率提升 60 倍的专用模型** - https://kobi.music/research/dettato
+
+### 新范式/工具
+- **Frostbite — AI 发现、设计并验证的全新 CPU 架构** - https://architectlabs.com/blog/frostbite
+
+### 新范式/工具
+- **Harness Adapters — 把 harness 变成适配器的一个训练维度** - https://huggingface.co/blog/harness-adapters-at-scale
+
+### 新范式/工具
+- **Self-Rewriting Weights — 模型自我重写权重（推理时直接改写自身参数）** - https://arxiv.org/abs/2611.21885
 
 ### 港股分析
 - **2026-11-20 港股Alpha全景 — 网易-19%业绩暴雷引爆科网裂变，南向覆盖首次收缩，三左侧候选逐一裁决**
